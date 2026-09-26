@@ -1,85 +1,133 @@
-/* Panel chrome inside the dockview workspace (UI_SPEC sections 2, 3 and 9). Tokens only.
-   The theme's .panel / .panel-head / .eyebrow / .tag-b grammar is reused; this file adds the
-   workspace-specific parts. Never transition a var() colour. */
+/* Panel chrome (look spec 4.3, 4.11, 4.12). Tokens only, square corners, hard-cut states.
+   The title bar is the component bar of the reference look: frame grey with black 11px text. Its height is 24px,
+   not the 18px house value, because its controls must stay 24px targets (decision D1, WCAG 2.5.8);
+   the 2x2 row budget still holds (section 7). No panel borders: 2px black gutters separate panels. */
 
 .nqt-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
-  border-radius: var(--r-sm);
-}
-
-/* Focus shows once, on the focused item (the body's inset ring or a control's ring): no second
-   lime frame on the panel border (2.4.7). */
-
-.nqt-panel .panel-head { gap: 8px; padding: 0 8px; flex: 0 0 var(--panel-head-h); }
-.nqt-panel .panel-id,
-.nqt-panel .panel-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.nqt-panel .panel-id { flex: 1 1 auto; }
-.nqt-panel .panel-tools { flex: 0 0 auto; }
-
-/* Titles carry context names (hypotheses, run ids), which are case-sensitive: no uppercase here. */
-.nqt-panel .panel-title {
-  text-transform: none;
-  letter-spacing: .02em;
-  font-weight: 500;
+  min-width: 0;
+  background: var(--bg);
   color: var(--text);
-  white-space: nowrap;
+  border-radius: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  /* The title (the panel's identifier) keeps its width; the screen name truncates first (1.4.4). */
-  flex: 0 1 auto;
-  max-width: 100%;
 }
 
-.nqt-panel .panel-screen {
-  flex: 1 1 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--muted);
+/* The focused panel: a 1px command-blue line, standing in for the OS window accent border. It is an
+   overlay above the red bar, the header and the body, which would paint over an outline on the panel
+   itself, and above the related-menu dim (z-index 25), so it stays bright; it takes no pointer events. */
+.nqt-panel[data-focused="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 26;
+  border: 1px solid var(--cmd-border);
+  pointer-events: none;
+}
+
+/* ---------- title bar ---------- */
+.ptitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 24px;
+  height: 24px;
+  min-width: 0;
+  padding-left: 4px;
+  background: var(--frame-bg);
+  color: var(--frame-fg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  line-height: 1;
+}
+
+.ptitle-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  font: inherit;
+  font-weight: 400;
+  color: inherit;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+.ptitle-no { flex: 0 0 auto; }
+.ptitle-ctx { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Link-group square: the group colour with a black letter (4.11). The letter always travels with it. */
+.pchip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--frame-fg);
+  font-weight: 700;
+  font-size: var(--fs-small);
+}
+.pchip[data-group="A"] { background: var(--link-a); }
+.pchip[data-group="B"] { background: var(--link-b); }
+.pchip[data-group="C"] { background: var(--link-c); }
+
+.ptitle-tools { display: flex; align-items: stretch; flex: 0 0 auto; height: 100%; }
+.ptag { display: inline-flex; align-items: center; padding: 0 6px; white-space: nowrap; }
+.ptitle-optwrap { position: relative; display: flex; }
+
+.ptitle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 6px;
+  background: var(--frame-bg);
+  color: var(--frame-fg);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ptitle-btn:hover,
+.ptitle-btn[aria-expanded="true"],
+.ptitle-btn[aria-pressed="true"] { background: var(--tab-on); color: var(--tab-on-fg); }
+/* On the light bar the keyboard ring is black: white on the frame grey would not be visible. */
+.ptitle-btn:focus-visible { outline: 2px solid var(--frame-fg); outline-offset: -2px; }
+
+/* ---------- slots and stage ---------- */
+.pslot { flex: 0 0 auto; min-width: 0; }
+.pstage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
 }
 
-.link-chip {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding-left: 5px;
-  border-left: 3px solid var(--link);
-  color: var(--link);
-}
-
-.panel-toggle {
-  height: 20px;
-  min-width: 24px;
-  padding: 0 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border-int);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-}
-.panel-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
-
-/* The body is the panel's Tab stop: a scrolling region with an inset focus ring, so the panel's
-   overflow never clips the ring. */
+/* The body is the panel's Tab stop and its scrolling region; the keyboard ring is drawn inside it so
+   the panel's overflow never clips it. */
 .nqt-panel .nqt-panel-body {
   display: block;
-  place-content: normal;
-  text-align: left;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 10px 12px;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  text-align: left;
 }
-.nqt-panel .nqt-panel-body:focus-visible,
-.nqt-panel .panel-toggle:focus-visible {
-  outline: 2px solid var(--accent);
+.nqt-panel .nqt-panel-body:focus-visible {
+  outline: 2px solid var(--focus);
   outline-offset: -2px;
 }

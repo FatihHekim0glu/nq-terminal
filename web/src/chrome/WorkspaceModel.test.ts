@@ -3,6 +3,7 @@ import { MNEMONICS, findMnemonic, type MnemonicDef } from '../commands/registry'
 import type { ParsedCommand } from '../commands/parser'
 import { DEFAULT_LAYOUTS, SCREEN_PHASES, layoutFor } from './WorkspaceLayouts'
 import {
+  panelSubject,
   applyPlan,
   effectiveContext,
   sanitiseParams,
@@ -65,7 +66,7 @@ function fakeApi(existing: FakePanel[] = []): DockApiLike & { calls: string[]; s
 }
 
 describe('default layouts per screen', () => {
-  it('has a layout for every mnemonic, whose first panel is that screen (HOME is the launchpad)', () => {
+  it('has a layout for every mnemonic, whose first panel is that screen (HOME is the home layout)', () => {
     for (const def of MNEMONICS) {
       const layout = layoutFor(def.code)
       expect(layout.panels.length, def.code).toBeGreaterThan(0)
@@ -74,21 +75,22 @@ describe('default layouts per screen', () => {
     }
   })
 
-  it('lays HOME out as the six UI_SPEC panels (rows first, then the right column) with their link groups', () => {
+  it('lays HOME out as the 2x2 home layout (look spec 7.1): left column first, then the right column', () => {
     const home = layoutFor('HOME')
     expect(home.panels.map((p) => `${p.group} ${panelTitle(p)}`)).toEqual([
       'A NQ GP 1d',
       'B volmanaged_v0 EQ',
-      '- LIVE',
       'A 27F MON',
       '- REG',
-      '- OOS',
     ])
-    expect(home.panels.slice(1, 3).map((p) => p.position?.direction)).toEqual(['below', 'below'])
-    expect(home.panels.slice(3).map((p) => p.position?.direction)).toEqual(['right', 'right', 'right'])
-    const [first, ...rest] = home.panels
-    expect(first?.position).toBeUndefined()
-    for (const panel of rest) expect(panel.position, panel.id).toBeDefined()
+    expect(home.panels.map((p) => p.position?.direction)).toEqual([undefined, 'below', 'right', 'right'])
+    expect(home.panels.map((p) => p.position?.ref)).toEqual([undefined, 'home-gp', 'home-gp', 'home-eq'])
+  })
+
+  it('keeps LIVE and OOS out of the default HOME (they open with Shift+Enter)', () => {
+    const codes = layoutFor('HOME').panels.map((p) => p.code)
+    expect(codes).not.toContain('LIVE')
+    expect(codes).not.toContain('OOS')
   })
 
   it('gives every layout panel a unique id and a reference that exists earlier in the list', () => {
@@ -159,8 +161,8 @@ describe('applyPlan against a dockview-like api', () => {
     const api = fakeApi([{ id: 'old', params: paramsFromCommand(command('REG'), '-'), title: 'REG', position: undefined }])
     applyPlan(api, { kind: 'load', layout: layoutFor('HOME') })
     expect(api.calls[0]).toBe('clear')
-    expect(api.store.map((p) => p.params.code)).toEqual(['GP', 'EQ', 'LIVE', 'MON', 'REG', 'OOS'])
-    expect(api.store[3]?.position).toEqual({ referencePanel: 'home-gp', direction: 'right' })
+    expect(api.store.map((p) => p.params.code)).toEqual(['GP', 'EQ', 'MON', 'REG'])
+    expect(api.store[2]?.position).toEqual({ referencePanel: 'home-gp', direction: 'right' })
   })
 
   it('replaces the params and title of one panel in place', () => {
@@ -223,5 +225,17 @@ describe('effectiveContext: link groups retarget panels that accept the kind', (
 
   it('never retargets an unlinked panel', () => {
     expect(effectiveContext({ ...gp, group: '-' }, { kind: 'instrument', value: 'ES' })).toEqual(gp.context)
+  })
+})
+
+describe('panelSubject: the context and argument the title bar shows (look spec 4.3)', () => {
+  it('shows an instrument as its generic ticker with the sector, like the status line', () => {
+    expect(panelSubject({ context: { kind: 'instrument', value: 'NQ' }, args: { timeframe: '1d' } })).toBe('NQ1 Index 1d')
+    expect(panelSubject({ context: { kind: 'instrument', value: 'ZN' }, args: {} })).toBe('TY1 Comdty')
+  })
+
+  it('shows other contexts by name, and the argument alone when there is no context', () => {
+    expect(panelSubject({ context: { kind: 'hypothesis', value: 'volmanaged_v0' }, args: {} })).toBe('volmanaged_v0')
+    expect(panelSubject({ context: null, args: { date: '2019-03-14' } })).toBe('2019-03-14')
   })
 })

@@ -1,0 +1,31 @@
+/* Security or quote header (look spec 4.6). Two 22px lines at the quote size on black. Tokens
+   only; no tick flash, no transition. Up and down are the only semantic hues. */
+.quote {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--white);
+  font-family: var(--font-sans);
+  font-size: var(--fs-quote);
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.quote-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 22px;
+  min-width: 0;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.quote-ticker { color: var(--white); }
+.quote-label { color: var(--data); }
+.quote-value { color: var(--white); }
+.quote-pair { display: inline-flex; align-items: baseline; gap: 4px; }
+.quote-flag { color: var(--warn); }
+.quote .up { color: var(--c-up); }
+.quote .down { color: var(--c-down); }
+.quote-spark { flex: 0 0 auto; }
+.quote-spark polyline { stroke: var(--white); stroke-width: 1; }

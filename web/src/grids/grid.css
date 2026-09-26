@@ -1,0 +1,161 @@
+/* Table styles for MonitorGrid and every grid screen (look spec 4.8, 4.12, 3.4). Tokens only.
+   Usage: <div class="nqt-grid-scroll"><table class="nqt-grid">...</table></div>. Add `ruled` to the
+   table for the optional column rules and frame. Row classes: group-row, total-row, band-row,
+   filter-row. Cell classes: name, num, hot, up, down, muted, bar. The nqt- prefix and the -row
+   suffixes keep clear of Tailwind utilities (`grid`, `filter`). Every state is a hard cut. */
+
+.nqt-grid-scroll {
+  overflow: auto;
+  min-height: 0;
+}
+/* scrollbar-color only for Firefox: in Chromium it would switch off the ::-webkit-scrollbar styling. */
+@supports (-moz-appearance: none) {
+  .nqt-grid-scroll { scrollbar-color: var(--sb-thumb) var(--sb-track); }
+}
+
+.nqt-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: 1;
+}
+.nqt-grid caption { text-align: left; }
+
+/* Header: 20px on --th-bg, a 1px --th-rule on top, cells split by a 1px black gap, sticky. Down text
+   on the header and on band rows uses the raised red, which passes on the header grey. */
+.nqt-grid thead { --c-down: var(--c-down-raised); }
+.nqt-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--th-bg);
+  color: var(--th-fg);
+  border-top: 1px solid var(--th-rule);
+  box-shadow: inset -1px 0 0 var(--bg);
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nqt-grid thead th.num { text-align: right; }
+
+/* Body rows: 20px, black, no zebra; nothing wraps, long names end in an ellipsis. */
+.nqt-grid td {
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--bg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nqt-grid .name { color: var(--data); }
+.nqt-grid .num {
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.nqt-grid .muted { color: var(--muted); }
+.nqt-grid .up { color: var(--c-up); }
+.nqt-grid .down { color: var(--c-down); }
+
+/* `N)` hot-link numbers: body size, condensed to about 0.63 width, muted, right-aligned. */
+.nqt-grid .hot {
+  width: 2.2em;
+  padding-right: 2px;
+  text-align: right;
+  color: var(--muted);
+}
+.nqt-grid .hot > span { display: inline-block; transform: scaleX(.63); transform-origin: right center; }
+
+/* Group or section rows: black, white bold, numbered. Totals: white bold. */
+.nqt-grid tr.group-row td { color: var(--white); font-weight: 700; }
+.nqt-grid tr.total-row td { color: var(--white); font-weight: 700; }
+.nqt-grid tr.band-row { --c-down: var(--c-down-raised); }
+.nqt-grid tr.band-row td { background: var(--th-bg); }
+
+/* Optional amber filter row under the header. */
+.nqt-grid tr.filter-row td { background: var(--field-bg); color: var(--field-fg); }
+
+/* Optional rules: 1px --th-rule column rules and frame, off by default. */
+.nqt-grid.ruled { border: 1px solid var(--th-rule); }
+.nqt-grid.ruled td { border-left: 1px solid var(--th-rule); }
+.nqt-grid.ruled td:first-child { border-left: 0; }
+
+/* States (4.12): row hover, cell hover, selection, keyboard focus. Inside a hovered cell the muted
+   grey and the down red fail on the hovered-cell grey, so both are lifted there (5.32 and 4.89). */
+.nqt-grid tbody tr:hover td { background: var(--hover-row); }
+.nqt-grid tr[aria-selected="true"] { --c-down: var(--c-down-raised); }
+.nqt-grid tbody tr[aria-selected="true"] td { background: var(--sel-bg); }
+.nqt-grid tbody tr td:hover {
+  --muted: var(--muted-hover);
+  --c-down: var(--c-down-hover);
+  background: var(--hover-cell);
+}
+.nqt-grid tr:focus-visible,
+.nqt-grid td:focus-visible,
+.nqt-grid th:focus-visible {
+  --muted: var(--muted-hover);
+  --c-down: var(--c-down-hover);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background: var(--hover-cell);
+}
+
+/* Tree expanders ⊞ / ⊟ (round > hypothesis > run). */
+.nqt-grid .expander { display: inline-block; width: 1.2em; color: var(--text); }
+
+/* Inline bars: 60% of the row, the value always printed beside the bar. */
+.nqt-grid .bar {
+  display: inline-block;
+  height: 60%;
+  min-height: 8px;
+  vertical-align: middle;
+}
+.nqt-grid .bar.pos { background: var(--bar-pos); }
+.nqt-grid .bar.neg { background: var(--bar-neg); }
+.nqt-grid .bar.mag { background: var(--bar-mag); }
+
+/* Warnings above a table: `Exceptions (N)` in the exception red, ⚠ in yellow plus text. */
+.nqt-grid-exc { color: var(--exc); }
+.nqt-grid-warn { color: var(--warn); }
+
+/* Classic scrollbars, always visible, taking layout space (IS-09). */
+.nqt-grid-scroll::-webkit-scrollbar { width: var(--sb-w); height: var(--sb-w); }
+.nqt-grid-scroll::-webkit-scrollbar-track { background: var(--sb-track); }
+.nqt-grid-scroll::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border: 1px solid var(--sb-track);
+  border-radius: 0;
+}
+.nqt-grid-scroll::-webkit-scrollbar-corner { background: var(--sb-track); }
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button {
+  display: block;
+  width: var(--sb-w);
+  height: var(--sb-w);
+  background-color: var(--sb-track);
+  background-repeat: no-repeat;
+  background-position: center;
+}
+/* White arrow triangles in the end zones, no button boxes (IS-09), drawn as 60 degree cones. */
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:vertical { height: 17px; background-size: 8px 5px; }
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:horizontal { width: 17px; background-size: 5px 8px; }
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: conic-gradient(from 150deg at 50% 0, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: conic-gradient(from -30deg at 50% 100%, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: conic-gradient(from 60deg at 0 50%, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-grid-scroll::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: conic-gradient(from 240deg at 100% 50%, var(--sb-arrow) 60deg, transparent 0);
+}

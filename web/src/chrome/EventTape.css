@@ -1,0 +1,16 @@
+/* Event tape (spec 4.9): 57px, three 19px PT Mono lines on the tape navy, a 1px line above.
+   Static: no scrolling, no animation. */
+.event-tape {
+  height: 57px; overflow: hidden;
+  background: var(--tape-bg); box-shadow: inset 0 1px 0 var(--tape-edit);
+  font-family: var(--font-mono); font-size: var(--fs-fixed); line-height: 19px;
+  color: var(--tape-fg);
+}
+.event-tape .tape-lines { list-style: none; margin: 0; padding: 0 8px; }
+.event-tape .tape-lines li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-tape .tape-src { color: var(--tape-src); }
+.event-tape .tape-note { padding: 0 8px; }
+
+@media (max-width: 700px) {
+  .event-tape { height: auto; max-height: 57px; }
+}

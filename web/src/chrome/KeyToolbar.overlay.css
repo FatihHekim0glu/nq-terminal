@@ -1,0 +1,21 @@
+/* Key map overlay: a black box with a light 1px edge (the menu look of spec 4.7) over the whole
+   workspace, between the command zone and the status line, so the chrome stays usable and no panel
+   control is left half covered. No shadow, no transition. */
+.keymap-overlay {
+  position: fixed; top: 141px; left: 0; right: 0; bottom: var(--status-h); z-index: 80; overflow: auto;
+  background: var(--bg); border: 1px solid var(--list-border); color: var(--text); font-size: var(--fs-data);
+}
+.keymap-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px; background: var(--frame-bg); color: var(--frame-fg); }
+.keymap-head h2 { font-size: var(--fs-data); font-weight: 700; line-height: 24px; }
+.keymap-head button { min-height: 24px; padding: 0 8px; background: var(--btn-grey); color: var(--text); border: 1px solid var(--border-int); border-radius: 0; font: inherit; cursor: pointer; }
+.keymap-head :focus-visible { outline: 2px solid var(--frame-fg); outline-offset: -2px; }
+.keymap-body { padding: 4px 8px 8px; }
+.keymap-body .help-table { width: 100%; border-collapse: collapse; line-height: var(--row-h); }
+.keymap-body .help-table caption { text-align: left; font-size: var(--fs-small); color: var(--muted); }
+.keymap-body .help-table thead th { text-align: left; font-weight: 400; color: var(--th-fg); background: var(--th-bg); padding: 0 5px; }
+.keymap-body .help-table tbody th { text-align: left; font-weight: 400; color: var(--white); padding: 0 5px; vertical-align: top; }
+.keymap-body .help-table td { color: var(--data); padding: 0 5px; }
+
+@media (max-width: 700px) {
+  .keymap-overlay { top: 0; bottom: 0; }
+}

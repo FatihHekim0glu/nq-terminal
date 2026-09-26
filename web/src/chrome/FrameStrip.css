@@ -1,0 +1,49 @@
+/* Frame strip (spec 4.2): 37px of --frame-bg; an 8px top margin, then 29px layout tabs. The active tab
+   is --frame-tab-on and merges into the key toolbar below it, with a 1px edge on its right. The focus
+   ring on this light strip is black (white would be 1.5:1 on it), and white on the dark active tab. */
+.frame-strip {
+  position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;
+  height: 37px; padding-top: 8px; min-width: 0;
+  background: var(--frame-bg); color: var(--frame-fg); font-size: var(--fs-small);
+}
+.frame-tabs { display: flex; align-items: stretch; height: 29px; min-width: 0; overflow: hidden; }
+.frame-tab {
+  flex: 0 0 auto; min-width: 24px; height: 29px; padding: 0 12px;
+  background: transparent; border: 0; border-radius: 0; color: var(--frame-fg);
+  font: inherit; white-space: nowrap; cursor: pointer;
+}
+.frame-tab:hover { background: var(--tab-on); }
+.frame-tab[aria-current="page"] {
+  min-width: 225px; text-align: left;
+  background: var(--frame-tab-on); color: var(--frame-tab-fg); box-shadow: inset -1px 0 0 var(--frame-tab-edge);
+}
+.frame-tab b { font-weight: 700; }
+.frame-strip :focus-visible { outline: 2px solid var(--frame-fg); outline-offset: -2px; }
+.frame-strip .frame-tab[aria-current="page"]:focus-visible { outline-color: var(--focus); }
+
+.frame-right { display: flex; align-items: center; gap: 6px; height: 29px; padding-right: 8px; flex: 0 0 auto; }
+.frame-flags { display: flex; gap: 4px; }
+.frame-flag { padding: 1px 6px; background: var(--flag-bg); color: var(--flag-fg); font-weight: 700; white-space: nowrap; }
+.frame-btn { min-height: 24px; padding: 0 6px; background: transparent; border: 0; border-radius: 0; color: var(--frame-fg); font: inherit; cursor: pointer; }
+.frame-options { position: relative; }
+/* Drops from the frame strip's lower edge at the window's right edge and covers the key and nav rows
+   beneath it whole, so no control is left half hidden (a half-covered target fails 2.5.8). */
+.frame-options-list {
+  position: fixed; right: 0; top: 37px; z-index: 60; min-width: 16em; padding: 4px 0;
+  background: var(--list-bg); border: 1px solid var(--list-border);
+}
+.frame-options-list button {
+  display: block; width: 100%; min-height: 24px; padding: 0 10px; text-align: left;
+  background: transparent; border: 0; border-radius: 0; color: var(--data); font: inherit; font-size: var(--fs-data); cursor: pointer;
+}
+.frame-options-list button:hover { background: var(--hover-menu); }
+.frame-options-list button[aria-pressed="true"] { background: var(--list-sel); font-weight: 700; }
+.frame-options-list :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+@media (max-width: 700px) {
+  .frame-strip { flex-wrap: wrap; height: auto; padding-top: 4px; align-items: center; }
+  .frame-tabs { flex-wrap: wrap; height: auto; overflow: visible; }
+  .frame-tab[aria-current="page"] { min-width: 0; }
+  .frame-right { flex-wrap: wrap; height: auto; }
+  .frame-options-list { position: absolute; top: calc(100% + 2px); }
+}

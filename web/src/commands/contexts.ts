@@ -1,6 +1,7 @@
-// Context resolution for the command line (UI_SPEC section 5): a token names an instrument
-// (root or symbol, any case), the universe (27F), a hypothesis or confirmation, or a run id.
-// Names from files match exactly first, then by a unique case-insensitive match.
+// Context resolution for the command line (UI_SPEC section 5, spec 5.1): a token names an instrument
+// (root, symbol or generic ticker such as NQ1 or TY1, any case), the universe (27F), a hypothesis or
+// confirmation, or a run id. Names from files match exactly first, then by a unique case-insensitive match.
+import { rootForGeneric } from './sectors'
 import type { CommandIndexData, ContextKind, ResolvedContext } from './types'
 
 function byName(token: string, names: readonly string[]): string | undefined {
@@ -12,7 +13,8 @@ function byName(token: string, names: readonly string[]): string | undefined {
 
 function instrumentRoot(token: string, index: CommandIndexData): string | undefined {
   const upper = token.toUpperCase()
-  return index.instruments.find((i) => i.root.toUpperCase() === upper || i.symbol.toUpperCase() === upper)?.root
+  const direct = index.instruments.find((i) => i.root.toUpperCase() === upper || i.symbol.toUpperCase() === upper)?.root
+  return direct ?? rootForGeneric(token, index)
 }
 
 function universe(token: string, index: CommandIndexData): string | undefined {

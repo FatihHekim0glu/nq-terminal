@@ -10,9 +10,10 @@ import { createLayoutsStore } from '../state/layouts'
 import { createLinkGroupsStore } from '../state/linkGroups'
 import type { SafeStorage } from '../state/safeStorage'
 import type { SerializedDockview } from 'dockview-react'
-import Workspace, { type FocusedPanel, type WorkspaceHandle } from './Workspace'
+import Workspace, { WORKSPACE_THEME, type FocusedPanel, type WorkspaceHandle } from './Workspace'
 import { toStored } from './WorkspaceStorage'
 import { panelTabStops } from './WorkspaceFocus'
+import { activateNumbered, numberedItems } from './NumberedActions'
 
 class NoopResizeObserver {
   observe(): void {}
@@ -57,29 +58,40 @@ function renderWorkspace(props: Partial<Parameters<typeof Workspace>[0]> = {}) {
   return { ...utils, ref, layouts, linkGroups, onScreenChange }
 }
 
+const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
+
 function panelTitles(): string[] {
-  return Array.from(document.querySelectorAll('[data-nqt-panel] h2')).map((h) => h.textContent ?? '')
+  return Array.from(document.querySelectorAll('[data-nqt-title]')).map((h) => h.getAttribute('data-nqt-title') ?? '')
+}
+
+function panelNumbers(): string[] {
+  return Array.from(document.querySelectorAll('[data-nqt-panel] .ptitle-no')).map((h) => h.textContent ?? '')
 }
 
 describe('Workspace (dockview) with the default layouts', () => {
-  it('opens HOME with its six panels and reports the screen', async () => {
+  it('opens HOME as the 2x2 home layout and reports the screen', async () => {
     const { onScreenChange } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
-    expect(panelTitles()).toEqual(['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG', 'LIVE', 'OOS'])
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    expect(panelTitles()).toEqual(HOME_TITLES)
     expect(onScreenChange).toHaveBeenCalledWith('HOME')
   })
 
   it('shows a labelled placeholder for an unbuilt screen', async () => {
     renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     const reg = screen.getByRole('region', { name: 'REG' })
     expect(within(reg).getByText('REG: Registry board')).toBeTruthy()
     expect(within(reg).getByText(PLACEHOLDER.status)).toBeTruthy()
+    // The placeholder is drawn the way a built screen will be: a red function bar and a grid.
+    expect(within(reg).getByRole('toolbar', { name: 'Registry board functions' })).toBeTruthy()
+    const grid = within(reg).getByRole('table', { name: 'REG placeholder: what this panel will show' })
+    expect(grid.className).toBe('nqt-grid')
+    expect(grid.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(30)
   })
 
   it('loads a multi-panel screen on Enter and renders HELP from the registry', async () => {
     const { ref, onScreenChange } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => ref.current?.run(command('REG'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(['REG', 'MT']))
     act(() => ref.current?.run(command('HELP'), 'new-panel'))
@@ -90,29 +102,29 @@ describe('Workspace (dockview) with the default layouts', () => {
 
   it('replaces the focused panel in place and retargets its link group', async () => {
     const { ref, linkGroups } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     const gpBody = screen.getByRole('group', { name: 'NQ GP 1d content' })
     act(() => gpBody.focus())
     const es = { kind: 'instrument' as const, value: 'ES' }
     act(() => ref.current?.run(command('GP', { context: es, contextSource: 'typed', canonical: 'ES GP' }), 'replace'))
     await waitFor(() => expect(panelTitles()[0]).toBe('ES GP'))
-    expect(panelTitles()).toHaveLength(6)
+    expect(panelTitles()).toHaveLength(4)
     expect(linkGroups.getState().contexts.A).toEqual(es)
   })
 
   it('keeps exactly one Tab stop per panel (dockview tab strips hidden)', async () => {
     const { container } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     const root = container.querySelector('.nqt-workspace') as HTMLElement
     const stops = panelTabStops(root)
-    expect(stops).toHaveLength(6)
+    expect(stops).toHaveLength(4)
     for (const stop of stops) expect(stop.closest('[data-nqt-panel]')).not.toBeNull()
   })
 
   it('returns focus to the last focused panel', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
-    const oos = screen.getByRole('group', { name: 'OOS content' })
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    const oos = screen.getByRole('group', { name: 'REG content' })
     act(() => oos.focus())
     act(() => (document.activeElement as HTMLElement).blur())
     let moved = false
@@ -125,33 +137,33 @@ describe('Workspace (dockview) with the default layouts', () => {
 
   it('restores a screen layout saved from another screen, and resets it when typed on itself', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
-    act(() => screen.getByRole('group', { name: 'OOS content' }).focus())
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'REG content' }).focus())
     act(() => ref.current?.run(command('LEDG'), 'replace'))
     await waitFor(() => expect(panelTitles()).toContain('LEDG'))
     act(() => ref.current?.run(command('RUNS'), 'new-panel'))
     await waitFor(() => expect(panelTitles()).toContain('RUNS'))
     const customised = panelTitles()
-    expect(customised).toHaveLength(7)
+    expect(customised).toHaveLength(5)
     act(() => ref.current?.run(command('REG'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(['REG', 'MT']))
     act(() => ref.current?.run(command('HOME'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(customised))
     act(() => ref.current?.run(command('HOME'), 'replace'))
-    await waitFor(() => expect(panelTitles()).toEqual(['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG', 'LIVE', 'OOS']))
+    await waitFor(() => expect(panelTitles()).toEqual(HOME_TITLES))
   })
 
   it('born failing: a tampered saved layout falls back to the default instead of rendering it', async () => {
     const layouts = createLayoutsStore(memoryStorage())
     layouts.getState().saveLayout('HOME', toStored('HOME', { grid: 'not a grid' } as unknown as SerializedDockview))
     renderWorkspace({ layouts })
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     expect(panelTitles()[0]).toBe('NQ GP 1d')
   })
 
   it('with no panel focused yet, focusPanel focuses the first panel (a second Esc never lands on the page)', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     let moved = false
     act(() => {
       moved = ref.current?.focusPanel() ?? false
@@ -162,15 +174,16 @@ describe('Workspace (dockview) with the default layouts', () => {
 
   it('with no panel focused, a single-panel screen loads its own layout instead of replacing a panel', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => ref.current?.run(command('HELP'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(['HELP']))
   })
 
   it('born failing: the fallback context follows the focused panel after a command replaces it', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
-    expect(ref.current?.focusedContext()).toBeNull()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    // Before any focus the command line addresses panel 1 (command-target fix), so its context is NQ.
+    expect(ref.current?.focusedContext()).toEqual({ kind: 'instrument', value: 'NQ' })
     act(() => screen.getByRole('group', { name: 'REG content' }).focus())
     expect(ref.current?.focusedContext()).toBeNull()
     const nq = { kind: 'instrument' as const, value: 'NQ' }
@@ -181,7 +194,7 @@ describe('Workspace (dockview) with the default layouts', () => {
 
   it('born failing: the fallback context follows the focused panel link group when a command retargets it', async () => {
     const { ref } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
     expect(ref.current?.focusedContext()).toEqual({ kind: 'instrument', value: 'NQ' })
     const es = { kind: 'instrument' as const, value: 'ES' }
@@ -190,23 +203,49 @@ describe('Workspace (dockview) with the default layouts', () => {
     expect(ref.current?.focusedContext()).toEqual(es)
   })
 
-  it('reports the focused panel again after a run, and null once a load removes it', async () => {
+  // Changed with the command-target fix (visual review, nav toolbar blank until a panel had DOM focus):
+  // once a load removes the focused panel, the command line addresses panel 1 of the new layout, so
+  // the report names that panel instead of null. REG's panels carry no context, so the context is null.
+  it('reports the focused panel again after a run, and panel 1 of the new layout once a load removes it', async () => {
     const onFocusedPanelChange = vi.fn<(panel: FocusedPanel | null) => void>()
     const { ref } = renderWorkspace({ onFocusedPanelChange })
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
     expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ params: expect.objectContaining({ group: 'A' }) }))
     act(() => ref.current?.run(command('REG'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(['REG', 'MT']))
-    expect(onFocusedPanelChange).toHaveBeenLastCalledWith(null)
+    expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ number: 1, params: expect.objectContaining({ code: 'REG' }) }))
     expect(ref.current?.focusedContext()).toBeNull()
+  })
+
+  it('born failing: before any panel has focus, the command line addresses panel 1 (look spec 4.2, 4.3)', async () => {
+    const onFocusedPanelChange = vi.fn<(panel: FocusedPanel | null) => void>()
+    const { ref } = renderWorkspace({ onFocusedPanelChange })
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await waitFor(() => expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ panelId: 'home-gp', number: 1 })))
+    const ringed = () => Array.from(document.querySelectorAll('[data-nqt-panel][data-focused="true"]')).map((el) => el.getAttribute('data-nqt-title'))
+    await waitFor(() => expect(ringed()).toEqual(['NQ GP 1d']))
+    expect(ref.current?.focusedContext()).toEqual({ kind: 'instrument', value: 'NQ' })
+  })
+
+  it('after a command, the command line addresses the panel the command ran in', async () => {
+    const onFocusedPanelChange = vi.fn<(panel: FocusedPanel | null) => void>()
+    const { ref } = renderWorkspace({ onFocusedPanelChange })
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => ref.current?.run(command('LEDG'), 'new-panel'))
+    await waitFor(() => expect(panelTitles()).toContain('LEDG'))
+    const added = document.querySelector('[data-nqt-title="LEDG"]')?.getAttribute('data-nqt-panel')
+    expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ panelId: added, params: expect.objectContaining({ code: 'LEDG' }) }))
+    act(() => ref.current?.run(command('GP', { context: { kind: 'instrument', value: 'ES' }, contextSource: 'typed', canonical: 'ES GP' }), 'replace'))
+    await waitFor(() => expect(panelTitles()).toEqual(['ES GP']))
+    expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ number: 1, params: expect.objectContaining({ code: 'GP' }) }))
   })
 
   it('seeds empty link groups from the layout it loads, and leaves a set group alone', async () => {
     const linkGroups = createLinkGroupsStore(memoryStorage())
     linkGroups.getState().setContext('B', { kind: 'hypothesis', value: 'za_v0' })
     renderWorkspace({ linkGroups })
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     expect(linkGroups.getState().contexts).toEqual({
       A: { kind: 'instrument', value: 'NQ' },
       B: { kind: 'hypothesis', value: 'za_v0' },
@@ -216,18 +255,165 @@ describe('Workspace (dockview) with the default layouts', () => {
 
   it('born failing: saves a layout only after a command changes it, never the untouched default', async () => {
     const { ref, layouts } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
     expect(layouts.getState().layouts).toEqual({})
-    act(() => screen.getByRole('group', { name: 'OOS content' }).focus())
+    act(() => screen.getByRole('group', { name: 'REG content' }).focus())
     act(() => ref.current?.run(command('LEDG'), 'replace'))
     await waitFor(() => expect(Object.keys(layouts.getState().layouts)).toEqual(['HOME']))
   })
 
   it('leaves no orphan tabpanel behind the hidden tab strips', async () => {
     const { container } = renderWorkspace()
-    await waitFor(() => expect(panelTitles()).toHaveLength(6))
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(0)
     expect(container.querySelectorAll('.dv-content-container[aria-labelledby]')).toHaveLength(0)
+  })
+})
+
+describe('Workspace panels: numbers, focus cue, history and the related menu (look spec 4.3, 4.7, 5.2)', () => {
+  it('numbers panels in reading order on their title bars (1-GP 2-MON 3-EQ 4-REG)', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(panelNumbers()).toEqual(['1-GP', '2-MON', '3-EQ', '4-REG']))
+  })
+
+  it('separates panels by a 2px black gutter, with no panel borders or tab strips', () => {
+    expect(WORKSPACE_THEME.gap).toBe(2)
+    expect(WORKSPACE_THEME.className).toBe('dockview-theme-nqt')
+  })
+
+  it('marks the focused panel and reports its id and number', async () => {
+    const onFocusedPanelChange = vi.fn<(panel: FocusedPanel | null) => void>()
+    renderWorkspace({ onFocusedPanelChange })
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: '27F MON content' }).focus())
+    await waitFor(() => {
+      const focused = document.querySelectorAll('[data-nqt-panel][data-focused="true"]')
+      expect(Array.from(focused).map((el) => el.getAttribute('data-nqt-title'))).toEqual(['27F MON'])
+    })
+    expect(onFocusedPanelChange).toHaveBeenLastCalledWith(expect.objectContaining({ panelId: 'home-mon', number: 2 }))
+  })
+
+  it('focuses panel N for Alt+N through the handle, and refuses a number with no panel', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelNumbers()).toHaveLength(4))
+    let ok = false
+    act(() => {
+      ok = ref.current?.focusPanelNumber(3) ?? false
+    })
+    expect(ok).toBe(true)
+    expect(document.activeElement).toBe(screen.getByRole('group', { name: 'volmanaged_v0 EQ content' }))
+    act(() => {
+      ok = ref.current?.focusPanelNumber(9) ?? true
+    })
+    expect(ok).toBe(false)
+  })
+
+  it('goes back and forward through what one panel showed; false when there is nowhere to go', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
+    let moved = true
+    act(() => {
+      moved = ref.current?.goBack('home-gp') ?? true
+    })
+    expect(moved).toBe(false)
+    const es = { kind: 'instrument' as const, value: 'ES' }
+    act(() => ref.current?.run(command('GP', { context: es, contextSource: 'typed', canonical: 'ES GP' }), 'replace'))
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP'))
+    act(() => {
+      moved = ref.current?.goBack('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('NQ GP 1d'))
+    act(() => {
+      moved = ref.current?.goForward('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP'))
+    act(() => {
+      moved = ref.current?.goForward('home-gp') ?? true
+    })
+    expect(moved).toBe(false)
+  })
+
+  it('opens the related functions menu inside the focused panel only, and a row replaces that panel', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
+    let opened = false
+    act(() => {
+      opened = ref.current?.openRelatedMenu() ?? false
+    })
+    expect(opened).toBe(true)
+    const dialog = await screen.findByRole('dialog', { name: 'Related functions' })
+    expect(dialog.closest('[data-nqt-panel]')?.getAttribute('data-nqt-panel')).toBe('home-gp')
+    const gip = within(dialog).getAllByRole('menuitem').find((m) => /\bGIP\b/.test(m.textContent ?? ''))
+    act(() => gip?.click())
+    await waitFor(() => expect(panelTitles()[0]).toBe('NQ GIP'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('closes the related functions menu when focus moves to another panel, and keeps it for the chrome', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => {
+      ref.current?.openRelatedMenu('home-gp')
+    })
+    await screen.findByRole('dialog', { name: 'Related functions' })
+    const outside = document.createElement('button')
+    document.body.append(outside)
+    act(() => outside.focus())
+    expect(screen.getByRole('dialog', { name: 'Related functions' })).toBeTruthy()
+    act(() => screen.getByRole('group', { name: '27F MON content' }).focus())
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    outside.remove()
+  })
+})
+
+describe('Workspace panels: maximise and Number <GO> (look spec 4.3, 5.1 item 5)', () => {
+  it('maximises a panel from its title bar and restores it again', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    const reg = screen.getByRole('region', { name: 'REG' })
+    const max = within(reg).getByRole('button', { name: 'Maximise panel' })
+    expect(max.getAttribute('aria-pressed')).toBe('false')
+    act(() => max.click())
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'REG' })).getByRole('button', { name: 'Maximise panel' }).getAttribute('aria-pressed')).toBe('true'))
+    act(() => within(screen.getByRole('region', { name: 'REG' })).getByRole('button', { name: 'Maximise panel' }).click())
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'REG' })).getByRole('button', { name: 'Maximise panel' }).getAttribute('aria-pressed')).toBe('false'))
+  })
+
+  it('registers each panel red-bar button with the numbered registry; 96 opens the Actions menu', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(numberedItems('home-reg').map((i) => i.n)).toContain(96))
+    expect(numberedItems('home-eq').map((i) => i.n)).toEqual(expect.arrayContaining([1, 2, 3, 4, 5, 96]))
+    let ran = false
+    act(() => {
+      ran = activateNumbered('home-reg', 96)
+    })
+    expect(ran).toBe(true)
+    expect(within(screen.getByRole('region', { name: 'REG' })).getByRole('menu', { name: 'Actions menu' })).toBeTruthy()
+  })
+
+  it('while the related functions menu is open, its rows are the panel numbers; closing it restores the bar', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => {
+      ref.current?.openRelatedMenu('home-reg')
+    })
+    await screen.findByRole('dialog', { name: 'Related functions' })
+    await waitFor(() => expect(numberedItems('home-reg').map((i) => i.n)).not.toContain(96))
+    expect(numberedItems('home-reg')[0]?.n).toBe(1)
+    act(() => ref.current?.closeRelatedMenu())
+    await waitFor(() => expect(numberedItems('home-reg').map((i) => i.n)).toContain(96))
+  })
+
+  it('a tab on a shared analytics panel opens that function in the same panel', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    const eq = screen.getByRole('region', { name: 'volmanaged_v0 EQ' })
+    act(() => within(eq).getByRole('tab', { name: '2) Drawdown' }).click())
+    await waitFor(() => expect(panelTitles()[2]).toBe('volmanaged_v0 DD'))
   })
 })

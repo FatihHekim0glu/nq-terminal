@@ -7,8 +7,8 @@ export interface CopyViolation {
 }
 
 const DASHES: ReadonlyArray<readonly [RegExp, string]> = [
-  [/—/, 'em dash'],
-  [/–/, 'en dash'],
+  [/\u2014/, 'em dash'],
+  [/\u2013/, 'en dash'],
 ]
 
 const US_SPELLINGS: ReadonlyArray<readonly [RegExp, string]> = [

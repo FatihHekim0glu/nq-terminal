@@ -1,33 +1,92 @@
-/* CommandLine dropdown: SIGNAL .cmdk grammar on cmdk's attributes, tokens only (UI_SPEC sections 3, 4, 9).
-   Rows are 24px (2.5.8). The selected row gets a lime left border as well as the amber text, so colour
-   is not the only cue. No transitions on colour (SIGNAL rule). */
-.cmdline { position: relative; }
-/* The list hangs from the input (not the prompt), so matches line up with the typed text. */
-.cmdline-root { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
-.cmdline-root > input { flex: 1 1 auto; min-width: 0; }
-.cmdline-root > input[aria-invalid="true"] { border-color: var(--c-down); }
-/* In the error state the one ring is red, not a red border inside a lime ring. */
-.cmdline-root > input[aria-invalid="true"]:focus-visible { outline-color: var(--c-down); }
+/* Command zone contents (spec 4.2): the 22px box (8px inset, 680px wide), its caret triangle and block
+   cursor, the autocomplete sheet and numbered menus hanging from the box border, then the message
+   line. Tokens only; state changes are hard cuts, never transitions. */
+.cmdline { display: flex; flex-direction: column; min-width: 0; padding-top: 6px; }
+.cmdline .cmd-row { display: flex; align-items: center; gap: 16px; height: var(--cmd-box-h); min-width: 0; }
+.cmdline-root { position: relative; flex: 0 1 680px; min-width: 0; margin-left: 8px; }
 /* cmdk renders a label for its own input, which this line does not use; the combobox has its name. */
 .cmdline [cmdk-label] { display: none !important; }
 
-.cmdline .cmd-pop,
-.cmdline .cmd-error {
-  position: absolute; top: calc(100% + 4px); left: 10px; z-index: 50;
-  width: min(640px, calc(100vw - 24px));
-  background: var(--raised); border: 1px solid var(--border-int); border-radius: var(--r-md);
-  box-shadow: 0 18px 40px -16px #000;
+.cmd-box {
+  --cmd-text-x: 13px;
+  position: relative; display: flex; align-items: stretch; height: var(--cmd-box-h);
+  background: var(--cmd-bg); border: 1px solid var(--cmd-border-idle);
 }
-.cmdline .cmd-pop { left: -4px; top: calc(100% + 8px); width: min(640px, calc(100vw - 96px)); max-height: 52vh; overflow-y: auto; padding: 4px; }
-.cmdline [cmdk-group-heading] {
-  padding: 6px 8px 2px; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted);
+.cmd-box:focus-within { border-color: var(--cmd-border); }
+.cmd-box:has(#cmd:focus-visible) { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cmd-box #cmd:focus-visible { outline: none; }
+.cmd-caret {
+  flex: 0 0 auto; width: 6px; margin-left: 3px;
+  clip-path: polygon(0 0, 100% 50%, 0 100%); background: var(--cmd-caret-idle);
 }
+.cmd-box:focus-within .cmd-caret { background: var(--cmd-caret); }
+.cmd-box #cmd {
+  position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; height: 100%; padding: 0 0 0 4px;
+  background: transparent; border: 0; border-radius: 0; color: var(--white); caret-color: transparent;
+  font-family: var(--font-mono); font-size: var(--fs-cmd); line-height: 20px;
+}
+.cmd-cursor {
+  position: absolute; z-index: 0; top: 1px; display: none; width: 1ch; height: 18px; pointer-events: none;
+  left: calc(var(--cmd-text-x) + var(--col, 0) * 1ch - var(--scroll, 0px));
+  font-family: var(--font-mono); font-size: var(--fs-cmd);
+  background: var(--cmd-cursor);
+  animation: caret calc(2 * var(--caret-phase)) steps(1) infinite;
+}
+.cmd-box:focus-within .cmd-cursor { display: block; }
+@keyframes caret {
+  0%, 50% { background: var(--cmd-cursor); }
+  50.01%, 100% { background: var(--cmd-cursor-dim); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmd-cursor { animation: none; }
+}
+
+/* The sheet: same width as the box, hanging from its border. */
+.cmdline .cmd-pop {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 50;
+  max-height: 60vh; overflow-y: auto;
+  background: var(--ac-bg); border: 1px solid var(--cmd-border); border-top: 0;
+  font-size: var(--fs-cmd); color: var(--text);
+}
+.cmdline [cmdk-group-heading] { height: var(--row-h); padding: 0 8px; }
+.cmdline .grp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: var(--row-h); }
+.cmdline .grp-head > span { font-size: var(--fs-nav); font-weight: 700; color: var(--data); }
+.cmdline .grp-hint { font-size: var(--fs-small); font-weight: 400; color: var(--muted); }
 .cmdline [cmdk-item] {
-  display: flex; align-items: center; gap: 12px; min-height: 24px; padding: 2px 6px 2px 4px;
-  border-left: 2px solid transparent; border-radius: var(--r-sm);
-  font-family: var(--font-mono); font-size: 12px; color: var(--text); cursor: pointer;
+  display: grid; grid-template-columns: 24% minmax(0, 1fr); align-items: center; column-gap: 8px;
+  height: var(--row-h); padding: 0 8px; cursor: pointer; white-space: nowrap;
 }
-.cmdline [cmdk-item] .det { margin-left: auto; font-family: var(--font-sans); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cmdline [cmdk-item][data-selected="true"] { background: var(--sel-bg); color: var(--data); border-left-color: var(--accent); }
-.cmdline .cmd-note { margin: 4px 0 0; padding: 6px 8px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
-.cmdline .cmd-error { padding: 6px 10px; border-color: var(--c-down); color: var(--text); font-family: var(--font-sans); font-size: 12px; white-space: normal; }
+.cmdline [cmdk-item] .lbl { color: var(--white); overflow: hidden; text-overflow: ellipsis; }
+.cmdline [cmdk-item] .det { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.cmdline [cmdk-item] .det b { color: var(--white); font-weight: 700; }
+.cmdline [cmdk-item].more { display: block; color: var(--link); }
+.cmdline [cmdk-item]:hover,
+.cmdline [cmdk-item][data-selected="true"] { background: var(--hover-menu); }
+/* The arrowed-to row: a white bar as well as the fill, so the state is not shade alone. */
+.cmdline [cmdk-item][data-selected="true"] { box-shadow: inset 2px 0 0 var(--focus); }
+.cmdline .cmd-note { padding: 0 8px; line-height: var(--row-h); font-size: var(--fs-small); color: var(--muted); }
+
+/* Numbered menus (spec 4.7): breadcrumb, <Cancel> X, `N) MNEM  Title` rows. */
+.cmd-menu { padding: 4px 0; }
+.cmd-menu .menu-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px; min-height: var(--row-h); }
+.cmd-menu .menu-crumb { color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-menu .menu-close { min-height: 24px; padding: 0 4px; background: transparent; border: 0; color: var(--text); font: inherit; cursor: pointer; }
+.cmd-menu .menu-intro { padding: 0 8px; line-height: var(--row-h); color: var(--data); }
+.cmd-menu .menu-list { list-style: none; margin: 0; padding: 0; }
+.cmd-menu .menu-row {
+  display: grid; grid-template-columns: 2.2em minmax(4em, max-content) minmax(0, 1fr); align-items: center; column-gap: 8px;
+  height: var(--row-h); padding: 0 8px; cursor: pointer; white-space: nowrap;
+}
+.cmd-menu .menu-row .n { justify-self: end; color: var(--muted); display: inline-block; transform: scaleX(.63); transform-origin: right center; }
+.cmd-menu .menu-row .lbl { color: var(--white); overflow: hidden; text-overflow: ellipsis; }
+.cmd-menu .menu-row .det { color: var(--data); overflow: hidden; text-overflow: ellipsis; }
+.cmd-menu .menu-row:hover { background: var(--hover-menu); }
+.cmd-menu .menu-row[aria-selected="true"] { background: var(--sel-list); box-shadow: inset 2px 0 0 var(--focus); }
+.cmd-menu .menu-row[aria-selected="true"] > * { color: var(--white); }
+
+@media (max-width: 700px) {
+  .cmdline .cmd-row { flex-wrap: wrap; height: auto; row-gap: 4px; }
+  .cmdline-root { flex: 1 1 100%; margin-right: 8px; }
+  .cmdline .cmd-row > .ctx-strip { margin-left: 8px; flex-wrap: wrap; }
+  .cmdline .cmd-pop { position: static; }
+}

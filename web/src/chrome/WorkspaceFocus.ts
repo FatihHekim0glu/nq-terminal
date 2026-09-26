@@ -3,11 +3,14 @@
 // carries `data-roving-default`. Every other focusable element inside a panel is taken out of the
 // Tab order, so Tab and Shift+Tab move between panels. Left and Right move between the items of
 // the focused panel unless the item (a chart, a grid) already handled the key. Up, Down, Home and
-// End are left to the item, because they scroll.
+// End are left to the item, because they scroll. While a panel shows an overlay marked
+// `data-roving-overlay` (the related functions menu), the Tab stop is taken from that overlay's items,
+// so Tab from the command line lands in the open menu and its scroll region stays keyboard reachable.
 import { useEffect, type RefObject } from 'react'
 
 export const ROVING_ATTR = 'data-roving'
 export const ROVING_DEFAULT_ATTR = 'data-roving-default'
+export const ROVING_OVERLAY_ATTR = 'data-roving-overlay'
 
 const FOCUSABLE = [
   'a[href]', 'area[href]', 'button', 'input', 'select', 'textarea', 'iframe', 'summary',
@@ -59,7 +62,9 @@ function pickCurrent(items: readonly HTMLElement[], prefer?: HTMLElement): HTMLE
  */
 export function syncRoving(panel: HTMLElement, prefer?: HTMLElement): HTMLElement | undefined {
   const items = rovingItems(panel)
-  const current = pickCurrent(items, prefer)
+  const overlay = panel.querySelector<HTMLElement>(`[${ROVING_OVERLAY_ATTR}]`)
+  const inOverlay = overlay ? items.filter((el) => overlay.contains(el)) : []
+  const current = pickCurrent(inOverlay.length > 0 ? inOverlay : items, prefer)
   for (const el of panel.querySelectorAll<HTMLElement>(FOCUSABLE)) {
     if (!items.includes(el)) setTabIndex(el, -1)
   }
@@ -92,7 +97,7 @@ export function usePanelRoving(ref: RefObject<HTMLElement | null>): void {
     if (!panel) return undefined
     syncRoving(panel)
     const observer = new MutationObserver(() => syncRoving(panel))
-    observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['tabindex', ROVING_ATTR, 'disabled', 'href'] })
+    observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['tabindex', ROVING_ATTR, ROVING_OVERLAY_ATTR, 'disabled', 'href'] })
     const onKey = (event: KeyboardEvent) => handleRovingKey(panel, event)
     const onFocus = (event: FocusEvent) => {
       const target = event.target as HTMLElement | null

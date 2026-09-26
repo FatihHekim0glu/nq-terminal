@@ -6,6 +6,7 @@ import { createApiQueryClient } from '../api/queries'
 import { useLinkGroups } from '../state/linkGroups'
 import { COMMAND_LINE } from '../copy/commands'
 import { LiveCommandLine } from './CommandLine.live'
+import { resetMessage } from './MessageLine.store'
 
 beforeAll(() => {
   class NoResize {
@@ -19,6 +20,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup()
   useLinkGroups.getState().clearAll()
+  resetMessage()
 })
 
 const COMMANDS = {
@@ -56,8 +58,10 @@ describe('LiveCommandLine: suggestions from GET /api/commands', () => {
     await waitFor(() => expect(spy).toHaveBeenCalled())
     expect(String(spy.mock.calls[0]?.[0])).toBe('/api/commands')
     expect(spy.mock.calls[0]?.[1]?.method).toBe('GET')
+    // Typed in upper case, as the box shows it (spec 3.3): retyping a lowercase line on every retry
+    // would change the value each time and keep waitFor's mutation observer busy.
     await waitFor(() => {
-      fireEvent.change(input, { target: { value: 'nt_' } })
+      fireEvent.change(input, { target: { value: 'NT_' } })
       expect(within(screen.getByRole('listbox')).getByText('nt_fixture_run')).toBeTruthy()
     })
   })
@@ -87,14 +91,15 @@ describe('LiveCommandLine: suggestions from GET /api/commands', () => {
     fireEvent.change(input, { target: { value: 'GP' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onRun).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert')).toBeTruthy()
+    // Errors now read in the message line (spec 4.2), a polite status region, not an alert box.
+    expect(screen.getByRole('status').textContent).toMatch(/^GP needs an instrument/)
   })
 
   it('notes a failed index and still offers functions', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ detail: 'down' }, 503))
     const { input } = mount()
     await waitFor(() => {
-      fireEvent.change(input, { target: { value: 're' } })
+      fireEvent.change(input, { target: { value: 'RE' } })
       expect(screen.getByText(COMMAND_LINE.indexError)).toBeTruthy()
     })
   })

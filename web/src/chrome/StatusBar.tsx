@@ -1,14 +1,18 @@
-// StatusBar (UI_SPEC sections 2 and 8, SIGNAL .statusline): screen, link-group contexts, data window,
-// TWS, the kill switch from GET /api/health, gate reads, READ ONLY, NO ORDER PATH and the ET clock.
+// StatusBar (spec 4.10, decision D7): the 22px house status line in the Suggested Functions style: an
+// amber label, then segments of a bold white key and a value, divided by 1px rules.
+//   Status | Screen HOME | A NQ1 Index | B rebal_v0 | C - | DATA 2010-01-01..2021-12-31 | TWS not monitored
+//          | KILL off | Gate reads 7 | READ ONLY | NO ORDER PATH | 14:02:11 ET | <Esc> command
+// The safety segments (TWS, KILL, gate reads, READ ONLY, NO ORDER PATH) never shrink; contexts and
+// the data window give way first. The kill and health segments sit in one live region (assertive
+// while the kill switch is on), so a change of safety state is announced; the clock stays outside it.
 // Props only: the caller passes the health query state, so this component never fetches.
-// Values (screen number, data window, gate reads, clock) are <b> in the data colour, labels muted.
-// The kill and health segments sit in one live region (assertive while the kill switch is on), so
-// a change of safety state is announced; the clock stays outside it.
 import { useEffect, useState, type ReactNode } from 'react'
-import { screenNumber, type MnemonicCode } from '../commands/registry'
-import type { HealthData } from '../commands/types'
+import type { MnemonicCode } from '../commands/registry'
+import { displayContext } from '../commands/sectors'
+import type { CommandIndexData, HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
+import { KeyText } from './MessageLine'
 import { dataWindowValue, etClock } from './StatusBar.format'
 import './StatusBar.css'
 
@@ -21,19 +25,17 @@ export interface StatusBarProps {
   readonly screen: MnemonicCode
   readonly contexts: LinkContexts
   readonly health: HealthState
+  readonly index?: CommandIndexData | null
 }
 
 const CLOCK_TICK_MS = 1000
 
-/** `template` with its `{value}` slot as a <b> value, e.g. "gate reads <b>7</b>". */
-function labelled(template: string, value: string): ReactNode {
-  const [before = '', after = ''] = template.split('{value}')
+/** One segment: a bold key, then its value. `kind` sets how it lays out (see StatusBar.css). */
+function Seg({ k, children, kind = 'keep', title }: { readonly k: string; readonly children: ReactNode; readonly kind?: 'keep' | 'shrink'; readonly title?: string }) {
   return (
-    <>
-      {before}
-      <b>{value}</b>
-      {after}
-    </>
+    <span className={`seg ${kind}`} title={title}>
+      <b>{k}</b> {children}
+    </span>
   )
 }
 
@@ -47,22 +49,20 @@ function useEtClock(): string {
 }
 
 function KillSegment({ health }: { readonly health: HealthState }) {
-  if (health.status === 'loading') return <span className="seg">{STATUS_BAR.killLoading}</span>
+  if (health.status === 'loading') return <Seg k={STATUS_BAR.kill}>{STATUS_BAR.killLoading}</Seg>
   if (health.status === 'error') {
     return (
-      <span className="seg warn" title={STATUS_BAR.healthDownNote}>
-        {STATUS_BAR.killUnknown}
+      <span className="seg keep warn" title={STATUS_BAR.healthDownNote}>
+        <b>{STATUS_BAR.kill}</b> {STATUS_BAR.killUnknown}
       </span>
     )
   }
-  if (health.data.kill_switch_on) {
-    return (
-      <span className="seg alert" title={STATUS_BAR.killOnNote}>
-        {STATUS_BAR.killOn}
-      </span>
-    )
-  }
-  return <span className="seg">{STATUS_BAR.killOff}</span>
+  if (!health.data.kill_switch_on) return <Seg k={STATUS_BAR.kill}>{STATUS_BAR.killOff}</Seg>
+  return (
+    <span className="seg keep alert" title={STATUS_BAR.killOnNote}>
+      <b>{STATUS_BAR.kill}</b> {STATUS_BAR.killOn}
+    </span>
+  )
 }
 
 function SafetySegments({ health }: { readonly health: HealthState }) {
@@ -71,7 +71,7 @@ function SafetySegments({ health }: { readonly health: HealthState }) {
     <span className="seg-live" role="status" aria-live={killOn ? 'assertive' : 'polite'}>
       <KillSegment health={health} />
       {health.status === 'error' ? (
-        <span className="seg warn">
+        <span className="seg keep warn">
           <span className="sr-only">. </span>
           {STATUS_BAR.healthDown}
         </span>
@@ -80,37 +80,39 @@ function SafetySegments({ health }: { readonly health: HealthState }) {
   )
 }
 
-export function StatusBar({ screen, contexts, health }: StatusBarProps) {
+function ContextSegments({ contexts, index }: { readonly contexts: LinkContexts; readonly index: CommandIndexData | null }) {
+  return LINK_GROUP_IDS.map((group) => {
+    const context = contexts[group]
+    return (
+      <Seg key={group} k={group} kind="shrink" title={context?.value}>
+        {context ? displayContext(context, index) : STATUS_BAR.empty}
+      </Seg>
+    )
+  })
+}
+
+export function StatusBar({ screen, contexts, health, index = null }: StatusBarProps) {
   const clock = useEtClock()
   const data = health.status === 'ok' ? health.data : null
   const range = data ? dataWindowValue(data.fence) : STATUS_BAR.dataFallbackValue
   return (
-    <footer className="statusline status-bar" aria-label={STATUS_BAR.label}>
-      <span className="seg">
-        {`${STATUS_BAR.screenPrefix} `}
-        <b>{screenNumber(screen)}</b>
-        {` ${screen}`}
-      </span>
-      {LINK_GROUP_IDS.map((group) => {
-        const value = contexts[group]?.value
-        return (
-          <span className="seg shrink ctx-seg" key={group} data-group={group} title={value}>
-            <span className="grp">{group}</span>
-            {` ${value ?? STATUS_BAR.empty}`}
-          </span>
-        )
-      })}
-      <span className="seg shrink">{labelled(STATUS_BAR.dataWindow, range)}</span>
-      {data?.fixture_mode ? <span className="seg warn">{STATUS_BAR.fixture}</span> : null}
-      <span className="seg">{STATUS_BAR.tws}</span>
+    <footer className="nqt-status status-bar" aria-label={STATUS_BAR.label} data-chrome="status">
+      <span className="status-label">{STATUS_BAR.lead}</span>
+      <Seg k={STATUS_BAR.screen}>{screen}</Seg>
+      <ContextSegments contexts={contexts} index={index} />
+      <Seg k={STATUS_BAR.data} kind="shrink">{range}</Seg>
+      {data?.fixture_mode ? <span className="seg keep warn">{STATUS_BAR.fixture}</span> : null}
+      <Seg k={STATUS_BAR.tws}>{STATUS_BAR.twsValue}</Seg>
       <SafetySegments health={health} />
-      {data ? <span className="seg">{labelled(STATUS_BAR.gateReads, String(data.gate_reads_this_process))}</span> : null}
-      <span className="seg safe">{STATUS_BAR.readOnly}</span>
-      <span className="seg safe">{STATUS_BAR.noOrderPath}</span>
-      <span className="seg push">
-        <time>{labelled(STATUS_BAR.clock, clock)}</time>
+      <Seg k={STATUS_BAR.gateReads}>{data ? String(data.gate_reads_this_process) : STATUS_BAR.missing}</Seg>
+      <span className="seg keep flag">{STATUS_BAR.readOnly}</span>
+      <span className="seg keep flag">{STATUS_BAR.noOrderPath}</span>
+      <span className="seg keep push small">
+        <time>{STATUS_BAR.clock.replace('{value}', clock)}</time>
       </span>
-      <span className="seg">{STATUS_BAR.escHint}</span>
+      <span className="seg keep small">
+        <KeyText text={`${STATUS_BAR.escKey} ${STATUS_BAR.escHint}`} />
+      </span>
     </footer>
   )
 }

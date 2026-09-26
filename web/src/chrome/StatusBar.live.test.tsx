@@ -45,9 +45,9 @@ describe('LiveStatusBar: the status bar on GET /api/health and the link-group st
   it('shows the kill switch and gate reads from /api/health, with one GET', async () => {
     const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(HEALTH))
     mount(<LiveStatusBar screen="HOME" />)
-    expect(screen.getByText('KILL: reading')).toBeTruthy()
-    await waitFor(() => expect(screen.getByText('KILL: ON')).toBeTruthy())
-    expect(hasSegment('gate reads 3')).toBe(true)
+    expect(hasSegment('KILL reading')).toBe(true)
+    await waitFor(() => expect(hasSegment('KILL ON')).toBe(true))
+    expect(hasSegment('Gate reads 3')).toBe(true)
     expect(screen.getByText('FIXTURE DATA')).toBeTruthy()
     const [url, init] = spy.mock.calls[0]!
     expect(String(url)).toBe('/api/health')
@@ -57,7 +57,7 @@ describe('LiveStatusBar: the status bar on GET /api/health and the link-group st
   it('says the kill state is unknown when /api/health fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ detail: 'down' }, 503))
     mount(<LiveStatusBar screen="HOME" />)
-    await waitFor(() => expect(screen.getByText('KILL: unknown')).toBeTruthy())
+    await waitFor(() => expect(hasSegment('KILL unknown')).toBe(true))
     expect(screen.getByText('READ ONLY')).toBeTruthy()
     expect(screen.getByText('NO ORDER PATH')).toBeTruthy()
   })
@@ -71,9 +71,9 @@ describe('LiveStatusBar: the status bar on GET /api/health and the link-group st
         <LiveStatusBar screen="GP" />
       </>,
     )
-    expect(hasSegment('A NQ')).toBe(true)
-    expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('NQ')
-    await waitFor(() => expect(screen.getByText('KILL: ON')).toBeTruthy())
+    expect(hasSegment('A NQ1 Index')).toBe(true)
+    expect(screen.getAllByRole('listitem')[0]?.textContent).toContain('NQ1 Index')
+    await waitFor(() => expect(hasSegment('KILL ON')).toBe(true))
   })
 })
 
@@ -90,10 +90,10 @@ describe('LiveStatusBar: a stale answer is never shown as current', () => {
         <LiveStatusBar screen="HOME" />
       </ApiProvider>,
     )
-    await waitFor(() => expect(screen.getByText('KILL: off')).toBeTruthy())
+    await waitFor(() => expect(hasSegment('KILL off')).toBe(true))
     await client.refetchQueries()
-    await waitFor(() => expect(screen.getByText('KILL: unknown')).toBeTruthy())
-    expect(screen.queryByText('KILL: off')).toBeNull()
+    await waitFor(() => expect(hasSegment('KILL unknown')).toBe(true))
+    expect(hasSegment('KILL off')).toBe(false)
     expect(spy).toHaveBeenCalledTimes(2)
   })
 })

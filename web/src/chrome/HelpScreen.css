@@ -1,29 +1,55 @@
-/* HELP screen (UI_SPEC section 7). Tokens only; 11px floor. */
-/* minmax(0, 1fr): the track never grows to a table's min-content width, so prose wraps to the panel
-   at any zoom (1.4.10); a table wider than the panel scrolls with the panel body instead. */
-.help { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 120ch; font-size: 13px; color: var(--text); }
-.help p { max-width: 100ch; text-wrap: pretty; }
-.help h3 { margin-top: 8px; }
-.help .muted { color: var(--muted); }
-.help-intro { color: var(--text); }
-.help-examples { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
-.help-examples code,
-.help .code { font-family: var(--font-mono); font-size: 12px; color: var(--data); }
-.help-examples code { padding: 0 6px; border: 1px solid var(--border-int); border-radius: var(--r-sm); }
+/* HELP (spec 7.12): contents rail on --raised (white group headings, numbered amber items), amber
+   prose, white headings, italic --link breadcrumb, selected contents entry on --sel-bg.
+   Tokens only; 11px floor; no uppercase labels. */
+.help { display: grid; grid-template-columns: minmax(12em, 16em) minmax(0, 1fr); gap: 0; min-height: 100%; font-size: var(--fs-data); color: var(--data); text-align: left; }
+.help-toc { background: var(--raised); padding: 4px 0; }
+.help-toc ul { list-style: none; margin: 0; padding: 0; }
+.help-toc button {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%; min-height: 24px; padding: 0 8px;
+  background: transparent; border: 0; border-radius: 0; color: var(--data); font: inherit; text-align: left; cursor: pointer;
+}
+.help-toc button .count { color: var(--text); }
+/* Group headings white with right-aligned counts; under Mnemonics the numbered amber items, one list
+   row high, with muted condensed N) numbers in a 2.2em gutter (spec 7.12, 3.4). They are Number <GO>
+   targets: the same numbers as the index. */
+.help-toc .toc-group > button { color: var(--white); }
+.help-toc .toc-items { padding-bottom: 4px; }
+.help-toc .toc-item { justify-content: flex-start; gap: 4px; min-height: var(--row-h); padding-left: 0; color: var(--data); }
+.help-toc .toc-item .ix { display: inline-block; flex: 0 0 2.2em; text-align: right; }
+.help-toc .toc-item .hot { display: inline-block; color: var(--muted); transform: scaleX(.63); transform-origin: right center; }
+.help-toc button:hover { background: var(--hover-menu); }
+.help-toc button[aria-current="true"] { background: var(--sel-bg); box-shadow: inset 2px 0 0 var(--focus); }
 
-.help-table { border-collapse: collapse; width: 100%; font-size: 12px; line-height: 16px; }
-.help-table caption { text-align: left; font-family: var(--font-mono); font-size: 11px; color: var(--muted); padding-bottom: 4px; }
-.help-table th { text-align: left; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 4px 8px; background: var(--raised); }
+.help-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 6px; padding: 4px 12px 12px; min-width: 0; }
+.help-body p { max-width: 100ch; text-wrap: pretty; }
+.help-crumb { font-style: italic; color: var(--link); }
+.help-title { font-size: calc(2 * var(--fs-data)); line-height: 1.2; font-weight: 700; color: var(--white); }
+.help-body h4 { margin-top: 8px; font-size: var(--fs-title, var(--fs-data)); font-weight: 700; color: var(--white); }
+.help .muted { color: var(--muted); }
+.help-intro, .help-grammar { color: var(--data); }
+.help-examples { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.help .cmd-link-wrap { color: var(--link); }
+.help .cmd-link {
+  min-height: 24px; padding: 0 2px; background: transparent; border: 0; border-radius: 0;
+  color: var(--link); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+
+.help-table { border-collapse: collapse; width: 100%; font-size: var(--fs-data); line-height: var(--row-h); }
+.help-table caption { text-align: left; font-size: var(--fs-small); color: var(--muted); padding-bottom: 2px; }
+.help-table thead th { text-align: left; font-weight: 400; color: var(--th-fg); background: var(--th-bg); box-shadow: inset 0 1px 0 var(--th-rule); padding: 0 5px; }
 .help-table td,
-.help-table tbody th { padding: 3px 8px; border-top: 1px solid var(--border); vertical-align: top; }
-/* Data cells in mono with slashed zeros, so P0 never reads as PO; screen names stay in Inter. */
-.help-table td { font-family: var(--font-mono); font-feature-settings: 'tnum' 1, 'zero' 1; }
-.help-table td.prose { font-family: var(--font-sans); }
-.help-table tbody th { text-align: left; font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; background: none; }
-.help-table .ix { font-family: var(--font-mono); color: var(--accent); text-align: right; width: 4ch; }
-.help-table .status { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.help-table tbody th { padding: 0 5px; vertical-align: top; }
+.help-table tbody th { text-align: left; font-weight: 400; color: var(--white); background: none; }
+.help-table td { color: var(--text); font-variant-numeric: tabular-nums lining-nums; }
+.help-table td.prose { color: var(--data); }
+.help-table .ix { text-align: right; width: 2.2em; }
+.help-table .ix .hot { display: inline-block; color: var(--muted); transform: scaleX(.63); transform-origin: right center; }
+.help-table .status { color: var(--muted); white-space: nowrap; }
 .help-table tr[data-built="true"] .status { color: var(--c-up); }
 
-.help a { color: var(--accent); text-underline-offset: 2px; }
-.help a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.help-licences { list-style: none; display: grid; gap: 2px; }
+.help a { color: var(--link); text-underline-offset: 2px; }
+.help-licences { list-style: none; display: grid; gap: 2px; color: var(--text); }
+
+@media (max-width: 700px) {
+  .help { grid-template-columns: minmax(0, 1fr); }
+}

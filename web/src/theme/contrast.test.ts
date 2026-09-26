@@ -1,42 +1,22 @@
+// Section 8.2 of the look spec in docs/: every text pair at 4.5:1, every graphic pair at 3:1, in the
+// default theme and in both CVD themes, plus the negative cases that must fail the checker.
 import { describe, expect, it } from 'vitest'
 import tokensCss from './tokens.css?raw'
 import {
   COMPONENT_MIN,
   CONTRAST_PAIRS,
+  CVD_PAIRS,
+  RAMP_STEPS,
   TEXT_MIN,
   auditContrast,
+  bestTextRatio,
   contrastRatio,
+  mixHex,
   readTokens,
+  type ContrastPair,
 } from './contrast'
 
-// UI_SPEC section 3, verbatim. The tokens file must carry exactly these values.
-const SPEC_TOKENS: Record<string, string> = {
-  bg: '#070A0E',
-  surface: '#0F1318',
-  raised: '#171C22',
-  text: '#EFF2F5',
-  data: '#FFB000',
-  muted: '#8D9399',
-  accent: '#94D53C',
-  'accent-2': '#E8AA4E',
-  'c-up': '#23C987',
-  'c-down': '#FF5C5C',
-  'cvd-up': '#4DA3FF',
-  'border-int': '#646C77',
-  'sel-bg': '#2A1F00',
-  fence: '#FFB000',
-  'sec-equity': '#6CB6FF',
-  'sec-rates': '#B39DFF',
-  'sec-fx': '#38C7E8',
-  'sec-energy': '#FF8A3D',
-  'sec-metals': '#E0C060',
-  'sec-grains': '#9CCC65',
-  'sec-livestock': '#F48FB1',
-  'sec-benchmark': '#8D9399',
-}
-
-const SIGNAL_DOWN = '#E64343'
-const SIGNAL_BORDER = '#4A505A'
+const tokens = readTokens(tokensCss)
 
 function swapToken(css: string, name: string, value: string): string {
   const pattern = new RegExp(`(--${name}\\s*:\\s*)#[0-9A-Fa-f]{6}`)
@@ -44,25 +24,40 @@ function swapToken(css: string, name: string, value: string): string {
   return css.replace(pattern, `$1${value}`)
 }
 
+function ratioOf(fg: string, bg: string, set = tokens): number {
+  const a = set[fg]
+  const b = set[bg]
+  if (!a || !b) throw new Error(`missing token --${a ? bg : fg}`)
+  return contrastRatio(a, b)
+}
+
+function hasPair(fg: string, bg: string, min: number, pairs: readonly ContrastPair[] = CONTRAST_PAIRS): boolean {
+  return pairs.some((p) => p.fg === fg && p.bg === bg && p.min === min)
+}
+
 describe('WCAG contrast formula', () => {
   it('gives 21 for black on white and 1 for a colour on itself', () => {
     expect(contrastRatio('#000000', '#FFFFFF')).toBeCloseTo(21, 10)
-    expect(contrastRatio('#171C22', '#171C22')).toBeCloseTo(1, 10)
+    expect(contrastRatio('#1E1E1E', '#1E1E1E')).toBeCloseTo(1, 10)
   })
 
   it('is symmetric in its arguments', () => {
-    expect(contrastRatio('#FFB000', '#171C22')).toBeCloseTo(contrastRatio('#171C22', '#FFB000'), 12)
+    expect(contrastRatio('#FFA028', '#1E1E1E')).toBeCloseTo(contrastRatio('#1E1E1E', '#FFA028'), 12)
   })
 
-  it('reproduces the ratios printed in UI_SPEC section 3', () => {
-    const raised = SPEC_TOKENS.raised!
-    const surface = SPEC_TOKENS.surface!
-    expect(contrastRatio(SPEC_TOKENS.text!, raised)).toBeCloseTo(15.25, 2)
-    expect(contrastRatio(SPEC_TOKENS.data!, surface)).toBeCloseTo(10.17, 2)
-    expect(contrastRatio(SPEC_TOKENS.muted!, raised)).toBeCloseTo(5.52, 2)
-    expect(contrastRatio(SPEC_TOKENS['c-down']!, raised)).toBeCloseTo(5.66, 2)
-    expect(contrastRatio(SPEC_TOKENS['border-int']!, raised)).toBeCloseTo(3.23, 2)
-    expect(contrastRatio(SPEC_TOKENS['border-int']!, surface)).toBeCloseTo(3.51, 2)
+  it('reproduces the ratios printed in section 2', () => {
+    expect(ratioOf('text', 'bg')).toBeCloseTo(14.59, 2)
+    expect(ratioOf('data', 'bg')).toBeCloseTo(10.31, 2)
+    expect(ratioOf('muted', 'raised')).toBeCloseTo(6.77, 2)
+    expect(ratioOf('c-down', 'bg')).toBeCloseTo(5.71, 2)
+    expect(ratioOf('c-down', 'raised')).toBeCloseTo(4.53, 2)
+    expect(ratioOf('c-down-raised', 'th-bg')).toBeCloseTo(5.05, 2)
+    expect(ratioOf('c-down-raised', 'sel-bg')).toBeCloseTo(4.62, 2)
+    expect(ratioOf('c-down-hover', 'hover-cell')).toBeCloseTo(4.89, 2)
+    expect(ratioOf('muted-hover', 'hover-cell')).toBeCloseTo(5.32, 2)
+    expect(ratioOf('fn-fg', 'fn-bar')).toBeCloseTo(9.92, 2)
+    expect(ratioOf('sb-thumb', 'sb-track')).toBeCloseTo(3.6, 2)
+    expect(ratioOf('frame-fg', 'frame-bg')).toBeCloseTo(13.21, 2)
   })
 
   it('rejects a malformed colour instead of guessing', () => {
@@ -71,61 +66,148 @@ describe('WCAG contrast formula', () => {
   })
 })
 
-describe('tokens.css', () => {
-  const tokens = readTokens(tokensCss)
-
-  it('defines every UI_SPEC section 3 token with its exact value', () => {
-    for (const [name, value] of Object.entries(SPEC_TOKENS)) {
-      expect(tokens[name], `--${name}`).toBe(value)
-    }
-  })
-
-  it('keeps the decorative SIGNAL border as the 9% white alpha', () => {
-    expect(tokensCss).toMatch(/--border\s*:\s*oklch\(1 0 0 \/ 9%\)/)
-  })
-
-  it('passes every text pair at 4.5:1 and every component pair at 3.0:1', () => {
+describe('tokens.css passes section 8.2', () => {
+  it('passes every default-theme pair', () => {
     expect(auditContrast(tokens)).toEqual([])
   })
 
-  it('checks both kinds of pair with the WCAG thresholds', () => {
-    const kinds = new Set(CONTRAST_PAIRS.map((pair) => pair.min))
-    expect(kinds).toEqual(new Set([TEXT_MIN, COMPONENT_MIN]))
-    expect(TEXT_MIN).toBe(4.5)
-    expect(COMPONENT_MIN).toBe(3)
-    const covered = new Set(CONTRAST_PAIRS.flatMap((pair) => [pair.fg, pair.bg]))
-    for (const name of Object.keys(SPEC_TOKENS)) {
-      expect(covered.has(name), `--${name} is checked by some pair`).toBe(true)
+  it('passes every CVD pair in the deuteranopia theme', () => {
+    expect(auditContrast(readTokens(tokensCss, 'deut'), CVD_PAIRS)).toEqual([])
+  })
+
+  it('passes every CVD pair in the protanomaly theme', () => {
+    expect(auditContrast(readTokens(tokensCss, 'prot'), CVD_PAIRS)).toEqual([])
+  })
+
+  it('checks the text tokens on each of the five dark surfaces', () => {
+    for (const fg of ['text', 'data', 'muted', 'white', 'c-up', 'link']) {
+      for (const bg of ['bg', 'raised', 'chrome', 'th-bg', 'sel-bg']) {
+        expect(hasPair(fg, bg, TEXT_MIN), `${fg} on ${bg}`).toBe(true)
+      }
     }
+  })
+
+  it('checks --c-down only where it passes, and the raised and hover variants elsewhere', () => {
+    for (const bg of ['bg', 'raised', 'chrome']) expect(hasPair('c-down', bg, TEXT_MIN)).toBe(true)
+    for (const bg of ['th-bg', 'sel-bg', 'hover-cell']) expect(hasPair('c-down', bg, TEXT_MIN)).toBe(false)
+    expect(hasPair('c-down-raised', 'th-bg', TEXT_MIN)).toBe(true)
+    expect(hasPair('c-down-raised', 'sel-bg', TEXT_MIN)).toBe(true)
+    expect(hasPair('c-down-hover', 'hover-cell', TEXT_MIN)).toBe(true)
+    expect(hasPair('muted-hover', 'hover-cell', TEXT_MIN)).toBe(true)
+  })
+
+  it('checks black labels on the light fills and white labels on the dark fills', () => {
+    for (const bg of ['field-bg', 'frame-bg', 'tab-on', 'tab-hover', 'key-cancel', 'key-go', 'key-sector',
+      'key-panel', 'field-off', 'datatip-bg', 'heat-up-2', 'heat-up-1', 'heat-dn-2']) {
+      expect(hasPair('black', bg, TEXT_MIN), `black on ${bg}`).toBe(true)
+    }
+    for (const bg of ['fn-bar', 'fn-hover', 'fn-press', 'sel-list', 'sel-toggle', 'flag-bg', 'heat-dn-1',
+      'corr-dn-2', 'corr-dn-1', 'corr-0', 'corr-up-1', 'corr-up-2', 'corr-diag', 'list-sel']) {
+      expect(hasPair('white', bg, TEXT_MIN), `white on ${bg}`).toBe(true)
+    }
+  })
+
+  it('checks the graphic pairs at 3:1', () => {
+    for (const fg of ['cmd-border', 'cmd-cursor', 'border-int', 'field-focus']) {
+      for (const bg of ['bg', 'raised', 'chrome']) expect(hasPair(fg, bg, COMPONENT_MIN), `${fg} on ${bg}`).toBe(true)
+    }
+    expect(hasPair('sb-thumb', 'sb-track', COMPONENT_MIN)).toBe(true)
+    expect(hasPair('list-border', 'list-bg', COMPONENT_MIN)).toBe(true)
+    for (const fg of ['chart-s1', 'accent-2', 'chart-vol', 'candle-dn', 'bar-pos', 'bar-neg']) {
+      expect(hasPair(fg, 'bg', COMPONENT_MIN), `${fg} on bg`).toBe(true)
+    }
+  })
+
+  it('checks the CVD up and down colours on the four surfaces', () => {
+    for (const fg of ['c-up', 'c-down-raised']) {
+      for (const bg of ['bg', 'raised', 'th-bg', 'sel-bg']) {
+        expect(hasPair(fg, bg, TEXT_MIN, CVD_PAIRS), `${fg} on ${bg}`).toBe(true)
+      }
+    }
+    expect(ratioOf('cvd-up', 'sel-bg')).toBeGreaterThanOrEqual(TEXT_MIN)
+    expect(ratioOf('c-down', 'sel-bg', readTokens(tokensCss, 'prot'))).toBeCloseTo(5.3, 1)
   })
 })
 
-describe('born-failing cases (rule 5): the audit must reject SIGNAL values', () => {
-  it("fails SIGNAL's #E64343 over #171C22 as text", () => {
-    const ratio = contrastRatio(SIGNAL_DOWN, '#171C22')
-    expect(ratio).toBeLessThan(TEXT_MIN)
-    expect(ratio).toBeCloseTo(4.28, 2)
+describe('SEAG heat ramp (MRET): black or white text passes at every one of 101 steps', () => {
+  const ramps = [
+    { name: 'green', from: 'mret-up-floor', to: 'mret-up-max', worst: 4.6 },
+    { name: 'red', from: 'mret-dn-floor', to: 'mret-dn-max', worst: 4.91 },
+  ] as const
 
-    const broken = readTokens(swapToken(tokensCss, 'c-down', SIGNAL_DOWN))
-    const failures = auditContrast(broken)
-    expect(failures).toContainEqual(
-      expect.objectContaining({ fg: 'c-down', bg: 'raised', min: TEXT_MIN }),
-    )
+  for (const ramp of ramps) {
+    it(`${ramp.name} ramp stays at or above 4.5`, () => {
+      const from = tokens[ramp.from]!
+      const to = tokens[ramp.to]!
+      const ratios = Array.from({ length: RAMP_STEPS }, (_, i) =>
+        bestTextRatio(mixHex(from, to, i / (RAMP_STEPS - 1)), [tokens.black!, tokens.white!]))
+      expect(ratios).toHaveLength(101)
+      const worst = Math.min(...ratios)
+      expect(worst).toBeGreaterThanOrEqual(TEXT_MIN)
+      expect(worst).toBeCloseTo(ramp.worst, 1)
+    })
+  }
+
+  it('mixes channel by channel in sRGB', () => {
+    expect(mixHex('#000000', '#FFFFFF', 0)).toBe('#000000')
+    expect(mixHex('#000000', '#FFFFFF', 1)).toBe('#FFFFFF')
+    expect(mixHex('#014D10', '#18BD39', 0.5)).toBe('#0D8525')
+  })
+})
+
+describe('born-failing cases (rule 5): the checker must reject these reference values', () => {
+  it('fails #FF2C4A on the #232323 table header (4.27)', () => {
+    const ratio = contrastRatio('#FF2C4A', '#232323')
+    expect(ratio).toBeCloseTo(4.27, 2)
+    const failures = auditContrast(tokens, [{ fg: 'c-down', bg: 'th-bg', min: TEXT_MIN }])
+    expect(failures).toContainEqual(expect.objectContaining({ fg: 'c-down', bg: 'th-bg' }))
   })
 
-  it('fails #4A505A as an interactive border on raised and surface', () => {
-    expect(contrastRatio(SIGNAL_BORDER, '#171C22')).toBeLessThan(COMPONENT_MIN)
-    expect(contrastRatio(SIGNAL_BORDER, '#0F1318')).toBeLessThan(COMPONENT_MIN)
+  it('fails #FF1E3E as text on #1E1E1E (4.37)', () => {
+    expect(contrastRatio('#FF1E3E', '#1E1E1E')).toBeCloseTo(4.37, 2)
+    const broken = readTokens(swapToken(tokensCss, 'c-down', '#FF1E3E'))
+    expect(auditContrast(broken)).toContainEqual(expect.objectContaining({ fg: 'c-down', bg: 'raised', min: TEXT_MIN }))
+  })
 
-    const broken = readTokens(swapToken(tokensCss, 'border-int', SIGNAL_BORDER))
-    const failed = auditContrast(broken).filter((f) => f.fg === 'border-int')
-    expect(failed.map((f) => f.bg).sort()).toEqual(expect.arrayContaining(['raised', 'surface']))
-    expect(failed.every((f) => f.min === COMPONENT_MIN)).toBe(true)
+  it('fails black on the #BA152D heat step (3.23)', () => {
+    expect(contrastRatio('#000000', '#BA152D')).toBeCloseTo(3.23, 2)
+    const failures = auditContrast(tokens, [{ fg: 'black', bg: 'heat-dn-1', min: TEXT_MIN }])
+    expect(failures).toHaveLength(1)
+  })
+
+  it('fails --muted #A5A5A5 inside a hovered cell (4.48)', () => {
+    expect(contrastRatio('#A5A5A5', '#3C3C3C')).toBeCloseTo(4.48, 2)
+    const failures = auditContrast(tokens, [{ fg: 'muted', bg: 'hover-cell', min: TEXT_MIN }])
+    expect(failures).toHaveLength(1)
+  })
+
+  it("fails the reference #646464 scrollbar thumb on #222222 (2.69)", () => {
+    expect(contrastRatio('#646464', '#222222')).toBeCloseTo(2.69, 2)
+    const broken = readTokens(swapToken(tokensCss, 'sb-thumb', '#646464'))
+    expect(auditContrast(broken)).toContainEqual(
+      expect.objectContaining({ fg: 'sb-thumb', bg: 'sb-track', min: COMPONENT_MIN }))
+  })
+
+  it("fails the reference #731010 histogram bar on black (1.81)", () => {
+    expect(contrastRatio('#731010', '#000000')).toBeCloseTo(1.81, 2)
+    const broken = readTokens(swapToken(tokensCss, 'bar-neg', '#731010'))
+    expect(auditContrast(broken)).toContainEqual(
+      expect.objectContaining({ fg: 'bar-neg', bg: 'bg', min: COMPONENT_MIN }))
+  })
+
+  it("fails the deuteranopia swatch #0089E9 on the header and the selection", () => {
+    const broken = readTokens(swapToken(tokensCss, 'cvd-up', '#0089E9'), 'deut')
+    const bgs = auditContrast(broken, CVD_PAIRS).filter((f) => f.fg === 'c-up').map((f) => f.bg).sort()
+    expect(bgs).toEqual(['sel-bg', 'th-bg'])
   })
 
   it('reports a token that is missing from the file instead of skipping it', () => {
     const withoutData = tokensCss.replace(/--data\s*:[^;]+;/, '')
-    const failures = auditContrast(readTokens(withoutData))
-    expect(failures).toContainEqual(expect.objectContaining({ fg: 'data', ratio: null }))
+    expect(auditContrast(readTokens(withoutData))).toContainEqual(expect.objectContaining({ fg: 'data', ratio: null }))
+  })
+
+  it('reports an alias that points at nothing', () => {
+    const dangling = tokensCss.replace(/--cmd-border\s*:[^;]+;/, '')
+    expect(readTokens(dangling).accent).toBeUndefined()
   })
 })

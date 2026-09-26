@@ -1,34 +1,76 @@
-/* Entry stylesheet: Tailwind 4, the terminal tokens, then SIGNAL's class grammar compacted for a
-   dense terminal (UI_SPEC sections 2, 3 and 4). 11px is the floor for any text. */
+/* Entry stylesheet: Tailwind 4, the terminal tokens, the vendored Bergoom faces, then the base rules
+   of the flat-black look (look spec sections 3 and 4). Every colour comes from tokens.css.
+   11px is the floor for any text. No transitions on colour or background: state changes are hard cuts. */
 @import "tailwindcss";
 @import "./tokens.css";
+
+/* Bergoom, OFL-1.1 (src/assets/fonts/bergoom/LICENSE.md), shipped unmodified under its own name.
+   Only the faces a page uses are fetched; Source Sans 3 (@fontsource, OFL) is the fallback. */
+@font-face {
+  font-family: "Bergoom";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/bergoom/Bergoom-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bergoom";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/bergoom/Bergoom-Italic.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bergoom";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/bergoom/Bergoom-Semibold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bergoom";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/bergoom/Bergoom-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Bergoom";
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../assets/fonts/bergoom/Bergoom-BoldItalic.woff2") format("woff2");
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root { height: 100%; }
 
+html { background-color: var(--bg); }
+
 body {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-data);
+  line-height: var(--row-h);
+  font-weight: var(--fw-regular);
+  letter-spacing: 0;
+  text-transform: none;
   background-color: var(--bg);
   color: var(--text);
-  font-feature-settings: 'cv05', 'ss01', 'tnum' 1;
-  line-height: 1.5;
+  /* Bergoom's digits are tabular already; the fallback needs the feature. No 'zero': plain zeros. */
+  font-variant-numeric: tabular-nums lining-nums;
   -webkit-font-smoothing: antialiased;
-  /* never transition bg or colour: tokens switch instantly */
 }
 
-::selection { background: var(--sel-bg); color: var(--data); }
+::selection { background: var(--sel-bg); color: var(--text); }
 
-.mono { font-family: var(--font-mono); }
-.disp { font-family: var(--font-display); letter-spacing: -0.02em; }
-.num {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 16px;
-  font-feature-settings: 'tnum' 1, 'zero' 1;
-  color: var(--data);
-}
+/* Keyboard focus: a 2px white ring (2.4.7, 2.4.11). Pointer hover uses fills, never this ring. */
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.mono { font-family: var(--font-mono); font-size: var(--fs-fixed); line-height: var(--lh-fixed); }
+/* Numbers: light grey, right-aligned, tabular (section 3.4). Names and labels are amber (.lbl). */
+.num { color: var(--text); text-align: right; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
+.lbl { color: var(--data); }
 .txt-muted { color: var(--muted); }
 .up { color: var(--c-up); }
 .down { color: var(--c-down); }
@@ -38,95 +80,28 @@ body {
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 
-/* focus ring: 2px lime (2.4.7, 2.4.11) */
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
-
-/* ---------- frame ---------- */
+/* ---------- frame: rows stack top to bottom, the workspace takes the rest (4.1) ---------- */
 .frame {
-  display: grid;
-  grid-template-rows: var(--cmd-h) minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   height: 100dvh;
   min-width: 0;
   background: var(--bg);
 }
+.frame > * { flex: 0 0 auto; }
+.frame > .workspace { flex: 1 1 auto; }
 
-/* ---------- command-line bar (top) ---------- */
-.cmdbar {
-  display: flex; align-items: stretch; min-width: 0;
-  background: var(--raised); border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono); font-size: 12px;
-}
-.cmdbar .cmd { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; padding: 0 10px; }
-.cmdbar .prompt { color: var(--accent); white-space: nowrap; }
-.cmdbar input {
-  flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px;
-  background: var(--bg); color: var(--text);
-  border: 1px solid var(--border-int); border-radius: var(--r-sm);
-  font: inherit;
-}
-.cmdbar input::placeholder { color: var(--muted); }
-/* One ring on the input, drawn over its border rather than 2px outside it. */
-.cmdbar input:focus-visible { outline-offset: -1px; }
-.cmdbar .seg { display: flex; align-items: center; gap: 10px; padding: 0 12px; border-left: 1px solid var(--border); white-space: nowrap; }
-.cmdbar .safe { color: var(--data); font-weight: 500; letter-spacing: .07em; }
+/* ---------- link groups: one colour per group as --group, for every chip. Colour reinforces the
+   letter. --link stays the hyperlink colour everywhere, including inside a linked panel. ---------- */
+[data-group="A"] { --group: var(--link-a); }
+[data-group="B"] { --group: var(--link-b); }
+[data-group="C"] { --group: var(--link-c); }
+[data-group="-"] { --group: var(--muted); }
 
-/* ---------- link groups: one colour per group, used by every chip (ContextStrip.css, PanelChrome.css,
-   StatusBar.css). Colour reinforces the letter, never replaces it. ---------- */
-[data-group="A"] { --link: var(--link-a); }
-[data-group="B"] { --link: var(--link-b); }
-[data-group="C"] { --link: var(--link-c); }
-[data-group="-"] { --link: var(--muted); }
-
-/* ---------- panel chrome (SIGNAL .panel / .panel-head, compacted) ---------- */
-.workspace { min-height: 0; overflow: auto; padding: 8px; }
-.panel {
-  display: flex; flex-direction: column; min-height: 100%;
-  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
-  overflow: clip; box-shadow: inset 0 1px 0 oklch(1 0 0 / 4%);
-}
-.panel-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  height: var(--panel-head-h); padding: 0 10px;
-  background: var(--raised); border-bottom: 1px solid var(--border);
-}
-.panel-body { flex: 1 1 auto; display: grid; place-content: center; gap: 6px; padding: 16px; text-align: center; }
-.panel-body .empty { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
-.panel-body .note { font-size: 13px; color: var(--muted); max-width: 60ch; }
-
-.eyebrow {
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: .07em;
-  text-transform: uppercase; color: var(--muted);
-}
-.eyebrow b { color: var(--accent); font-weight: 500; }
-
-.tag-b { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
-.tag-b::before { content: "["; color: var(--muted); }
-.tag-b::after { content: "]"; color: var(--muted); }
-
-/* ---------- status bar (SIGNAL .statusline, 22px) ---------- */
-.statusline {
-  display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; min-height: var(--status-h);
-  font-family: var(--font-mono); font-size: 11px; line-height: 20px; color: var(--muted);
-  background: var(--raised); border-top: 1px solid var(--border);
-}
-.statusline .seg { flex: 0 0 auto; padding: 0 10px; border-right: 1px solid var(--border); white-space: nowrap; }
-/* Contexts and the data window give way first, so the bar stays one 22px line and the safety and
-   kill segments never truncate. */
-.statusline .seg.shrink { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.statusline .seg b { color: var(--data); font-weight: 500; }
-.statusline .seg.safe { color: var(--data); letter-spacing: .07em; }
-.statusline .seg.push { margin-left: auto; border-right: none; border-left: 1px solid var(--border); }
-
-/* Narrow viewports (about 400% zoom): the bars wrap instead of overlapping or clipping (1.4.10). */
-@media (max-width: 700px) {
-  .frame { grid-template-rows: auto minmax(0, 1fr) auto; }
-  .cmdbar { flex-wrap: wrap; }
-  .cmdbar .cmd { flex: 1 0 100%; min-height: var(--cmd-h); }
-  .cmdbar input { min-width: 12ch; }
-  .cmdbar .seg { border-left: none; min-height: 24px; }
-  .statusline { flex-wrap: wrap; }
-}
+/* ---------- workspace (4.3): 2px black gutters, no panel borders. Panel chrome lives in
+   src/chrome/PanelChrome.css, the grid look in src/grids/grid.css. ---------- */
+.workspace { min-height: 0; overflow: auto; padding: var(--gutter); background: var(--bg); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

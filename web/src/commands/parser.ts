@@ -1,9 +1,13 @@
-// Command-line parser for UI_SPEC section 5:
-//   <context> <FUNCTION> [args]
-//   context := instrument | hypothesis | run id | 27F | omitted (the focused panel's link-group context)
-// Pure and total: every input gives a command or a coded error; nothing throws.
+// Command-line parser for UI_SPEC section 5 and spec 5.1:
+//   <context> [SECTOR] <FUNCTION> [args]
+//   context := instrument (root or generic ticker) | hypothesis | run id | 27F
+//            | omitted (the focused panel's link-group context)
+// A sector key after an instrument is checked against it and dropped; a hypothesis, a run or 27F
+// refuses one. Pure and total: every input gives a command or a coded error; nothing throws.
+// src/commands/line.ts adds the chrome grammar (digits, NXTW, HELP suffix, menus) on top of this.
 import { pickContext, resolveContext } from './contexts'
 import { findMnemonic, TIMEFRAMES, type MnemonicDef } from './registry'
+import { mergeGenericTokens, sectorForRoot, sectorWord, type SectorCode } from './sectors'
 import type { CommandIndexData, ResolvedContext } from './types'
 
 export const MAX_LINE = 200
@@ -25,11 +29,17 @@ export type ParseErrorCode =
   | 'missing-argument'
   | 'bad-argument'
   | 'too-many-arguments'
+  | 'sector-mismatch'
+  | 'sector-not-taken'
+  | 'missing-command'
+  | 'extra-after-word'
 
 export interface ParseError {
   readonly code: ParseErrorCode
   readonly token?: string
   readonly mnemonic?: MnemonicDef
+  /** sector-mismatch: the key the instrument takes; sector-not-taken: the key that was typed. */
+  readonly sector?: SectorCode
 }
 
 export interface CommandArgs {
@@ -58,12 +68,39 @@ export interface ParseOptions {
   readonly fallbackContext?: ResolvedContext | string | null
 }
 
-type Step<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ParseError }
+export type Step<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: ParseError }
 
-const fail = (code: ParseErrorCode, token?: string, mnemonic?: MnemonicDef): { ok: false; error: ParseError } => ({
+export const fail = (code: ParseErrorCode, token?: string, mnemonic?: MnemonicDef, sector?: SectorCode): { ok: false; error: ParseError } => ({
   ok: false,
-  error: { code, ...(token === undefined ? {} : { token }), ...(mnemonic ? { mnemonic } : {}) },
+  error: { code, ...(token === undefined ? {} : { token }), ...(mnemonic ? { mnemonic } : {}), ...(sector ? { sector } : {}) },
 })
+
+/**
+ * Checks and drops a sector key typed after a context (`NQ INDEX GP` becomes `NQ GP`). The key must be
+ * the one the instrument takes; anything that is not an instrument takes none. Returns new tokens.
+ */
+export function stripSector(tokens: readonly string[], index: CommandIndexData | null): Step<readonly string[]> {
+  const [first = '', second = ''] = tokens
+  const given = sectorWord(second)
+  if (tokens.length < 2 || given === null || findMnemonic(first)) return { ok: true, value: tokens }
+  const candidates = resolveContext(first, index)
+  if (candidates.length === 0) return fail(index ? 'unknown-context' : 'index-unavailable', first)
+  const instrument = candidates.find((c) => c.kind === 'instrument')
+  if (!instrument) return fail('sector-not-taken', first, undefined, given)
+  const expected = sectorForRoot(instrument.value, index)
+  if (given !== expected) return fail('sector-mismatch', first, undefined, expected)
+  return { ok: true, value: [first, ...tokens.slice(2)] }
+}
+
+/** Splits a line into tokens, checking length and the command alphabet; `C 1` style tickers joined. */
+export function tokenise(input: string): Step<readonly string[]> {
+  if (input.length > MAX_LINE) return fail('too-long')
+  const tokens = input.trim().split(/\s+/).filter((t) => t !== '')
+  if (tokens.length === 0) return fail('empty')
+  const bad = tokens.find((t) => !TOKEN.test(t))
+  if (bad !== undefined) return fail('bad-character', bad)
+  return { ok: true, value: mergeGenericTokens(tokens) }
+}
 
 export function isCalendarDate(text: string): boolean {
   const m = ISO_DATE.exec(text)
@@ -133,12 +170,15 @@ function canonical(context: ResolvedContext | null, mnemonic: MnemonicDef, args:
 }
 
 export function parseCommand(input: string, options: ParseOptions): ParseResult {
-  if (input.length > MAX_LINE) return fail('too-long')
-  const tokens = input.trim().split(/\s+/).filter((t) => t !== '')
-  if (tokens.length === 0) return fail('empty')
-  const bad = tokens.find((t) => !TOKEN.test(t))
-  if (bad !== undefined) return fail('bad-character', bad)
+  const typed = tokenise(input)
+  if (!typed.ok) return typed
+  const sectored = stripSector(typed.value, options.index)
+  if (!sectored.ok) return sectored
+  return parseTokens(sectored.value, options)
+}
 
+/** The plain grammar over tokens already split, joined and stripped of a sector key. */
+export function parseTokens(tokens: readonly string[], options: ParseOptions): ParseResult {
   const parts = split(tokens, options.index)
   if (!parts.ok) return parts
   const { mnemonic, contextToken, argTokens } = parts.value

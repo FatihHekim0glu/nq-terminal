@@ -1,0 +1,93 @@
+/* Related Functions menu (look spec 4.7, IS-10). Tokens only, square corners, hard cuts.
+   The dim covers only the stage of the owning panel (red bar and below). The box edge is
+   --menu-border. Rows are 24px targets (decision D1). */
+
+.menu-dim {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: var(--dim);
+}
+
+.related {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: 6px;
+  max-height: calc(100% - 12px);
+  overflow: auto;
+  padding: 6px 12px 12px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--menu-border);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.related-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.menu-crumb { color: var(--link); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.related-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 4px;
+  background: var(--bg);
+  color: var(--text);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.related-cancel:hover { background: var(--hover-menu); }
+.related-cancel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.related-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+.related-col { display: flex; flex-direction: column; min-width: 0; }
+
+.related-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 6px 0 0;
+  background: var(--bg);
+  color: var(--white);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.related-category { margin-top: 8px; }
+.related-col .related-row:first-child { margin-top: 0; }
+.related-no {
+  display: inline-block;
+  flex: 0 0 2.2em;
+  text-align: right;
+  color: var(--muted);
+  transform: scaleX(.63);
+  transform-origin: right center;
+}
+.related-mnem { flex: 0 0 4em; color: var(--white); }
+.related-title { color: var(--data); overflow: hidden; text-overflow: ellipsis; }
+.related-cat { color: var(--white); }
+.related-row:hover,
+.related-row:focus-visible { background: var(--sel-list); }
+.related-row:hover .related-no,
+.related-row:focus-visible .related-no,
+.related-row:hover .related-title,
+.related-row:focus-visible .related-title { color: var(--white); }
+.related-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

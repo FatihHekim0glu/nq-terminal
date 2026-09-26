@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 import { StatusBar, type HealthState } from './StatusBar'
+import statusCss from './StatusBar.css?raw'
 import { dataWindow, dayBefore } from './StatusBar.format'
 
 afterEach(cleanup)
@@ -17,11 +18,11 @@ const HEALTH: HealthData = {
 
 const CONTEXTS = {
   A: { kind: 'instrument', value: 'NQ' },
-  B: { kind: 'hypothesis', value: 'volmanaged_v0' },
+  B: { kind: 'hypothesis', value: 'rebal_v0' },
   C: null,
 } as const
 
-/** The segment whose whole text is `text`: values sit in their own <b>, so getByText cannot see it. */
+/** The segment whose whole text is `text`: keys sit in their own <b>, so getByText cannot see it. */
 function seg(bar: HTMLElement, text: string | RegExp): HTMLElement | undefined {
   return Array.from(bar.querySelectorAll<HTMLElement>('.seg')).find((el) =>
     typeof text === 'string' ? el.textContent === text : text.test(el.textContent ?? ''),
@@ -33,78 +34,96 @@ function renderBar(health: HealthState, screenCode: 'HOME' | 'REG' = 'HOME') {
   return screen.getByRole('contentinfo', { name: STATUS_BAR.label })
 }
 
-describe('StatusBar (UI_SPEC sections 2 and 8)', () => {
-  it('always reads READ ONLY, NO ORDER PATH and TWS: not monitored, whatever the health state', () => {
+describe('StatusBar: the 22px status line (spec 4.10, decision D7)', () => {
+  it('reads Screen, the groups, DATA, TWS, KILL, Gate reads, the ET clock and the <Esc> hint', () => {
+    const bar = renderBar({ status: 'ok', data: HEALTH }, 'REG')
+    expect(seg(bar, 'Screen REG')).toBeTruthy()
+    expect(seg(bar, 'A NQ1 Index')).toBeTruthy()
+    expect(seg(bar, 'B rebal_v0')).toBeTruthy()
+    expect(seg(bar, 'C -')).toBeTruthy()
+    expect(seg(bar, 'DATA 2010-01-01..2021-12-31')).toBeTruthy()
+    expect(seg(bar, 'TWS not monitored')).toBeTruthy()
+    expect(seg(bar, 'KILL off')).toBeTruthy()
+    expect(seg(bar, 'Gate reads 7')).toBeTruthy()
+    expect(seg(bar, /^\d{2}:\d{2}:\d{2} ET$/)).toBeTruthy()
+    expect(seg(bar, '<Esc> command')).toBeTruthy()
+  })
+
+  it('opens with an amber label and sets each key in bold (Suggested Functions style)', () => {
+    const bar = renderBar({ status: 'ok', data: HEALTH }, 'REG')
+    expect(bar.querySelector('.status-label')?.textContent).toBe(STATUS_BAR.lead)
+    const keys = Array.from(bar.querySelectorAll('.seg b')).map((b) => b.textContent)
+    expect(keys).toEqual(expect.arrayContaining(['Screen', 'A', 'B', 'C', 'DATA', 'TWS', 'KILL', 'Gate reads']))
+  })
+
+  it('always keeps READ ONLY, NO ORDER PATH, TWS, KILL and gate reads, whatever the health state', () => {
     for (const health of [{ status: 'ok', data: HEALTH }, { status: 'loading' }, { status: 'error' }] as const) {
       const bar = renderBar(health)
       expect(within(bar).getByText('READ ONLY')).toBeTruthy()
       expect(within(bar).getByText('NO ORDER PATH')).toBeTruthy()
-      expect(within(bar).getByText('TWS: not monitored')).toBeTruthy()
+      expect(seg(bar, 'TWS not monitored')).toBeTruthy()
+      expect(seg(bar, /^KILL /)).toBeTruthy()
+      expect(seg(bar, /^Gate reads /)).toBeTruthy()
+      for (const s of ['READ ONLY', 'NO ORDER PATH']) expect(within(bar).getByText(s).closest('.seg')?.className).toMatch(/\bkeep\b/)
       cleanup()
     }
   })
 
   it('shows the kill switch from /api/health: off, ON, reading and unknown', () => {
-    expect(within(renderBar({ status: 'ok', data: HEALTH })).getByText('KILL: off')).toBeTruthy()
+    expect(seg(renderBar({ status: 'ok', data: HEALTH }), 'KILL off')).toBeTruthy()
     cleanup()
     const on = renderBar({ status: 'ok', data: { ...HEALTH, kill_switch_on: true } })
-    const kill = within(on).getByText('KILL: ON')
-    expect(kill.getAttribute('title')).toBe(STATUS_BAR.killOnNote)
-    expect(kill.className).toMatch(/\balert\b/)
+    const kill = seg(on, 'KILL ON')
+    expect(kill?.getAttribute('title')).toBe(STATUS_BAR.killOnNote)
+    expect(kill?.className).toMatch(/\balert\b/)
     cleanup()
-    expect(within(renderBar({ status: 'loading' })).getByText('KILL: reading')).toBeTruthy()
+    expect(seg(renderBar({ status: 'loading' }), 'KILL reading')).toBeTruthy()
     cleanup()
     const down = renderBar({ status: 'error' })
-    expect(within(down).getByText('KILL: unknown')).toBeTruthy()
-    expect(within(down).getByText('HEALTH: unavailable')).toBeTruthy()
-  })
-
-  it('no longer carries the stage A placeholder (born failing against the scaffold)', () => {
-    const bar = renderBar({ status: 'ok', data: HEALTH })
-    expect(within(bar).queryByText('KILL: not read')).toBeNull()
-  })
-
-  it('shows the screen number, one segment per link group, gate reads and the ET clock', () => {
-    const bar = renderBar({ status: 'ok', data: HEALTH }, 'REG')
-    expect(seg(bar, 'SCR 04 REG')).toBeTruthy()
-    expect(seg(bar, 'A NQ')).toBeTruthy()
-    expect(seg(bar, 'B volmanaged_v0')).toBeTruthy()
-    expect(seg(bar, 'C -')).toBeTruthy()
-    expect(seg(bar, 'gate reads 7')).toBeTruthy()
-    expect(seg(bar, /^\d{2}:\d{2}:\d{2} ET$/)).toBeTruthy()
-    expect(within(bar).getByText('Esc cmd')).toBeTruthy()
-  })
-
-  it('shows every number in the data colour (<b>) with its label muted (UI_SPEC section 3)', () => {
-    const bar = renderBar({ status: 'ok', data: HEALTH }, 'REG')
-    const values = Array.from(bar.querySelectorAll('.seg b')).map((b) => b.textContent)
-    expect(values).toEqual(['04', '2010-01-01..2021-12-31', '7', expect.stringMatching(/^\d{2}:\d{2}:\d{2}$/)])
+    expect(seg(down, 'KILL unknown')).toBeTruthy()
+    expect(within(down).getByText(STATUS_BAR.healthDown)).toBeTruthy()
+    expect(seg(down, 'Gate reads --')).toBeTruthy()
   })
 
   it('born failing: tells assistive tech about the kill switch and health, without the clock', () => {
     const bar = renderBar({ status: 'ok', data: HEALTH })
-    const live = within(bar).getByRole('status')
-    expect(live.textContent).toBe('KILL: off')
+    expect(within(bar).getByRole('status').textContent).toBe('KILL off')
     cleanup()
     const down = renderBar({ status: 'error' })
-    expect(within(down).getByRole('status').textContent).toBe('KILL: unknown. HEALTH: unavailable')
+    expect(within(down).getByRole('status').textContent).toBe(`KILL unknown. ${STATUS_BAR.healthDown}`)
     cleanup()
-    const on = renderBar({ status: 'ok', data: { ...HEALTH, kill_switch_on: true } })
-    const urgent = within(on).getByRole('status')
-    expect(urgent.textContent).toBe('KILL: ON')
+    const urgent = within(renderBar({ status: 'ok', data: { ...HEALTH, kill_switch_on: true } })).getByRole('status')
+    expect(urgent.textContent).toBe('KILL ON')
     expect(urgent.getAttribute('aria-live')).toBe('assertive')
   })
 
   it('derives the data window from the fence (end exclusive) and falls back before health answers', () => {
     expect(seg(renderBar({ status: 'ok', data: HEALTH }), 'DATA 2010-01-01..2021-12-31')).toBeTruthy()
     cleanup()
-    expect(seg(renderBar({ status: 'loading' }), STATUS_BAR.dataFallback)).toBeTruthy()
+    expect(seg(renderBar({ status: 'loading' }), 'DATA 2010-01-01..2021-12-31')).toBeTruthy()
   })
 
   it('marks fixture mode so fixture numbers are never mistaken for research files', () => {
     expect(within(renderBar({ status: 'ok', data: HEALTH })).queryByText('FIXTURE DATA')).toBeNull()
     cleanup()
     expect(within(renderBar({ status: 'ok', data: { ...HEALTH, fixture_mode: true } })).getByText('FIXTURE DATA')).toBeTruthy()
+  })
+
+  // Visual review: the reference row is set near body size, so the status line uses the nav size
+  // (13px); only the secondary bits (the clock and the <Esc> hint) keep the 11px small size (spec 3.2).
+  it('sets the status line at the nav size and only the clock and the <Esc> hint small', () => {
+    /** The declarations of the top-level rule whose selector is exactly `selector`. */
+    const block = (selector: string) => {
+      const start = statusCss.indexOf(`\n${selector} {`)
+      return start < 0 ? '' : statusCss.slice(start, statusCss.indexOf('}', start))
+    }
+    expect(block('.nqt-status')).toMatch(/font-size:\s*var\(--fs-nav\)/)
+    expect(block('.nqt-status .seg.small')).toMatch(/font-size:\s*var\(--fs-small\)/)
+    render(<StatusBar screen="HOME" contexts={CONTEXTS} health={{ status: 'ok', data: HEALTH }} />)
+    const small = Array.from(screen.getByRole('contentinfo').querySelectorAll('.seg.small')).map((el) => el.textContent)
+    expect(small).toHaveLength(2)
+    expect(small[0]).toMatch(/ET$/)
+    expect(small[1]).toContain(STATUS_BAR.escHint)
   })
 
   it('fetches nothing itself', () => {

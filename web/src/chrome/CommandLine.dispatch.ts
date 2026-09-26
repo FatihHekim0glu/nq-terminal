@@ -1,0 +1,159 @@
+// What the command line does (spec 5.1 and 5.2): run a typed line through parseLine and carry out the
+// action (a command, a context menu, Number <GO>, a menu, HELP, HL, LAST, NO); choose a suggestion or a
+// menu item; the Esc (CANCEL) cascade. Messages go to the message line.
+import { describeError, withValue } from '../commands/messages'
+import { parseLine, type LineAction } from '../commands/line'
+import { displayContext } from '../commands/sectors'
+import type { ResolvedContext } from '../commands/types'
+import { COMMAND_LINE } from '../copy/commands'
+import { MESSAGES } from '../copy/chrome'
+import { functionMenu, helpMenu, lastMenu, relatedMenu, searchMenu, sectorMenu, type MenuItem } from './CommandLine.menus'
+import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
+import { postMessage } from './MessageLine.store'
+import type { SuggestionGroup } from '../commands/suggest'
+
+function fallbackOf(p: CommandLineParts) {
+  return p.options.resolveFallback ? p.options.resolveFallback() : p.options.fallbackContext
+}
+
+function contextOf(p: CommandLineParts): ResolvedContext | null {
+  const f = fallbackOf(p)
+  return f && typeof f !== 'string' ? f : null
+}
+
+function loadContext(p: CommandLineParts, context: ResolvedContext): void {
+  p.options.onContext?.(context)
+  p.menus.open(functionMenu(context, p.options.index))
+  postMessage(withValue(COMMAND_LINE.loaded, displayContext(context, p.options.index)))
+}
+
+/** Number <GO>: item n of the open menu, else of the focused panel. Returns the line to keep, or null. */
+function numberGo(p: CommandLineParts, n: number): string | null {
+  const menu = p.menus.menu
+  if (!menu) {
+    if (!p.options.onNumber?.(n)) postMessage(withValue(COMMAND_LINE.noItem, String(n)))
+    return ''
+  }
+  const item = menu.items.find((i) => i.n === n)
+  if (!item) {
+    postMessage(withValue(COMMAND_LINE.noMenuItem, String(n)))
+    return ''
+  }
+  chooseItem(p, item)
+  return null
+}
+
+function openMenuAction(p: CommandLineParts, action: LineAction): void {
+  const index = p.options.index
+  if (action.kind === 'sector') p.menus.open(sectorMenu(action.sector, index))
+  else if (action.kind === 'help') p.menus.open(helpMenu(action.code))
+  else if (action.kind === 'last') p.menus.open(lastMenu(p.history.history.entries))
+  else if (action.kind === 'menu') {
+    if (p.menus.stack.length > 1) p.menus.up()
+    else if (!p.options.onMenu?.()) p.menus.open(relatedMenu(contextOf(p), index))
+  }
+}
+
+/** Carries out a parsed line. Returns the line to keep in the box ('' clears it), or null to leave it. */
+function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): string | null {
+  switch (action.kind) {
+    case 'run': {
+      const panel = newPanel || action.newPanel
+      p.options.onRun(action.command, panel ? 'new-panel' : 'replace')
+      p.history.remember(action.command.canonical)
+      p.menus.close()
+      postMessage(withValue(panel ? COMMAND_LINE.ranNewPanel : COMMAND_LINE.ran, action.command.canonical))
+      return ''
+    }
+    case 'context':
+      p.history.remember(displayContext(action.context, p.options.index))
+      loadContext(p, action.context)
+      return ''
+    case 'number':
+      return numberGo(p, action.n)
+    case 'search':
+      if (action.query === '') {
+        postMessage(COMMAND_LINE.searchEmpty)
+        return 'HL '
+      }
+      p.menus.open(searchMenu(action.query, p.options.index))
+      return ''
+    case 'tape':
+      postMessage(p.options.onTape?.() ? MESSAGES.tapeOn : MESSAGES.tapeOff)
+      return ''
+    default:
+      openMenuAction(p, action)
+      return ''
+  }
+}
+
+/** Parses `text` and carries it out; an error keeps the text and explains it. */
+export function runText(p: CommandLineParts, text: string, newPanel: boolean): void {
+  const result = parseLine(text, { index: p.options.index, fallbackContext: fallbackOf(p) })
+  if (!result.ok) {
+    p.s.edit(text)
+    const message = describeError(result.error)
+    p.s.setError(message)
+    p.s.setDismissed(true)
+    postMessage(message, 'error')
+    return
+  }
+  const keep = perform(p, result.action, newPanel)
+  if (keep !== null) p.s.edit(keep)
+}
+
+export function chooseItem(p: CommandLineParts, item: MenuItem): void {
+  const act = item.act
+  if (act.kind === 'open') p.menus.open(act.menu, false)
+  else if (act.kind === 'context') loadContext(p, act.context)
+  else if (act.kind === 'fill') {
+    p.menus.close()
+    p.s.edit(act.line)
+    p.inputRef.current?.focus()
+  } else runText(p, act.line, false)
+}
+
+/** Tab: complete the line with the suggestion's text. */
+export function takeSuggestion(p: CommandLineParts, s: Suggestion): void {
+  p.s.edit(s.value)
+  p.inputRef.current?.focus()
+}
+
+/** A click, or Enter after arrowing: an instrument loads, the SEARCH row runs, More opens its group. */
+export function chooseSuggestion(p: CommandLineParts, value: string): void {
+  if (value.startsWith(MORE_PREFIX)) {
+    p.s.setExpanded(value.slice(MORE_PREFIX.length) as SuggestionGroup)
+    p.inputRef.current?.focus()
+    return
+  }
+  const s = p.ordered.find((x) => x.value.trim() === value.trim())
+  if (!s) return
+  if (s.group === 'instrument' || s.group === 'search') runText(p, s.value, false)
+  else takeSuggestion(p, s)
+  p.inputRef.current?.focus()
+}
+
+/** Esc and the CANCEL key: close a menu (one level), else the sheet, else clear the line. False when nothing was open or typed. */
+export function cancelStep(p: CommandLineParts): boolean {
+  if (p.menus.menu) {
+    if (p.menus.stack.length > 1) p.menus.up()
+    else p.menus.close()
+    return true
+  }
+  if (p.sheetOpen) {
+    p.s.setDismissed(true)
+    return true
+  }
+  if (p.s.line !== '') {
+    p.s.edit('')
+    return true
+  }
+  return false
+}
+
+export function returnFocus(p: CommandLineParts): void {
+  p.s.setError(null)
+  const previous = p.previousFocus.current
+  if (previous?.isConnected) previous.focus()
+  else if (!p.options.onReturnFocus?.()) p.inputRef.current?.blur()
+}

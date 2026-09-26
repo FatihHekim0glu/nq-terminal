@@ -1,8 +1,28 @@
-/* StatusBar additions on top of SIGNAL .statusline (theme/index.css). Text cues carry the state;
-   colour only reinforces it. --c-down is 5.66:1 and --data 9.35:1 on --raised. */
-.status-bar .seg.alert { color: var(--c-down); font-weight: 700; letter-spacing: .07em; }
-.status-bar .seg.warn { color: var(--data); }
-.status-bar .ctx-seg { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }
-.status-bar .ctx-seg .grp { color: var(--link); }
+/* Status line (spec 4.10, D7): 22px on --chrome, an amber lead label, bold white keys, --text values,
+   1px --chrome-div rules. Set at the nav size (13px), near body size like the reference row; only
+   the secondary bits (the clock and the <Esc> hint) are small (spec 3.2).
+   Safety segments (.keep) never shrink or clip; contexts and the data window
+   (.shrink) give way first. Text cues carry every state; colour only reinforces it. */
+.nqt-status {
+  display: flex; flex-wrap: nowrap; align-items: center; height: var(--status-h); min-width: 0; overflow: hidden;
+  background: var(--chrome); color: var(--text);
+  font-family: var(--font-sans); font-size: var(--fs-nav); line-height: var(--status-h);
+}
+.nqt-status .status-label { flex: 0 0 auto; padding: 0 8px; color: var(--data); }
+.nqt-status .seg { flex: 0 0 auto; padding: 0 8px; white-space: nowrap; box-shadow: inset 1px 0 0 var(--chrome-div); }
+.nqt-status .seg b { color: var(--white); font-weight: 700; }
+.nqt-status .seg.shrink { flex: 0 1 auto; min-width: 0; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }
+.nqt-status .seg.flag { background: var(--flag-bg); color: var(--flag-fg); font-weight: 700; }
+.nqt-status .seg.alert { color: var(--exc); font-weight: 700; }
+.nqt-status .seg.alert b { color: var(--exc); }
+.nqt-status .seg.warn { color: var(--warn); }
+.nqt-status .seg.push { margin-left: auto; }
+.nqt-status .seg.small { font-size: var(--fs-small); }
 /* The kill and health segments share one live region; it lays out like the segments around it. */
-.status-bar .seg-live { display: flex; align-items: center; }
+.nqt-status .seg-live { display: flex; align-items: center; flex: 0 0 auto; }
+
+/* Narrow viewports (about 400% zoom): the line wraps instead of clipping (1.4.10). */
+@media (max-width: 700px) {
+  .nqt-status { flex-wrap: wrap; height: auto; min-height: var(--status-h); }
+  .nqt-status .seg.push { margin-left: 0; }
+}

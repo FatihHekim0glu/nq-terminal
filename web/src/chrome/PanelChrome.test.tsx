@@ -1,92 +1,165 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { PANEL } from '../copy/workspace'
+import { FUNCTION_BAR, PANEL } from '../copy/workspace'
+import FunctionBar from './FunctionBar'
 import PanelChrome from './PanelChrome'
+import { NumberingContext, type NumberedItem } from './PanelChrome.numbers'
 import { panelTabStops } from './WorkspaceFocus'
 
 afterEach(cleanup)
 
-function renderPanel(extra: Partial<Parameters<typeof PanelChrome>[0]> = {}) {
+type Props = Parameters<typeof PanelChrome>[0]
+
+function renderPanel(extra: Partial<Props> = {}) {
   return render(
-    <PanelChrome panelId="p1" title="NQ GP 1d" screen="Candles with volume and an indicator pane" group="A" {...extra}>
+    <PanelChrome panelId="p1" number={1} code="GP" title="NQ GP 1d" subject="NQ 1d" group="A" {...extra}>
       <p>content</p>
       <button type="button">inner control</button>
     </PanelChrome>,
   )
 }
 
-describe('PanelChrome (UI_SPEC sections 2 and 8)', () => {
-  it('is a region named by its title, with the link chip, title and screen name in the header', () => {
+describe('PanelChrome title bar (look spec 4.3)', () => {
+  it('shows <panel no>-<MNEMONIC>, the link chip and the context, and names the region by that heading', () => {
     renderPanel()
-    const region = screen.getByRole('region', { name: 'NQ GP 1d' })
+    const heading = screen.getByRole('heading', { level: 2 })
+    expect(heading.textContent).toContain('1-GP')
+    expect(heading.textContent).toContain('NQ 1d')
+    expect(within(heading).getByText('Link group A')).toBeTruthy()
+    const region = screen.getByRole('region')
+    expect(region.getAttribute('aria-labelledby')).toBe(heading.id)
     expect(region.getAttribute('data-nqt-panel')).toBe('p1')
-    expect(within(region).getByRole('heading', { name: 'NQ GP 1d' })).toBeTruthy()
-    expect(within(region).getByText('[A]')).toBeTruthy()
-    expect(within(region).getByText('Link group A')).toBeTruthy()
-    expect(within(region).getByText('Candles with volume and an indicator pane')).toBeTruthy()
+    expect(region.getAttribute('data-nqt-title')).toBe('NQ GP 1d')
   })
 
-  it('shows an unlinked panel as [-] with a readable label', () => {
-    renderPanel({ group: '-' })
-    expect(screen.getByText('[-]')).toBeTruthy()
-    expect(screen.getByText(PANEL.linkChipNone)).toBeTruthy()
+  it('draws the chip as a square with the group letter, and shows no chip on an unlinked panel', () => {
+    const { container, rerender } = renderPanel()
+    const chip = container.querySelector('.pchip')
+    expect(chip?.getAttribute('data-group')).toBe('A')
+    expect(chip?.textContent).toContain('A')
+    rerender(
+      <PanelChrome panelId="p1" number={1} code="REG" title="REG" group="-">
+        <p>x</p>
+      </PanelChrome>,
+    )
+    expect(container.querySelector('.pchip')).toBeNull()
   })
 
-  it('renders each tag as a bracket tag', () => {
+  it('renders each tag in brackets on the title bar', () => {
     renderPanel({ tags: ['PRE-REG', 'SPENT'] })
-    expect(screen.getByText('PRE-REG').className).toContain('tag-b')
-    expect(screen.getByText('SPENT').className).toContain('tag-b')
+    expect(screen.getByText('[PRE-REG]').className).toContain('ptag')
+    expect(screen.getByText('[SPENT]').className).toContain('ptag')
   })
 
-  it('offers a table toggle only when the panel has a table view, and reports the change', () => {
+  it('offers the T toggle only when the panel has a table view, and reports the change', () => {
     const { rerender } = renderPanel()
     expect(screen.queryByRole('button', { name: PANEL.tableViewLabel })).toBeNull()
     const onChange = vi.fn()
     rerender(
-      <PanelChrome panelId="p1" title="NQ GP 1d" screen="s" group="A" tableView={false} onTableViewChange={onChange}>
+      <PanelChrome panelId="p1" number={1} code="GP" title="NQ GP 1d" group="A" tableView={false} onTableViewChange={onChange}>
         <p>content</p>
       </PanelChrome>,
     )
     const toggle = screen.getByRole('button', { name: PANEL.tableViewLabel })
+    expect(toggle.textContent).toBe(PANEL.tableViewKey)
     expect(toggle.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(toggle)
     expect(onChange).toHaveBeenCalledWith(true)
   })
 
-  it('names the table toggle by its visible label, with the state in aria-pressed alone (2.5.3)', () => {
-    renderPanel({ tableView: true, onTableViewChange: () => {} })
-    const toggle = screen.getByRole('button', { name: PANEL.tableViewLabel })
-    expect(toggle.hasAttribute('aria-label')).toBe(false)
-    expect(toggle.textContent).toBe(PANEL.tableViewLabel)
-    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+  it('has a maximise control whose state is in aria-pressed', () => {
+    const onToggleMaximise = vi.fn()
+    renderPanel({ onToggleMaximise, maximised: false })
+    const max = screen.getByRole('button', { name: PANEL.maximise })
+    expect(max.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(max)
+    expect(onToggleMaximise).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps one landmark per panel: the body is a named group, and the full title stays readable', () => {
+  it('opens the Options menu with related functions, back, forward and maximise', () => {
+    const onRelated = vi.fn()
+    const onBack = vi.fn()
+    renderPanel({ onRelated, onBack, onForward: () => {}, onToggleMaximise: () => {} })
+    const options = screen.getByRole('button', { name: PANEL.options })
+    expect(options.getAttribute('aria-haspopup')).toBe('menu')
+    fireEvent.click(options)
+    const menu = screen.getByRole('menu')
+    const labels = within(menu).getAllByRole('menuitem').map((m) => m.textContent)
+    expect(labels).toEqual([PANEL.related, PANEL.back, PANEL.forward, PANEL.maximise])
+    fireEvent.click(within(menu).getByRole('menuitem', { name: PANEL.back }))
+    expect(onBack).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('marks the focused panel for the 1px focus line (data-focused)', () => {
+    const { container, rerender } = renderPanel({ focused: true })
+    expect(container.querySelector('section')?.getAttribute('data-focused')).toBe('true')
+    rerender(
+      <PanelChrome panelId="p1" number={1} code="GP" title="NQ GP 1d" group="A" focused={false}>
+        <p>content</p>
+      </PanelChrome>,
+    )
+    expect(container.querySelector('section')?.getAttribute('data-focused')).toBe('false')
+  })
+
+  it('keeps one landmark per panel: the body is a named group', () => {
     renderPanel()
     expect(screen.getAllByRole('region')).toHaveLength(1)
     expect(screen.getByRole('group', { name: 'NQ GP 1d content' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'NQ GP 1d' }).getAttribute('title')).toBe('NQ GP 1d')
   })
 
-  it('is exactly one Tab stop: the panel body, with inner controls taken out of the Tab order', () => {
-    renderPanel({ tableView: false, onTableViewChange: () => {} })
-    const region = screen.getByRole('region', { name: 'NQ GP 1d' })
+  it('is exactly one Tab stop: the panel body, with every title-bar control out of the Tab order', () => {
+    renderPanel({ tableView: false, onTableViewChange: () => {}, onToggleMaximise: () => {}, onRelated: () => {} })
+    const region = screen.getByRole('region')
     const stops = panelTabStops(region)
     expect(stops).toHaveLength(1)
     expect(stops[0]?.getAttribute('aria-label')).toBe('NQ GP 1d content')
   })
 
-  it('moves from the body to the table toggle with the Left arrow', () => {
+  it('moves from the body to the title-bar controls with the Left arrow', () => {
     renderPanel({ tableView: false, onTableViewChange: () => {} })
     const body = screen.getByLabelText('NQ GP 1d content')
     body.focus()
     fireEvent.keyDown(body, { key: 'ArrowLeft' })
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: PANEL.tableViewLabel }))
+    expect((document.activeElement as HTMLElement).closest('.ptitle')).not.toBeNull()
+  })
+
+  it('places a FunctionBar rendered by the screen above the scrolling body, not inside it', () => {
+    render(
+      <PanelChrome panelId="p1" number={2} code="REG" title="REG" group="-">
+        <FunctionBar panelId="p1" title="Registry board" items={[{ n: 96, label: FUNCTION_BAR.actions, menu: [{ label: 'x', onSelect: () => {} }] }]} />
+        <p>rows</p>
+      </PanelChrome>,
+    )
+    const bar = screen.getByRole('toolbar', { name: 'Registry board functions' })
+    const body = screen.getByRole('group', { name: 'REG content' })
+    expect(body.contains(bar)).toBe(false)
+    expect(bar.closest('section')).not.toBeNull()
+  })
+
+  it('registers the numbered items of its screen, once per panel, through the numbering context', () => {
+    const calls: Array<{ panelId: string; items: ReadonlyArray<NumberedItem> }> = []
+    const registrar = vi.fn((panelId: string, items: ReadonlyArray<NumberedItem>) => {
+      calls.push({ panelId, items })
+      return () => {}
+    })
+    render(
+      <NumberingContext value={registrar}>
+        <PanelChrome panelId="p9" number={1} code="REG" title="REG" group="-">
+          <FunctionBar panelId="p9" title="Registry board" items={[{ n: 96, label: 'Actions', menu: [{ label: 'x', onSelect: () => {} }] }, { n: 98, label: 'Export', onRun: () => {} }]} />
+        </PanelChrome>
+      </NumberingContext>,
+    )
+    const last = calls.at(-1)
+    expect(last?.panelId).toBe('p9')
+    expect(last?.items.map((i) => i.n)).toEqual([96, 98])
+    act(() => last?.items[0]?.run())
+    expect(screen.getByRole('menu')).toBeTruthy()
   })
 
   it('has no control whose text could read as a trading action', () => {
-    renderPanel({ tableView: false, onTableViewChange: () => {} })
+    renderPanel({ tableView: false, onTableViewChange: () => {}, onToggleMaximise: () => {}, onRelated: () => {} })
     for (const button of screen.getAllByRole('button')) {
       expect(button.textContent ?? '').not.toMatch(/order|submit|cancel|modify/i)
     }

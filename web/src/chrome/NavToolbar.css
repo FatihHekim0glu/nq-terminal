@@ -1,0 +1,27 @@
+/* Nav toolbar (spec 4.2): a 21px row on --chrome plus a 1px --chrome-rule line; --text at --fs-nav;
+   1px x 13px --chrome-div dividers, vertically centred. Buttons are 21px tall and at least 24px wide,
+   so each 24px target circle stays clear of its neighbours (2.5.8 spacing exception, as for the
+   command box). The help square is --warn with a black glyph. */
+.nav-toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: 22px; padding: 0 6px; min-width: 0; overflow: hidden;
+  background: var(--chrome); box-shadow: inset 0 -1px 0 var(--chrome-rule);
+  color: var(--text); font-size: var(--fs-nav);
+}
+.nav-left, .nav-right { display: flex; align-items: center; gap: 4px; height: 21px; min-width: 0; }
+.nav-btn {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 24px; height: 21px; padding: 0 4px;
+  background: transparent; border: 0; border-radius: 0; color: var(--text); font: inherit; white-space: nowrap; cursor: pointer;
+}
+.nav-btn:hover { background: var(--hover-menu); }
+.nav-btn.nav-help > span { display: inline-grid; place-items: center; min-width: 20px; min-height: 15px; line-height: 15px; background: var(--warn); color: var(--frame-fg); font-weight: 700; }
+.nav-div { flex: 0 0 1px; width: 1px; height: 13px; background: var(--chrome-div); }
+.nav-msg { display: inline-flex; gap: 8px; white-space: nowrap; }
+.nav-msg[data-kill="on"] .nav-kill { color: var(--exc); font-weight: 700; }
+.nav-msg[data-kill="unknown"] .nav-kill { color: var(--warn); }
+.nav-toolbar :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+@media (max-width: 700px) {
+  .nav-toolbar { flex-wrap: wrap; height: auto; }
+  .nav-left, .nav-right { flex-wrap: wrap; height: auto; }
+}

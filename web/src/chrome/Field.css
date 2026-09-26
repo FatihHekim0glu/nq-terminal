@@ -1,0 +1,130 @@
+/* Amber fields, dropdown lists, the parameter row, read-only boxes, grey and toggle buttons
+   (look spec 4.4, 4.5, 4.12, 6.4; IS-06, IS-08, IS-14). Tokens only, square corners, hard cuts.
+   Fields and buttons are 24px, not the measured 20px, because they are targets (decision D1). */
+
+.param-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: 26px;
+  padding: 1px 6px;
+  background: var(--bg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.param-label { color: var(--data); white-space: nowrap; }
+
+.field-wrap { position: relative; display: inline-flex; }
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  background: var(--field-bg);
+  color: var(--field-fg);
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: 1;
+}
+.field::placeholder { color: var(--field-fg); }
+.field:focus-visible { outline: 1px solid var(--field-focus); outline-offset: 1px; }
+.field:disabled,
+.field[aria-disabled="true"] { background: var(--field-off); color: var(--field-fg); cursor: default; }
+
+.field-dd { gap: 6px; padding-right: 0; cursor: pointer; white-space: nowrap; }
+.field-dd[aria-expanded="true"] .field-value { background: var(--sel-list); color: var(--white); }
+.field-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 16px;
+  background: var(--field-btn);
+  color: var(--text);
+  font-size: var(--fs-small);
+}
+
+.field-list {
+  position: absolute;
+  left: 0;
+  z-index: 30;
+  min-width: 100%;
+  margin: 0;
+  padding: 12px 0;
+  list-style: none;
+  background: var(--list-bg);
+  border: 1px solid var(--list-border);
+  border-radius: 0;
+  color: var(--data);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.field-list-down { top: 100%; }
+.field-list-up { bottom: 100%; }
+.field-list [role="option"] {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.field-list [role="option"]:hover,
+.field-list [role="option"][data-active="true"] { background: var(--list-sel); color: var(--white); }
+.field-list [role="option"][aria-selected="true"] { font-weight: 700; }
+
+/* Read-only values: never amber; a --ro-box grey box with --text (4.5, 7.4). */
+.field-ro {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 4px;
+  background: var(--ro-box);
+  color: var(--text);
+}
+
+.btn-grey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 10px;
+  background: var(--btn-grey);
+  color: var(--text);
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.btn-grey:hover { background: var(--hover-menu); }
+.btn-grey:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.btn-grey:disabled { color: var(--muted); cursor: default; }
+
+.btn-toggles { display: inline-flex; gap: 1px; background: var(--bg); }
+.btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  min-width: 35px;
+  padding: 0 8px;
+  background: linear-gradient(var(--btn-top), var(--btn-bot));
+  color: var(--white);
+  border: 0;
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-chart);
+  cursor: pointer;
+}
+.btn-toggle:hover { background: var(--toggle-hover); }
+.btn-toggle[aria-pressed="true"] { background: var(--sel-toggle); font-weight: 700; }
+.btn-toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

@@ -1,0 +1,17 @@
+/* Plain UI tooltip (look spec 4.5, IS-11). Tokens only; no fade, no shadow, square corners.
+   Positioned in viewport pixels from the pointer tip (or the focused control) by Tooltip.tsx. */
+.tip {
+  position: fixed;
+  z-index: 50;
+  max-width: 320px;
+  padding: 2px 6px;
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  border: 1px solid var(--tip-border);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  white-space: normal;
+  pointer-events: auto;
+}

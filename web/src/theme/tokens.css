@@ -1,13 +1,15 @@
-/* nq-lab terminal tokens: UI_SPEC section 3.
-   Base is the SIGNAL dark theme, token names kept so components
-   port without renames, with two contrast fixes: --c-down and --border-int.
-   Checked by src/theme/contrast.test.ts (text 4.5:1, components 3:1).
-   Rule kept from SIGNAL: never put a var() oklch colour in a CSS transition. */
+/* nq-lab terminal tokens: the flat-black look of the look spec (docs, sections 2 and 3).
+   The single source of every colour, size and font stack in the web app. Components read these
+   variables and never write a colour literal of their own.
+   Checked by src/theme/tokens.test.ts (exact values) and src/theme/contrast.test.ts (text 4.5:1,
+   graphics 3:1, in the default theme and both CVD themes).
+   Rules: never put a var() colour in a CSS transition; every state change is a hard cut. */
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
+  --color-chrome: var(--chrome);
   --color-text: var(--text);
   --color-data: var(--data);
   --color-muted: var(--muted);
@@ -20,6 +22,8 @@
   --color-border-int: var(--border-int);
   --color-sel-bg: var(--sel-bg);
   --color-fence: var(--fence);
+  --color-link: var(--link);
+  --color-focus: var(--focus);
   --color-sec-equity: var(--sec-equity);
   --color-sec-rates: var(--sec-rates);
   --color-sec-fx: var(--sec-fx);
@@ -28,43 +32,91 @@
   --color-sec-grains: var(--sec-grains);
   --color-sec-livestock: var(--sec-livestock);
   --color-sec-benchmark: var(--sec-benchmark);
-  --font-display: var(--font-display);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
 
+/* ---------- type, radii and geometry (sections 2.1, 3.2, 4.1 to 4.4) ---------- */
 :root {
-  --font-display: "Space Grotesk", system-ui, sans-serif;
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 10px;
-  --cmd-h: 28px;
+  /* Bergoom (OFL, vendored in src/assets/fonts/bergoom) with Source Sans 3 as its fallback;
+     PT Mono for fixed-grid content only (message line, tape, raw logs). */
+  --font-sans: "Bergoom", "Source Sans 3", system-ui, sans-serif;
+  --font-mono: "PT Mono", ui-monospace, monospace;
+
+  --fs-data: 15px;
+  --fs-small: 11px;
+  --fs-cmd: 15px;
+  --fs-quote: 18px;
+  --fs-kpi: 21px;
+  --fs-title: 15px;
+  --fs-nav: 13px;
+  --fs-chart: 13px;
+  --fs-fixed: 15px;
+  --lh-fixed: 19px;
+  --fw-regular: 400;
+  --fw-bold: 700;
+
+  /* Everything square. */
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+
+  /* Decision D1: 20px grid rows; interactive targets that are not table rows stay at 24px (2.5.8). */
+  --row-h: 20px;
+  --target-min: 24px;
+
+  /* Global frame stack at 1920x1080 (4.1): 37 / 32 / 22 / 50 / workspace / 22. */
+  --frame-h: 37px;
+  --keybar-h: 32px;
+  --key-h: 24px;
+  --nav-h: 22px;
+  --cmd-zone-h: 50px;
+  --cmd-box-h: 22px;
+  --cmd-box-w: 680px;
+  --msg-h: 21px;
+  --tape-h: 57px;
   --status-h: 22px;
-  --panel-head-h: 28px;
+
+  /* Panel stack (4.3, 4.4). */
+  --ptitle-h: 18px;
+  --quote-h: 22px;
+  --fn-h: 21px;
+  --tab-h: 21px;
+  --tab-slant: 5px;
+  --subtab-h: 20px;
+  --param-h: 22px;
+  --gutter: 2px;
+
+  --sb-w: 15px;
+  --caret-phase: 1000ms;
 }
 
-/* Dark is the only P0 theme (PRD section 5: no light theme). */
+/* ---------- colours: the default dark theme (sections 2.1 and 2.2) ---------- */
 :root,
 [data-theme="dark"] {
-  --bg: #070A0E;
-  --surface: #0F1318;
-  --raised: #171C22;
-  --text: #EFF2F5;
-  --data: #FFB000;
-  --muted: #8D9399;
-  --accent: #94D53C;
-  --accent-2: #E8AA4E;
-  --c-up: #23C987;
-  --c-down: #FF5C5C; /* SIGNAL #E64343 is 4.28:1 on --raised and fails 1.4.3 */
-  --cvd-up: #4DA3FF;
-  --border: oklch(1 0 0 / 9%);
-  --border-int: #646C77; /* replaces the 14% alpha; #4A505A gives only 2.1 to 2.4 */
-  --sel-bg: #2A1F00;
-  --fence: #FFB000;
+  /* Surfaces and text */
+  --bg: #000000;
+  --surface: #000000;
+  --raised: #1E1E1E;
+  --text: #D7D7D7;
+  --data: #FFA028;
+  --muted: #A5A5A5;
+  --white: #FFFFFF;
+  --black: #000000;
+  --accent: var(--cmd-border); /* kept so ported components compile; focus is --focus, selection --sel-* */
+  --accent-2: #F06000;
+  --c-up: #51EE6C;
+  --c-down: #FF2C4A;          /* on --bg, --raised and --chrome only */
+  --c-down-raised: #FF5566;   /* on --th-bg, the selected row and the day band */
+  --c-down-hover: #FF8A94;    /* inside a hovered cell */
+  --muted-hover: #B4B4B4;     /* --muted inside a hovered cell (4.12) */
+  --cvd-up: #3399FF;
+  --border: #343434;
+  --border-int: #8C8C8C;
+  --sel-bg: #0C2B4A;
+  --fence: #FFA028;
 
-  /* Sector palette for the 27 futures (each at least 7.3:1 on --raised). */
+  /* Sector palette for the 27 futures (house choice, kept from UI_SPEC). */
   --sec-equity: #6CB6FF;
   --sec-rates: #B39DFF;
   --sec-fx: #38C7E8;
@@ -74,12 +126,186 @@
   --sec-livestock: #F48FB1;
   --sec-benchmark: #8D9399;
 
-  /* Link groups [A] [B] [C] (panel chip, context strip, status bar). A is the accent (UI_SPEC section 3:
-     "active link"); B and C are light tints outside the data, semantic and sector colours, so a
-     linked chip never reads as a benchmark line or a sector. The letter always travels with them. */
-  --link-a: #94D53C;
+  /* Link-group chips [A] [B] [C]: house choice (spec 9.1, unverifiable), a 14px square in the group
+     colour with a black letter. The letter always travels with the colour. */
+  --link-a: #66ABFF;
   --link-b: #D7B8FF;
   --link-c: #8FE3E0;
 
+  /* Window chrome */
+  --chrome: #191919;
+  --chrome-rule: #0A0A0A;
+  --chrome-div: #646464;
+  --frame-bg: #CDCDCD;
+  --frame-fg: #000000;
+  --frame-tab-on: #191919;
+  --frame-tab-fg: #D9DAD9;
+  --frame-tab-edge: #434343;
+  --fn-bar: #870F1E;
+  --fn-fg: #FFFFFF;
+  --fn-hover: #BB152E;
+  --fn-press: #770C1A;
+  --fn-div: #000000;
+  --fn-edge: #1E0306;
+  --fn-off: #4A0A12;
+
+  /* Command line */
+  --cmd-bg: #000000;
+  --cmd-border: #148EFF;
+  --cmd-border-idle: #163A6B;
+  --cmd-caret: #2B8EFF;
+  --cmd-caret-idle: #003E9A;
+  --cmd-cursor: #328EFD;
+  --cmd-cursor-dim: #00307D;
+  --ac-bg: #1E1E1E;
+  --msg-fg: #FFFFFF;
+
+  /* Fields, lists, buttons */
+  --field-bg: #FFA028;
+  --field-fg: #000000;
+  --field-btn: #3F3F3F;
+  --field-btn-fg: var(--text);
+  --field-off: #A69785;
+  --field-off-fg: #000000;
+  --field-focus: #3F85D2;
+  --list-bg: #1E1E1E;
+  --list-border: #B8B8B8;
+  --list-sel: #0F3A66;
+  --th-bg: #232323;
+  --th-fg: #D7D7D7;
+  --th-rule: #505050;
+  --tab-bg: #464646;
+  --tab-fg: #D7D7D7;
+  --tab-on: #9E9E9E;
+  --tab-on-fg: #000000;
+  --tab-hover: #CCCCCC;
+  --sel-list: #0D58A7;
+  --sel-toggle: #0051BA;
+  --btn-top: #333333;
+  --btn-bot: #191919;
+  --btn-grey: #404040;
+  --hover-row: #191919;
+  --hover-cell: #3C3C3C;
+  --hover-menu: #373737;
+  --focus: #FFFFFF;
+  --link: #53B2F5;
+  --dim: rgba(0, 0, 0, .5);
+  --dialog-title: #CBCBCB;
+  --dialog-title-fg: #000000;
+  --dialog-border: #CBCDC8;
+  --tip-bg: #FFFFFF;
+  --tip-border: #3B3B3B;
+  --tip-fg: #1A1A1A;
+  --datatip-bg: #99CACB;
+  --datatip-fg: #000000;
+
+  /* Scrollbars: classic, always visible */
+  --sb-track: #222222;
+  --sb-track-list: #131313;
+  --sb-thumb: #787878;
+  --sb-arrow: #FFFFFF;
+
+  /* Headers, tape, flags */
+  --legend-bg: #0C0C0C;
+  --cyan-name: #40EDFF;
+  --cyan-chart: #89FFF1;
+  --marker: #FFFF00;
+  --marker-fg: #000000;
+  --warn: #FFE100;
+  --exc: var(--c-down);
+  --flag-bg: #870F1E;
+  --flag-fg: #FFFFFF;
+  --key-cancel: #FF425A;
+  --key-go: #18BD39;
+  --key-sector: #F0AF00;
+  --key-panel: #1DBBED;
+  --key-fg: #000000;
+  --tape-bg: #001230;
+  --tape-fg: #FB9600;
+  --tape-src: #EA5D08;
+  --tape-edit: #001940;
+  --bar-pos: #00851C;
+  --bar-neg: #C31834;
+  --bar-mag: #0051BA;
+
+  /* Heat and tile scales. MON: black text except white on --heat-dn-1. CORR (2018 movers tiles),
+     MRET (floor to max ramps) and HOME KPI tiles: white text, or the better of black and white. */
+  --heat-up-2: #51EE6C;
+  --heat-up-1: #39A74C;
+  --heat-dn-1: #BA152D;
+  --heat-dn-2: #FF1E3E;
+  --corr-dn-2: #6C0820;
+  --corr-dn-1: #390014;
+  --corr-0: #000000;
+  --corr-up-1: #002D09;
+  --corr-up-2: #005713;
+  --corr-diag: #4B4B4B;
+  --mret-dn-floor: #5E0A1D;
+  --mret-dn-max: #DE1831;
+  --mret-up-floor: #014D10;
+  --mret-up-max: #18BD39;
+  --tile-up-1: #004A0F;
+  --tile-up-2: #00821B;
+  --tile-dn-1: #7B0B23;
+  --tile-dn-2: #A1132D;
+
+  /* Charts (section 6) */
+  --chart-grid: #505050;
+  --chart-axis: #FFFFFF;
+  --chart-s1: #FFFFFF;
+  --chart-area: #031D38;
+  --chart-vol: #7189AA;
+  --chart-split-outer: #242424;
+  --chart-split-inner: #484848;
+  --chart-split-hover: #626262;  /* 6.3 pane separator hover */
+  --chart-year-div: #808080;
+  --candle-up: #FFFFFF;
+  --candle-dn: #0080FF;
+  --last-line: #F09000;
+  --perf-pos: #007219;
+  --perf-neg: #6A1020;
+  --dist-curve: #F79400;
+  --roll-vol: #00B5F7;
+  --zero-line: #848484;
+
+  /* Values named in sections 4 to 7, tokenised here so no component writes a literal. */
+  --menu-border: #BABABA;       /* 4.7 menu box edge */
+  --band: #2D2D2D;              /* 7.2 and 7.10 section and header bands */
+  --band-count: #5DA1DF;        /* 7.2 universe count row */
+  --box-border: #4D4D4D;        /* 7.3 DES card borders */
+  --ro-box: #454545;            /* 4.5 and 7.4 read-only value boxes */
+  --cfg-head: #2E2D2B;          /* 7.4 config section header bars */
+  --stats-band: #292921;        /* 7.5 RET stats section bands */
+  --toggle-hover: #414141;      /* 4.5 range and toggle button hover */
+  --minibar-bg: #111111;        /* 6.1 chart mini toolbar */
+  --minibar-fg: #D8D8D8;
+  --spark-bg: #181818;          /* 7.7 2Day sparkline cell */
+  --spark-prior: #4D4D4D;
+  --crosshair: #BFBFBF;         /* 9.2 best guess */
+  --crosshair-label: #C0FFFF;
+  --study-upper: #FF00FF;       /* 6.2 Bollinger upper; 6.3 PScatter Bonferroni line */
+  --study-mid: #FFFFFF;
+  --study-lower: #00FF00;       /* 6.2 Bollinger lower; 6.3 PScatter Holm line */
+
   color-scheme: dark;
+}
+
+/* ---------- colour-vision themes (section 2.3). Amber stays unless noted. ---------- */
+:root[data-cvd="deut"],
+[data-cvd="deut"] {
+  --c-up: var(--cvd-up);
+  --c-down: #FF5566;
+  --c-down-raised: #FF5566;
+  --heat-up-2: #6BCEFF;
+  --heat-up-1: #399CFF;
+}
+
+:root[data-cvd="prot"],
+[data-cvd="prot"] {
+  --c-up: var(--cvd-up);
+  --c-down: #FF7329;
+  --c-down-raised: #FF7329;
+  --c-down-hover: #FF8443;    /* nearest passing value to #FF7329 inside a hovered cell (4.54) */
+  --data: #FEBA11;
+  --field-bg: #FEBA11;
 }

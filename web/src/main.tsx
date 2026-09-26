@@ -1,13 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
-// Self-hosted fonts (UI_SPEC section 3), latin subsets only: works offline, no third-party requests.
-import '@fontsource/jetbrains-mono/latin-400.css'
-import '@fontsource/jetbrains-mono/latin-500.css'
-import '@fontsource/jetbrains-mono/latin-700.css'
-import '@fontsource/inter/latin-400.css'
-import '@fontsource/inter/latin-500.css'
-import '@fontsource/space-grotesk/latin-600.css'
+// Self-hosted fonts, latin subsets only: works offline, no third-party requests. Bergoom is vendored
+// (OFL, declared in theme/index.css); Source Sans 3 is its fallback and PT Mono the fixed-grid face.
+// Weights 400 and 700 only, plus italics.
+import '@fontsource/source-sans-3/latin-400.css'
+import '@fontsource/source-sans-3/latin-400-italic.css'
+import '@fontsource/source-sans-3/latin-700.css'
+import '@fontsource/source-sans-3/latin-700-italic.css'
+import '@fontsource/pt-mono/latin-400.css'
+// OFL condition 2: the licence travels with every built copy of the Bergoom files.
+import './assets/fonts/bergoom/LICENSE.md?url'
 import './theme/index.css'
 
 import App from './App'

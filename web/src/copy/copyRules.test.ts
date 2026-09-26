@@ -23,7 +23,7 @@ describe('user-facing copy (UI_SPEC section 10)', () => {
 
 describe('born-failing cases (rule 5): the guard must catch what it bans', () => {
   it('flags an em dash and an en dash, at any depth', () => {
-    const bad = { a: 'read only — no orders', nested: { b: ['2010–2021'] } }
+    const bad = { a: 'read only \u2014 no orders', nested: { b: ['2010\u20132021'] } }
     const rules = findCopyViolations(bad).map((v) => `${v.path}:${v.rule}`)
     expect(rules).toContain('a:em dash')
     expect(rules).toContain('nested.b.0:en dash')

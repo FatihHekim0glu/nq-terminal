@@ -1,0 +1,17 @@
+/* Message line (spec 4.2): 21px, PT Mono, white, left-aligned under the command box. Key tokens in
+   hint notation take their key colour (spec 5.1 item 11). No transitions. */
+.msg-row { position: relative; height: 21px; min-width: 0; }
+.msg-line,
+.msg-idle {
+  position: absolute; inset: 0 auto 0 8px; max-width: calc(100% - 16px);
+  font-family: var(--font-mono); font-size: var(--fs-fixed); line-height: 21px;
+  color: var(--msg-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.key-go { color: var(--key-go); }
+.key-cancel { color: var(--key-cancel); }
+.key-sector { color: var(--key-sector); }
+
+@media (max-width: 700px) {
+  .msg-row { height: auto; min-height: 21px; }
+  .msg-line, .msg-idle { position: static; white-space: normal; max-width: none; padding: 0 8px; }
+}

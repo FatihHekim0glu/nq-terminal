@@ -1,0 +1,15 @@
+/* The window frame stack (spec 4.1): frame strip 37, key toolbar 32, nav toolbar 22, command zone 50,
+   the workspace taking the rest, the optional 57px event tape, the 22px status line. Each chrome row
+   sets its own height; the workspace flexes. */
+.nqt-frame { display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-width: 0; background: var(--bg); }
+.nqt-chrome { flex: 0 0 auto; display: flex; flex-direction: column; min-width: 0; }
+.nqt-frame > main.nqt-workspace { flex: 1 1 0; min-height: 0; }
+.nqt-frame > .event-tape,
+.nqt-frame > .nqt-status { flex: 0 0 auto; }
+.nqt-cmdzone { height: var(--cmd-zone-h); background: var(--bg); box-shadow: inset 0 -1px 0 var(--bg); min-width: 0; }
+
+@media (max-width: 700px) {
+  .nqt-frame { height: auto; min-height: 100dvh; }
+  .nqt-frame > main.nqt-workspace { flex: 0 0 auto; min-height: 80dvh; }
+  .nqt-cmdzone { height: auto; padding-bottom: 1px; }
+}

@@ -1,20 +1,23 @@
-/* Chart accessibility wrapper (UI_SPEC sections 3 and 9). Tokens only. */
-.chart-a11y { display: flex; flex-direction: column; gap: 4px; min-height: 0; height: 100%; }
+/* Chart accessibility wrapper (UI_SPEC sections 3 and 9) in the grid look of the look spec, sections 4.5,
+   4.8 and 6.1. Tokens only; square corners; state changes are hard cuts with no transition. */
+.chart-a11y { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--bg); }
 
 .chart-a11y-bar { display: flex; justify-content: flex-end; }
 
+/* The Table toggle is a range-row toggle button (4.5): gradient at rest, toggle blue and bold when on. */
 .chart-a11y-toggle {
+  min-width: 35px;
   height: 20px;
   padding: 0 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border-int);
-  border-radius: var(--r-sm);
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(var(--btn-top), var(--btn-bot));
+  color: var(--white);
+  font: var(--fs-chart)/20px var(--font-sans);
   cursor: pointer;
 }
-.chart-a11y-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+.chart-a11y-toggle:hover { background: var(--toggle-hover); }
+.chart-a11y-toggle[aria-pressed="true"] { background: var(--sel-toggle); font-weight: 700; }
 
 .chart-a11y-figure,
 .chart-a11y-tablewrap { flex: 1 1 auto; min-height: 0; position: relative; }
@@ -22,13 +25,55 @@
 
 .chart-a11y-toggle:focus-visible,
 .chart-a11y-figure:focus-visible,
-.chart-a11y-tablewrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chart-a11y-tablewrap:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
-.chart-a11y-table { border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; line-height: 16px; }
-.chart-a11y-table caption { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; }
-.chart-a11y-table th { position: sticky; top: 0; background: var(--raised); color: var(--muted); font-weight: 500; text-align: left; padding: 4px 8px; }
-.chart-a11y-table td { padding: 4px 8px; color: var(--text); border-top: 1px solid var(--border); }
-.chart-a11y-table .num { text-align: right; color: var(--data); font-feature-settings: 'tnum' 1, 'zero' 1; }
+/* Classic scrollbars, always visible (4.8). */
+.chart-a11y-tablewrap::-webkit-scrollbar { width: 15px; height: 15px; }
+.chart-a11y-tablewrap::-webkit-scrollbar-track { background: var(--sb-track); }
+.chart-a11y-tablewrap::-webkit-scrollbar-thumb { background: var(--sb-thumb); border: 1px solid var(--sb-track); border-radius: 0; }
+@supports not selector(::-webkit-scrollbar) {
+  .chart-a11y-tablewrap { scrollbar-color: var(--sb-thumb) var(--sb-track); }
+}
 
-/* Crosshair readout under the chart (SIGNAL .crosshair-readout): values in the data colour. */
-.chart-a11y-readout { font-family: var(--font-mono); font-size: 11px; line-height: 16px; color: var(--data); font-feature-settings: 'tnum' 1, 'zero' 1; }
+/* Table view (4.8): 20px sticky header on --th-bg with a --th-rule top and 1px black gaps between
+   header cells; black body rows, no zebra; labels amber, numbers --text, right-aligned. */
+.chart-a11y-table {
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: var(--row-h);
+}
+.chart-a11y-table caption { text-align: left; color: var(--data); padding: 0 5px; }
+.chart-a11y-table th {
+  position: sticky;
+  top: 0;
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--th-bg);
+  color: var(--th-fg);
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+  border-top: 1px solid var(--th-rule);
+  border-right: 1px solid var(--bg);
+}
+.chart-a11y-table th:last-child { border-right: 0; }
+.chart-a11y-table td {
+  height: var(--row-h);
+  padding: 0 5px;
+  color: var(--data);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chart-a11y-table .num { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+.chart-a11y-table td.num { color: var(--text); }
+.chart-a11y-table tbody tr:hover td { background: var(--hover-row); }
+.chart-a11y-table tbody td:hover { --muted: var(--muted-hover); --c-down: var(--c-down-hover); background: var(--hover-cell); }
+
+/* Crosshair readout under the chart: kept only as the table-view fallback (6.1). */
+.chart-a11y-readout {
+  font: var(--fs-chart)/16px var(--font-sans);
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+}

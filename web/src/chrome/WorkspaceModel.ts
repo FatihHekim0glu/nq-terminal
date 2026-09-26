@@ -5,6 +5,7 @@
 //   Shift+Enter: a new panel opens to the right of the focused one, in its link group.
 import type { CommandArgs, ParsedCommand } from '../commands/parser'
 import { TIMEFRAMES, findMnemonic } from '../commands/registry'
+import { displayContext } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { isLinkContext, isLinkGroup, type LinkContext } from '../state/linkGroups'
 import { layoutFor, type LayoutPanel, type LinkGroup, type PanelParams, type ScreenLayout } from './WorkspaceLayouts'
@@ -45,6 +46,14 @@ export interface DockApiLike {
 export function panelTitle(params: Pick<PanelParams, 'code' | 'context' | 'args'>): string {
   const argument = params.args.date ?? params.args.timeframe
   return [params.context?.value, params.code, argument].filter(Boolean).join(' ')
+}
+
+/** What the title bar shows after the link-group square: context and argument, e.g. "NQ 1d". */
+export function panelSubject(params: Pick<PanelParams, 'context' | 'args'>): string {
+  const argument = params.args.date ?? params.args.timeframe
+  // Instruments show as the chrome shows them everywhere (`NQ1 Index`, look spec 5.1 item 2).
+  const context = params.context ? displayContext(params.context, null) : undefined
+  return [context, argument].filter(Boolean).join(' ')
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/

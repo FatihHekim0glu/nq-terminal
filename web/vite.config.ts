@@ -44,7 +44,8 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
     // Vitest stubs CSS imports to '' by default; the contrast test must read the real tokens file.
-    css: { include: [/src[\\/]theme[\\/]tokens\.css/] },
+    // The panel and grid style tests read their stylesheets as text (?raw) only.
+    css: { include: [/src[\\/]theme[\\/]tokens\.css/, /src[\\/](chrome|grids)[\\/][^?]+\.css\?raw$/] },
     restoreMocks: true,
   },
 })

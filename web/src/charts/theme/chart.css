@@ -1,0 +1,97 @@
+/* Chart frame overlays (look spec 6.1, 6.4, 7.6). Tokens only. Every
+   colour is declared in tokens.css. Every state change is a hard
+   cut: no transitions. */
+
+.chart-root { position: relative; min-height: 0; background: var(--bg); }
+
+/* Name line above charts (GP, GIP, EQ). */
+.chart-name { color: var(--cyan-chart); font: var(--fs-chart)/16px var(--font-sans); }
+
+/* Legend overlay, top-left: a 13px swatch, the name with its axis tag, the value right-aligned. */
+.chart-legend {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 13px auto auto;
+  column-gap: 6px;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--legend-bg);
+  border-radius: 3px;
+  color: var(--white);
+  font: var(--fs-chart)/16px var(--font-sans);
+  pointer-events: none;
+}
+.chart-legend-swatch { width: 13px; height: 13px; }
+.chart-legend-value { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+
+/* 5px pane splitter: 1px outer, 3px inner, 1px outer. */
+.chart-splitter {
+  box-sizing: border-box;
+  height: 5px;
+  background: var(--chart-split-inner);
+  border-top: 1px solid var(--chart-split-outer);
+  border-bottom: 1px solid var(--chart-split-outer);
+}
+
+/* HTML year row under the lightweight-charts time axis, split by 1px dividers. */
+.chart-years { position: relative; height: 16px; color: var(--chart-axis); font: var(--fs-chart)/16px var(--font-sans); }
+.chart-years-div { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--chart-year-div); }
+
+/* Floating Track | Table | Zoom toolbar at top centre. */
+.chart-minibar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  transform: translateX(-50%);
+  background: var(--minibar-bg);
+  color: var(--minibar-fg);
+  font: var(--fs-chart)/18px var(--font-sans);
+}
+
+/* Range toolbar row 2 (6.4): contiguous buttons, 1px black separators, gradient at rest. */
+.chart-range { display: flex; height: 20px; background: var(--bg); }
+.chart-range-btn {
+  min-width: 35px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-left: 1px solid var(--bg);
+  border-radius: 0;
+  background: linear-gradient(var(--btn-top), var(--btn-bot));
+  color: var(--white);
+  font: var(--fs-chart)/20px var(--font-sans);
+  cursor: pointer;
+}
+.chart-range-btn:first-child { border-left: 0; }
+.chart-range-btn:hover { background: var(--toggle-hover); }
+/* Active: toggle blue plus bold, so the state is not carried by colour alone (2.29:1 to neighbours). */
+.chart-range-btn[aria-pressed="true"] { background: var(--sel-toggle); font-weight: 700; }
+.chart-range-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* Event-marker data tip (fills, rolls, gate reads): black text on the pale teal tip. */
+.chart-datatip {
+  position: absolute;
+  z-index: 3;
+  padding: 2px 6px;
+  background: var(--datatip-bg);
+  color: var(--bg);
+  font: var(--fs-chart)/16px var(--font-sans);
+  white-space: pre;
+  pointer-events: none;
+}
+
+/* A request past the fence: the gate's refusal text, amber, centred in the plot. */
+.chart-refusal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--data);
+  font: var(--fs-data)/20px var(--font-sans);
+}

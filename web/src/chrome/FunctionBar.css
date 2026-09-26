@@ -1,0 +1,118 @@
+/* Red function bar and dropdown menus (look spec 4.4, 4.12; IS-04, IS-05). Tokens only.
+   Every state is a hard cut: no transition anywhere. Heights follow decision D1: controls that are
+   not table rows are at least 24px (WCAG 2.5.8), so the bar is 24px, not the measured 21px. */
+
+.fn-bar {
+  display: flex;
+  align-items: stretch;
+  min-height: 24px;
+  min-width: 0;
+  background: var(--fn-bar);
+  color: var(--fn-fg);
+  border-bottom: 1px solid var(--fn-edge);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: 1;
+}
+
+/* Each button, and the amber field, ends with a 2px dark divider ('97) Edit |', 'Options |'), so a
+   lone button still shows its extent at rest. The page counter and title at the right have none. */
+.fn-field {
+  display: flex;
+  align-items: center;
+  padding: 0 4px 0 2px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--fn-div);
+}
+
+.fn-cell { position: relative; display: flex; flex: 0 0 auto; border-right: 2px solid var(--fn-div); }
+
+.fn-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 8px;
+  background: var(--fn-bar);
+  color: var(--fn-fg);
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.fn-btn:hover { background: var(--fn-hover); }
+.fn-btn:active,
+.fn-btn[aria-expanded="true"] { background: var(--fn-press); }
+.fn-btn[aria-disabled="true"] { color: var(--fn-off); background: var(--fn-bar); cursor: default; }
+.fn-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* `NN)` hot-link numbers are drawn condensed and tight before the label (look spec 3.4). */
+.fn-no { display: inline-block; transform: scaleX(.63); transform-origin: right center; }
+.fn-caret { font-size: var(--fs-small); }
+
+.fn-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  padding: 0 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.fn-page { color: var(--fn-fg); }
+.fn-title {
+  font-weight: 700;
+  color: var(--white);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- dropdown menus ---------- */
+.menu {
+  position: absolute;
+  top: 100%;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+  padding: 12px 0;
+  border: 1px solid var(--bg);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.menu-left { left: 0; }
+.menu-right { right: 0; }
+.menu-red { background: var(--fn-bar); color: var(--fn-fg); }
+.menu-dark { background: var(--raised); color: var(--text); border-color: var(--list-border); }
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 24px 0 12px;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.menu-red .menu-item:hover,
+.menu-red .menu-item:focus-visible { background: var(--fn-hover); }
+.menu-dark .menu-item:hover,
+.menu-dark .menu-item:focus-visible { background: var(--hover-menu); }
+.menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* Narrow viewports (1.4.10): the bar wraps, and the page indicator and title wrap onto the next row
+   instead of ending in an ellipsis. */
+@media (max-width: 700px) {
+  .fn-bar { flex-wrap: wrap; }
+  .fn-right { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; white-space: normal; }
+  .fn-title { overflow: visible; text-overflow: clip; }
+}

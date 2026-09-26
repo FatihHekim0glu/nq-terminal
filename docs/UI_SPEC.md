@@ -1,73 +1,85 @@
 # nq-lab terminal: UI specification
 
-Status: plan, 2026-09-26. Stack and decisions: `ARCHITECTURE.md`, `PRD.md` section 7. Contrast ratios below were computed with the WCAG formula; SIGNAL oklch values were converted to sRGB.
+Status: plan, 2026-09-26; sections 1 to 3, 5, 9 and 10 updated the same day for the flat-black terminal look (`BLOOMBERG_LOOK.md`, the look spec; decisions D1 to D7 are applied as noted below). Stack and decisions: `ARCHITECTURE.md`, `PRD.md` section 7. Contrast ratios were computed with the WCAG formula.
 
 ## 1. Principles
 
-1. **Bloomberg traits, translated.** Amber data on near-black; up and down are the only semantic hues; a persistent command line of mnemonics; panels linked in groups; dense tabular figures; everything reachable from the keyboard.
+1. **Amber identifiers and labels on black, light-grey numbers; up and down are the only semantic hues; blue for the command line, the focus ring and the selection.** Names and labels are amber (`--data`), as are times and headlines; most numbers are `--text`. A persistent command line of mnemonics, panels linked in groups, dense tabular figures, and everything reachable from the keyboard. The product name stays nq-lab terminal: no third-party name, mark or proprietary font appears in the UI (look spec 1.2).
 2. **Honesty is visible.** nq-lab's rules show on screen (section 6), so a chart can never look more certain than the research behind it.
-3. **Read only, and it says so.** The status bar always shows `READ ONLY` and `NO ORDER PATH`. There is no order ticket anywhere.
-4. **Nothing animates numbers.** No count-ups, no reveal effects. `prefers-reduced-motion` is honoured for the little motion there is (panel focus, dropdown).
+3. **Read only, and it says so.** The frame strip and the status line always show `READ ONLY` and `NO ORDER PATH`. There is no order ticket anywhere.
+4. **Nothing animates numbers.** No count-ups, no reveal effects, no tick flash, and no transition on any colour: every state change is a hard cut. The only motion is the command-line caret blink, which holds steady under `prefers-reduced-motion`.
 5. **Colour is never the only cue.** Signed numbers carry `+` or `-` and ▲ or ▼; legends carry a text symbol.
 
 ## 2. Frame
 
+Global rows, top to bottom, at 1920x1080 (look spec 4.1; measured in Playwright by `e2e/keys.spec.ts`):
+
 ```
-+--------------------------------------------------------------------------------------------+
-| nq-lab> _                           | A:NQ  B:volmanaged_v0  C:-  |  READ ONLY  NO ORDER PATH |  28px CMD bar
-+--------------------------------------------------------------------------------------------+
-|                                                                                            |
-|   dockview workspace: panels with 28px headers, tabs, split and float; popout for monitor 2|
-|                                                                                            |
-+--------------------------------------------------------------------------------------------+
-| SCR 00 HOME | A NQ | B volmanaged_v0 | DATA 2010-01-01..2021-12-31 | TWS: not monitored |   |  22px status bar
-| KILL: off | gate reads 7 | 14:02:11 ET | Esc cmd                                          |
-+--------------------------------------------------------------------------------------------+
+y=0     FRAME STRIP    37px  #CDCDCD  layout tabs HOME / RESEARCH / LIVE / +  (active #191919) | READ ONLY  NO ORDER PATH  Options
+y=37    KEY TOOLBAR    32px  #191919  CANCEL (red), HELP SEARCH MENU PG BACK PG FWD, then HOME REG RUNS LEDG LIVE OOS (green) | key map
+y=69    NAV TOOLBAR    22px  #191919  < > | [A] NQ1 Index | GP | Related Functions Menu        Message: KILL off, TWS | favourites | export | ?
+y=91    COMMAND ZONE   50px  #000000  22px command box (680px), panel number, link groups | 21px message line (PT Mono)
+y=141   WORKSPACE     917px  #000000  dockview, 2px black gutters, no panel borders
+y=1058  STATUS LINE    22px  #191919  Status | Screen HOME | A NQ1 Index | B volmanaged_v0 | C - | DATA ... | TWS not monitored |
+                                      KILL off | Gate reads 7 | READ ONLY | NO ORDER PATH           14:02:11 ET | <Esc> command
 ```
 
-Target 1920x1080; minimum 1366x768 (panels stack to two columns). Default layouts per screen live in one declarative table, `web/src/chrome/WorkspaceLayouts.ts` (Phase 7.4 may split it per screen). Layouts are fixed: dockview group tab strips are hidden (the panel header replaces them) and panels do not resize by dragging, because a 4px sash drag has no keyboard or single-pointer equivalent (WCAG 2.1.1, 2.5.7). A user layout is the panel set a command leaves (Enter replacing a panel, Shift+Enter adding one); it is kept in `localStorage` as a per-viewer convenience, saved only after such a command, and tied to the default it came from, so a changed default replaces it (wrapped in try/catch; the default layout renders if storage fails).
+With the event tape switched on (`NO <GO>`; off by default, D4), a 57px tape sits above the status line and the workspace shrinks to 860px. There is one global command box, labelled with the focused panel's number (D3); instrument panels carry their own two-line quote header instead. The status line is one 22px line (D7) whose safety segments (KILL, TWS, gate reads, READ ONLY, NO ORDER PATH) never shrink.
 
-**Panel header** (SIGNAL `.panel-head`, compacted): link chip `[A]` `[B]` `[C]` `[-]` with a colour stripe and the letter, title in `.eyebrow` style, mnemonic, tag (`[PRE-REG]`, `[POST HOC]`, `[SPENT]`, `[PLUMBING]`, `[UNUSABLE: BALANCE]`), table-view toggle, overflow menu.
+Target 1920x1080; minimum 1366x768. Default layouts per screen live in one declarative table, `web/src/chrome/WorkspaceLayouts.ts`. HOME is a 2x2 grid (GP, MON, EQ, REG, numbered 1 to 4 in reading order); LIVE and OOS open with Shift+Enter. Layouts are fixed: dockview group tab strips are hidden (the panel title bar replaces them) and panels do not resize by dragging, because a 4px sash drag has no keyboard or single-pointer equivalent (WCAG 2.1.1, 2.5.7). A user layout is the panel set a command leaves (Enter replacing a panel, Shift+Enter adding one); it is kept in `localStorage` as a per-viewer convenience, saved only after such a command, and tied to the default it came from, so a changed default replaces it (wrapped in try/catch; the default layout renders if storage fails).
 
-**Link groups.** Setting a context in one A panel retargets every A panel and syncs the time crosshair across them (uPlot `cursor.sync` key per group; lightweight-charts crosshair position set programmatically [v5 API name `setCrosshairPosition` unverified; Phase 5 confirms]). `[-]` panels are unlinked.
+**Panel chrome** (look spec 4.3 to 4.7, with D1 applied to every control):
+- Title bar, 24px, `--frame-bg` with black 11px text: `<n>-<MNEMONIC>`, a 14px link-group square with a black letter (none when unlinked), then the context and argument (`1-GP [A] NQ1 Index 1d`). On the right: the tag (`[PRE-REG]`, `[POST HOC]`, `[SPENT]`, `[PLUMBING]`, `[UNUSABLE: BALANCE]`), the table toggle `T`, `Options` and maximise.
+- Quote header (instrument panels only): two 22px lines; ticker white, arrow by last tick, price by day change, amber labels, a `d` delayed flag in `--warn`; no tick flash.
+- Red function bar, 24px plus a 1px edge: an optional amber context field, numbered menu buttons in the house scheme `95) Compare`, `96) Actions`, `97) Settings`, `98) Export`, `99) Help`; `Page n/m` and the white bold screen title on the right. Hover `--fn-hover`, pressed `--fn-press`; its dropdowns are the same red.
+- Trapezoid tabs (5px slant), numbered `1) Equity 2) Drawdown ...`; sub-tabs on a `--tab-on` strip.
+- Related Functions menu: a black box with a light grey edge inside the owning panel. `--dim` covers only that panel from the red bar down, so the chrome and the command line stay usable. Two columns, numbered across both. While it is open it holds the panel's Tab stop.
+- Focused panel: a 1px `--cmd-border` line around it, its number in the command zone, the nav toolbar reflecting it, and the command box border dimming to `--cmd-border-idle` while focus is in a panel.
+- Per-panel back and forward history (50 each), walked with End, the `< >` buttons and the Options menu.
+
+**Link groups.** Setting a context in one A panel retargets every A panel and syncs the time crosshair across them (uPlot `cursor.sync` key per group; lightweight-charts `setCrosshairPosition` and `clearCrosshairPosition`, confirmed in the v5 source). Unlinked panels show no chip. Chip colours are a house choice: A `#66ABFF`, B `#D7B8FF`, C `#8FE3E0`.
 
 ## 3. Design tokens
 
-Base: the SIGNAL dark theme (the owner's own design system), token names kept so components port without renames, with two fixes (`--down`, `--border-int`).
+`web/src/theme/tokens.css` is the single source for every colour and size, and for the fonts; no component writes a hex value (tests in `src/theme`, `src/grids` and `src/charts/theme` enforce it). The values and their evidence are in look spec sections 2 and 3; `src/theme/tokens.test.ts` asserts them exactly and `contrast.test.ts` checks every pair in look spec 8.2, including the negative cases that must fail.
 
-| Token | Value | On `--raised #171C22` | On `--surface #0F1318` | Use |
-|---|---|---|---|---|
-| `--bg` | `#070A0E` | | | page |
-| `--surface` | `#0F1318` | | | panel body |
-| `--raised` | `#171C22` | | | panel header, dropdowns |
-| `--text` | `#EFF2F5` | 15.25 | 16.59 | labels, prose |
-| `--data` (new) | `#FFB000` | 9.35 | 10.17 | every non-semantic number |
-| `--muted` | `#8D9399` | 5.52 | 6.01 | secondary labels (11px floor) |
-| `--accent` | `#94D53C` | 9.66 | 10.51 | focus ring, selection, active link |
-| `--accent-2` | `#E8AA4E` | 8.40 | 9.13 | benchmark lines |
-| `--c-up` | `#23C987` | 7.98 | 8.68 | positive |
-| `--c-down` | `#FF5C5C` (replaces SIGNAL `#E64343`, which is 4.28 on raised and fails 1.4.3) | 5.66 | 6.16 | negative |
-| `--cvd-up` (P1 theme) | `#4DA3FF` | 6.53 | 7.10 | up in CVD mode |
-| `--border` | `oklch(1 0 0 / 9%)` | decorative | | panel dividers |
-| `--border-int` | `#646C77` (replaces the 14% alpha; `#4A505A` gives only 2.1 to 2.4) | 3.23 | 3.51 | input and control boundaries (1.4.11) |
-| `--sel-bg` | `#2A1F00` | amber 8.85, text 14.44 | | selected grid row |
-| `--fence` | `#FFB000`, dashed | 9.35 | | 2022-01-01 line |
+| Token | Value | Use |
+|---|---|---|
+| `--bg`, `--surface` | `#000000` | page, function bodies, chart plots |
+| `--raised` | `#1E1E1E` | side panes, dropdowns, autocomplete sheet, rails |
+| `--chrome` | `#191919` | key and nav toolbars, status line, active layout tab |
+| `--frame-bg` | `#CDCDCD` | frame strip and panel title bars, black text |
+| `--text` | `#D7D7D7` | numbers, body text |
+| `--data` | `#FFA028` | names, labels, dates, times, headlines, field fill |
+| `--muted` | `#A5A5A5` | `N)` numbers, hints; `--muted-hover #B4B4B4` inside a hovered cell |
+| `--white` | `#FFFFFF` | totals, KPI values, headings, mnemonics in menus |
+| `--c-up` | `#51EE6C` | positive |
+| `--c-down` | `#FF2C4A` on black, raised and chrome only; `--c-down-raised #FF5566` on headers and the selection; `--c-down-hover #FF8A94` in a hovered cell | negative |
+| `--fn-bar` | `#870F1E` | red function bar; READ ONLY and NO ORDER PATH flags, white text |
+| `--cmd-border` | `#148EFF` | command box, focused-panel line; `--accent` is an alias |
+| `--focus` | `#FFFFFF` | 2px keyboard focus ring |
+| `--sel-bg` | `#0C2B4A` | selected grid row, selected HELP item |
+| `--link` | `#53B2F5` | links, breadcrumbs, `{... <GO>}` command links |
+| `--th-bg` / `--th-rule` | `#232323` / `#505050` | table header and its top rule |
+| `--border-int` | `#8C8C8C` | control boundaries (1.4.11) |
+| `--fence` | `#FFA028`, 1px dashed | 2022-01-01 line, `IS | 2022+ SPENT` |
+| `--sb-thumb` / `--sb-track` | `#787878` / `#222222` | classic 15px scrollbars |
 
-Sector palette for the 27 futures (each at least 7.3:1 on `--raised`): Equity `#6CB6FF`, Rates `#B39DFF`, FX `#38C7E8`, Energy `#FF8A3D`, Metals `#E0C060`, Grains `#9CCC65`, Livestock `#F48FB1`, Benchmark `#8D9399`.
+The sector palette for the 27 futures is unchanged: Equity `#6CB6FF`, Rates `#B39DFF`, FX `#38C7E8`, Energy `#FF8A3D`, Metals `#E0C060`, Grains `#9CCC65`, Livestock `#F48FB1`, Benchmark `#8D9399`. Chart colours are tokens too (grid off by default; candles white up and `#0080FF` down, D6; benchmark `#F06000`; the MON, CORR and monthly-return scales); `web/src/charts/theme` reads them for the canvas libraries. All radii are 0; the chart legend's 3px corner is the one exception.
 
-Keep SIGNAL's rule: never put a `var()` oklch colour in a CSS transition.
+Never put a `var()` colour in a CSS transition; state changes are hard cuts.
 
-**Type.**
-- Data: JetBrains Mono 12px/16px, `font-feature-settings: 'tnum' 1, 'zero' 1` (`zero` unverified; dropped if it does not render).
-- Labels: 11px uppercase, `letter-spacing: .07em` (SIGNAL `.eyebrow`).
-- Prose (spec text, summaries): Inter 13px.
-- KPI headline numbers: Space Grotesk 600 (SIGNAL `.mchip .v`).
-- 11px minimum anywhere. Numbers right-aligned, fixed decimals per column, explicit `+`, ASCII `-`.
-- Fonts self-hosted through @fontsource.
+**Type.** Fonts are self-hosted through @fontsource, or vendored OFL files with their licence.
+- Everything (UI, tables, numbers, charts, KPIs): `"Bergoom", "Source Sans 3", system-ui, sans-serif`. Bergoom (OFL-1.1) is vendored unmodified in `web/src/assets/fonts/bergoom/` with its `LICENSE.md`, which ships in every build (D2). Source Sans 3 comes from `@fontsource/source-sans-3`. Bergoom's digits are tabular by default.
+- Fixed grid only (message line, event tape, command box, raw log views): `"PT Mono", ui-monospace, monospace` from `@fontsource/pt-mono`, with a plain zero.
+- Sizes: 15px body and table cells on 20px rows (D1); an 11px floor (title bars, key labels, status line); 13px for the nav toolbar and charts; 18px quote header; 21px KPI values. Weights 400 and 700 only.
+- No letter-spacing and no zero-slash or stylistic features; `tabular-nums lining-nums` on numbers. Numbers are right-aligned with fixed decimals per column, an explicit `+` on changes, ASCII `-`, and `--` for missing. Treasury prices are shown in 32nds as `130-06+` (D5).
 
-**Themes.** `dark` (default, P0); `dark+cvd` (P1, `data-cvd="deut"`: up `#4DA3FF`, down `#FF5C5C`); `amber-classic` (P2, `--text` becomes amber). No light theme.
+**Themes.** `dark` (default); `data-cvd="deut"` (up `#3399FF`, down `#FF5566`); `data-cvd="prot"` (up `#3399FF`, down `#FF7329`, amber `#FEBA11`). The scheme is chosen in the frame strip's Options menu and kept in `localStorage`. `amber-classic` is dropped. No light theme.
 
 ## 4. Reuse from the SIGNAL design system
+
+Where this section conflicts with sections 2, 3 and 5 (the look spec), those win: there is no `.eyebrow` label, no command prompt text, and the range buttons read `1D 3D 1M 6M YTD 1Y 5Y Max`.
 
 From the SIGNAL design system:
 - `globals.css` lines 10 to 25: the `@theme inline` mapping of `--color-*` to runtime variables.
@@ -82,20 +94,30 @@ From an earlier charting reference: shared time axes with a synced crosshair; ra
 ## 5. Command line
 
 ```
-<context> <FUNCTION> [args] <Enter>
-context := instrument (NQ ZN ES CL ... the 27 futures) | hypothesis (za_v0, rebal_v1_confirm)
-         | run id (nt_dtsmom_v0_ts1) | 27F (the universe) | omitted: the focused panel's link-group context
-Shift+Enter opens the result in a new panel instead of replacing the focused one.
-Up and Down in the empty line walk the history. Suggestions come from /api/commands.
+line    := [NXTW] [context [SECTOR]] [FUNCTION [args]] [HELP] <GO>
+         | SECTOR | digits | MNEMONIC
+context := instrument (NQ ZN ES CL ... the 27 futures, or a generic ticker: NQ1, TY1, EC1, C 1 ...)
+         | hypothesis (za_v0, rebal_v1_confirm) | run id (nt_dtsmom_v0_ts1) | 27F (the universe)
+         | omitted: the focused panel's link-group context
+SECTOR  := INDEX | COMDTY | CMDTY | CURNCY | CRNCY | EQUITY | GOVT | CORP   (any case; F8 to F11 insert one)
+<GO>    := Enter or NumpadEnter. Shift+Enter (or NXTW) opens the result in a new panel.
 ```
 
-Examples: `NQ GP`, `NQ GIP 2019-03-14`, `volmanaged_v0 DES`, `nt_dtsmom_v0_ts1 RUN`, `27F CORR`, `REG`.
+Examples: `NQ GP`, `NQ1 INDEX GP 1d`, `TY1 COMDTY DES`, `NQ GIP 2019-03-14`, `volmanaged_v0 DES`, `nt_dtsmom_v0_ts1 RUN`, `27F CORR`, `REG`, `GP HELP`.
+
+- **Sector keys** are checked against the instrument: NQ, ES and YM take INDEX; rates, energy, metals, grains and livestock take COMDTY; FX futures take CURNCY. Hypotheses, runs and 27F reject one. `NQ COMDTY` answers "NQ is an Index future: use INDEX (F10)." The chrome shows instruments as generic tickers with a title-case sector (`NQ1 Index`, `TY1 Comdty`); the alias table lives in `web/src/commands/sectors.ts`, because `/api/commands` has no alias field.
+- **A context on its own** (`NQ1 INDEX <GO>`) loads it into the focused panel's link group and opens its numbered function menu. **A bare sector** (`INDEX`, `COMDTY`) opens the sector menu.
+- **Number `<GO>`**: `N <GO>` runs numbered item N of the focused panel (red-bar buttons, tabs, menu rows, the HELP index) through `web/src/chrome/NumberedActions.ts`; out of range gives "No item 42 on this screen." `N <PgDn>` jumps N pages.
+- **Words**: `MNEM HELP` opens that function's help and `HELP` the index; `LAST` lists the last 8 commands; `MAIN` is HOME; `HL` searches help, hypotheses and runs; `NO` toggles the event tape; `MENU` opens Related Functions.
+- `{NQ1 Index GP <GO>}` in HELP and notes renders as a command link that runs on click or Enter.
+- The box shows no prompt and no placeholder; typed letters show in upper case. Suggestions come from `/api/commands` in groups (FUNCTIONS, INSTRUMENTS, HYPOTHESES, RUNS, SEARCH), at most 6 per group, or 9 when one group matches. Messages, prompts and errors appear in the message line under the box (a polite live region), never in toasts.
+- Up and Down in the empty line, or Shift+PgUp and Shift+PgDn, walk the history.
 
 ### Mnemonics
 
 | Mnemonic | Screen | Pri |
 |---|---|---|
-| `HOME` | Launchpad | P0 |
+| `HOME` | Home view (the front end shows this in place of the backend's own title; look spec 1.2) | P0 |
 | `GP` | Candles, volume, indicator pane (timeframes 1m, 5m, 1h, 1d) | P0 |
 | `GIP` | `GP` for one date, intraday (DL18) | P0 |
 | `DES` | Hypothesis tear sheet (context is a hypothesis) or instrument description | P0 |
@@ -119,13 +141,18 @@ The mnemonic registry in `web/src/commands/registry.ts` is the single source for
 
 ### Keys
 
-WCAG 2.1.4 rules out always-on single-character shortcuts.
-- **Esc**: focus the command line; a second Esc returns focus to the previous panel. (P0)
-- **Ctrl+K**: focus the command line. (P0)
-- **Tab, Shift+Tab**: move between panels; each panel is one tab stop with a roving tabindex inside. (P0)
+WCAG 2.1.4 rules out always-on single-character shortcuts. The key toolbar under the frame strip shows the main keys as buttons (CANCEL, HELP, SEARCH, MENU, PG BACK, PG FWD, then HOME, REG, RUNS, LEDG, LIVE, OOS); each names its key and action.
+- **Esc** (CANCEL): close the open list or menu; else clear a non-empty line; else return focus to the panel. From a panel, Esc focuses the command line. (P0)
+- **Enter, NumpadEnter** (GO): run the line. (P0)
+- **F1**: once, help for the function typed or for the focused screen; twice within 500ms, the HELP index. (P0)
+- **F8, F9, F10, F11**: insert ` Equity`, ` Comdty`, ` Index`, ` Curncy`. A Playwright test checks each one is prevented with no browser action (no full screen, no help tab). F8 answers "No equities in nq-lab". (P0)
+- **End**: back in the focused panel's history when the line is empty or a panel has focus. **Home**: focus the command line from elsewhere. (P0)
+- **PgUp, PgDn**: page back and forward in the focused panel, with an N prefix. **Shift+PgUp, Shift+PgDn**: command history. (P0)
+- **Alt+1 to Alt+9**: focus panel N. **Alt+K**: the keyboard map; Alt+K again closes it. **Ctrl+K**: focus the command line. (P0)
+- **Tab, Shift+Tab**: move between panels; each panel is one tab stop with a roving tabindex inside. Inside the command line, Tab completes while the suggestion list is open. (P0)
 - **In a focused chart**: Left and Right step the crosshair one bar and update the readout; `+` and `-` zoom; Home and End jump to the data ends; `T` toggles the table view. Active only while the chart has focus. (P0)
 - **In a grid**: arrows, PgUp, PgDn; Enter drills down. (P0)
-- **F-keys** (P1, DL16): F2 `REG`, F4 `LEDG`, F8 `LIVE`, F9 `HOME`, each behind a Playwright test that the browser does not act on them. F1, F3, F5, F6, F7, F11 and F12 are never used.
+- The earlier F-key plan (F2 REG, F4 LEDG, F8 LIVE, F9 HOME) is dropped; the custom key buttons replace it. MENU is not bound to the ContextMenu key, and F12 is never used.
 
 ## 6. Honesty labels
 
@@ -234,11 +261,16 @@ Empty states name the expected file ("no journal yet: live/logs/volmanaged_paper
 - 1.4.11: `--border-int`, chart lines and the focus ring are at least 3:1.
 - 1.4.1: sign and glyph on every signed value; legend text symbols.
 - 2.1.1 and 2.1.4: every action from the keyboard; no always-on single-key shortcuts.
-- 2.4.7 and 2.4.11: 2px lime focus ring; a focused cell scrolls into view and sticky headers do not cover it.
-- 2.5.8: default rows 24px; an opt-in compact 20px density is documented as below the target-size minimum.
+- 2.4.7 and 2.4.11: 2px white `--focus` ring (inset on grid cells); a focused cell scrolls into view and sticky headers do not cover it. Amber fields use a 1px `--field-focus` ring with a 1px offset.
+- 2.5.8: table and list rows are 20px (D1), with Number `<GO>` in the command box as the equivalent control for every numbered row. Every other control (title-bar buttons, red-bar buttons, tabs, menu rows, key buttons, fields) is at least 24px. The 22px command box and the 21px nav toolbar buttons meet 2.5.8 through the spacing exception.
+- Where the reference colour fails AA, the nearest passing value is used (`--c-down-raised`, `--c-down-hover`, `--muted-hover`, `--sb-thumb`, white text on `#BA152D`); the look spec lists each one.
 - Every canvas chart: `role="img"` with an `aria-label` data summary (range, last value, max drawdown) and a table view toggle, because axe cannot see into canvas.
 - `prefers-reduced-motion` honoured.
+- 1.4.10: at 700 CSS px and narrower the panels stack at full width in reading order and only the page scrolls vertically (look spec 2.4); `e2e/shell.spec.ts` checks 320 CSS px.
+- 1.4.12: no chrome or panel text is clipped under the text-spacing overrides; `e2e/shell.spec.ts` checks HOME.
+- 2.2.2 and 2.3.1: the command-line block cursor blinks with a hard cut, 1000ms per phase, never fully off, and only while the line has focus. It is a text caret, the essential convention for an editable field, so 2.2.2 does not ask for a pause control; it is one 9 x 18px block, well under the 2.3.1 flash threshold, and it holds steady under `prefers-reduced-motion`.
+- The related functions menu is a non-modal dialog (`aria-modal="false"`); focus moving into another panel closes it.
 
 ## 10. Copy rules
 
-UK spelling (normalise, colour, analyse), no em or en dashes, no stock filler vocabulary, sentence case for prose, uppercase only for mnemonics, tags and `.eyebrow` labels. All strings live in `web/src/copy/*.ts` so the house style lint can check them as one file set.
+UK spelling (normalise, colour, analyse), no em or en dashes, no stock filler vocabulary, sentence case for prose and headers ("Registry board", "Active exp."). Uppercase only where the data itself is uppercase: mnemonics, tags (`[PRE-REG]`), tickers, source codes, key-button labels and suggestion group headings (`FUNCTIONS`). There are no uppercase eyebrow labels and no letter-spacing. Hints use `<Key>` notation (`<End> back  <F1> help`). All strings live in `web/src/copy/*.ts` so the house style lint can check them as one file set.

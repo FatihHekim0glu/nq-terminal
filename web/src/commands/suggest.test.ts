@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fuzzy, suggest } from './suggest'
+import { fuzzy, sheetGroups, suggest } from './suggest'
 import type { CommandIndexData } from './types'
 
 const INDEX: CommandIndexData = {
@@ -37,14 +37,15 @@ describe('suggestions', () => {
     const first = suggest('r', INDEX)
     expect(first.slice(0, 5).map((s) => s.value)).toEqual(['REG ', 'RUNS ', 'RUN ', 'RET ', 'RR '])
     expect(first.map((s) => s.value)).toContain('rebal_v0 ')
-    expect(first.map((s) => s.value)).toContain('RTY ')
+    // Instruments show as their generic ticker and sector (spec 5.1 item 2).
+    expect(first.map((s) => s.value)).toContain('RTY1 Index ')
   })
 
   it('groups each suggestion by kind and labels it', () => {
     const [reg] = suggest('RE', INDEX)
     expect(reg).toMatchObject({ value: 'REG ', label: 'REG', group: 'function', detail: 'Registry board' })
-    const nq = suggest('nq', INDEX).find((s) => s.label === 'NQ')
-    expect(nq).toMatchObject({ group: 'instrument', value: 'NQ ', detail: 'NQ.V.0 equity' })
+    const nq = suggest('nq', INDEX).find((s) => s.label === 'NQ1 Index')
+    expect(nq).toMatchObject({ group: 'instrument', value: 'NQ1 Index ', detail: 'NQ.V.0 back-adj' })
   })
 
   it('second token after a context: only functions that accept that context kind', () => {
@@ -72,9 +73,49 @@ describe('suggestions', () => {
     expect(values('v')).not.toContain('nt_volmanaged_v0 ')
   })
 
-  it('caps the list', () => {
-    const many = { ...INDEX, runs: Array.from({ length: 80 }, (_, i) => `run_${i}`) }
-    expect(suggest('run_', many).length).toBeLessThanOrEqual(12)
+  it('finds an instrument by its root or its generic ticker', () => {
+    expect(values('zn')).toContain('TY1 Comdty ')
+    expect(values('ty')).toContain('TY1 Comdty ')
+  })
+
+  it('after a generic ticker and its sector key, offers the functions for it', () => {
+    expect(values('NQ1 Index ')).toContain('NQ1 Index GP ')
+    expect(values('TY1 Comdty G')).toEqual(['TY1 Comdty GP ', 'TY1 Comdty GIP '])
+  })
+
+  it('offers the chrome words with the functions', () => {
+    expect(values('LA')).toContain('LAST ')
+    expect(values('ME')).toContain('MENU ')
+  })
+
+  it('ends a first-token list of two or more letters with a SEARCH row that runs HL', () => {
+    const list = suggest('reb', INDEX)
+    expect(list.at(-1)).toMatchObject({ group: 'search', value: 'HL reb', label: 'HL reb' })
+    expect(suggest('r', INDEX).some((s) => s.group === 'search')).toBe(false)
+  })
+})
+
+describe('sheet groups (spec 4.2 autocomplete)', () => {
+  const many = { ...INDEX, runs: Array.from({ length: 80 }, (_, i) => `run_${i}`) }
+
+  it('shows at most 6 rows per group when several groups match, with the rest behind More', () => {
+    const groups = sheetGroups(suggest('r', many), null)
+    for (const g of groups) expect(g.items.length).toBeLessThanOrEqual(6)
+    const runs = groups.find((g) => g.group === 'run')
+    expect(runs?.more).toBe(80 - 6)
+  })
+
+  it('shows 9 rows when only one group matches', () => {
+    const groups = sheetGroups(suggest('run_', many).filter((s) => s.group === 'run'), null)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.items).toHaveLength(9)
+    expect(groups[0]?.more).toBe(71)
+  })
+
+  it('shows every row of an expanded group', () => {
+    const groups = sheetGroups(suggest('r', many), 'run')
+    expect(groups.find((g) => g.group === 'run')?.items).toHaveLength(80)
+    expect(groups.find((g) => g.group === 'run')?.more).toBe(0)
   })
 
   it('offers only functions while the index has not loaded', () => {

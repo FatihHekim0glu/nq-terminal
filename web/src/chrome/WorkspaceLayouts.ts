@@ -41,17 +41,17 @@ const NQ: ResolvedContext = { kind: 'instrument', value: 'NQ' }
 const UNIVERSE: ResolvedContext = { kind: 'universe', value: '27F' }
 const VOLMANAGED: ResolvedContext = { kind: 'hypothesis', value: 'volmanaged_v0' }
 
-// HOME wireframe, UI_SPEC section 7: three rows of two panels. Rows are built first and then split,
-// so the DOM, and with it the Tab order, runs row by row in reading order.
+// HOME (look spec 7.1): the 2x2 home layout, about 19 grid rows per panel at 1080p. The left
+// column is built first and then each row is split to the right, so the DOM, and with it the Tab
+// order and the panel numbers, runs row by row: 1-GP, 2-MON, 3-EQ, 4-REG. LIVE and OOS are no longer
+// in the default; they open with Shift+Enter.
 const HOME: ScreenLayout = {
   screen: 'HOME',
   panels: [
     { id: 'home-gp', code: 'GP', context: NQ, args: { timeframe: '1d' }, group: 'A' },
     { id: 'home-eq', code: 'EQ', context: VOLMANAGED, args: {}, group: 'B', position: { ref: 'home-gp', direction: 'below' } },
-    { id: 'home-live', code: 'LIVE', context: null, args: {}, group: '-', position: { ref: 'home-eq', direction: 'below' } },
     { id: 'home-mon', code: 'MON', context: UNIVERSE, args: {}, group: 'A', position: { ref: 'home-gp', direction: 'right' } },
     { id: 'home-reg', code: 'REG', context: null, args: {}, group: '-', position: { ref: 'home-eq', direction: 'right' } },
-    { id: 'home-oos', code: 'OOS', context: null, args: {}, group: '-', position: { ref: 'home-live', direction: 'right' } },
   ],
 }
 

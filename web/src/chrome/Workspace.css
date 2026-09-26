@@ -1,47 +1,115 @@
-/* Workspace: dockview themed from the terminal tokens (UI_SPEC sections 2 and 3). Tokens only.
-   Group tab strips are hidden (PanelChrome is the header), so only the grid and sashes show. */
-.nqt-workspace { padding: 4px; min-height: 0; overflow: hidden; }
+/* Workspace: dockview themed from the terminal tokens (look spec 4.1, 4.3, 4.8). Tokens only.
+   Group tab strips are hidden (PanelChrome is the title bar); panels sit on black with 2px gutters
+   (WORKSPACE_THEME.gap) and no borders. */
+.nqt-workspace { padding: 0; min-height: 0; overflow: hidden; background: var(--bg); }
 .nqt-dock { height: 100%; width: 100%; }
 
-/* Fixed layouts: the sashes between panels do not drag. Dragging a 4px sash has no keyboard or
+/* Fixed layouts: the sashes between panels do not drag. Dragging a sash has no keyboard or
    single-pointer equivalent (WCAG 2.1.1, 2.5.7) and is below the 2.5.8 target size. */
 .nqt-dock .dv-sash { pointer-events: none; cursor: default; }
 
-/* Narrow viewports (about 400% zoom): the workspace scrolls and keeps panels at a readable size,
-   instead of clipping the rows that do not fit (1.4.10). */
+/* Narrow viewports (200% to 400% zoom, WCAG 1.4.10): the panels stack in reading order at full width,
+   each at a readable height, and the page scrolls vertically only. dockview positions its views
+   absolutely with inline sizes; here every level of its layout (the shell, the grid, the split views)
+   flows as ordinary blocks instead, so no panel keeps a width wider than the viewport. The layout the
+   commands build is unchanged: this is only how it is drawn at this width. */
 @media (max-width: 700px) {
-  .nqt-workspace { overflow: auto; }
-  .nqt-dock { min-width: 640px; min-height: 540px; }
+  /* A panel is at least 16rem tall and most of the viewport, whichever is taller. */
+  .nqt-workspace { overflow: visible; --stack-panel-h: max(16rem, 80dvh); }
+  .nqt-workspace > div,
+  .nqt-workspace .dv-shell,
+  .nqt-workspace .nqt-dock,
+  .nqt-workspace .dv-grid-view,
+  .nqt-workspace .dv-split-view-container,
+  .nqt-workspace .dv-view-container,
+  .nqt-workspace .dv-view {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+  .nqt-workspace .dv-view-container { display: flex; flex-direction: column; gap: 2px; }
+  .nqt-workspace .dv-sash-container { display: none; }
+  .nqt-workspace .dv-groupview { width: auto !important; height: var(--stack-panel-h) !important; }
 }
 
 .dockview-theme-nqt {
   --dv-background-color: var(--bg);
-  --dv-paneview-active-outline-color: var(--accent);
-  --dv-group-view-background-color: var(--surface);
-  --dv-tabs-and-actions-container-background-color: var(--raised);
-  --dv-tabs-and-actions-container-height: var(--panel-head-h);
-  --dv-tabs-and-actions-container-font-size: 11px;
-  --dv-activegroup-visiblepanel-tab-background-color: var(--surface);
+  --dv-paneview-active-outline-color: var(--cmd-border);
+  --dv-group-view-background-color: var(--bg);
+  --dv-tabs-and-actions-container-background-color: var(--chrome);
+  --dv-tabs-and-actions-container-height: 24px;
+  --dv-tabs-and-actions-container-font-size: var(--fs-small);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--chrome);
   --dv-activegroup-visiblepanel-tab-color: var(--text);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--raised);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--chrome);
   --dv-inactivegroup-visiblepanel-tab-color: var(--muted);
   --dv-separator-border: transparent;
   --dv-sash-color: transparent;
   --dv-active-sash-color: transparent;
   --dv-drag-over-background-color: var(--sel-bg);
-  --dv-drag-over-border-color: var(--accent);
-  --dv-border-radius: var(--r-sm);
+  --dv-drag-over-border-color: var(--cmd-border);
+  --dv-border-radius: 0;
   background-color: var(--bg);
   color: var(--text);
 }
 
 /* The dockview content box holds PanelChrome, which fills it. */
 .dockview-theme-nqt .dv-content-container { background: var(--bg); }
+.dockview-theme-nqt .dv-groupview { border-radius: 0; }
 
-.ws-empty { padding: 16px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+/* Classic scrollbars in every panel (IS-09): always visible, 15px, square, taking layout space. The
+   thumb is the lighter grey that passes 3:1 on the track (1.4.11). */
+/* scrollbar-color only for Firefox: in Chromium it would switch off the ::-webkit-scrollbar styling. */
+@supports (-moz-appearance: none) {
+  .nqt-workspace * { scrollbar-color: var(--sb-thumb) var(--sb-track); }
+}
+.nqt-workspace ::-webkit-scrollbar { width: var(--sb-w); height: var(--sb-w); }
+.nqt-workspace ::-webkit-scrollbar-track { background: var(--sb-track); }
+.nqt-workspace ::-webkit-scrollbar-thumb {
+  background: var(--sb-thumb);
+  border: 1px solid var(--sb-track);
+  border-radius: 0;
+}
+.nqt-workspace ::-webkit-scrollbar-corner { background: var(--sb-track); }
+.nqt-workspace ::-webkit-scrollbar-button:single-button {
+  display: block;
+  width: var(--sb-w);
+  height: var(--sb-w);
+  background-color: var(--sb-track);
+  background-repeat: no-repeat;
+  background-position: center;
+}
+/* White arrow triangles in the end zones, no button boxes (IS-09), drawn as 60 degree cones. */
+.nqt-workspace ::-webkit-scrollbar-button:single-button:vertical { height: 17px; background-size: 8px 5px; }
+.nqt-workspace ::-webkit-scrollbar-button:single-button:horizontal { width: 17px; background-size: 5px 8px; }
+.nqt-workspace ::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: conic-gradient(from 150deg at 50% 0, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-workspace ::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: conic-gradient(from -30deg at 50% 100%, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-workspace ::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: conic-gradient(from 60deg at 0 50%, var(--sb-arrow) 60deg, transparent 0);
+}
+.nqt-workspace ::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: conic-gradient(from 240deg at 100% 50%, var(--sb-arrow) 60deg, transparent 0);
+}
 
-.ws-placeholder { display: grid; gap: 6px; font-size: 13px; }
-.ws-placeholder-head { font-family: var(--font-mono); font-size: 12px; color: var(--data); }
-.ws-placeholder-status { font-family: var(--font-mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--accent-2); }
-.ws-placeholder-plan { color: var(--text); max-width: 70ch; }
-.ws-placeholder-meta { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.ws-empty { padding: 16px; font-family: var(--font-sans); font-size: var(--fs-data); color: var(--muted); }
+
+/* Placeholder: a function bar, optional tabs and a grid (grids/grid.css) filling the body. The grid
+   is clipped to the body rather than scrolled: its extra rows are decoration (aria-hidden) that only
+   shows the density, and a scrolling body with nothing focusable in it would trap keyboard users
+   out of the overflow (axe scrollable-region-focusable) once the roving stop moves to the red bar. */
+.ws-placeholder { display: block; height: 100%; min-width: 0; overflow: hidden; }
+.ws-placeholder .ws-col-item { width: 9em; }
+.ws-placeholder-plan { padding: 8px; color: var(--text); max-width: 70ch; }
+
+/* Narrow viewports (1.4.10): the placeholder's cells are prose, so they wrap rather than end in an
+   ellipsis once the panel is as narrow as the viewport. */
+@media (max-width: 700px) {
+  .ws-placeholder .ws-col-item { width: 6.5em; }
+  .ws-placeholder .nqt-grid td { white-space: normal; overflow-wrap: anywhere; }
+}

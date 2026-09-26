@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { handleRovingKey, panelTabStops, syncRoving } from './WorkspaceFocus'
+import { ROVING_OVERLAY_ATTR, handleRovingKey, panelTabStops, syncRoving } from './WorkspaceFocus'
 
 function panel(html: string): HTMLElement {
   const el = document.createElement('section')
@@ -44,6 +44,26 @@ describe('syncRoving: one tab stop per panel', () => {
     expect(panelTabStops(el).map((n) => n.id)).toEqual(['stray'])
     syncRoving(el)
     expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
+  })
+
+  it('moves the one tab stop into an open overlay, and to the panel default when it closes', () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div data-roving data-roving-default id="body">x</div>
+      <div ${ROVING_OVERLAY_ATTR} data-roving id="menu"><button id="cancel">c</button><button id="row">r</button></div>`)
+    syncRoving(el, el.querySelector('#bar') as HTMLElement)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['menu'])
+    el.querySelector('#menu')?.remove()
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
+  })
+
+  it('born failing: without the overlay mark the open menu has no tab stop at all', () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div id="menu"><button id="cancel">c</button></div>`)
+    syncRoving(el, el.querySelector('#bar') as HTMLElement)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
   })
 
   it('writes nothing when the tab stops are already right (so an observer cannot loop)', () => {

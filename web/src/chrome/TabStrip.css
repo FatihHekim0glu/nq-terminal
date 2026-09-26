@@ -1,0 +1,50 @@
+/* Tab strips (look spec 4.4, 4.12; screens_b-31, IS-08). Tokens only, hard-cut states.
+   Tabs are 24px, not the measured 21px (top) and 20px (sub), because they are targets (decision D1). */
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: 1;
+}
+.tabs-top { gap: 1px; background: var(--bg); }
+.tabs-sub { background: var(--tab-on); }
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 14px 0 8px;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* Trapezoids: the right edge slants out 5px over the height (screens_b-31). */
+.tabs-top .tab {
+  background: var(--tab-bg);
+  color: var(--tab-fg);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 100%, 0 100%);
+}
+.tabs-top .tab:hover { background: var(--tab-hover); color: var(--tab-on-fg); }
+.tabs-top .tab[aria-selected="true"] { background: var(--tab-on); color: var(--tab-on-fg); }
+
+.tabs-sub .tab { background: var(--tab-on); color: var(--tab-on-fg); padding: 0 8px; }
+.tabs-sub .tab:hover { background: var(--tab-hover); }
+.tabs-sub .tab[aria-selected="true"] { background: var(--sel-list); color: var(--white); }
+/* A clip-path would cut the focus ring on the trapezoid; draw it on the black strip instead. */
+.tabs-top .tab:focus-visible { clip-path: none; }
+
+/* Narrow viewports (1.4.10): the strip wraps onto a second row rather than hiding the tabs that do
+   not fit. */
+@media (max-width: 700px) {
+  .tabs { flex-wrap: wrap; row-gap: 1px; }
+}

@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { createRef } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { HistoryStorage } from '../commands/history'
 import type { CommandIndexData } from '../commands/types'
 import { COMMAND_LINE, PARSE_MESSAGES } from '../copy/commands'
-import { CommandLine, type CommandLineProps } from './CommandLine'
+import { MESSAGES } from '../copy/chrome'
+import { CommandLine, type CommandLineHandle, type CommandLineProps } from './CommandLine'
+import { resetMessage } from './MessageLine.store'
 
 // cmdk measures its list with ResizeObserver and scrolls the selected item into view; jsdom has neither.
 beforeAll(() => {
@@ -16,13 +19,17 @@ beforeAll(() => {
   vi.stubGlobal('ResizeObserver', NoResize)
   Element.prototype.scrollIntoView = () => {}
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  resetMessage()
+})
 
 const INDEX: CommandIndexData = {
   grammar: '<context> <FUNCTION> [args]',
   mnemonics: [],
   instruments: [
     { root: 'NQ', symbol: 'NQ.V.0', sector: 'equity' },
+    { root: 'ES', symbol: 'ES.V.0', sector: 'equity' },
     { root: 'ZN', symbol: 'ZN.V.0', sector: 'rates' },
   ],
   universe: ['27F'],
@@ -39,47 +46,90 @@ function memoryStorage(): HistoryStorage {
 
 function setup(props: Partial<CommandLineProps> = {}) {
   const onRun = vi.fn()
+  const ref = createRef<CommandLineHandle>()
   render(
     <div>
       <button type="button">panel</button>
       <header>
-        <CommandLine index={INDEX} onRun={onRun} historyStorage={memoryStorage()} {...props} />
+        <CommandLine ref={ref} index={INDEX} onRun={onRun} historyStorage={memoryStorage()} {...props} />
       </header>
     </div>,
   )
   const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
   const type = (text: string) => fireEvent.change(input, { target: { value: text } })
   const key = (k: string, init: Partial<KeyboardEventInit> = {}) => fireEvent.keyDown(input, { key: k, ...init })
-  return { onRun, input, type, key, panel: screen.getByRole('button', { name: 'panel' }) }
+  const message = () => screen.getByRole('status')
+  return { onRun, input, type, key, ref, message, panel: screen.getByRole('button', { name: 'panel' }) }
 }
 
-describe('CommandLine: running commands', () => {
-  it('shows the nq-lab> prompt and a collapsed, labelled combobox', () => {
+describe('CommandLine: the command box (spec 4.2)', () => {
+  it('has no prompt text and no placeholder sentence', () => {
     const { input } = setup()
-    expect(screen.getByText(COMMAND_LINE.prompt)).toBeTruthy()
+    expect(screen.queryByText('nq-lab>')).toBeNull()
+    expect(input.getAttribute('placeholder')).toBeNull()
     expect(input.getAttribute('aria-expanded')).toBe('false')
     expect(input.getAttribute('aria-controls')).toBeNull()
   })
 
+  it('shows typed letters in upper case and a sector key in title case', () => {
+    const { type, input } = setup()
+    type('nq1 index gp')
+    expect(input.value).toBe('NQ1 Index GP')
+  })
+
+  it('draws the caret triangle and a block cursor, both hidden from assistive technology', () => {
+    const { input } = setup()
+    const box = input.closest('.cmd-box') as HTMLElement
+    expect(box.querySelector('.cmd-caret')?.getAttribute('aria-hidden')).toBe('true')
+    expect(box.querySelector('.cmd-cursor')?.getAttribute('aria-hidden')).toBe('true')
+  })
+
+  it('restarts the block cursor in the bright phase on each keystroke', () => {
+    const { type, input } = setup()
+    const box = input.closest('.cmd-box') as HTMLElement
+    const before = box.querySelector('.cmd-cursor')
+    type('N')
+    expect(box.querySelector('.cmd-cursor')).not.toBe(before)
+  })
+})
+
+describe('CommandLine: running commands', () => {
   it('Enter runs the typed line and replaces the focused panel; the line clears', () => {
-    const { onRun, type, key, input } = setup()
+    const { onRun, type, key, input, message } = setup()
     type('NQ GP')
     key('Enter')
     expect(onRun).toHaveBeenCalledTimes(1)
     const [command, target] = onRun.mock.calls[0]!
     expect(command).toMatchObject({ canonical: 'NQ GP', context: { kind: 'instrument', value: 'NQ' } })
-    expect(command.mnemonic.code).toBe('GP')
     expect(target).toBe('replace')
     expect(input.value).toBe('')
-    expect(screen.getByRole('status').textContent).toBe('Opened NQ GP.')
+    expect(message().textContent).toBe('Opened NQ GP.')
   })
 
-  it('Shift+Enter opens the result in a new panel', () => {
+  it('NumpadEnter runs the line too (its key is Enter)', () => {
     const { onRun, type, key } = setup()
+    type('REG')
+    key('Enter', { code: 'NumpadEnter' })
+    expect(onRun).toHaveBeenCalledTimes(1)
+  })
+
+  it('Shift+Enter and NXTW open the result in a new panel', () => {
+    const { onRun, type, key, message } = setup()
     type('REG')
     key('Enter', { shiftKey: true })
     expect(onRun.mock.calls[0]?.[1]).toBe('new-panel')
-    expect(screen.getByRole('status').textContent).toBe('Opened REG in a new panel.')
+    expect(message().textContent).toBe('Opened REG in a new panel.')
+    type('NXTW NQ GP')
+    key('Enter')
+    expect(onRun.mock.calls[1]?.[1]).toBe('new-panel')
+    expect(onRun.mock.calls[1]?.[0].canonical).toBe('NQ GP')
+  })
+
+  it('a generic ticker with its sector key runs against the root', () => {
+    const { onRun, type, key } = setup()
+    type('TY1 COMDTY DES')
+    key('Enter')
+    expect(onRun.mock.calls[0]?.[0].canonical).toBe('ZN DES')
   })
 
   it('uses the focused panel link-group context when the line names none', () => {
@@ -100,50 +150,161 @@ describe('CommandLine: running commands', () => {
     expect(onRun.mock.calls.map((c) => c[0].canonical)).toEqual(['NQ GP', 'ZN GP'])
   })
 
-  it('announces a repeated command again (a fresh node in the status region)', () => {
-    const { type, key } = setup()
+  it('announces a repeated command again (a fresh node in the message line)', () => {
+    const { type, key, message } = setup()
     type('REG')
     key('Enter')
-    const status = screen.getByRole('status')
-    const first = status.firstElementChild
+    const first = message().firstElementChild
     type('REG')
     key('Enter')
-    expect(status.textContent).toBe('Opened REG.')
-    expect(status.firstElementChild).not.toBe(first)
+    expect(message().textContent).toBe('Opened REG.')
+    expect(message().firstElementChild).not.toBe(first)
   })
 
-  it('a malformed line runs nothing, keeps the text and explains why', () => {
-    const { onRun, type, key, input } = setup()
+  it('a malformed line runs nothing, keeps the text and explains why in the message line', () => {
+    const { onRun, type, key, input, message } = setup()
     type('NQ FOO')
     key('Enter')
     expect(onRun).not.toHaveBeenCalled()
     expect(input.value).toBe('NQ FOO')
     expect(input.getAttribute('aria-invalid')).toBe('true')
-    const alert = screen.getByRole('alert')
-    expect(alert.textContent).toBe(PARSE_MESSAGES['unknown-function'].replace('{token}', 'FOO'))
-    expect(input.getAttribute('aria-describedby')).toContain(alert.id)
+    expect(message().textContent).toBe(PARSE_MESSAGES['unknown-function'].replace('{token}', 'FOO'))
+    expect(input.getAttribute('aria-describedby')).toContain(message().id)
     type('NQ FO')
     expect(input.getAttribute('aria-invalid')).toBeNull()
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(message().textContent).toBe('')
+  })
+
+  it('names F10 when the sector key does not fit the instrument', () => {
+    const { type, key, message } = setup()
+    type('NQ COMDTY')
+    key('Enter')
+    expect(message().textContent).toBe('NQ is an Index future: use INDEX (F10).')
   })
 
   it('an empty Enter explains the grammar and runs nothing', () => {
-    const { onRun, key } = setup()
+    const { onRun, key, message } = setup()
     key('Enter')
     expect(onRun).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toBe(PARSE_MESSAGES.empty)
+    expect(message().textContent).toBe(PARSE_MESSAGES.empty)
   })
 })
 
-describe('CommandLine: suggestions (cmdk inline)', () => {
+describe('CommandLine: menus in the sheet (spec 5.1)', () => {
+  it('a context on its own loads it and lists its functions, numbered; N <GO> runs one', () => {
+    const onContext = vi.fn()
+    const { onRun, type, key, input } = setup({ onContext })
+    type('NQ1 INDEX')
+    key('Enter')
+    expect(onContext).toHaveBeenCalledWith({ kind: 'instrument', value: 'NQ' })
+    const menu = screen.getByRole('listbox', { name: 'NQ1 Index' })
+    expect(input.getAttribute('aria-controls')).toBe(menu.id)
+    const options = within(menu).getAllByRole('option')
+    expect(options[0]?.textContent).toMatch(/^1\)GP/)
+    type('1')
+    key('Enter')
+    expect(onRun.mock.calls[0]?.[0].canonical).toBe('NQ GP')
+    expect(screen.queryByRole('listbox', { name: 'NQ1 Index' })).toBeNull()
+  })
+
+  it('choosing an instrument in the suggestions loads it and shows its menu', () => {
+    const onContext = vi.fn()
+    const { type, input } = setup({ onContext })
+    input.focus()
+    type('es')
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('ES1 Index'))
+    expect(onContext).toHaveBeenCalledWith({ kind: 'instrument', value: 'ES' })
+    expect(screen.getByRole('listbox', { name: 'ES1 Index' })).toBeTruthy()
+  })
+
+  it('a menu item that needs an argument fills the line and waits for it', () => {
+    const { type, key, input } = setup()
+    type('NQ')
+    key('Enter')
+    const menu = screen.getByRole('listbox', { name: 'NQ1 Index' })
+    const gip = within(menu).getAllByRole('option').find((o) => o.textContent?.includes('GIP'))
+    fireEvent.click(gip!)
+    expect(input.value).toBe('NQ GIP ')
+  })
+
+  it('INDEX lists the Index futures; COMDTY lists categories that open their futures', () => {
+    const { type, key } = setup()
+    type('INDEX')
+    key('Enter')
+    const index = screen.getByRole('listbox', { name: 'Index' })
+    expect(within(index).getAllByRole('option').map((o) => o.textContent)).toEqual(['1)NQ1 IndexNQ.V.0 back-adj', '2)ES1 IndexES.V.0 back-adj'])
+    type('COMDTY')
+    key('Enter')
+    const comdty = screen.getByRole('listbox', { name: 'Comdty' })
+    fireEvent.click(within(comdty).getByText('Rates >'))
+    expect(within(screen.getByRole('listbox', { name: 'Rates' })).getByText('TY1 Comdty')).toBeTruthy()
+  })
+
+  it('LAST lists the last commands, newest first', () => {
+    const { type, key } = setup()
+    for (const line of ['REG', 'NQ GP', 'HELP']) {
+      type(line)
+      key('Enter')
+    }
+    type('LAST')
+    key('Enter')
+    const last = screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle })
+    expect(within(last).getAllByRole('option').map((o) => o.textContent)).toEqual(['1)HELP', '2)NQ GP', '3)REG'])
+  })
+
+  it('GP HELP opens the help for GP with runnable examples', () => {
+    const { type, key } = setup()
+    type('GP HELP')
+    key('Enter')
+    const help = screen.getByRole('listbox', { name: /^GP/ })
+    expect(within(help).getAllByRole('option').length).toBeGreaterThan(0)
+  })
+
+  it('Number <GO> with no menu open asks the focused panel, and says when it has no such item', () => {
+    const onNumber = vi.fn((n: number) => n === 7)
+    const { type, key, message } = setup({ onNumber })
+    type('7')
+    key('Enter')
+    expect(onNumber).toHaveBeenCalledWith(7)
+    type('42')
+    key('Enter')
+    expect(message().textContent).toBe('No item 42 on this screen.')
+  })
+
+  it('NO toggles the event tape and says so', () => {
+    const onTape = vi.fn(() => true)
+    const { type, key, message } = setup({ onTape })
+    type('NO')
+    key('Enter')
+    expect(onTape).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe(MESSAGES.tapeOn)
+  })
+
+  it('Esc closes an open menu', () => {
+    const { type, key } = setup()
+    type('INDEX')
+    key('Enter')
+    key('Escape')
+    expect(screen.queryByRole('listbox', { name: 'Index' })).toBeNull()
+  })
+})
+
+describe('CommandLine: suggestions (spec 4.2 autocomplete)', () => {
   it('typing opens a listbox of suggestions tied to the input', () => {
     const { type, input } = setup()
     type('re')
     const list = screen.getByRole('listbox')
     expect(input.getAttribute('aria-expanded')).toBe('true')
     expect(input.getAttribute('aria-controls')).toBe(list.id)
-    const options = within(list).getAllByRole('option')
-    expect(options[0]?.textContent).toContain('REG')
+    expect(within(list).getAllByRole('option')[0]?.textContent).toContain('REG')
+  })
+
+  it('heads each group in capitals and puts the hide hint on the first heading', () => {
+    const { type } = setup()
+    type('re')
+    const list = screen.getByRole('listbox')
+    expect(within(list).getByText('FUNCTIONS')).toBeTruthy()
+    expect(within(list).getByText(COMMAND_LINE.hideHint)).toBeTruthy()
   })
 
   it('born failing: no option is marked active until the user arrows, so Enter and ARIA agree', () => {
@@ -162,10 +323,31 @@ describe('CommandLine: suggestions (cmdk inline)', () => {
     expect(input.getAttribute('aria-activedescendant')).toBe(first?.id)
   })
 
-  it('offers contexts from /api/commands', () => {
+  it('ArrowUp on the first row closes the sheet', () => {
+    const { type, key, input } = setup()
+    type('re')
+    key('ArrowDown')
+    key('ArrowUp')
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('offers contexts from /api/commands, instruments as generic tickers', () => {
     const { type } = setup()
     type('nq')
-    expect(within(screen.getByRole('listbox')).getByText('NQ.V.0 equity')).toBeTruthy()
+    const list = screen.getByRole('listbox')
+    expect(within(list).getByText('NQ1 Index')).toBeTruthy()
+    // The typed letters are bold inside the description, so its text spans two elements.
+    const detail = Array.from(list.querySelectorAll('.det')).find((d) => d.textContent === 'NQ.V.0 back-adj')
+    expect(detail?.querySelector('b')?.textContent).toBe('NQ')
+  })
+
+  it('shows a More row for a long group and opens the whole group on it', () => {
+    const many = { ...INDEX, runs: Array.from({ length: 20 }, (_, i) => `run_${i}`) }
+    const { type } = setup({ index: many })
+    type('run_')
+    const more = within(screen.getByRole('listbox')).getByText('More runs...')
+    fireEvent.click(more)
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').filter((o) => o.textContent?.startsWith('run_'))).toHaveLength(20)
   })
 
   it('Tab completes the highlighted suggestion; Enter still runs the typed line', () => {
@@ -184,7 +366,6 @@ describe('CommandLine: suggestions (cmdk inline)', () => {
     key('ArrowDown')
     const selected = screen.getAllByRole('option').find((o) => o.getAttribute('aria-selected') === 'true')
     expect(selected).toBe(screen.getAllByRole('option')[1])
-    expect(input.getAttribute('aria-activedescendant')).toBe(selected?.id)
     key('Enter')
     expect(onRun).not.toHaveBeenCalled()
     expect(input.value).toBe(`${selected?.querySelector('.lbl')?.textContent} `)
@@ -199,21 +380,32 @@ describe('CommandLine: suggestions (cmdk inline)', () => {
     expect(document.activeElement).toBe(input)
   })
 
-  it('Esc closes an open list first, a second Esc returns focus to the panel', () => {
+  it('shows a note when the index failed, and still offers functions', () => {
+    const { type } = setup({ index: null, indexError: true })
+    type('re')
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')[0]?.textContent).toContain('REG')
+    expect(screen.getByText(COMMAND_LINE.indexError)).toBeTruthy()
+  })
+})
+
+describe('CommandLine: Esc (CANCEL) cascade (spec 5.2)', () => {
+  it('closes an open list, then clears a typed line, then returns focus to the panel', () => {
     const { type, key, input, panel } = setup()
     panel.focus()
     fireEvent.keyDown(panel, { key: 'Escape' })
     expect(document.activeElement).toBe(input)
     type('re')
-    expect(input.getAttribute('aria-expanded')).toBe('true')
     key('Escape')
     expect(input.getAttribute('aria-expanded')).toBe('false')
+    expect(input.value).toBe('RE')
+    key('Escape')
+    expect(input.value).toBe('')
     expect(document.activeElement).toBe(input)
     key('Escape')
     expect(document.activeElement).toBe(panel)
   })
 
-  it('a second Esc with no previous panel asks the workspace to focus one', () => {
+  it('a final Esc with no previous panel asks the workspace to focus one', () => {
     const onReturnFocus = vi.fn(() => true)
     const { key, input } = setup({ onReturnFocus })
     input.focus()
@@ -221,39 +413,28 @@ describe('CommandLine: suggestions (cmdk inline)', () => {
     expect(onReturnFocus).toHaveBeenCalledTimes(1)
   })
 
-  it('clears the error box when focus leaves the line by any route', () => {
-    const { type, key, input, panel } = setup()
+  it('clears an error when focus leaves the line by any route', () => {
+    const { type, key, input, panel, message } = setup()
     input.focus()
     type('XYZ')
     key('Enter')
-    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(message().textContent).not.toBe('')
     act(() => panel.focus())
-    expect(screen.queryByRole('alert')).toBeNull()
+    expect(message().textContent).toBe('')
   })
 
-  it('clears the error box when Esc returns focus, so it does not cover a panel header', () => {
-    const { type, key, panel } = setup()
-    panel.focus()
-    fireEvent.keyDown(panel, { key: 'Escape' })
-    type('XYZ')
-    key('Enter')
-    expect(screen.getByRole('alert')).toBeTruthy()
-    key('Escape')
-    expect(document.activeElement).toBe(panel)
-    expect(screen.queryByRole('alert')).toBeNull()
-  })
-
-  it('shows a note when the index failed, and still offers functions', () => {
-    const { type } = setup({ index: null, indexError: true })
-    type('re')
-    const list = screen.getByRole('listbox')
-    expect(within(list).getAllByRole('option')[0]?.textContent).toContain('REG')
-    expect(screen.getByText(COMMAND_LINE.indexError)).toBeTruthy()
+  it('the handle runs the same cascade for the CANCEL key, without moving focus', () => {
+    const { type, ref, input } = setup()
+    type('NQ G')
+    act(() => ref.current?.cancel())
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+    act(() => ref.current?.cancel())
+    expect(input.value).toBe('')
   })
 })
 
 describe('CommandLine: history and keys', () => {
-  it('Up and Down in the empty line walk the history', () => {
+  it('Up and Down in the empty line walk the history; Shift+PgUp and Shift+PgDn do too', () => {
     const { type, key, input } = setup()
     for (const line of ['REG', 'HELP']) {
       type(line)
@@ -268,12 +449,15 @@ describe('CommandLine: history and keys', () => {
     expect(input.value).toBe('HELP')
     key('ArrowDown')
     expect(input.value).toBe('')
+    key('PageUp', { shiftKey: true })
+    expect(input.value).toBe('HELP')
+    key('PageDown', { shiftKey: true })
+    expect(input.value).toBe('')
   })
 
   it('history survives a remount through storage', () => {
     const storage = memoryStorage()
     const first = setup({ historyStorage: storage })
-    first.type('MON')
     first.type('27F MON')
     first.key('Enter')
     cleanup()
@@ -282,7 +466,15 @@ describe('CommandLine: history and keys', () => {
     expect(second.input.value).toBe('27F MON')
   })
 
-  it('Esc and Ctrl+K from anywhere focus the command line; the browser does not act on Ctrl+K', () => {
+  it('the handle inserts a sector key at the caret, focusing the line', () => {
+    const { type, ref, input } = setup()
+    type('NQ1')
+    act(() => ref.current?.insert(' Index'))
+    expect(input.value).toBe('NQ1 Index')
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('Esc, Ctrl+K and Home from anywhere focus the command line; the browser does not act on Ctrl+K', () => {
     const { input, panel } = setup()
     panel.focus()
     const notPrevented = fireEvent.keyDown(panel, { key: 'k', ctrlKey: true })
@@ -290,6 +482,9 @@ describe('CommandLine: history and keys', () => {
     expect(document.activeElement).toBe(input)
     panel.focus()
     fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(document.activeElement).toBe(input)
+    panel.focus()
+    fireEvent.keyDown(panel, { key: 'Home' })
     expect(document.activeElement).toBe(input)
   })
 
