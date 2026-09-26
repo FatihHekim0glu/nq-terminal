@@ -1,0 +1,14 @@
+# Import order for the terminal backend (Phase 3.1 cleanup): standard library, third party, then nq-lab and the
+# terminal as first party, then the test helper modules that pytest puts on the path.
+# Run: ruff check --select I --fix terminal/backend
+line-length = 120
+
+[lint.isort]
+known-first-party = ["nq_lab", "nq_terminal"]
+known-local-folder = ["conftest", "fakes", "fixture_app", "research_guard", "safety_receivers", "test_research_support",
+                      "test_runs_support"]
+
+[lint.per-file-ignores]
+# One import and one include_router line per build phase, so concurrent edits each touch a single line (the one-line
+# router loop is deliberate too).
+"nq_terminal/app.py" = ["I001", "E701"]

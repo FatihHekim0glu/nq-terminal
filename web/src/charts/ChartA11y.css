@@ -1,0 +1,34 @@
+/* Chart accessibility wrapper (UI_SPEC sections 3 and 9). Tokens only. */
+.chart-a11y { display: flex; flex-direction: column; gap: 4px; min-height: 0; height: 100%; }
+
+.chart-a11y-bar { display: flex; justify-content: flex-end; }
+
+.chart-a11y-toggle {
+  height: 20px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-int);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.chart-a11y-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+.chart-a11y-figure,
+.chart-a11y-tablewrap { flex: 1 1 auto; min-height: 0; position: relative; }
+.chart-a11y-tablewrap { overflow: auto; }
+
+.chart-a11y-toggle:focus-visible,
+.chart-a11y-figure:focus-visible,
+.chart-a11y-tablewrap:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.chart-a11y-table { border-collapse: collapse; font-family: var(--font-mono); font-size: 12px; line-height: 16px; }
+.chart-a11y-table caption { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding-bottom: 4px; }
+.chart-a11y-table th { position: sticky; top: 0; background: var(--raised); color: var(--muted); font-weight: 500; text-align: left; padding: 4px 8px; }
+.chart-a11y-table td { padding: 4px 8px; color: var(--text); border-top: 1px solid var(--border); }
+.chart-a11y-table .num { text-align: right; color: var(--data); font-feature-settings: 'tnum' 1, 'zero' 1; }
+
+/* Crosshair readout under the chart (SIGNAL .crosshair-readout): values in the data colour. */
+.chart-a11y-readout { font-family: var(--font-mono); font-size: 11px; line-height: 16px; color: var(--data); font-feature-settings: 'tnum' 1, 'zero' 1; }

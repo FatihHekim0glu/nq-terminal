@@ -1,0 +1,132 @@
+{
+ "runs": {
+  "za_orb": "nt_za_v0_fixture_a",
+  "overnight": "nt_overnight_v0_fixture_open",
+  "sized": "nt_volmanaged_v0_fixture_m1",
+  "dtsmom": "nt_dtsmom_v0_fixture_ts1",
+  "nan_tokens": "smoke_2015_01",
+  "unbalanced": "nt_za_v0_fixture_unbalanced"
+ },
+ "files": {
+  "backtests/output/nt_dtsmom_v0_fixture_ts1/result.json": {
+   "source": "backtests/output/nt_dtsmom_v0_ts1/result.json",
+   "how": "rebuilt",
+   "note": "real 27-price snapshots for 2012-01-03..2012-01-24 (CL roll on 2012-01-23); a small ES long, CL short, GC long and ZN long book replayed on them in USD4 money; 27-long net_qty and px lists as in the source"
+  },
+  "backtests/output/nt_overnight_v0_fixture_open/result.json": {
+   "source": "backtests/output/nt_overnight_v0_open_c/result.json",
+   "how": "trimmed",
+   "note": "real trades picked across the three blocks; totals, summary, balance_check and coverage_check recomputed; data verbatim"
+  },
+  "backtests/output/nt_volmanaged_v0_fixture_m1/result.json": {
+   "source": "backtests/output/nt_volmanaged_v0_final_m1/result.json",
+   "how": "rebuilt",
+   "note": "real closes, decisions and snapshot prices for 2011-06-02..2011-06-16 (roll on 2011-06-13); a small book (lots of 20, 3, 24 and 2 MNQ; ENTRY, REBAL, ROLL, LIQ) replayed on them with exact Decimal money, so fills, trades, snapshots and the balance and MTM checks agree; keys and types copied from the source"
+  },
+  "backtests/output/nt_za_v0_fixture_a/result.json": {
+   "source": "backtests/output/nt_za_v0_repaired_a/result.json",
+   "how": "trimmed",
+   "note": "6 real trades (2 per block, stop, eod and target exits); n_trades, pnl_total, fees_total, summary and balance_check recomputed from them with nt_run.summarize; data and venue verbatim"
+  },
+  "backtests/output/nt_za_v0_fixture_unbalanced/result.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "the za_orb fixture with a final balance 12.34 USD above its trades: balance_check.ok is false, so the run is unusable (rule 4)"
+  },
+  "backtests/output/smoke_2015_01/result.json": {
+   "source": "backtests/output/smoke_2015_01/result.json",
+   "how": "verbatim",
+   "note": "20 trades; empty blocks carry NaN tokens"
+  },
+  "experiments/overnight_v0.json": {
+   "source": "experiments/overnight_v0.json",
+   "how": "rebuilt",
+   "note": "the spec of a fixture registry row, verbatim except that references to the project rules file are reworded; re-hashes to its recorded sha256"
+  },
+  "experiments/rebal_v1_confirm.json": {
+   "source": "experiments/rebal_v1_confirm.json",
+   "how": "verbatim",
+   "note": "the spec of the one opening in oos_openings.json; re-hashes to the opening's sha256, so it cannot be reworded; not under version control, the tests copy it from the nq-lab project (opening_spec.ensure_opening_spec_fixture)"
+  },
+  "experiments/volmanaged_v0.json": {
+   "source": "experiments/volmanaged_v0.json",
+   "how": "rebuilt",
+   "note": "the spec of a fixture registry row, verbatim except that references to the project rules file are reworded; re-hashes to its recorded sha256"
+  },
+  "live/logs/preflight2_2026-09-26_PLUMBING_DELAYED.log": {
+   "source": "live/logs/preflight2_2026-09-26_PLUMBING_DELAYED.log",
+   "how": "trimmed",
+   "note": "19 real Nautilus log lines (braille banner, INFO and WARN); the paper account id is replaced by DU1234567"
+  },
+  "live/logs/preflight2_2026-09-26_journal.PLUMBING_DELAYED.jsonl": {
+   "source": "live/logs/preflight2_2026-09-26_journal.PLUMBING_DELAYED.jsonl",
+   "how": "verbatim",
+   "note": "the one real preflight journal row"
+  },
+  "live/logs/volmanaged_paper_journal.PLUMBING_DELAYED.jsonl": {
+   "source": null,
+   "how": "synthetic",
+   "note": "plumbing journal: warmup, delayed_fetch with the stale sizing note, close; every row labelled"
+  },
+  "live/logs/volmanaged_paper_journal.jsonl": {
+   "source": null,
+   "how": "synthetic",
+   "note": "book journal rows of every type (warmup, close, skipped, close with NaN fields, close with error) plus one plumbing-labelled row that must be classed by its row, not by the file name (DL11)"
+  },
+  "results/ledger.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "one ledger row for the overnight fixture run, its numbers taken from the fixture result.json as scripts/ledger_append.py would; header as the real ledger"
+  },
+  "results/oos_access_log.jsonl": {
+   "source": "results/oos_access_log.jsonl",
+   "how": "trimmed",
+   "note": "14 real lines covering the four key sets (both sealed lines verbatim, so the sealed-line pin holds) plus 2 synthetic terminal lines at the end"
+  },
+  "results/oos_openings.json": {
+   "source": "results/oos_openings.json",
+   "how": "verbatim",
+   "note": "the one closed opening; hashes to the pinned sha256"
+  },
+  "results/registry.csv": {
+   "source": "results/registry.csv",
+   "how": "rebuilt",
+   "note": "the overnight_v0 and volmanaged_v0 rows verbatim except family_k, Bonferroni, Holm and BH, recomputed for a family of 2 so the multiple-testing view matches"
+  },
+  "results/screens/dtsmom_v0_monthly.csv": {
+   "source": "results/screens/dtsmom_v0_monthly.csv",
+   "how": "trimmed",
+   "note": "header plus the first 12 months"
+  },
+  "results/screens/overnight_v0.json": {
+   "source": "results/screens/overnight_v0.json",
+   "how": "rebuilt",
+   "note": "full screen result, verbatim except spec_sha256, which records the fixture spec's hash (its statistics describe the full sample, not the trimmed CSV)"
+  },
+  "results/screens/overnight_v0_trades.csv": {
+   "source": "results/screens/overnight_v0_trades.csv",
+   "how": "trimmed",
+   "note": "header plus the first 4 nights of each block"
+  },
+  "results/screens/volmanaged_v0.json": {
+   "source": "results/screens/volmanaged_v0.json",
+   "how": "rebuilt",
+   "note": "full screen result, verbatim except spec_sha256, which records the fixture spec's hash (its statistics describe the full sample, not the trimmed CSV)"
+  },
+  "results/screens/volmanaged_v0_daily.csv": {
+   "source": "results/screens/volmanaged_v0_daily.csv",
+   "how": "trimmed",
+   "note": "header plus the first 40 sessions (the first has no returns yet: empty cells)"
+  },
+  "results/screens/za_v0_rejected_days.json": {
+   "source": "results/screens/za_v0_rejected_days.json",
+   "how": "verbatim",
+   "note": "qa.day_gate rejected sessions, for the [GATED] and [REPAIRED] flags on bars"
+  },
+  "results/screens/za_v0_repaired_rejected_days.json": {
+   "source": "results/screens/za_v0_repaired_rejected_days.json",
+   "how": "verbatim",
+   "note": "qa.day_gate rejected sessions, for the [GATED] and [REPAIRED] flags on bars"
+  }
+ }
+}

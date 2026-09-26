@@ -1,0 +1,187 @@
+{
+ "run_id": "nt_za_v0_fixture_unbalanced",
+ "config": {
+  "strategy": "za_orb",
+  "params": {
+   "or_minutes": 5,
+   "target_r": 10.0
+  },
+  "variant": "repaired",
+  "start": "2010-09-28",
+  "end": "2022-01-01",
+  "run_id": "nt_za_v0_fixture_unbalanced"
+ },
+ "nautilus_trader": "1.231.0",
+ "created_utc": "2026-09-25T23:55:21.868987+00:00",
+ "elapsed_s": 28.3,
+ "data": {
+  "variant": "repaired",
+  "start": "2010-09-28 00:00:00+00:00",
+  "end": "2022-01-01 00:00:00+00:00",
+  "sessions": 2836,
+  "gated_days": 2825,
+  "rejected_days": 11,
+  "rejected_reasons": {
+   "no bars": 7,
+   "opening range bar missing": 2,
+   "only 377 of 390 RTH bars": 2
+  },
+  "bars_fed": 1097236
+ },
+ "venue": {
+  "venue": "XCME",
+  "oms_type": "NETTING",
+  "account_type": "MARGIN",
+  "currency": "USD",
+  "fill_model": {
+   "prob_fill_on_limit": 0.0,
+   "prob_slippage": 0.0
+  },
+  "bar_execution": true,
+  "bar_adaptive_high_low_ordering": false,
+  "fee_per_contract_side_usd": 2.24,
+  "starting_balance_usd": 1000000.0
+ },
+ "n_trades": 6,
+ "pnl_total": 1053.12,
+ "fees_total": 26.88,
+ "summary": {
+  "n_trades": 6,
+  "pnl_total": 1053.12,
+  "fees_total": 26.88,
+  "mean_net_r": 2.1899868945868946,
+  "t_net_r": 1.247919884493258,
+  "gross_mean_r": 2.2403846153846154,
+  "hit_rate": 0.5,
+  "reasons": {
+   "stop": 3,
+   "eod": 2,
+   "target": 1
+  },
+  "blocks": {
+   "2010-2013": {
+    "n": 2,
+    "mean_net_r": 0.9537777777777776,
+    "t": null
+   },
+   "2014-2017": {
+    "n": 2,
+    "mean_net_r": 4.411111111111111,
+    "t": null
+   },
+   "2018-2021": {
+    "n": 2,
+    "mean_net_r": 1.2050717948717948,
+    "t": null
+   }
+  }
+ },
+ "balance_check": {
+  "starting_usd": 1000000.0,
+  "final_usd": 1001065.46,
+  "delta_usd": 1065.46,
+  "realized_sum_usd": 1053.12,
+  "diff_usd": 12.34,
+  "ok": false,
+  "open_positions": 0,
+  "trade_list_sum_usd": 1053.12
+ },
+ "trades": [
+  {
+   "date": "2010-09-29",
+   "direction": 1,
+   "entry_ts": "2010-09-29T13:35:00+00:00",
+   "entry_px": 5790.5,
+   "stop_px": 5786.0,
+   "target_px": 5835.5,
+   "r_pts": 4.5,
+   "exit_ts": "2010-09-29T14:21:00+00:00",
+   "exit_px": 5786.0,
+   "reason": "stop",
+   "pnl_pts": -4.5,
+   "pnl_usd": -94.48,
+   "commissions_usd": 4.48,
+   "net_r": -1.049777777777778
+  },
+  {
+   "date": "2010-10-01",
+   "direction": -1,
+   "entry_ts": "2010-10-01T13:35:00+00:00",
+   "entry_px": 5794.0,
+   "stop_px": 5799.25,
+   "target_px": 5741.5,
+   "r_pts": 5.25,
+   "exit_ts": "2010-10-01T20:00:00+00:00",
+   "exit_px": 5778.25,
+   "reason": "eod",
+   "pnl_pts": 15.75,
+   "pnl_usd": 310.52,
+   "commissions_usd": 4.48,
+   "net_r": 2.957333333333333
+  },
+  {
+   "date": "2014-01-03",
+   "direction": -1,
+   "entry_ts": "2014-01-03T14:35:00+00:00",
+   "entry_px": 7394.75,
+   "stop_px": 7399.25,
+   "target_px": 7349.75,
+   "r_pts": 4.5,
+   "exit_ts": "2014-01-03T14:38:00+00:00",
+   "exit_px": 7399.25,
+   "reason": "stop",
+   "pnl_pts": -4.5,
+   "pnl_usd": -94.48,
+   "commissions_usd": 4.48,
+   "net_r": -1.049777777777778
+  },
+  {
+   "date": "2014-01-09",
+   "direction": -1,
+   "entry_ts": "2014-01-09T14:35:00+00:00",
+   "entry_px": 7410.5,
+   "stop_px": 7412.25,
+   "target_px": 7393.0,
+   "r_pts": 1.75,
+   "exit_ts": "2014-01-09T15:18:00+00:00",
+   "exit_px": 7393.0,
+   "reason": "target",
+   "pnl_pts": 17.5,
+   "pnl_usd": 345.52,
+   "commissions_usd": 4.48,
+   "net_r": 9.872
+  },
+  {
+   "date": "2018-01-02",
+   "direction": -1,
+   "entry_ts": "2018-01-02T14:35:00+00:00",
+   "entry_px": 10309.0,
+   "stop_px": 10324.0,
+   "target_px": 10159.0,
+   "r_pts": 15.0,
+   "exit_ts": "2018-01-02T14:39:00+00:00",
+   "exit_px": 10324.0,
+   "reason": "stop",
+   "pnl_pts": -15.0,
+   "pnl_usd": -304.48,
+   "commissions_usd": 4.48,
+   "net_r": -1.0149333333333335
+  },
+  {
+   "date": "2018-01-03",
+   "direction": 1,
+   "entry_ts": "2018-01-03T14:35:00+00:00",
+   "entry_px": 10418.0,
+   "stop_px": 10405.0,
+   "target_px": 10548.0,
+   "r_pts": 13.0,
+   "exit_ts": "2018-01-03T21:00:00+00:00",
+   "exit_px": 10462.75,
+   "reason": "eod",
+   "pnl_pts": 44.75,
+   "pnl_usd": 890.52,
+   "commissions_usd": 4.48,
+   "net_r": 3.425076923076923
+  }
+ ]
+}

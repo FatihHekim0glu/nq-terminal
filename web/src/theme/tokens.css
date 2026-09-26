@@ -1,0 +1,85 @@
+/* nq-lab terminal tokens: UI_SPEC section 3.
+   Base is the SIGNAL dark theme, token names kept so components
+   port without renames, with two contrast fixes: --c-down and --border-int.
+   Checked by src/theme/contrast.test.ts (text 4.5:1, components 3:1).
+   Rule kept from SIGNAL: never put a var() oklch colour in a CSS transition. */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-text: var(--text);
+  --color-data: var(--data);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-up: var(--c-up);
+  --color-down: var(--c-down);
+  --color-cvd-up: var(--cvd-up);
+  --color-border: var(--border);
+  --color-border-int: var(--border-int);
+  --color-sel-bg: var(--sel-bg);
+  --color-fence: var(--fence);
+  --color-sec-equity: var(--sec-equity);
+  --color-sec-rates: var(--sec-rates);
+  --color-sec-fx: var(--sec-fx);
+  --color-sec-energy: var(--sec-energy);
+  --color-sec-metals: var(--sec-metals);
+  --color-sec-grains: var(--sec-grains);
+  --color-sec-livestock: var(--sec-livestock);
+  --color-sec-benchmark: var(--sec-benchmark);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+:root {
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --cmd-h: 28px;
+  --status-h: 22px;
+  --panel-head-h: 28px;
+}
+
+/* Dark is the only P0 theme (PRD section 5: no light theme). */
+:root,
+[data-theme="dark"] {
+  --bg: #070A0E;
+  --surface: #0F1318;
+  --raised: #171C22;
+  --text: #EFF2F5;
+  --data: #FFB000;
+  --muted: #8D9399;
+  --accent: #94D53C;
+  --accent-2: #E8AA4E;
+  --c-up: #23C987;
+  --c-down: #FF5C5C; /* SIGNAL #E64343 is 4.28:1 on --raised and fails 1.4.3 */
+  --cvd-up: #4DA3FF;
+  --border: oklch(1 0 0 / 9%);
+  --border-int: #646C77; /* replaces the 14% alpha; #4A505A gives only 2.1 to 2.4 */
+  --sel-bg: #2A1F00;
+  --fence: #FFB000;
+
+  /* Sector palette for the 27 futures (each at least 7.3:1 on --raised). */
+  --sec-equity: #6CB6FF;
+  --sec-rates: #B39DFF;
+  --sec-fx: #38C7E8;
+  --sec-energy: #FF8A3D;
+  --sec-metals: #E0C060;
+  --sec-grains: #9CCC65;
+  --sec-livestock: #F48FB1;
+  --sec-benchmark: #8D9399;
+
+  /* Link groups [A] [B] [C] (panel chip, context strip, status bar). A is the accent (UI_SPEC section 3:
+     "active link"); B and C are light tints outside the data, semantic and sector colours, so a
+     linked chip never reads as a benchmark line or a sector. The letter always travels with them. */
+  --link-a: #94D53C;
+  --link-b: #D7B8FF;
+  --link-c: #8FE3E0;
+
+  color-scheme: dark;
+}

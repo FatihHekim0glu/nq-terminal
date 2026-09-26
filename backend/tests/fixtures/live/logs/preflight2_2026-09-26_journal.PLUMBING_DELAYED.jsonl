@@ -1,0 +1,1 @@
+{"type": "warmup", "date": "2026-09-28", "per_contract": {"MNQZ6.CME": {"sessions": 30, "valid": 30, "no_bars": 0}}, "missing": [], "invalid": [], "valid_last": 22, "window": 22, "min_valid": 17, "refused": null, "requests": 30, "planned": 30, "today_bars": 0, "halted": null, "mode": "plumbing test, delayed data", "strategy_performance": false}

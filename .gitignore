@@ -1,0 +1,38 @@
+# Dependencies and virtual environments
+node_modules/
+.venv/
+
+# Build output
+dist/
+*.tsbuildinfo
+.vite/
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Test output
+coverage/
+.coverage
+htmlcov/
+qa/.dumps/
+web/e2e/.results/
+playwright-report/
+test-results/
+blob-report/
+
+# Local environment and logs
+.env
+.env.*
+*.log
+# The Nautilus log fixture is test data, not a local log
+!backend/tests/fixtures/live/logs/*.log
+
+# Internal build plan, kept local
+docs/TASKS.md
+
+# Hash-pinned spec whose text names a local file outside this repository; the tests copy it
+# verbatim from the nq-lab project (backend/tests/opening_spec.py)
+backend/tests/fixtures/experiments/rebal_v1_confirm.json

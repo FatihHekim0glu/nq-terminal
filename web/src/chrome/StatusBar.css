@@ -1,0 +1,8 @@
+/* StatusBar additions on top of SIGNAL .statusline (theme/index.css). Text cues carry the state;
+   colour only reinforces it. --c-down is 5.66:1 and --data 9.35:1 on --raised. */
+.status-bar .seg.alert { color: var(--c-down); font-weight: 700; letter-spacing: .07em; }
+.status-bar .seg.warn { color: var(--data); }
+.status-bar .ctx-seg { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; }
+.status-bar .ctx-seg .grp { color: var(--link); }
+/* The kill and health segments share one live region; it lays out like the segments around it. */
+.status-bar .seg-live { display: flex; align-items: center; }

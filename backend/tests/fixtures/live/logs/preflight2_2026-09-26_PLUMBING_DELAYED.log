@@ -1,0 +1,19 @@
+2026-09-26T14:02:40.264909600Z [INFO] NQLAB-PAPER.TradingNode: =================================================================
+2026-09-26T14:02:40.264929900Z [INFO] NQLAB-PAPER.TradingNode:  NAUTILUS TRADER - Automated Algorithmic Trading Platform
+2026-09-26T14:02:40.264930200Z [INFO] NQLAB-PAPER.TradingNode:  by Nautech Systems Pty Ltd.
+2026-09-26T14:02:40.264930400Z [INFO] NQLAB-PAPER.TradingNode:  Copyright (C) 2015-2026. All rights reserved.
+2026-09-26T14:02:40.264930500Z [INFO] NQLAB-PAPER.TradingNode: =================================================================
+2026-09-26T14:02:40.264930600Z [INFO] NQLAB-PAPER.TradingNode: 
+2026-09-26T14:02:40.264930700Z [INFO] NQLAB-PAPER.TradingNode: ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣴⣶⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+2026-09-26T14:02:40.264930900Z [INFO] NQLAB-PAPER.TradingNode: ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣾⣿⣿⣿⠀⢸⣿⣿⣿⣿⣶⣶⣤⣀⠀⠀⠀⠀⠀
+2026-09-26T14:02:40.293921700Z [INFO] NQLAB-PAPER.VolManagedLive: READY
+2026-09-26T14:02:40.293982200Z [INFO] NQLAB-PAPER.ExecEngine: Registered OMS.UNSPECIFIED for Strategy VolManagedLive-000
+2026-09-26T14:02:40.294106900Z [WARN] NQLAB-PAPER.InteractiveBrokersClient-011: Started when loop is not running
+2026-09-26T14:02:40.299955500Z [WARN] NQLAB-PAPER.InteractiveBrokersClient-011: Market data farm connection is OK:usfarm.nj (code: 2104, req_id=-1)
+2026-09-26T14:02:40.588326700Z [INFO] NQLAB-PAPER.ExecClient-INTERACTIVE_BROKERS: Account `DU1234567` found in the connected TWS/Gateway
+2026-09-26T14:02:40.876351700Z [WARN] NQLAB-PAPER.VolManagedLive: PLUMBING TEST, DELAYED DATA: not strategy performance: delayed market data on paper account DU1234567
+2026-09-26T14:02:40.876416200Z [INFO] NQLAB-PAPER.VolManagedLive: book at start: 0 contracts in None
+2026-09-26T14:02:40.879465700Z [INFO] NQLAB-PAPER.VolManagedLive: warm-up 1/30: requesting MNQZ6.CME-1-MINUTE-LAST-EXTERNAL from 2026-08-14 13:30:00+00:00 to 2026-08-14 20:00:00+00:00
+2026-09-26T14:02:40.879712800Z [INFO] NQLAB-PAPER.VolManagedLive: RUNNING
+2026-09-26T14:02:41.241711100Z [INFO] NQLAB-PAPER.VolManagedLive: Received <Bar[390]> data for MNQZ6.CME-1-MINUTE-LAST-EXTERNAL
+2026-09-26T14:07:41.436416800Z [INFO] NQLAB-PAPER.DataClient-INTERACTIVE_BROKERS: MNQZ6.CME: Requesting historical bars: MNQZ6.CME-1-MINUTE-LAST-EXTERNAL ending on '2026-09-25 20:00:00+00:00' with duration '23400 S'

@@ -1,0 +1,216 @@
+{
+ "run_id": "nt_overnight_v0_fixture_open",
+ "config": {
+  "strategy": "overnight",
+  "params": {
+   "exit_at": "open_tick"
+  },
+  "variant": "repaired",
+  "start": "2010-09-28",
+  "end": "2022-01-01",
+  "run_id": "nt_overnight_v0_fixture_open"
+ },
+ "nautilus_trader": "1.231.0",
+ "created_utc": "2026-09-26T01:33:17.508443+00:00",
+ "elapsed_s": 4.1,
+ "data": {
+  "variant": "repaired",
+  "start": "2010-09-28 00:00:00+00:00",
+  "end": "2022-01-01 00:00:00+00:00",
+  "sessions": 2836,
+  "nights": 2825,
+  "late_exits_frozen": 0,
+  "skipped": [
+   {
+    "entry_date": "2010-09-28",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-06-11",
+    "reason": "no exit bar"
+   },
+   {
+    "entry_date": "2014-06-12",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-06-13",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-09-22",
+    "reason": "no exit bar"
+   },
+   {
+    "entry_date": "2014-09-23",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-09-24",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-09-25",
+    "reason": "no entry bar"
+   },
+   {
+    "entry_date": "2014-12-30",
+    "reason": "no exit bar"
+   },
+   {
+    "entry_date": "2014-12-31",
+    "reason": "no entry bar"
+   }
+  ],
+  "skipped_reasons": {
+   "no entry bar": 7,
+   "no exit bar": 3
+  },
+  "exit_at": "open_tick",
+  "bars_fed": 14125,
+  "ticks_fed": 2825,
+  "day_gate": "none (the spec's bar-existence rules only)"
+ },
+ "venue": {
+  "venue": "XCME",
+  "oms_type": "NETTING",
+  "account_type": "MARGIN",
+  "currency": "USD",
+  "fill_model": {
+   "prob_fill_on_limit": 0.0,
+   "prob_slippage": 0.0
+  },
+  "bar_execution": true,
+  "bar_adaptive_high_low_ordering": false,
+  "fee_per_contract_side_usd": 2.24,
+  "starting_balance_usd": 1000000.0
+ },
+ "n_trades": 4,
+ "pnl_total": 617.08,
+ "fees_total": 17.92,
+ "summary": {
+  "n_trades": 4,
+  "pnl_total": 617.08,
+  "fees_total": 17.92,
+  "mean_net_r": null,
+  "t_net_r": null,
+  "gross_mean_r": null,
+  "hit_rate": 0.75,
+  "mean_pnl_usd": 154.27,
+  "t_pnl_usd": 2.139875875184941,
+  "mean_pnl_pts": 7.9375,
+  "reasons": {
+   "exit": 4
+  },
+  "blocks": {
+   "2010-2013": {
+    "n": 0,
+    "mean_net_r": null,
+    "t": null,
+    "n_trades": 2,
+    "mean_pnl_usd": 263.02,
+    "t_pnl_usd": null
+   },
+   "2014-2017": {
+    "n": 0,
+    "mean_net_r": null,
+    "t": null,
+    "n_trades": 1,
+    "mean_pnl_usd": -19.48,
+    "t_pnl_usd": null
+   },
+   "2018-2021": {
+    "n": 0,
+    "mean_net_r": null,
+    "t": null,
+    "n_trades": 1,
+    "mean_pnl_usd": 110.52,
+    "t_pnl_usd": null
+   }
+  }
+ },
+ "balance_check": {
+  "starting_usd": 1000000.0,
+  "final_usd": 1000617.08,
+  "delta_usd": 617.08,
+  "realized_sum_usd": 617.08,
+  "diff_usd": 0.0,
+  "ok": true,
+  "open_positions": 0,
+  "trade_list_sum_usd": 617.08
+ },
+ "coverage_check": {
+  "nights": 4,
+  "n_trades": 4,
+  "skipped": 0,
+  "skipped_reasons": {},
+  "ok": true
+ },
+ "strategy_skipped": [],
+ "trades": [
+  {
+   "date": "2010-09-29",
+   "direction": 1,
+   "entry_ts": "2010-09-29T20:00:00+00:00",
+   "entry_px": 5789.25,
+   "stop_px": null,
+   "target_px": null,
+   "r_pts": null,
+   "exit_ts": "2010-09-30T13:30:00+00:00",
+   "exit_px": 5799.75,
+   "reason": "exit",
+   "pnl_pts": 10.5,
+   "pnl_usd": 205.52,
+   "commissions_usd": 4.48,
+   "net_r": null
+  },
+  {
+   "date": "2010-09-30",
+   "direction": 1,
+   "entry_ts": "2010-09-30T20:00:00+00:00",
+   "entry_px": 5780.5,
+   "stop_px": null,
+   "target_px": null,
+   "r_pts": null,
+   "exit_ts": "2010-10-01T13:30:00+00:00",
+   "exit_px": 5796.75,
+   "reason": "exit",
+   "pnl_pts": 16.25,
+   "pnl_usd": 320.52,
+   "commissions_usd": 4.48,
+   "net_r": null
+  },
+  {
+   "date": "2014-01-02",
+   "direction": 1,
+   "entry_ts": "2014-01-02T21:00:00+00:00",
+   "entry_px": 7398.5,
+   "stop_px": null,
+   "target_px": null,
+   "r_pts": null,
+   "exit_ts": "2014-01-03T14:30:00+00:00",
+   "exit_px": 7397.75,
+   "reason": "exit",
+   "pnl_pts": -0.75,
+   "pnl_usd": -19.48,
+   "commissions_usd": 4.48,
+   "net_r": null
+  },
+  {
+   "date": "2018-01-02",
+   "direction": 1,
+   "entry_ts": "2018-01-02T21:00:00+00:00",
+   "entry_px": 10399.75,
+   "stop_px": null,
+   "target_px": null,
+   "r_pts": null,
+   "exit_ts": "2018-01-03T14:30:00+00:00",
+   "exit_px": 10405.5,
+   "reason": "exit",
+   "pnl_pts": 5.75,
+   "pnl_usd": 110.52,
+   "commissions_usd": 4.48,
+   "net_r": null
+  }
+ ]
+}

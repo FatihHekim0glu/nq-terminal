@@ -1,0 +1,2 @@
+# JSON dumps written by terminal/backend/tests/test_dump_for_qa.py and read by `python -m crosscheck`
+.dumps/

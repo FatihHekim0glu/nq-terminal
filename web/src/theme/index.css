@@ -1,0 +1,133 @@
+/* Entry stylesheet: Tailwind 4, the terminal tokens, then SIGNAL's class grammar compacted for a
+   dense terminal (UI_SPEC sections 2, 3 and 4). 11px is the floor for any text. */
+@import "tailwindcss";
+@import "./tokens.css";
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  background-color: var(--bg);
+  color: var(--text);
+  font-feature-settings: 'cv05', 'ss01', 'tnum' 1;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  /* never transition bg or colour: tokens switch instantly */
+}
+
+::selection { background: var(--sel-bg); color: var(--data); }
+
+.mono { font-family: var(--font-mono); }
+.disp { font-family: var(--font-display); letter-spacing: -0.02em; }
+.num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+  color: var(--data);
+}
+.txt-muted { color: var(--muted); }
+.up { color: var(--c-up); }
+.down { color: var(--c-down); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* focus ring: 2px lime (2.4.7, 2.4.11) */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-sm); }
+
+/* ---------- frame ---------- */
+.frame {
+  display: grid;
+  grid-template-rows: var(--cmd-h) minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+  min-width: 0;
+  background: var(--bg);
+}
+
+/* ---------- command-line bar (top) ---------- */
+.cmdbar {
+  display: flex; align-items: stretch; min-width: 0;
+  background: var(--raised); border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono); font-size: 12px;
+}
+.cmdbar .cmd { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; padding: 0 10px; }
+.cmdbar .prompt { color: var(--accent); white-space: nowrap; }
+.cmdbar input {
+  flex: 1 1 auto; min-width: 0; height: 20px; padding: 0 6px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border-int); border-radius: var(--r-sm);
+  font: inherit;
+}
+.cmdbar input::placeholder { color: var(--muted); }
+/* One ring on the input, drawn over its border rather than 2px outside it. */
+.cmdbar input:focus-visible { outline-offset: -1px; }
+.cmdbar .seg { display: flex; align-items: center; gap: 10px; padding: 0 12px; border-left: 1px solid var(--border); white-space: nowrap; }
+.cmdbar .safe { color: var(--data); font-weight: 500; letter-spacing: .07em; }
+
+/* ---------- link groups: one colour per group, used by every chip (ContextStrip.css, PanelChrome.css,
+   StatusBar.css). Colour reinforces the letter, never replaces it. ---------- */
+[data-group="A"] { --link: var(--link-a); }
+[data-group="B"] { --link: var(--link-b); }
+[data-group="C"] { --link: var(--link-c); }
+[data-group="-"] { --link: var(--muted); }
+
+/* ---------- panel chrome (SIGNAL .panel / .panel-head, compacted) ---------- */
+.workspace { min-height: 0; overflow: auto; padding: 8px; }
+.panel {
+  display: flex; flex-direction: column; min-height: 100%;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+  overflow: clip; box-shadow: inset 0 1px 0 oklch(1 0 0 / 4%);
+}
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  height: var(--panel-head-h); padding: 0 10px;
+  background: var(--raised); border-bottom: 1px solid var(--border);
+}
+.panel-body { flex: 1 1 auto; display: grid; place-content: center; gap: 6px; padding: 16px; text-align: center; }
+.panel-body .empty { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+.panel-body .note { font-size: 13px; color: var(--muted); max-width: 60ch; }
+
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--muted);
+}
+.eyebrow b { color: var(--accent); font-weight: 500; }
+
+.tag-b { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+.tag-b::before { content: "["; color: var(--muted); }
+.tag-b::after { content: "]"; color: var(--muted); }
+
+/* ---------- status bar (SIGNAL .statusline, 22px) ---------- */
+.statusline {
+  display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; min-height: var(--status-h);
+  font-family: var(--font-mono); font-size: 11px; line-height: 20px; color: var(--muted);
+  background: var(--raised); border-top: 1px solid var(--border);
+}
+.statusline .seg { flex: 0 0 auto; padding: 0 10px; border-right: 1px solid var(--border); white-space: nowrap; }
+/* Contexts and the data window give way first, so the bar stays one 22px line and the safety and
+   kill segments never truncate. */
+.statusline .seg.shrink { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.statusline .seg b { color: var(--data); font-weight: 500; }
+.statusline .seg.safe { color: var(--data); letter-spacing: .07em; }
+.statusline .seg.push { margin-left: auto; border-right: none; border-left: 1px solid var(--border); }
+
+/* Narrow viewports (about 400% zoom): the bars wrap instead of overlapping or clipping (1.4.10). */
+@media (max-width: 700px) {
+  .frame { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .cmdbar { flex-wrap: wrap; }
+  .cmdbar .cmd { flex: 1 0 100%; min-height: var(--cmd-h); }
+  .cmdbar input { min-width: 12ch; }
+  .cmdbar .seg { border-left: none; min-height: 24px; }
+  .statusline { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

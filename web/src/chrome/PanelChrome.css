@@ -1,0 +1,85 @@
+/* Panel chrome inside the dockview workspace (UI_SPEC sections 2, 3 and 9). Tokens only.
+   The theme's .panel / .panel-head / .eyebrow / .tag-b grammar is reused; this file adds the
+   workspace-specific parts. Never transition a var() colour. */
+
+.nqt-panel {
+  height: 100%;
+  min-height: 0;
+  border-radius: var(--r-sm);
+}
+
+/* Focus shows once, on the focused item (the body's inset ring or a control's ring): no second
+   lime frame on the panel border (2.4.7). */
+
+.nqt-panel .panel-head { gap: 8px; padding: 0 8px; flex: 0 0 var(--panel-head-h); }
+.nqt-panel .panel-id,
+.nqt-panel .panel-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.nqt-panel .panel-id { flex: 1 1 auto; }
+.nqt-panel .panel-tools { flex: 0 0 auto; }
+
+/* Titles carry context names (hypotheses, run ids), which are case-sensitive: no uppercase here. */
+.nqt-panel .panel-title {
+  text-transform: none;
+  letter-spacing: .02em;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* The title (the panel's identifier) keeps its width; the screen name truncates first (1.4.4). */
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.nqt-panel .panel-screen {
+  flex: 1 1 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.link-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding-left: 5px;
+  border-left: 3px solid var(--link);
+  color: var(--link);
+}
+
+.panel-toggle {
+  height: 20px;
+  min-width: 24px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-int);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.panel-toggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+
+/* The body is the panel's Tab stop: a scrolling region with an inset focus ring, so the panel's
+   overflow never clips the ring. */
+.nqt-panel .nqt-panel-body {
+  display: block;
+  place-content: normal;
+  text-align: left;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+}
+.nqt-panel .nqt-panel-body:focus-visible,
+.nqt-panel .panel-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

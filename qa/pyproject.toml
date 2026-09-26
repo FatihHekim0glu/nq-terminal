@@ -1,0 +1,29 @@
+[project]
+name = "nq-terminal-qa"
+version = "0.1.0"
+description = "Reference cross-checks for the nq-lab terminal analytics (TASKS 3.4, decision U2). Never imported by the backend."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "quantstats==0.0.82",
+    "empyrical-reloaded==0.5.12",
+    "arch==8.0.0",
+    "statsmodels==0.15.0",
+    "scipy==1.18.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.10,<0.11"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "crosscheck"
+module-root = ""
+
+[dependency-groups]
+dev = [
+    "pytest==9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

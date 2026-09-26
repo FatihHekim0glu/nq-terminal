@@ -1,0 +1,2 @@
+run_id,ts_utc,exp_id,strategy,params_json,variant,start,end,n_trades,pnl_total,fees_total,mean_net_r,t_net_r,hit_rate,balance_check,runtime_s,result_created_utc
+nt_overnight_v0_fixture_open,2026-09-26T00:00:00+00:00,overnight_v0_fixture,overnight,"{""exit_at"": ""open_tick""}",repaired,2010-09-28,2022-01-01,4,617.08,17.92,,,0.75,OK,4.1,2026-09-26T01:33:17.508443+00:00
