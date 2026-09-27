@@ -49,6 +49,12 @@ const CostScreen = lazy(() => import('../screens/cost/CostScreen'))
 const BlkScreen = lazy(() => import('../screens/blk/BlkScreen'))
 const ExpoScreen = lazy(() => import('../screens/expo/ExpoScreen'))
 const SealScreen = lazy(() => import('../screens/seal/SealScreen'))
+// 11 VCONE, SEAS, EVT, ROLL and DQ (RI4, RI5)
+const VconeScreen = lazy(() => import('../screens/vcone/VconeScreen'))
+const SeasScreen = lazy(() => import('../screens/seas/SeasScreen'))
+const EvtScreen = lazy(() => import('../screens/evt/EvtScreen'))
+const RollScreen = lazy(() => import('../screens/roll/RollScreen'))
+const DqScreen = lazy(() => import('../screens/dq/DqScreen'))
 
 function HelpPanel() {
   return <HelpScreen built={builtScreens(BUILT_SCREENS)} />
@@ -81,6 +87,11 @@ export const BUILT_SCREENS: ScreenRegistry = {
   BLK: BlkScreen,
   EXPO: ExpoScreen,
   SEAL: SealScreen,
+  VCONE: VconeScreen,
+  SEAS: SeasScreen,
+  EVT: EvtScreen,
+  ROLL: RollScreen,
+  DQ: DqScreen,
 }
 
 export function builtScreens(registry: ScreenRegistry): ReadonlySet<string> {

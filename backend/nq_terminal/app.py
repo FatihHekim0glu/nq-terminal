@@ -123,6 +123,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from nq_terminal.api import analytics; app.include_router(analytics.router)  # noqa: E702  3.3
     from nq_terminal.api import instruments; app.include_router(instruments.router)  # noqa: E702  8 (A1)
     from nq_terminal.api import live_stream; app.include_router(live_stream.router)  # noqa: E702  9.2 (SSE)
+    from nq_terminal.api import dq, events, roll, seasonality, vcone  # 11: DQ, EVT, ROLL, SEAS, VCONE
+    for p11 in (vcone, seasonality, events, roll, dq): app.include_router(p11.router)  # noqa: E701  before the mount
     _mount_web(app, settings.web_dist)
     assert_get_only(app)
     return app

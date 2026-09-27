@@ -18,12 +18,20 @@ import numpy as np
 
 from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump
 from crosscheck.market_reference import market_references
+from crosscheck.p11_dq import P11_DQ_REFERENCES
+from crosscheck.p11_evt import P11_EVT_REFERENCES
+from crosscheck.p11_roll import P11_ROLL_REFERENCES
+from crosscheck.p11_seas import P11_SEAS_REFERENCES
+from crosscheck.p11_vcone import P11_VCONE_REFERENCES
 from crosscheck.p1_reference import P1_REFERENCES
 from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
 from crosscheck.trade_reference import costs_references, trades_references
 
 BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "market": market_references,
-                     **P1_REFERENCES}
+                     **P1_REFERENCES,
+                     # Phase 11: VCONE, SEAS, EVT, ROLL and DQ (RI4, RI5)
+                     **P11_VCONE_REFERENCES, **P11_SEAS_REFERENCES, **P11_EVT_REFERENCES, **P11_ROLL_REFERENCES,
+                     **P11_DQ_REFERENCES}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9
@@ -77,7 +85,18 @@ def _vector_diff(value, ref, tol: float) -> tuple[float, bool]:
     return worst, abs(worst) <= max(tol * scale, ABS_FLOOR)
 
 
+def _textual(ref) -> bool:
+    """True for a word or hash (RI5's statuses and sha256s), or a list or dict holding one."""
+    if isinstance(ref, dict):
+        return any(isinstance(v, str) for v in ref.values())
+    if isinstance(ref, (list, tuple)):
+        return any(isinstance(v, str) for v in ref)
+    return isinstance(ref, str)
+
+
 def judge(value, ref, tol: float) -> tuple[float, bool]:
+    if _textual(ref):  # words and hashes match exactly or not at all
+        return (0.0, True) if value == ref else (math.inf, False)
     if isinstance(ref, (list, tuple, dict)):
         return _vector_diff(value, ref, tol)
     diff, settled = _scalar_diff(value, ref)

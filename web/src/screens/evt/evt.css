@@ -1,0 +1,50 @@
+/* EVT (event study). Tokens only, square corners, hard cuts; the market screens' frame (market.css). The chart
+   takes the top of the body with a floor so a short panel scrolls rather than squeezing the plot; the end
+   distribution is one table row under it; the event grid and the notes follow, and the panel body scrolls. */
+
+.evt-chart {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  height: 360px;
+  min-height: 300px;
+}
+.evt-chart > * { flex: 1 1 auto; min-height: 0; }
+
+.evt-end {
+  flex: 0 0 auto;
+  margin: 2px 6px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.evt-end-caption {
+  padding: 0;
+  color: var(--cyan-chart);
+  text-align: left;
+  line-height: var(--row-h);
+}
+.evt-end th {
+  padding: 0 12px 0 0;
+  color: var(--muted);
+  font-weight: 400;
+  text-align: right;
+  line-height: var(--row-h);
+}
+.evt-end td {
+  padding: 0 12px 0 0;
+  color: var(--text);
+  text-align: right;
+  line-height: var(--row-h);
+}
+.evt-end td.up { color: var(--c-up); }
+.evt-end td.down { color: var(--c-down); }
+
+.evt-note {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 6px;
+  color: var(--text);
+  line-height: var(--row-h);
+}
+
+.evt-grid { border-top: 1px solid var(--th-rule); }

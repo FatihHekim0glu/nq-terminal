@@ -1,0 +1,76 @@
+/* ROLL (look spec 7 grammar, as MON and CORR). Tokens only, square corners, hard cuts (no transitions).
+   The strip is a dense grid: 27 rows of 20px with the twelve months across; a cell with a roll sits on the
+   header grey so the cycle reads at a glance, and its signed text carries the direction (never colour alone). */
+
+.roll-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.roll-note {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--text);
+  line-height: var(--row-h);
+  text-align: left;
+}
+.roll-note.muted { color: var(--muted); }
+.roll-heading { color: var(--white); font-weight: 700; }
+
+.roll-strip-wrap, .roll-table-wrap { flex: 0 0 auto; }
+.roll-strip .roll-cell { min-width: 64px; }
+.roll-strip .roll-on { background: var(--th-bg); --c-down: var(--c-down-raised); }
+.roll-strip .roll-name { color: var(--text); white-space: nowrap; }
+
+.roll-pick {
+  min-height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--data);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.roll-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.roll-market { display: flex; flex-direction: column; flex: 0 0 auto; }
+
+.roll-chart-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  padding: 4px 6px;
+}
+.roll-chart-wrap > * { flex: 1 1 auto; min-height: 0; }
+.roll-chart {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 2px 6px;
+  height: 220px;
+}
+.roll-chart-scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.roll-chart-plot { width: 100%; height: 100%; background: var(--bg); }
+.roll-chart-axis {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+}
+.roll-fence-label { color: var(--fence); }
+.roll-zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.roll-fence { stroke: var(--fence); stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.roll-bar.up { fill: var(--c-up); }
+.roll-bar.down { fill: var(--c-down); }
+
+.roll-paper { display: flex; flex-direction: column; flex: 0 0 auto; }
+.nqt-grid tr.roll-held td, .nqt-grid tr.roll-held th { background: var(--sel-bg); }

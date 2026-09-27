@@ -1,6 +1,7 @@
 // Real-data smoke run (TASKS 8.3), run only by terminal/scripts/smoke_real.ps1 through real.config.ts:
-// a second backend on a spare port reads the real nq-lab files (not fixture mode). Every P0 screen opens
-// on real files with no error state, no console error, no failed API answer and only same-origin GETs;
+// a second backend on a spare port reads the real nq-lab files (not fixture mode). Every P0 screen, and every
+// Phase 11 screen (VCONE, SEAS, EVT, ROLL, DQ, each showing its [POST HOC] label, with the DQ record anchors),
+// opens on real files with no error state, no console error, no failed API answer and only same-origin GETs;
 // no served price or market date lies past 2021-12-31; then the performance budgets are measured again on
 // real data (HOME, GIP pan and zoom, and the real 8,411-fill run). The script itself checks, around this
 // run, that the new oos_access_log.jsonl lines all have caller "terminal" and end at or before 2022-01-01,
@@ -51,6 +52,9 @@ function failedAnswers(w: Watch): string[] {
     .map((r) => `${r.status()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
 }
 
+/** Answers that carry served prices or session dates (the Phase 11 views included). */
+const FENCED_PREFIXES = ['/api/market/', '/api/seasonality/', '/api/events/', '/api/dq/']
+
 /** Price or market values past the fence in any served bars or market answer. */
 async function pastFence(w: Watch): Promise<string[]> {
   const found: string[] = []
@@ -67,14 +71,15 @@ async function pastFence(w: Watch): Promise<string[]> {
   }
   for (const r of w.responses) {
     const path = new URL(r.url()).pathname
-    if (r.status() !== 200 || !(path === '/api/bars' || path.startsWith('/api/market/'))) continue
+    if (r.status() !== 200 || !(path === '/api/bars' || FENCED_PREFIXES.some((p) => path.startsWith(p)))) continue
     scan(await r.json().catch(() => null), '', path)
   }
   return found
 }
 
-/** Opens one line in the focused panel and waits for it; returns what went wrong on it. */
-async function openScreen(page: Page, line: string): Promise<string[]> {
+/** Opens one line in the focused panel and waits for it; returns what went wrong on it (and, with `mustShow`,
+ *  when the panel does not show that text). */
+async function openScreen(page: Page, line: string, mustShow?: string): Promise<string[]> {
   const target = await runLine(page, line)
   const problems: string[] = []
   try {
@@ -86,6 +91,7 @@ async function openScreen(page: Page, line: string): Promise<string[]> {
   const alerts = await target.locator('[role="alert"]').allTextContents()
   if (alerts.length > 0) problems.push(`${line}: alert ${alerts.map((a) => a.trim()).join(' | ')}`)
   if (await target.locator('[data-placeholder]').count() > 0) problems.push(`${line}: placeholder screen`)
+  if (mustShow && !((await target.textContent()) ?? '').includes(mustShow)) problems.push(`${line}: no ${mustShow}`)
   return problems
 }
 
@@ -103,6 +109,41 @@ async function pickRuns(page: Page): Promise<{ readonly fills: string; readonly 
     if (page1.total === BUDGETS.fillsRows) { fills = r.run_id; break }
   }
   return { fills, byKind }
+}
+
+const P11_LINES = ['NQ VCONE', 'NQ SEAS', 'volmanaged_v0 SEAS', 'NQ EVT', 'NQ ROLL', 'NQ DQ', 'HO DQ']
+const P11_FROM = '2011-01-01'
+
+interface DqDayRow { readonly date: string; readonly state: string }
+interface DqCal { readonly days: readonly DqDayRow[]; readonly symbol: { readonly counts: Readonly<Record<string, number>> } }
+interface SeasPanelRow { readonly id: string; readonly excluded_sessions: number | null; readonly buckets: ReadonlyArray<{ readonly n: number }> }
+interface EvtRowLite { readonly used: boolean; readonly reason: string | null }
+
+/** The record anchors (ANALYTICS RI4, RI5) and the checks that rebuilt NQ sessions stay in SEAS and EVT. */
+async function p11Anchors(page: Page): Promise<{ readonly failures: string[]; readonly values: Record<string, number> }> {
+  const failures: string[] = []
+  const nq = await apiJson<DqCal>(page, '/api/dq/calendar/NQ.V.0')
+  const ho = await apiJson<DqCal>(page, '/api/dq/calendar/HO.V.0')
+  const guards = await apiJson<{ ok: number; mismatch: number; no_record: number }>(page, '/api/dq/guards')
+  const expectEq = (name: string, got: number, want: number) => { if (got !== want) failures.push(`${name}: ${got}, expected ${want}`) }
+  expectEq('NQ rebuilt', nq.symbol.counts.rebuilt ?? -1, 487)
+  expectEq('NQ unrepairable', nq.symbol.counts.unrepairable ?? -1, 11)
+  expectEq('HO rebuilt', ho.symbol.counts.rebuilt ?? -1, 740)
+  expectEq('HO unrepairable', ho.symbol.counts.unrepairable ?? -1, 222)
+  expectEq('guards OK', guards.ok, 12)
+  expectEq('guards mismatch', guards.mismatch, 0)
+  const later = nq.days.filter((d) => d.date >= P11_FROM)
+  const eligible = later.length
+  const unrepairable = later.filter((d) => d.state === 'unrepairable').length
+  const seas = await apiJson<{ panels: SeasPanelRow[] }>(page, '/api/seasonality/instrument/NQ?start_year=2011&end_year=2021')
+  const intraday = seas.panels.find((p) => p.id === 'intraday')
+  const used = Math.max(0, ...(intraday?.buckets ?? []).map((b) => b.n))
+  expectEq('SEAS NQ 30-minute sessions used', used, eligible - unrepairable)
+  expectEq('SEAS NQ used plus left out', used + (intraday?.excluded_sessions ?? 0), eligible)
+  const evt = await apiJson<{ events: EvtRowLite[]; n_used: number }>(page, '/api/events/study?symbol=NQ.V.0&event=FOMC&mode=intraday&pre=60&post=120')
+  const noPrice = evt.events.filter((e) => !e.used && (e.reason ?? '').startsWith('no finite price')).length
+  expectEq('EVT NQ FOMC intraday voids for want of a raw close', noPrice, 0)
+  return { failures, values: { eligible, unrepairable, seasUsed: used, evtUsed: evt.n_used } }
 }
 
 // In file order on one worker; each test opens its own page, so one failure does not skip the rest.
@@ -164,6 +205,27 @@ test.describe('real-data smoke run', () => {
     }
     report(info, 'hypotheses', { opened: cards.length, names: cards.map((c) => c.name) })
     expect.soft(problems).toEqual([])
+    expect.soft(failedAnswers(w)).toEqual([])
+    expect.soft(await pastFence(w)).toEqual([])
+    expect.soft(w.errors).toEqual([])
+    expect(offOriginOrNotGet(w, new URL(baseURL ?? '').origin)).toEqual([])
+  })
+
+  test('every Phase 11 screen opens on real files, with the record anchors', async ({ page, baseURL }, info) => {
+    const w = watch(page)
+    await page.goto('/')
+    await expect(page.locator('[data-nqt-title]')).toHaveCount(HOME_READY.length)
+    const problems: string[] = []
+    const axe: Record<string, string[]> = {}
+    for (const line of P11_LINES) {
+      problems.push(...(await openScreen(page, line, '[POST HOC]')))
+      axe[line] = await axeIds(page)
+    }
+    const anchors = await p11Anchors(page)
+    report(info, 'p11-screens', { opened: P11_LINES.length, anchors })
+    report(info, 'axe-real-data-p11', Object.fromEntries(Object.entries(axe).filter(([, v]) => v.length > 0)))
+    expect.soft(problems).toEqual([])
+    expect.soft(anchors.failures).toEqual([])
     expect.soft(failedAnswers(w)).toEqual([])
     expect.soft(await pastFence(w)).toEqual([])
     expect.soft(w.errors).toEqual([])

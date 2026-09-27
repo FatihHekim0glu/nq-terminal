@@ -38,6 +38,16 @@
    "how": "verbatim",
    "note": "20 trades; empty blocks carry NaN tokens"
   },
+  "data/text/fomc/manifest.json": {
+   "source": "data/text/fomc/manifest.json",
+   "how": "trimmed",
+   "note": "EVT FOMC check: pages keyed by date with the role only (89 event, the rest prev_only); other keys dropped"
+  },
+  "experiments/macroday_v0.json": {
+   "source": "experiments/macroday_v0.json",
+   "how": "trimmed",
+   "note": "EVT event calendar: name and the 480 event_dates lines verbatim; every other key dropped"
+  },
   "experiments/overnight_v0.json": {
    "source": "experiments/overnight_v0.json",
    "how": "rebuilt",
@@ -73,6 +83,11 @@
    "how": "synthetic",
    "note": "book journal rows of every type (warmup, close, skipped, close with NaN fields, close with error) plus one plumbing-labelled row that must be classed by its row, not by the file name (DL11)"
   },
+  "results/guard_constants.json": {
+   "source": "results/guard_constants.json",
+   "how": "verbatim",
+   "note": "RI5 guard fingerprint record, copied unchanged"
+  },
   "results/ledger.csv": {
    "source": null,
    "how": "synthetic",
@@ -88,10 +103,35 @@
    "how": "verbatim",
    "note": "the one closed opening; hashes to the pinned sha256"
   },
+  "results/qa_report.json": {
+   "source": "results/qa_report.json",
+   "how": "trimmed",
+   "note": "years 2011 and 2012 only, four count keys kept"
+  },
+  "results/qa_report_futures_1m.json": {
+   "source": "results/qa_report_futures_1m.json",
+   "how": "trimmed",
+   "note": "GC and HO, years 2011 and 2012 only"
+  },
   "results/registry.csv": {
    "source": "results/registry.csv",
    "how": "rebuilt",
    "note": "the overnight_v0 and volmanaged_v0 rows verbatim except family_k, Bonferroni, Holm and BH, recomputed for a family of 2 so the multiple-testing view matches"
+  },
+  "results/repair_provenance_futures/GC.V.0.json": {
+   "source": "results/repair_provenance_futures/GC.V.0.json",
+   "how": "trimmed",
+   "note": "real sessions of 2011 and 2012 only; keys source, reason, vendor_reasons, flags, tier, volume_flag kept; counts recomputed"
+  },
+  "results/repair_provenance_futures_v2/HO.V.0.json": {
+   "source": "results/repair_provenance_futures_v2/HO.V.0.json",
+   "how": "trimmed",
+   "note": "real sessions of 2011 and 2012 only; same keys kept; counts recomputed"
+  },
+  "results/repair_report.json": {
+   "source": "results/repair_report.json",
+   "how": "trimmed",
+   "note": "broken_days, repaired and skipped only"
   },
   "results/screens/dtsmom_v0_monthly.csv": {
    "source": "results/screens/dtsmom_v0_monthly.csv",

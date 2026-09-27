@@ -1,0 +1,42 @@
+/* SEAS (TASKS Phase 11; look spec 4.4, 6 and 7). Tokens only, square corners, hard cuts. The chart takes
+   the upper part of the tab page with a floor so a short panel scrolls rather than squeezing the bars;
+   the grid sits under it; the notes close the page. At 700 CSS px and narrower nothing needs to stack. */
+
+.seas-page {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+.seas-chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  height: 340px;
+}
+.seas-chart > * { flex: 1 1 auto; min-height: 0; }
+
+.seas-heat {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  height: 420px;
+}
+.seas-heat > * { flex: 1 1 auto; min-height: 0; }
+
+.seas-heading {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--cyan-chart);
+  font-size: var(--fs-data);
+  font-weight: 400;
+  line-height: var(--row-h);
+}
+
+.seas-line {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--text);
+  line-height: var(--row-h);
+}

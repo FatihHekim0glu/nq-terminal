@@ -6,7 +6,9 @@
   From the nq-lab folder:
     powershell -NoProfile -ExecutionPolicy Bypass -File terminal\scripts\smoke_real.ps1
 
-  1. Runs its own self-test first: the log and file checks below must fail on broken input.
+  1. Runs its own self-test first: the log and file checks below, and the coverage check, must fail on broken
+     input. Then the coverage check reads the smoke spec: it must open VCONE, SEAS, EVT, ROLL and DQ, ask each
+     for its [POST HOC] label, and scan the market, seasonality, events and DQ answers for dates past the fence.
   2. Records the sha256 of results\ledger.csv, results\registry.csv and results\oos_openings.json, and the
      length and sha256 of results\oos_access_log.jsonl.
   3. Builds the web app into a temporary folder (web\dist and web\dist-gallery are not touched).
@@ -30,7 +32,11 @@
 .PARAMETER Grep
   Only run the smoke tests whose title matches this pattern (Playwright --grep).
 .PARAMETER SelfTest
-  Run only the self-test of the checks, on files in a temporary folder, and start nothing.
+  Run only the self-test of the checks, on files in a temporary folder, and the coverage check of the smoke
+  spec, and start nothing.
+.PARAMETER SmokeSpec
+  The smoke spec the coverage check reads (default web\e2e\perf\smoke.real.ts). Only the check reads it;
+  Playwright always runs the spec named in real.config.ts.
 #>
 [CmdletBinding()]
 param(
@@ -39,7 +45,8 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$WebPort = 4953,
     [string]$Grep = '',
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [string]$SmokeSpec = ''
 )
 
 Set-StrictMode -Version Latest
@@ -62,6 +69,9 @@ $ExpectedCaller = 'terminal'
 $IsStart = [DateTimeOffset]::new(2010, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
 $IsEnd = [DateTimeOffset]::new(2022, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
+$P11Codes = @('VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ')
+$P11FencedPrefixes = @('/api/market/', '/api/seasonality/', '/api/events/', '/api/dq/')
+if ($SmokeSpec -eq '') { $SmokeSpec = Join-Path $Web 'e2e\perf\smoke.real.ts' }
 
 function Stop-Smoke([string]$Message) {
     [Console]::Error.WriteLine("smoke_real.ps1: $Message")
@@ -167,6 +177,37 @@ function Compare-Files([object]$Before, [object]$After) {
     return $problems
 }
 
+function Get-QuotedList([string]$Text, [string]$Name) {
+    # The single-quoted strings of `const <Name> = [ ... ]` in the smoke spec, or $null when it has no such list.
+    $found = [regex]::Match($Text, "const\s+$Name\s*=\s*\[([^\]]*)\]")
+    if (-not $found.Success) { return $null }
+    return @([regex]::Matches($found.Groups[1].Value, "'([^']*)'") | ForEach-Object { $_.Groups[1].Value })
+}
+
+function Test-SmokeCoverage([string]$Text) {
+    # The smoke spec must open every Phase 11 screen, ask each for its [POST HOC] label, and scan the Phase 11
+    # answers for dates past the fence. Read from the spec's text, so it runs with no server and no browser.
+    $problems = New-Object System.Collections.Generic.List[string]
+    $lines = Get-QuotedList $Text 'P11_LINES'
+    if ($null -eq $lines) {
+        $problems.Add('the smoke spec has no P11_LINES list: no Phase 11 screen is opened')
+    } else {
+        foreach ($code in $P11Codes) {
+            $opened = @($lines | Where-Object { ($_ -split ' ')[-1] -ceq $code })
+            if ($opened.Count -eq 0) { $problems.Add("the smoke spec never opens $code") }
+        }
+        if ($Text -notmatch "for \(const (\w+) of P11_LINES\)[\s\S]{0,300}?openScreen\(page, \1, '\[POST HOC\]'\)") {
+            $problems.Add("the smoke spec does not open each P11_LINES entry with openScreen(page, line, '[POST HOC]')")
+        }
+    }
+    $fenced = Get-QuotedList $Text 'FENCED_PREFIXES'
+    foreach ($prefix in $P11FencedPrefixes) {
+        if ($null -eq $fenced -or $fenced -notcontains $prefix) { $problems.Add("the fence scan skips $prefix answers") }
+    }
+    if ($Text -match '\btest(\.describe)?\.(skip|fixme|only)\(') { $problems.Add('the smoke spec skips, parks or isolates a test') }
+    return $problems
+}
+
 # ---------------------------------------------------------------- self-test (born failing)
 
 function Invoke-SelfTest {
@@ -208,6 +249,39 @@ function Invoke-SelfTest {
         }
     } finally {
         Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    foreach ($failure in (Invoke-CoverageSelfTest)) { $failures.Add($failure) }
+    return $failures
+}
+
+function Invoke-CoverageSelfTest {
+    $failures = New-Object System.Collections.Generic.List[string]
+    $good = @(
+        "const FENCED_PREFIXES = ['/api/market/', '/api/seasonality/', '/api/events/', '/api/dq/']",
+        "const P11_LINES = ['NQ VCONE', 'NQ SEAS', 'volmanaged_v0 SEAS', 'NQ EVT', 'NQ ROLL', 'NQ DQ', 'HO DQ']",
+        "test('every Phase 11 screen opens', async ({ page }) => {",
+        "  for (const line of P11_LINES) {",
+        "    problems.push(...(await openScreen(page, line, '[POST HOC]')))",
+        "  }",
+        "})"
+    ) -join "`n"
+    $cases = @(
+        @{ name = 'a spec opening every Phase 11 screen passes'; text = $good; fail = $false },
+        @{ name = 'a spec with no Phase 11 list fails'; text = $good.Replace('P11_LINES', 'P0_LINES'); fail = $true },
+        @{ name = 'a spec that never opens VCONE fails'; text = $good.Replace("'NQ VCONE', ", ''); fail = $true },
+        @{ name = 'a spec that never opens ROLL fails'; text = $good.Replace("'NQ ROLL', ", ''); fail = $true },
+        @{ name = 'a lower-case code does not count'; text = $good.Replace("'NQ DQ', 'HO DQ'", "'NQ dq'"); fail = $true },
+        @{ name = 'a spec that lists the lines but never opens them fails'; text = $good.Replace('for (const line of P11_LINES)', 'for (const line of [])'); fail = $true },
+        @{ name = 'a spec that does not ask for [POST HOC] fails'; text = $good.Replace(", '[POST HOC]'", ''); fail = $true },
+        @{ name = 'a fence scan without the DQ answers fails'; text = $good.Replace(", '/api/dq/'", ''); fail = $true },
+        @{ name = 'a skipped test fails'; text = $good.Replace("test('every", "test.skip('every"); fail = $true }
+    )
+    foreach ($case in $cases) {
+        $problems = @(Test-SmokeCoverage $case.text)
+        $failed = $problems.Count -gt 0
+        $mark = if ($failed -eq $case.fail) { 'ok  ' } else { 'FAIL' }
+        Write-Host ("self-test {0} {1}" -f $mark, $case.name)
+        if ($failed -ne $case.fail) { $failures.Add("$($case.name): problems [$($problems -join '; ')]") }
     }
     return $failures
 }
@@ -268,6 +342,10 @@ function Quote([string]$Text) { return '"' + $Text + '"' }
 
 $selfFailures = @(Invoke-SelfTest)
 if ($selfFailures.Count -gt 0) { Stop-Smoke ("the self-test failed: " + ($selfFailures -join ' | ')) }
+if (-not (Test-Path -LiteralPath $SmokeSpec)) { Stop-Smoke "missing: $SmokeSpec" }
+$coverage = @(Test-SmokeCoverage ([System.IO.File]::ReadAllText($SmokeSpec, $Utf8)))
+if ($coverage.Count -gt 0) { Stop-Smoke ("the smoke spec misses Phase 11 coverage ($SmokeSpec): " + ($coverage -join ' | ')) }
+Write-Output "smoke spec opens $($P11Codes -join ', ') and scans their answers for the fence: $SmokeSpec"
 if ($SelfTest) { Write-Output 'self-test passed: every check fails on broken input and passes on clean input.'; exit 0 }
 
 foreach ($port in @($ApiPort, $WebPort)) {

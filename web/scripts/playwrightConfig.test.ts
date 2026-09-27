@@ -68,6 +68,20 @@ describe('Playwright projects', () => {
     expect(main?.workers).toBe(2)
   })
 
+  it('builds the app into a folder of its own and serves that folder, never the shared dist-gallery', () => {
+    // Born failing (improvement run 3): the preview served dist-gallery, which any other gallery build empties and
+    // rewrites; a page then asked for a chunk that was gone (404) and never booted, an empty workspace in the
+    // keyboard flow and gallery entries that never finished loading.
+    const servers = Array.isArray(config.webServer) ? config.webServer : [config.webServer]
+    const web = servers.find((s) => s?.name === 'vite preview')
+    const command = web?.command ?? ''
+    const dirs = [...command.matchAll(/--outDir\s+"([^"]+)"/g)].map((m) => m[1])
+    expect(dirs).toHaveLength(2) // the build writes it and the preview serves it
+    expect(dirs[0]).toBe(dirs[1])
+    expect(dirs[0]).not.toMatch(/dist-gallery["\\/]?$/)
+    expect(dirs[0]).toMatch(/e2e-gallery-\d+$/) // one folder per web port: Playwright refuses a busy port before building
+  })
+
   it('keeps every other spec, including the browserless trace checks, in the main project', () => {
     const projects = config.projects ?? []
     for (const file of ['e2e/runs.spec.ts', 'e2e/perf/trace.spec.ts', 'e2e/visual/screens.spec.ts']) {

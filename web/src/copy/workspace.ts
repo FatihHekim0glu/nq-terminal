@@ -9,6 +9,7 @@ export const WORKSPACE = {
   unreadable: 'This panel could not be read back from the saved layout. Run a command to replace it.',
   loading: 'Loading the workspace.',
   loadingScreen: 'Loading this screen.',
+  screenFailed: 'This screen could not be drawn: {detail}. The other panels are not affected.',
 } as const
 
 export const PANEL = {

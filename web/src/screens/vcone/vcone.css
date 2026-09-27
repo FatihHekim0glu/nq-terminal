@@ -1,0 +1,67 @@
+/* VCONE (TASKS Phase 11; look spec 4.8 grids, 6 charts). Tokens only, square corners, hard cuts. The cone
+   chart takes the upper body with a floor, the numbered horizon grid and the notes follow; the small
+   multiples are a wrapping grid of tiles on one scale. */
+
+.vcone-chart {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 360px;
+}
+.vcone-chart > * { flex: 1 1 auto; min-height: 0; }
+
+.vcone-grid { flex: 0 0 auto; }
+.vcone-grid th[scope='row'] { text-align: left; font-weight: 400; }
+.vcone-row-btn {
+  min-height: 24px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--data);
+  font: inherit;
+  cursor: pointer;
+}
+.vcone-row-btn:hover { background: var(--th-bg); }
+.vcone-row-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.vcone-row-on { background: var(--sel-bg); }
+.vcone-n { color: var(--muted); }
+.vcone-date { color: var(--data); }
+.vcone-latest-cell { color: var(--white); }
+.vcone-note { margin: 0; padding: 0 6px; line-height: var(--row-h); }
+
+.vcone-small {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.vcone-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 4px 6px;
+  list-style: none;
+}
+.vcone-tile {
+  padding: 2px 4px 4px;
+  background: var(--bg);
+  border-top: 1px solid var(--th-rule);
+}
+.vcone-tile-head {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  line-height: var(--row-h);
+  white-space: nowrap;
+}
+.vcone-ticker { color: var(--data); }
+.vcone-tile-value { margin-left: auto; color: var(--white); font-variant-numeric: tabular-nums lining-nums; }
+.vcone-tile-rank { min-width: 28px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums lining-nums; }
+.vcone-strip { display: block; width: 100%; height: 16px; }
+.vcone-range { fill: var(--chart-area); }
+.vcone-outer { fill: var(--bar-mag); }
+.vcone-inner { fill: var(--chart-vol); }
+.vcone-median { stroke: var(--chart-s1); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.vcone-marker { fill: var(--accent-2); }
+.vcone-scale { margin: 0; padding: 0 6px; color: var(--muted); line-height: var(--row-h); }

@@ -1,0 +1,50 @@
+{
+ "symbols": {
+  "GC": {
+   "symbol": "GC.V.0",
+   "years": {
+    "2011": {
+     "rows": 349526,
+     "ohlc_violations": 0,
+     "duplicate_ts": 0,
+     "sorted": true,
+     "contract_changes": 5,
+     "nonpositive_raw_close": 0,
+     "zero_volume_bars": 0
+    },
+    "2012": {
+     "rows": 343798,
+     "ohlc_violations": 0,
+     "duplicate_ts": 0,
+     "sorted": true,
+     "contract_changes": 5,
+     "nonpositive_raw_close": 0,
+     "zero_volume_bars": 0
+    }
+   }
+  },
+  "HO": {
+   "symbol": "HO.V.0",
+   "years": {
+    "2011": {
+     "rows": 214172,
+     "ohlc_violations": 0,
+     "duplicate_ts": 0,
+     "sorted": true,
+     "contract_changes": 12,
+     "nonpositive_raw_close": 0,
+     "zero_volume_bars": 0
+    },
+    "2012": {
+     "rows": 86564,
+     "ohlc_violations": 0,
+     "duplicate_ts": 0,
+     "sorted": true,
+     "contract_changes": 12,
+     "nonpositive_raw_close": 0,
+     "zero_volume_bars": 0
+    }
+   }
+  }
+ }
+}

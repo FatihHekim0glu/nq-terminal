@@ -15,6 +15,7 @@ export type ContextRule =
   | 'run'
   | 'universe'
   | 'hypothesis or instrument'
+  | 'instrument or hypothesis'
   | 'run or hypothesis'
 
 /** What may follow the function: nothing, one required date, or one optional timeframe. */
@@ -67,7 +68,7 @@ export const MNEMONICS: readonly MnemonicDef[] = [
   def('EXPO', 'P1', 'run'),
   def('SEAL', 'P1', 'hypothesis'),
   def('VCONE', 'P1', 'instrument'),
-  def('SEAS', 'P1', 'instrument'),
+  def('SEAS', 'P1', 'instrument or hypothesis'),
   def('EVT', 'P1', 'instrument'),
   def('ROLL', 'P1', 'instrument'),
   def('DQ', 'P1', 'instrument'),

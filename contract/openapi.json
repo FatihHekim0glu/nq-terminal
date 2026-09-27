@@ -2651,6 +2651,321 @@
         "title": "DistributionView",
         "type": "object"
       },
+      "DqCalendar": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/DqDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "fence": {
+            "title": "Fence",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "qa_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Source"
+          },
+          "qa_years": {
+            "items": {
+              "$ref": "#/components/schemas/DqQaYear"
+            },
+            "title": "Qa Years",
+            "type": "array"
+          },
+          "symbol": {
+            "$ref": "#/components/schemas/DqSymbol"
+          }
+        },
+        "required": [
+          "label",
+          "fence",
+          "symbol",
+          "days",
+          "qa_source",
+          "qa_years"
+        ],
+        "title": "DqCalendar",
+        "type": "object"
+      },
+      "DqCounts": {
+        "properties": {
+          "gated_out": {
+            "minimum": 0.0,
+            "title": "Gated Out",
+            "type": "integer"
+          },
+          "rebuilt": {
+            "minimum": 0.0,
+            "title": "Rebuilt",
+            "type": "integer"
+          },
+          "rejected": {
+            "minimum": 0.0,
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "sessions": {
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "unrepairable": {
+            "minimum": 0.0,
+            "title": "Unrepairable",
+            "type": "integer"
+          },
+          "vendor": {
+            "minimum": 0.0,
+            "title": "Vendor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "vendor",
+          "gated_out",
+          "rejected",
+          "rebuilt",
+          "unrepairable",
+          "sessions"
+        ],
+        "title": "DqCounts",
+        "type": "object"
+      },
+      "DqDay": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "enum": [
+              "vendor",
+              "gated_out",
+              "rejected",
+              "rebuilt",
+              "unrepairable"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "state",
+          "reason"
+        ],
+        "title": "DqDay",
+        "type": "object"
+      },
+      "DqIndex": {
+        "properties": {
+          "fence": {
+            "title": "Fence",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "description": "expected files that could not be read",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/DqSymbol"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "fence",
+          "symbols",
+          "missing"
+        ],
+        "title": "DqIndex",
+        "type": "object"
+      },
+      "DqQaYear": {
+        "properties": {
+          "contract_changes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Changes"
+          },
+          "duplicate_ts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicate Ts"
+          },
+          "ohlc_violations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ohlc Violations"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "rth_days_with_gaps": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rth Days With Gaps"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "year",
+          "rows",
+          "ohlc_violations",
+          "duplicate_ts",
+          "contract_changes",
+          "rth_days_with_gaps"
+        ],
+        "title": "DqQaYear",
+        "type": "object"
+      },
+      "DqSymbol": {
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/DqCounts"
+          },
+          "first": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "repair": {
+            "description": "nq, v1 or v2: which repair record applies",
+            "title": "Repair",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "source": {
+            "description": "the files the day states come from, relative to the project root",
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "description": "repaired, not_repaired, or not_assessed (no repair record)",
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "why_not_repaired": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why Not Repaired"
+          }
+        },
+        "required": [
+          "symbol",
+          "root",
+          "source",
+          "repair",
+          "status",
+          "why_not_repaired",
+          "counts",
+          "first",
+          "last"
+        ],
+        "title": "DqSymbol",
+        "type": "object"
+      },
       "DrawdownRow": {
         "description": "DD2: one episode; `peak` is null when the peak is the starting value, `recovery` null while it is open.",
         "properties": {
@@ -2810,6 +3125,81 @@
           "bench_max_drawdown"
         ],
         "title": "DrawdownView",
+        "type": "object"
+      },
+      "EndStats": {
+        "description": "The cross-event distribution of the path at the last offset (descriptive, no test).",
+        "properties": {
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "n": {
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sd"
+          },
+          "se": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Se"
+          },
+          "share_positive": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Positive"
+          }
+        },
+        "required": [
+          "n",
+          "mean",
+          "median",
+          "sd",
+          "se",
+          "share_positive"
+        ],
+        "title": "EndStats",
         "type": "object"
       },
       "EntryGroupRow": {
@@ -3247,6 +3637,430 @@
           "detail"
         ],
         "title": "ErrorDetail",
+        "type": "object"
+      },
+      "EventCalendar": {
+        "description": "The fixed event lists the study reads (no price is read here) and the instruments it accepts.",
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "daily_default": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Daily Default",
+            "type": "array"
+          },
+          "daily_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Daily Symbols",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventCalendarEntry"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "excluded": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Excluded",
+            "type": "array"
+          },
+          "fomc_check": {
+            "title": "Fomc Check",
+            "type": "string"
+          },
+          "intraday_default": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Intraday Default",
+            "type": "array"
+          },
+          "intraday_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Intraday Symbols",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "spec_sha256": {
+            "title": "Spec Sha256",
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "source",
+          "spec_sha256",
+          "fomc_check",
+          "types",
+          "counts",
+          "excluded",
+          "events",
+          "daily_symbols",
+          "intraday_symbols",
+          "daily_default",
+          "intraday_default"
+        ],
+        "title": "EventCalendar",
+        "type": "object"
+      },
+      "EventCalendarEntry": {
+        "description": "One announcement date and its releases (type and US Eastern time).",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "times_et": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Times Et",
+            "type": "array"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "types",
+          "times_et"
+        ],
+        "title": "EventCalendarEntry",
+        "type": "object"
+      },
+      "EventRow": {
+        "description": "One event: its release, whether its window was complete, and its own path (empty when void).",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "first": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First"
+          },
+          "n": {
+            "minimum": 1.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "path": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "t0_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T0 Utc"
+          },
+          "time_et": {
+            "title": "Time Et",
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Types",
+            "type": "array"
+          },
+          "used": {
+            "title": "Used",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "n",
+          "date",
+          "types",
+          "time_et",
+          "t0_utc",
+          "used",
+          "reason",
+          "first",
+          "end",
+          "path"
+        ],
+        "title": "EventRow",
+        "type": "object"
+      },
+      "EventStudy": {
+        "description": "Mean cumulative return path around the chosen events, its cross-event band and every event's row.",
+        "properties": {
+          "band_level": {
+            "title": "Band Level",
+            "type": "number"
+          },
+          "band_note": {
+            "title": "Band Note",
+            "type": "string"
+          },
+          "band_z": {
+            "title": "Band Z",
+            "type": "number"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "end": {
+            "$ref": "#/components/schemas/EndStats"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventRow"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lower": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Lower",
+            "type": "array"
+          },
+          "mean": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Mean",
+            "type": "array"
+          },
+          "mode": {
+            "enum": [
+              "daily",
+              "intraday"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "n_listed": {
+            "minimum": 0.0,
+            "title": "N Listed",
+            "type": "integer"
+          },
+          "n_used": {
+            "minimum": 0.0,
+            "title": "N Used",
+            "type": "integer"
+          },
+          "n_void": {
+            "minimum": 0.0,
+            "title": "N Void",
+            "type": "integer"
+          },
+          "offset_unit": {
+            "enum": [
+              "session",
+              "minute"
+            ],
+            "title": "Offset Unit",
+            "type": "string"
+          },
+          "offsets": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Offsets",
+            "type": "array"
+          },
+          "post": {
+            "minimum": 1.0,
+            "title": "Post",
+            "type": "integer"
+          },
+          "pre": {
+            "minimum": 1.0,
+            "title": "Pre",
+            "type": "integer"
+          },
+          "se": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Se",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "upper": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Upper",
+            "type": "array"
+          },
+          "variant": {
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "event_type",
+          "mode",
+          "variant",
+          "timeframe",
+          "label",
+          "basis",
+          "band_note",
+          "source",
+          "unit",
+          "offset_unit",
+          "pre",
+          "post",
+          "offsets",
+          "mean",
+          "se",
+          "lower",
+          "upper",
+          "band_z",
+          "band_level",
+          "n_listed",
+          "n_used",
+          "n_void",
+          "end",
+          "events",
+          "gate"
+        ],
+        "title": "EventStudy",
         "type": "object"
       },
       "ExcursionRow": {
@@ -3897,6 +4711,106 @@
           "reads_this_process"
         ],
         "title": "GateInfo",
+        "type": "object"
+      },
+      "GuardGroup": {
+        "properties": {
+          "changed_keys": {
+            "description": "keys whose live value differs from the recorded values, where the record keeps the values",
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Keys",
+            "type": "array"
+          },
+          "keys": {
+            "minimum": 0.0,
+            "title": "Keys",
+            "type": "integer"
+          },
+          "live_sha256": {
+            "title": "Live Sha256",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "record": {
+            "description": "where the recorded fingerprint lives",
+            "title": "Record",
+            "type": "string"
+          },
+          "recorded_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded Sha256"
+          },
+          "status": {
+            "enum": [
+              "OK",
+              "MISMATCH",
+              "NO RECORD"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "keys",
+          "live_sha256",
+          "recorded_sha256",
+          "record",
+          "status",
+          "changed_keys"
+        ],
+        "title": "GuardGroup",
+        "type": "object"
+      },
+      "GuardStatusReport": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/GuardGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mismatch": {
+            "minimum": 0.0,
+            "title": "Mismatch",
+            "type": "integer"
+          },
+          "no_record": {
+            "minimum": 0.0,
+            "title": "No Record",
+            "type": "integer"
+          },
+          "ok": {
+            "minimum": 0.0,
+            "title": "Ok",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "groups",
+          "ok",
+          "mismatch",
+          "no_record"
+        ],
+        "title": "GuardStatusReport",
         "type": "object"
       },
       "Health": {
@@ -6741,6 +7655,134 @@
         "title": "LogTail",
         "type": "object"
       },
+      "MarketRolls": {
+        "description": "One market's in-sample rolls; `qa_rolls_total` is the universe QA report's count (null when the report or\nthe root is absent) and `qa_match` whether it equals `count`.",
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "first_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Date"
+          },
+          "last_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Date"
+          },
+          "max_abs_gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Abs Gap Pct"
+          },
+          "mean_abs_gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Abs Gap Pct"
+          },
+          "per_year": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Per Year",
+            "type": "object"
+          },
+          "qa_match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Match"
+          },
+          "qa_rolls_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Rolls Total"
+          },
+          "rolls": {
+            "items": {
+              "$ref": "#/components/schemas/RollEvent"
+            },
+            "title": "Rolls",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "tick": {
+            "title": "Tick",
+            "type": "number"
+          },
+          "units": {
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "root",
+          "sector",
+          "units",
+          "tick",
+          "first_date",
+          "last_date",
+          "rolls",
+          "per_year",
+          "count",
+          "mean_abs_gap_pct",
+          "max_abs_gap_pct",
+          "qa_rolls_total",
+          "qa_match"
+        ],
+        "title": "MarketRolls",
+        "type": "object"
+      },
       "MinTrlView": {
         "properties": {
           "at_benchmark": {
@@ -7778,6 +8820,92 @@
           "gate"
         ],
         "title": "PairCorrelationSeries",
+        "type": "object"
+      },
+      "PaperRoll": {
+        "description": "One MNQ contract: its expiry, the date the book rolls out of it (at that session's close) and into what.",
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "expiry": {
+            "title": "Expiry",
+            "type": "string"
+          },
+          "into": {
+            "title": "Into",
+            "type": "string"
+          },
+          "roll_date": {
+            "title": "Roll Date",
+            "type": "string"
+          },
+          "status": {
+            "description": "past, held (after today's close) or upcoming",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "expiry",
+          "roll_date",
+          "into",
+          "status"
+        ],
+        "title": "PaperRoll",
+        "type": "object"
+      },
+      "PaperRollSchedule": {
+        "properties": {
+          "held": {
+            "title": "Held",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "next_roll": {
+            "title": "Next Roll",
+            "type": "string"
+          },
+          "roll_today": {
+            "title": "Roll Today",
+            "type": "boolean"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PaperRoll"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "today_et": {
+            "title": "Today Et",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "rule",
+          "source",
+          "today_et",
+          "held",
+          "next_roll",
+          "roll_today",
+          "rows"
+        ],
+        "title": "PaperRollSchedule",
         "type": "object"
       },
       "PaperTracking": {
@@ -9474,6 +10602,137 @@
         "title": "RiskView",
         "type": "object"
       },
+      "RollCalendar": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "markets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketRolls"
+            },
+            "title": "Markets",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "months": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "qa_source": {
+            "title": "Qa Source",
+            "type": "string"
+          },
+          "unit_note": {
+            "title": "Unit Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "as_of",
+          "label",
+          "basis",
+          "unit_note",
+          "months",
+          "markets",
+          "missing",
+          "qa_source",
+          "gate"
+        ],
+        "title": "RollCalendar",
+        "type": "object"
+      },
+      "RollEvent": {
+        "description": "One instrument_id change: `from` and `to` are the vendor's instrument ids.",
+        "properties": {
+          "close_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Before"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "from": {
+            "title": "From",
+            "type": "integer"
+          },
+          "gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Pct"
+          },
+          "gap_pts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap Pts"
+          },
+          "last_date": {
+            "title": "Last Date",
+            "type": "string"
+          },
+          "t": {
+            "title": "T",
+            "type": "integer"
+          },
+          "to": {
+            "title": "To",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "t",
+          "last_date",
+          "from",
+          "to",
+          "close_before",
+          "gap_pts",
+          "gap_pct"
+        ],
+        "title": "RollEvent",
+        "type": "object"
+      },
       "RollMarker": {
         "properties": {
           "from": {
@@ -11050,6 +12309,341 @@
           "markdown"
         ],
         "title": "SealedView",
+        "type": "object"
+      },
+      "SeasonBucket": {
+        "description": "One calendar group: n values, their mean, one standard error of the mean and the share above zero.",
+        "properties": {
+          "hit_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "key": {
+            "title": "Key",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "n": {
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "se": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Se"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "n",
+          "mean",
+          "se",
+          "hit_rate"
+        ],
+        "title": "SeasonBucket",
+        "type": "object"
+      },
+      "SeasonHeatmap": {
+        "description": "Monthly values, years down and months across; `sessions` counts the returns behind each cell.",
+        "properties": {
+          "months": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "sessions": {
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "values": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Values",
+            "type": "array"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "years",
+          "months",
+          "values",
+          "sessions"
+        ],
+        "title": "SeasonHeatmap",
+        "type": "object"
+      },
+      "SeasonPanel": {
+        "description": "One grouping. `observation` says what one value is (a month, a session, a 30-minute bucket of a session).\nAn unavailable panel has no buckets and a note saying why.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "buckets": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonBucket"
+            },
+            "title": "Buckets",
+            "type": "array"
+          },
+          "excluded_sessions": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Sessions"
+          },
+          "id": {
+            "enum": [
+              "month",
+              "weekday",
+              "week_of_month",
+              "intraday"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "observation": {
+            "title": "Observation",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "id",
+          "observation",
+          "available",
+          "note",
+          "buckets",
+          "excluded_sessions",
+          "source"
+        ],
+        "title": "SeasonPanel",
+        "type": "object"
+      },
+      "Seasonality": {
+        "properties": {
+          "aggregation": {
+            "enum": [
+              "compound",
+              "sum"
+            ],
+            "title": "Aggregation",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost"
+          },
+          "end_year": {
+            "title": "End Year",
+            "type": "integer"
+          },
+          "error_bar": {
+            "title": "Error Bar",
+            "type": "string"
+          },
+          "first": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First"
+          },
+          "fraction": {
+            "title": "Fraction",
+            "type": "boolean"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GateInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "heatmap": {
+            "$ref": "#/components/schemas/SeasonHeatmap"
+          },
+          "kind": {
+            "enum": [
+              "instrument",
+              "hypothesis"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "panels": {
+            "items": {
+              "$ref": "#/components/schemas/SeasonPanel"
+            },
+            "title": "Panels",
+            "type": "array"
+          },
+          "sessions": {
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "start_year": {
+            "title": "Start Year",
+            "type": "integer"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "subject",
+          "kind",
+          "label",
+          "basis",
+          "unit",
+          "fraction",
+          "aggregation",
+          "error_bar",
+          "first",
+          "last",
+          "sessions",
+          "start_year",
+          "end_year",
+          "variant",
+          "cost",
+          "panels",
+          "heatmap",
+          "gate"
+        ],
+        "title": "Seasonality",
         "type": "object"
       },
       "SessionFlags": {
@@ -13300,6 +14894,335 @@
         "title": "ValidityView",
         "type": "object"
       },
+      "VolCone": {
+        "description": "VCONE for one universe symbol: one row per horizon, to 2021-12-31.",
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "horizons": {
+            "items": {
+              "$ref": "#/components/schemas/VolConeRow"
+            },
+            "title": "Horizons",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "min_windows": {
+            "title": "Min Windows",
+            "type": "integer"
+          },
+          "percentiles": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Percentiles",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "undefined_returns": {
+            "description": "sessions where 1 + r <= 0 (no log return)",
+            "minimum": 0.0,
+            "title": "Undefined Returns",
+            "type": "integer"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "root",
+          "sector",
+          "as_of",
+          "label",
+          "basis",
+          "unit",
+          "percentiles",
+          "min_windows",
+          "undefined_returns",
+          "horizons",
+          "gate"
+        ],
+        "title": "VolCone",
+        "type": "object"
+      },
+      "VolConeRow": {
+        "description": "One horizon of the cone: the distribution of the rolling realised volatility over the in-sample history.",
+        "properties": {
+          "first_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Date"
+          },
+          "last_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Date"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the window ending on the last in-sample session",
+            "title": "Latest"
+          },
+          "latest_rank": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "percent of windows at or below the latest (not a p-value)",
+            "title": "Latest Rank"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "n": {
+            "description": "full windows in the history",
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "p10": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P10"
+          },
+          "p25": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P25"
+          },
+          "p50": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50"
+          },
+          "p75": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P75"
+          },
+          "p90": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P90"
+          },
+          "sessions": {
+            "minimum": 2.0,
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions",
+          "n",
+          "first_date",
+          "last_date",
+          "min",
+          "p10",
+          "p25",
+          "p50",
+          "p75",
+          "p90",
+          "max",
+          "latest",
+          "latest_rank"
+        ],
+        "title": "VolConeRow",
+        "type": "object"
+      },
+      "VolConeUniverse": {
+        "description": "VCONE's small multiples: every universe contract's cone statistics at one horizon.",
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "horizons": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Horizons",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "percentiles": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Percentiles",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/VolConeUniverseRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessions",
+          "horizons",
+          "as_of",
+          "label",
+          "basis",
+          "unit",
+          "percentiles",
+          "rows",
+          "missing",
+          "gate"
+        ],
+        "title": "VolConeUniverse",
+        "type": "object"
+      },
+      "VolConeUniverseRow": {
+        "properties": {
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/VolConeRow"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "root",
+          "sector",
+          "stats"
+        ],
+        "title": "VolConeUniverseRow",
+        "type": "object"
+      },
       "VolExtremes": {
         "description": "RR's Hi and Low callouts: the highest and lowest value of one rolling volatility line and the first session\neach falls on (null when the line has no value).",
         "properties": {
@@ -15180,6 +17103,407 @@
         ]
       }
     },
+    "/api/dq/calendar/{symbol}": {
+      "get": {
+        "description": "One state per session for `symbol`, with the reason where the day is not plain vendor data.",
+        "operationId": "calendar_api_dq_calendar__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "maxLength": 11,
+              "pattern": "^[A-Z0-9]{1,5}\\.V\\.0$",
+              "title": "Symbol",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DqCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          }
+        },
+        "summary": "Calendar",
+        "tags": [
+          "dq"
+        ]
+      }
+    },
+    "/api/dq/guards": {
+      "get": {
+        "description": "Each guard group's live fingerprint against the lab's record of it.",
+        "operationId": "guard_status_api_dq_guards_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardStatusReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          }
+        },
+        "summary": "Guard Status",
+        "tags": [
+          "dq"
+        ]
+      }
+    },
+    "/api/dq/symbols": {
+      "get": {
+        "description": "The symbols with a QA or repair record and their day-state counts.",
+        "operationId": "symbols_api_dq_symbols_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DqIndex"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          }
+        },
+        "summary": "Symbols",
+        "tags": [
+          "dq"
+        ]
+      }
+    },
+    "/api/events/calendar": {
+      "get": {
+        "description": "The fixed CPI, PPI, NFP and FOMC lists, their counts and the instruments each mode accepts; no price read.",
+        "operationId": "event_calendar_api_events_calendar_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Event Calendar",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/api/events/study": {
+      "get": {
+        "description": "Mean cumulative return path around the chosen events with its cross-event band ([POST HOC], no p-value).",
+        "operationId": "event_study_api_events_study_get",
+        "parameters": [
+          {
+            "description": "continuous symbol, e.g. NQ.V.0",
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "default": "NQ.V.0",
+              "description": "continuous symbol, e.g. NQ.V.0",
+              "pattern": "^[A-Z0-9]{1,5}\\.V\\.0$",
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "one of CPI, PPI, NFP, FOMC, or ALL (each date once)",
+            "in": "query",
+            "name": "event",
+            "required": false,
+            "schema": {
+              "default": "FOMC",
+              "description": "one of CPI, PPI, NFP, FOMC, or ALL (each date once)",
+              "enum": [
+                "CPI",
+                "PPI",
+                "NFP",
+                "FOMC",
+                "ALL"
+              ],
+              "title": "Event",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "default": "daily",
+              "enum": [
+                "daily",
+                "intraday"
+              ],
+              "title": "Mode",
+              "type": "string"
+            }
+          },
+          {
+            "description": "sessions (daily) or minutes (intraday) before",
+            "in": "query",
+            "name": "pre",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 390,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "sessions (daily) or minutes (intraday) before",
+              "title": "Pre"
+            }
+          },
+          {
+            "description": "sessions (daily) or minutes (intraday) after",
+            "in": "query",
+            "name": "post",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 390,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "sessions (daily) or minutes (intraday) after",
+              "title": "Post"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventStudy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Event Study",
+        "tags": [
+          "events"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "description": "Versions, the in-sample fence, sealed-window pin status, kill switch and gate counters.",
@@ -16147,6 +18471,140 @@
         ]
       }
     },
+    "/api/market/paper-rolls": {
+      "get": {
+        "description": "The MNQ paper book's roll schedule from `nq_lab.mnq_roll`: dates only, no price and no file is read.",
+        "operationId": "market_paper_rolls_api_market_paper_rolls_get",
+        "parameters": [
+          {
+            "description": "contracts before the held one",
+            "in": "query",
+            "name": "behind",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "description": "contracts before the held one",
+              "maximum": 8,
+              "minimum": 0,
+              "title": "Behind",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "contracts after the held one",
+            "in": "query",
+            "name": "ahead",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "description": "contracts after the held one",
+              "maximum": 40,
+              "minimum": 1,
+              "title": "Ahead",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperRollSchedule"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Paper Rolls",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/rolls": {
+      "get": {
+        "description": "Every in-sample roll of the 27 futures (instrument_id changes in the served 1d files) with its gap in points\nand percent, the month axis for the calendar strip, and the universe QA report's roll counts beside ours.",
+        "operationId": "market_rolls_api_market_rolls_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RollCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Rolls",
+        "tags": [
+          "data"
+        ]
+      }
+    },
     "/api/market/rv": {
       "get": {
         "description": "GP's RV22 line (MV3) on the universe's return convention, to 2021-12-31; the last value equals the\nuniverse's realised volatility at the same window.",
@@ -16423,6 +18881,158 @@
           }
         },
         "summary": "Market Universe",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/vcone": {
+      "get": {
+        "description": "The volatility cone of one universe symbol: for 5, 10, 21, 63, 126 and 252 sessions, the min, percentiles\nand max of the rolling realised volatility over the in-sample history, with the latest value, to 2021-12-31.",
+        "operationId": "market_vcone_api_market_vcone_get",
+        "parameters": [
+          {
+            "description": "a universe symbol, e.g. NQ.V.0",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "a universe symbol, e.g. NQ.V.0",
+              "pattern": "^[A-Z0-9]{1,5}\\.V\\.0$",
+              "title": "Symbol",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolCone"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Vcone",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/vcone/universe": {
+      "get": {
+        "description": "VCONE's small multiples: every universe contract's cone statistics at one horizon, to 2021-12-31.",
+        "operationId": "market_vcone_universe_api_market_vcone_universe_get",
+        "parameters": [
+          {
+            "description": "sessions per window, one of (5, 10, 21, 63, 126, 252)",
+            "in": "query",
+            "name": "horizon",
+            "required": false,
+            "schema": {
+              "default": 21,
+              "description": "sessions per window, one of (5, 10, 21, 63, 126, 252)",
+              "title": "Horizon",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VolConeUniverse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Vcone Universe",
         "tags": [
           "data"
         ]
@@ -17496,6 +20106,249 @@
         "summary": "Sealed",
         "tags": [
           "research"
+        ]
+      }
+    },
+    "/api/seasonality/hypothesis/{name}": {
+      "get": {
+        "description": "SEAS for a registered hypothesis: its recorded Basis A series by calendar period; no price is read.",
+        "operationId": "hypothesis_seasonality_api_seasonality_hypothesis__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+            "in": "query",
+            "name": "cost",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Cost",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "first calendar year",
+            "in": "query",
+            "name": "start_year",
+            "required": false,
+            "schema": {
+              "default": 2010,
+              "description": "first calendar year",
+              "maximum": 2021,
+              "minimum": 2010,
+              "title": "Start Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "last calendar year (to 2021)",
+            "in": "query",
+            "name": "end_year",
+            "required": false,
+            "schema": {
+              "default": 2021,
+              "description": "last calendar year (to 2021)",
+              "maximum": 2021,
+              "minimum": 2010,
+              "title": "End Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Seasonality"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Hypothesis Seasonality",
+        "tags": [
+          "seasonality"
+        ]
+      }
+    },
+    "/api/seasonality/instrument/{root}": {
+      "get": {
+        "description": "SEAS for one instrument: calendar panels from the 1d file and 30-minute buckets from the 1m bars.",
+        "operationId": "instrument_seasonality_api_seasonality_instrument__root__get",
+        "parameters": [
+          {
+            "description": "a universe root, e.g. NQ",
+            "in": "path",
+            "name": "root",
+            "required": true,
+            "schema": {
+              "description": "a universe root, e.g. NQ",
+              "pattern": "^[A-Z0-9]{1,5}$",
+              "title": "Root",
+              "type": "string"
+            }
+          },
+          {
+            "description": "1m series for the buckets; default repaired when it exists",
+            "in": "query",
+            "name": "variant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "vendor",
+                    "repaired"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "1m series for the buckets; default repaired when it exists",
+              "title": "Variant"
+            }
+          },
+          {
+            "description": "first calendar year",
+            "in": "query",
+            "name": "start_year",
+            "required": false,
+            "schema": {
+              "default": 2010,
+              "description": "first calendar year",
+              "maximum": 2021,
+              "minimum": 2010,
+              "title": "Start Year",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "last calendar year (to 2021)",
+            "in": "query",
+            "name": "end_year",
+            "required": false,
+            "schema": {
+              "default": 2021,
+              "description": "last calendar year (to 2021)",
+              "maximum": 2021,
+              "minimum": 2010,
+              "title": "End Year",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Seasonality"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Instrument Seasonality",
+        "tags": [
+          "seasonality"
         ]
       }
     }

@@ -231,7 +231,7 @@ MNEMONICS: tuple[tuple[str, str, str, str], ...] = (
     ("EXPO", "Exposure", "P1", "run"),
     ("SEAL", "Sealed results", "P1", "hypothesis"),
     ("VCONE", "Volatility cone", "P1", "instrument"),
-    ("SEAS", "Seasonality", "P1", "instrument"),
+    ("SEAS", "Seasonality", "P1", "instrument or hypothesis"),
     ("EVT", "Event study", "P1", "instrument"),
     ("ROLL", "Roll calendar", "P1", "instrument"),
     ("DQ", "Data quality", "P1", "instrument"),

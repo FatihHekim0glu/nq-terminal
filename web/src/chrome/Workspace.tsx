@@ -23,6 +23,7 @@ import PanelChrome from './PanelChrome'
 import { PanelActionsContext, type PanelActions } from './PanelChrome.actions'
 import { NumberingContext } from './PanelChrome.numbers'
 import RelatedMenu from './RelatedMenu'
+import ScreenBoundary from './ScreenBoundary'
 import { createWorkspaceController, type ControllerEnv, type FocusedPanel, type RunTarget, type WorkspaceController } from './WorkspaceController'
 import { PANEL_COMPONENT, effectiveContext, panelSubject, panelTitle, sanitiseParams } from './WorkspaceModel'
 import WorkspacePlaceholder from './WorkspacePlaceholder'
@@ -143,9 +144,11 @@ function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
         landmark={false}
       >
         {Screen ? (
-          <Suspense fallback={<p className="ws-empty">{WORKSPACE.loadingScreen}</p>}>
-            <Screen params={params} context={context} />
-          </Suspense>
+          <ScreenBoundary resetKey={`${params.code}:${context?.kind ?? ''}:${context?.value ?? ''}`}>
+            <Suspense fallback={<p className="ws-empty">{WORKSPACE.loadingScreen}</p>}>
+              <Screen params={params} context={context} />
+            </Suspense>
+          </ScreenBoundary>
         ) : (
           <WorkspacePlaceholder panelId={id} def={def} context={context} args={params.args} />
         )}

@@ -35,7 +35,6 @@ const TEAR_HONESTY = 'Every tile names its basis (A screen, B account) and unit.
 const TEAR_TABS = ['EQ', 'DD', 'RET', 'RR', 'MRET', 'DES']
 /** The other tear sheet tabs and DES, for the page of tab `self`. */
 const tearRelated = (self: string): string[] => TEAR_TABS.filter((c) => c !== self)
-const P1 = 'Planned for P1, after the P0 release; until then the command opens a labelled placeholder.'
 
 export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   HOME: {
@@ -316,41 +315,67 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     related: ['DES', 'OOS'],
   },
   VCONE: {
-    summary: 'A volatility cone for one instrument.',
-    shows: ['Realised volatility percentiles by horizon.', P1],
-    data: 'GET /api/bars, through the OOS gate.',
-    honesty: POST_HOC_PRICES,
-    examples: ['{NQ VCONE <GO>}'],
-    related: ['GP'],
+    summary: 'A volatility cone for one instrument, and the 27 futures at one horizon.',
+    shows: [
+      'Cone view: realised volatility over six horizons from 5 to 252 sessions; the spread of every full window to 2021-12-31 as percentiles, with the latest value and its rank drawn over it.',
+      '1) to 6): the horizon rows; a number and <GO> opens the 27 futures at that horizon.',
+      '27F view: one small cone per future on one scale; 1) to 27) open the cone of that future.',
+      '31) Cone view and 32) 27F view switch views; 98) Export saves the table on screen as CSV.',
+    ],
+    data: 'GET /api/market/vcone and GET /api/market/vcone/universe: the 1d series through the OOS gate, log returns on the project convention, annualised with the square root of 252.',
+    honesty: `${POST_HOC_PRICES} The rank is a place among past windows, not a test.`,
+    examples: ['{NQ VCONE <GO>}', '{ZN VCONE <GO>}'],
+    related: ['GP', 'MON', 'SEAS'],
   },
   SEAS: {
-    summary: 'Seasonality of one instrument.',
-    shows: ['Average returns by calendar period.', P1],
-    data: 'GET /api/bars, through the OOS gate.',
-    honesty: POST_HOC_PRICES,
-    examples: ['{NQ SEAS <GO>}'],
-    related: ['GP'],
+    summary: 'Seasonality of one instrument or one hypothesis.',
+    shows: [
+      'Tabs 81) to 85): month, weekday, week of month, 30 minutes, month by year. Each shows the mean with one standard error either side; the grid adds n with the hit rate.',
+      'Grid rows are numbered 1) to 13); a number and <GO> reads that row out.',
+      'The 30 minute buckets use only sessions not gated for the variant shown; a symbol with no record has no intraday panel.',
+      '96) Actions; 98) Export saves the tab shown as CSV; 99) Help.',
+    ],
+    data: 'GET /api/seasonality/instrument/{root} (1d and 1m bars through the OOS gate) or GET /api/seasonality/hypothesis/{name} (the Basis A series; no price is read).',
+    honesty: `${POST_HOC_PRICES} The whiskers are one standard error, a spread and not a confidence interval.`,
+    examples: ['{NQ SEAS <GO>}', '{volmanaged_v0 SEAS <GO>}'],
+    related: ['GP', 'DES', 'MRET', 'EVT'],
   },
   EVT: {
-    summary: 'An event study on one instrument.',
-    shows: ['Average paths around a set of event dates.', P1],
-    data: 'GET /api/bars, through the OOS gate.',
-    honesty: POST_HOC_PRICES,
-    examples: ['{NQ EVT <GO>}'],
-    related: ['GP'],
+    summary: 'An event study on one instrument around the fixed macro releases (CPI, PPI, NFP, FOMC).',
+    shows: [
+      'The mean cumulative return path around the chosen release, daily in sessions or intraday in minutes, with a pointwise cross-event band.',
+      'The distribution at the last offset, and one grid row per event; a row number and <GO> draws that event over the mean. A void row gives its reason.',
+      '96) Actions; 98) Export saves the mean path with its band as CSV.',
+    ],
+    data: 'GET /api/events/calendar (the event lines of macroday_v0, checked against the FOMC statements) and GET /api/events/study (bars through the OOS gate).',
+    honesty: `${POST_HOC_PRICES} The band is the mean plus and minus 1.96 standard errors at each offset, descriptive only.`,
+    examples: ['{NQ EVT <GO>}', '{ES EVT <GO>}'],
+    related: ['GP', 'SEAS'],
   },
   ROLL: {
-    summary: 'The roll calendar of one instrument.',
-    shows: ['Roll dates with their gaps in points and percent.', P1],
-    data: 'GET /api/bars (roll markers), through the OOS gate.',
-    examples: ['{NQ ROLL <GO>}'],
-    related: ['GP'],
+    summary: 'The roll calendar of the 27 futures and the MNQ roll dates of the paper book.',
+    shows: [
+      '1) Calendar: rolls per year and a strip by month for every market; strip rows 11) to 37) open that market.',
+      '2) Market: every in-sample roll of one market with its gap in points and percent of the raw close.',
+      '3) Paper book MNQ: the roll schedule of the paper book, dates only.',
+      '96) Actions and 98) Export (the view shown, as CSV).',
+    ],
+    data: 'GET /api/market/rolls (the 1d series through the OOS gate, checked against the roll count in the universe QA report) and GET /api/market/paper-rolls (calendar arithmetic, no price).',
+    honesty: POST_HOC_PRICES,
+    examples: ['{NQ ROLL <GO>}', '{ES ROLL <GO>}'],
+    related: ['GP', 'MON'],
   },
   DQ: {
-    summary: 'Data quality of one instrument.',
-    shows: ['Gated and repaired sessions on a calendar.', P1],
-    data: 'GET /api/qa and GET /api/qa/{name}, with every market time after the fence removed.',
-    examples: ['{NQ DQ <GO>}'],
+    summary: 'Data quality of one instrument, and the guard fingerprint status.',
+    shows: [
+      '85) Calendar: one square per session to 2021-12-31; a day that is not plain vendor data is marked G (gated out), R (rejected), B (rebuilt) or U (unrepairable). T or the Table button gives the year table.',
+      'Flagged days are numbered 1) to N) in the grid; a number and <GO> gives the reason for that day and outlines it on the calendar.',
+      '86) Guard fingerprints: every guard group with its status in words (OK, MISMATCH, NO RECORD).',
+      '96) Actions; 98) Export saves the flagged days, or the guard table, as CSV.',
+    ],
+    data: 'GET /api/dq/symbols with /api/dq/calendar/{symbol} for the calendar; GET /api/dq/guards for the guards. Records only; no price is read.',
+    honesty: 'Descriptive counts from the records, [POST HOC]; no p value.',
+    examples: ['{NQ DQ <GO>}', '{ES DQ <GO>}'],
     related: ['GP', 'GIP'],
   },
   JOBS: {

@@ -1,0 +1,17 @@
+{
+ "symbol": "NQ.V.0",
+ "years": {
+  "2011": {
+   "rows": 106728,
+   "ohlc_violations": 0,
+   "duplicate_timestamps": 0,
+   "rth_days_with_gaps": 2
+  },
+  "2012": {
+   "rows": 145070,
+   "ohlc_violations": 0,
+   "duplicate_timestamps": 0,
+   "rth_days_with_gaps": 4
+  }
+ }
+}

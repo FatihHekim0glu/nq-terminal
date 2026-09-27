@@ -20,6 +20,9 @@ One door (ARCHITECTURE section 5). The service never reads a price file. Every f
   whole window), checked after the fence and before any serve (`SpanTooLong`), so one call cannot load and
   bucket the whole 1m history.
 - An empty serve (a year with no bars, e.g. before a series starts) is cached as an empty frame.
+- Rebuilt 1m bars (NQ's repaired file stores no raw close or offset on the sessions rebuilt from trades) get
+  `raw_c = c - offset` from the one offset their contract carries on its vendor bars in the same served year
+  (`derive_raw_close`); a contract without exactly one known offset keeps NaN, which the screens count as unusable.
 - OHLCV buckets (PRD DL4, ANALYTICS MV1): first open, max high, min low, last close, summed volume; never a
   decimation of prices. The bucket starts at the requested timeframe and widens along `BUCKETS` until the
   number of buckets is at most `max_points`. Buckets under a day are aligned on the UTC epoch; day buckets
@@ -236,6 +239,32 @@ def find_rolls(frame: pd.DataFrame, source_tf: str) -> tuple[Roll, ...]:
     return tuple(rolls)
 
 
+def derive_raw_close(frame: pd.DataFrame) -> pd.DataFrame:
+    """1m rows rebuilt from trades (NQ's repaired file) carry `raw_c` and `offset` NaN: the repair added the
+    contract's back-adjustment offset to the trade prices and stored no raw close. Where the same `instrument_id`
+    carries exactly one finite offset elsewhere in `frame` (its vendor bars; the offset is constant per contract),
+    fill `offset` with it and `raw_c = c - offset`, the trade price. A contract with no known offset, or more than one,
+    stays NaN. Returns `frame` itself when nothing is missing, else a new frame."""
+    if frame.empty or not {"raw_c", "offset", "c", "instrument_id"} <= set(frame.columns):
+        return frame
+    raw = frame["raw_c"].to_numpy(dtype=np.float64)
+    missing = ~np.isfinite(raw) & np.isfinite(frame["c"].to_numpy(dtype=np.float64))
+    if not missing.any():
+        return frame
+    offset = frame["offset"].to_numpy(dtype=np.float64)
+    known = frame.loc[np.isfinite(offset) & np.isfinite(raw), ["instrument_id", "offset"]]
+    spread = known.groupby("instrument_id")["offset"].agg(["min", "max"])
+    single = spread.loc[spread["min"] == spread["max"], "min"]
+    fill = frame["instrument_id"].map(single).to_numpy(dtype=np.float64)
+    use = missing & np.isfinite(fill)
+    if not use.any():
+        return frame
+    out = frame.copy()
+    out.loc[use, "offset"] = fill[use]
+    out.loc[use, "raw_c"] = out.loc[use, "c"].to_numpy(dtype=np.float64) - fill[use]
+    return out
+
+
 def slice_window(frame: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     if frame.empty:
         return frame
@@ -342,7 +371,8 @@ class BarService:
             raise GateRefusal(str(exc)) from exc
         with self._lock:
             self._reads += 1
-        return frame.sort_values("ts", ignore_index=True) if not frame["ts"].is_monotonic_increasing else frame
+        frame = frame.sort_values("ts", ignore_index=True) if not frame["ts"].is_monotonic_increasing else frame
+        return derive_raw_close(frame) if key.timeframe == "1m" else frame
 
     def _store(self, key: CacheKey, frame: pd.DataFrame) -> None:
         size = frame_bytes(frame)

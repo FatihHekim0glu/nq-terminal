@@ -153,3 +153,54 @@ export const useLiveRoutes = (file?: string) => useApiQuery('/api/live/routes', 
 /** LV5: paper P&L against the rule's target on the same closes (performance rows only). */
 export const usePaperTracking = (file?: string) =>
   useApiQuery('/api/analytics/paper-tracking', { query: { file } }, useLive())
+
+// Phase 11: VCONE, SEAS, EVT and ROLL read prices only through the backend's gate; DQ reads the QA, repair and
+// guard records (no price). Every body is [POST HOC] descriptive, with no p-value.
+/** VCONE (MV9): one universe symbol's cone; idle until the symbol is known. */
+export const useVolCone = (symbol: string) =>
+  useApiQuery('/api/market/vcone', { query: { symbol } }, { enabled: hasId(symbol) })
+/** VCONE's 27 futures at one horizon (the small multiples). */
+export const useVolConeUniverse = (horizon: number, enabled = true) =>
+  useApiQuery('/api/market/vcone/universe', { query: { horizon } }, { enabled })
+
+export type SeasonalityInstrumentQuery = NonNullable<RequestOf<'/api/seasonality/instrument/{root}'>['query']>
+export type SeasonalityHypothesisQuery = NonNullable<RequestOf<'/api/seasonality/hypothesis/{name}'>['query']>
+/** SEAS (MV7) for a universe root or a registered hypothesis. */
+export type SeasonalityRequest =
+  | { readonly kind: 'instrument'; readonly root: string; readonly query: SeasonalityInstrumentQuery }
+  | { readonly kind: 'hypothesis'; readonly name: string; readonly query: SeasonalityHypothesisQuery }
+/** Exactly one of the two GETs is live, by kind; with no request both stay idle. */
+export function useSeasonality(request: SeasonalityRequest | null): UseQueryResult<Schemas['Seasonality'], ApiError> {
+  const root = request?.kind === 'instrument' ? request.root : ''
+  const name = request?.kind === 'hypothesis' ? request.name : ''
+  const instrument = useApiQuery(
+    '/api/seasonality/instrument/{root}',
+    { path: { root }, query: request?.kind === 'instrument' ? request.query : {} },
+    { enabled: hasId(root) },
+  )
+  const hypothesis = useApiQuery(
+    '/api/seasonality/hypothesis/{name}',
+    { path: { name }, query: request?.kind === 'hypothesis' ? request.query : {} },
+    { enabled: hasId(name) },
+  )
+  return request?.kind === 'hypothesis' ? hypothesis : instrument
+}
+
+/** EVT (MV8): the fixed event lists and the instruments the study accepts; no price is read. */
+export const useEventCalendar = () => useApiQuery('/api/events/calendar', {})
+export type EventStudyQuery = NonNullable<RequestOf<'/api/events/study'>['query']>
+export const useEventStudy = (query: EventStudyQuery, enabled = true) =>
+  useApiQuery('/api/events/study', { query }, { enabled })
+
+/** ROLL (MV10): every in-sample roll of the 27 futures. */
+export const useRollCalendar = () => useApiQuery('/api/market/rolls', {})
+export type PaperRollsQuery = NonNullable<RequestOf<'/api/market/paper-rolls'>['query']>
+/** The paper book's MNQ roll schedule: calendar arithmetic, dates only. */
+export const usePaperRolls = (query: PaperRollsQuery, enabled = true) =>
+  useApiQuery('/api/market/paper-rolls', { query }, { enabled })
+
+/** DQ (RI4, RI5): the records only. */
+export const useDqSymbols = () => useApiQuery('/api/dq/symbols', {})
+export const useDqCalendar = (symbol: string) =>
+  useApiQuery('/api/dq/calendar/{symbol}', { path: { symbol } }, { enabled: hasId(symbol) })
+export const useDqGuards = (enabled = true) => useApiQuery('/api/dq/guards', {}, { enabled })

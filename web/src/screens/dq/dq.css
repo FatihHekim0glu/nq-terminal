@@ -1,0 +1,66 @@
+/* DQ (ANALYTICS RI4 and RI5). Tokens only, square corners, hard cuts. The state fills are house choices from the
+   token palette; every state but vendor also carries a black letter, so the fill is never the only cue, and the
+   legend, the square titles, the table view and the flagged grid give the same states in words. */
+
+.dq { overflow: auto; }
+.dq-body { display: flex; flex-direction: column; min-height: 0; }
+.dq-label { margin: 0; padding: 2px 6px; line-height: var(--row-h); }
+.dq-heading {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--cyan-chart, var(--link));
+  font-size: var(--fs-data);
+  font-weight: 400;
+  line-height: var(--row-h);
+}
+.dq-note { margin: 0; padding: 0 6px; line-height: var(--row-h); color: var(--text); }
+.dq-selected-line { margin: 0; padding: 0 6px; min-height: var(--row-h); line-height: var(--row-h); color: var(--data); }
+
+.dq-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 2px 6px;
+  list-style: none;
+  line-height: var(--row-h);
+}
+.dq-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dq-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--black);
+  font-size: var(--fs-small);
+  font-weight: var(--fw-bold);
+}
+
+.dq-chart { flex: 0 0 auto; min-height: 240px; padding: 0 6px; }
+.dq-cal { display: block; max-width: 1200px; font-family: var(--font-sans); }
+.dq-cal-year { fill: var(--white); font-size: 12px; }
+.dq-cell text { fill: var(--black); font-size: 9px; font-weight: 700; pointer-events: none; }
+.dq-cell rect { stroke: none; }
+
+/* Fills: the swatch uses background, the square uses fill. Vendor stays a dim neutral. */
+.dq-swatch.dq-vendor { background: var(--hover-cell); }
+.dq-cell.dq-vendor rect { fill: var(--hover-cell); }
+.dq-swatch.dq-gated_out { background: var(--sec-energy); }
+.dq-cell.dq-gated_out rect { fill: var(--sec-energy); }
+.dq-swatch.dq-rejected { background: var(--c-down-raised); }
+.dq-cell.dq-rejected rect { fill: var(--c-down-raised); }
+.dq-swatch.dq-rebuilt { background: var(--cvd-up); }
+.dq-cell.dq-rebuilt rect { fill: var(--cvd-up); }
+.dq-swatch.dq-unrepairable { background: var(--sec-livestock); }
+.dq-cell.dq-unrepairable rect { fill: var(--sec-livestock); }
+.dq-cell.dq-selected rect { stroke: var(--focus); stroke-width: 2px; }
+.dq-cell.dq-hover rect { stroke: var(--text); stroke-width: 1px; }
+
+.dq-grid { position: relative; flex: 0 0 auto; height: 320px; min-height: 0; }
+.dq-qa { padding: 4px 0; }
+.dq-table { margin: 0 6px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.dq-table th, .dq-table td { padding: 0 8px; line-height: var(--row-h); text-align: left; border-bottom: 1px solid var(--border); }
+.dq-table thead th { background: var(--th-bg); color: var(--th-fg); font-weight: 400; }
+.dq-table tbody th { color: var(--data); font-weight: 400; }
+.dq-table .num { text-align: right; }

@@ -14,6 +14,8 @@ Schema `nqt-qa-dump/1`. Two kinds:
   with the line the terminal serves.
 - P1 bundles (`p1series`, `bootstrap`, `deflated`, `paths`, `regimes`, `stress`, `tracking`): the raw inputs of the
   Phase 10 metrics with the terminal's values (and Nautilus's where one exists); references in `p1_reference.py`.
+- P11 bundles (`vcone`, `seasonality`, `evt`, `roll`, `dq_sidecar`, `dq_nq`, `guards`): the raw inputs of the
+  Phase 11 screens with the terminal's values; references in `p11_*.py`.
 
 This module only reads. It never imports the backend (ARCHITECTURE section 11).
 """
@@ -38,7 +40,15 @@ BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "bootstrap": ("r", "basis", "periods", "on_capital", "seed", "reps", "horizon", "confidence"),
                  "deflated": ("trials", "paper"), "paths": ("trades", "all_trades", "bars", "point_value", "tick"),
                  "regimes": ("dates", "r", "rv_dates", "rv", "min_history"),
-                 "stress": ("dates", "r", "bench", "basis", "windows"), "tracking": ("rows", "multiplier")}
+                 "stress": ("dates", "r", "bench", "basis", "windows"), "tracking": ("rows", "multiplier"),
+                 # Phase 11 (the p11_*.py references; writers in terminal/backend/tests/test_*dump*p11* and
+                 # test_*_dump_for_qa.py)
+                 "vcone": ("dates", "r", "horizons", "percentiles", "min_windows"),
+                 "seasonality": ("dates", "r", "aggregation"),
+                 "evt": ("mode", "events", "pre", "post"),
+                 "roll": ("dates", "t", "instrument_id", "offset", "c_none", "qa_rolls_total"),
+                 "dq_sidecar": ("status", "fence", "sessions"), "dq_nq": ("fence", "sessions", "rejected", "still"),
+                 "guards": ("groups", "records")}
 
 
 class DumpError(ValueError):

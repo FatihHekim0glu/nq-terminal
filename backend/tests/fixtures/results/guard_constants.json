@@ -1,0 +1,23 @@
+{
+ "sha256": "25178e5d1930d4589f93e866d843b79771f1192a9a3c849eaed635cc74a1ec23",
+ "constants": {
+  "nq_tick": 0.25,
+  "nq_point_value_usd": 20.0,
+  "mnq_point_value_usd": 2.0,
+  "nq_fee_per_side_usd": 2.24,
+  "mnq_fee_per_side_usd": 0.61,
+  "min_nq_price": 500.0,
+  "max_nq_price": 100000.0,
+  "max_abs_1m_move": 0.1,
+  "rth_minutes_full_day": 390,
+  "rth_minutes_early_close": 210,
+  "in_sample_end_utc": "2022-01-01T00:00:00+00:00"
+ },
+ "history": [
+  {
+   "ts_utc": "2026-09-26T00:22:10.442169+00:00",
+   "reason": "initial freeze 2026-09-26: tick, contract values, IBKR fees, price bounds, RTH lengths, OOS fence",
+   "sha256": "25178e5d1930d4589f93e866d843b79771f1192a9a3c849eaed635cc74a1ec23"
+  }
+ ]
+}

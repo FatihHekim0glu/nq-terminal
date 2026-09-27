@@ -7,15 +7,26 @@
   repair rebuilt from trades (in the vendor list, not in the repaired one).
 Other symbols have no session QA file and are reported as not assessed. Dates are session dates (YYYY-MM-DD)
 inside the served window.
+
+Session exclusions for the screens that read 1m bars (SEAS buckets, EVT intraday), `default_exclusions`: NQ.V.0 from
+the files above; every other symbol from its futures repair provenance (`nq_lab.data.excluded_sessions`, which also
+checks the merged file's sha256; memoised per symbol and variant, never read in fixture mode). A symbol with neither
+record is not assessed.
 """
 from __future__ import annotations
 
+import datetime as dt
+import functools
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
 
 import pandas as pd
 
+from nq_lab import data as nq_data
+from nq_lab.config import IS_END, IS_START
 from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError
 
 SESSION_QA: Mapping[str, Mapping[str, str]] = MappingProxyType({
@@ -55,3 +66,51 @@ def session_flags(files: FileCache, results_dir: Path, symbol: str, variant: str
         gated, repaired, used = still, vendor - still, f"{names['vendor']} and {names['repaired']}"
     return {"assessed": True, "source": SOURCE.format(files=used), "gated": _inside(gated, start, end),
             "repaired": _inside(repaired, start, end)}
+
+
+# ---------------------------------------------------------------- exclusions for 1m screens
+
+DAY_GATE_PREFIX = "qa.day_gate"
+PROVENANCE_SOURCE = "futures repair provenance (nq_lab.data.excluded_sessions, variant {variant})"
+
+
+@dataclass(frozen=True)
+class Exclusions:
+    """Sessions to drop from 1m work; `assessed` False means no record exists (no 1m view)."""
+
+    assessed: bool
+    days: frozenset[dt.date]
+    source: str | None
+
+    @property
+    def day_gate(self) -> bool:
+        return bool(self.source) and self.source.startswith(DAY_GATE_PREFIX)
+
+
+ExclusionFn = Callable[[str, str], Exclusions]
+NOT_ASSESSED = Exclusions(assessed=False, days=frozenset(), source=None)
+
+
+@functools.lru_cache(maxsize=64)
+def provenance_exclusions(symbol: str, variant: str) -> Exclusions:
+    try:
+        days = nq_data.excluded_sessions(symbol, variant)
+    except (nq_data.DataLayoutError, FileNotFoundError, ValueError, KeyError):
+        return NOT_ASSESSED
+    return Exclusions(assessed=True, days=frozenset(days), source=PROVENANCE_SOURCE.format(variant=variant))
+
+
+def default_exclusions(files: FileCache, results_dir: Path, *, fixture_mode: bool) -> ExclusionFn:
+    """NQ from its session QA files; other symbols from their repair provenance (never in fixture mode, whose
+    runs must not depend on the real results folder)."""
+
+    def exclusions(symbol: str, variant: str) -> Exclusions:
+        if symbol in SESSION_QA:
+            flags = session_flags(files, results_dir, symbol, variant, IS_START, IS_END)
+            if not flags["assessed"]:
+                return NOT_ASSESSED
+            days = frozenset(dt.date.fromisoformat(d) for d in flags["gated"])
+            return Exclusions(assessed=True, days=days, source=flags["source"])
+        return NOT_ASSESSED if fixture_mode else provenance_exclusions(symbol, variant)
+
+    return exclusions

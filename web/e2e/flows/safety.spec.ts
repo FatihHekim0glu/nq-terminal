@@ -27,6 +27,7 @@ const CONTEXTS: Readonly<Record<string, readonly string[]>> = {
   run: [RUN],
   universe: ['27F'],
   'hypothesis or instrument': ['volmanaged_v0', 'NQ'],
+  'instrument or hypothesis': ['NQ', 'volmanaged_v0'],
   'run or hypothesis': [RUN, 'volmanaged_v0'],
 }
 const ARGUMENTS: Readonly<Record<string, string>> = { GIP: '2019-03-14' }

@@ -83,8 +83,8 @@ export default defineConfig(({ mode }) => ({
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.ts'],
     // Vitest stubs CSS imports to '' by default; the contrast test must read the real tokens file.
-    // The panel and grid style tests read their stylesheets as text (?raw) only.
-    css: { include: [/src[\\/]theme[\\/]tokens\.css/, /src[\\/](chrome|grids)[\\/][^?]+\.css\?raw$/] },
+    // The panel, grid and screen style tests read their stylesheets as text (?raw) only.
+    css: { include: [/src[\\/]theme[\\/]tokens\.css/, /src[\\/](chrome|grids|screens[\\/][a-z]+)[\\/][^?]+\.css\?raw$/] },
     restoreMocks: true,
     // One fork per hardware thread (32 here) ran the machine out of memory once the bundle test
     // added two real Vite builds; eight forks keep the whole suite at about the same wall time.

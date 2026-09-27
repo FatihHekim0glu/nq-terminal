@@ -136,6 +136,12 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     # Phase 8 (A1): the instrument DES, GP's RV22 line, MON's 2Day sparkline, LIVE's routes and fills
     "/api/instruments/{root}", "/api/market/rv", "/api/market/two-day", "/api/live/routes",
     "/api/live/stream",  # Phase 9 (9.2): the SSE stream for LIVE and JRNL
+    # Phase 11: VCONE, SEAS, EVT, ROLL, DQ (RI4, RI5)
+    "/api/market/vcone", "/api/market/vcone/universe",
+    "/api/seasonality/instrument/{root}", "/api/seasonality/hypothesis/{name}",
+    "/api/events/calendar", "/api/events/study",
+    "/api/market/rolls", "/api/market/paper-rolls",
+    "/api/dq/symbols", "/api/dq/calendar/{symbol}", "/api/dq/guards",
 }
 PHASE_3_PREFIX = "/api/analytics/"  # section 4 routes a concurrent Phase 3 build adds; checked by the contract
 

@@ -42,6 +42,13 @@ const API_ORIGIN = `http://127.0.0.1:${API_PORT}`
 const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`
 const q = (p: string) => `"${p}"`
 
+// The app is built into a folder of this run's own and served from it (improvement run 3). The preview used
+// to serve dist-gallery, which any other gallery build (`pnpm build:gallery`, another E2E start) empties and
+// rewrites: a page then asked for a chunk that was gone (404) and never booted. That was the QA round's failing
+// keyboard flow (an empty workspace) and gallery entries that never finished loading. One folder per web port:
+// Playwright refuses a web port already in use before it runs the build, so no two runs share a folder.
+const E2E_DIST = path.join(WEB_DIR, 'node_modules', '.tmp', `e2e-gallery-${WEB_PORT}`)
+
 export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e/.results',
@@ -72,8 +79,8 @@ export default defineConfig({
   // in one worker, so CPU contention from other specs never decides them. The budgets depend on no other
   // project: a failure in the main run no longer skips them (improvement run 3).
   // The main project runs at most two workers, even under --workers=4: four workers left about 5,900 loopback
-  // sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes), and runs lost a page load
-  // there to net::ERR_NO_BUFFER_SPACE or an empty workspace (a keyboard flow and a books spec failed that way).
+  // sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes; two workers peaked at about
+  // 1,200), and one run lost a page load there to net::ERR_NO_BUFFER_SPACE.
   projects: [
     { name: 'chromium', testIgnore: BUDGETS_SPEC, workers: 2 },
     { name: 'perf', testMatch: BUDGETS_SPEC },
@@ -97,9 +104,9 @@ export default defineConfig({
     },
     {
       name: 'vite preview',
-      // The gallery build (dist-gallery): the production app plus /__gallery/<name> for the
-      // component screenshots. It never writes dist, which start.ps1 serves.
-      command: `pnpm exec vite build --mode gallery && pnpm exec vite preview --mode gallery --config e2e/vite.preview.config.ts --port ${WEB_PORT} --strictPort`,
+      // The gallery build (the production app plus /__gallery/<name> for the component screenshots) in this
+      // run's own folder (E2E_DIST). It never writes dist, which start.ps1 serves, nor dist-gallery.
+      command: `pnpm exec vite build --mode gallery --outDir ${q(E2E_DIST)} --emptyOutDir && pnpm exec vite preview --mode gallery --config e2e/vite.preview.config.ts --outDir ${q(E2E_DIST)} --port ${WEB_PORT} --strictPort`,
       cwd: WEB_DIR,
       url: `${WEB_ORIGIN}/`,
       env: { ...(process.env as Record<string, string>), NQT_E2E_API_ORIGIN: API_ORIGIN },
