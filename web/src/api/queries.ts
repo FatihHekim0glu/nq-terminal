@@ -1,18 +1,19 @@
 // react-query hooks for the P0 endpoints (ARCHITECTURE section 4). Every hook is a GET through apiGet.
 // Hooks that take an id stay idle (no request) until the id is non-empty, so a panel whose link group has
-// no context yet fetches nothing. Live endpoints poll every LIVE_POLL_MS (P0 uses polling; SSE is P1).
+// no context yet fetches nothing. Live endpoints follow the live stream (TASKS 9.2, src/api/useLiveStream.ts):
+// while it is open they never poll and the stream refreshes them; otherwise they poll every LIVE_POLL_MS as in P0.
 import { QueryClient, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { ApiError, apiGet } from './client'
+import { LIVE_POLL_MS, apiQueryKey, type ApiQueryKey } from './queryKey'
 import type { ApiPath, GetArgs, RequestOf, Schemas, SuccessOf } from './types'
+import { useLivePollInterval } from './useLiveStream'
 
-export const LIVE_POLL_MS = 2000
+export { LIVE_POLL_MS, apiQueryKey, type ApiQueryKey }
 export const STALE_MS = 30_000
 export const RETRY_DELAY_MS = 500
 /** The command index is re-read this often, so a run or hypothesis added on disk becomes a context. */
 export const COMMANDS_POLL_MS = 60_000
 const MAX_RETRIES = 1
-
-export type ApiQueryKey<P extends ApiPath> = readonly ['api', P, RequestOf<P> | Record<string, never>]
 
 export interface ApiQueryOptions {
   readonly enabled?: boolean
@@ -23,10 +24,6 @@ export interface ApiQueryOptions {
 export interface PageQuery {
   readonly offset?: number
   readonly limit?: number
-}
-
-export function apiQueryKey<P extends ApiPath>(path: P, request?: RequestOf<P>): ApiQueryKey<P> {
-  return ['api', path, request ?? {}]
 }
 
 /** Retry once on a network failure or a 5xx (a half-written file answers 503); never on a 4xx or a refusal. */
@@ -64,6 +61,10 @@ export function useApiQuery<P extends ApiPath>(
 }
 
 const live: ApiQueryOptions = { refetchInterval: LIVE_POLL_MS, staleTime: 0 }
+/** A live endpoint: no polling while the stream is open (it refreshes these), P0's polling otherwise. */
+function useLive(extra: ApiQueryOptions = {}): ApiQueryOptions {
+  return { ...live, ...extra, refetchInterval: useLivePollInterval() }
+}
 const hasId = (...ids: ReadonlyArray<string>): boolean => ids.every((id) => id.trim() !== '')
 
 // System
@@ -78,6 +79,8 @@ export const useHypothesis = (name: string) =>
 export const useHypothesisSeries = (name: string, cost: number) =>
   useApiQuery('/api/hypotheses/{name}/series', { path: { name }, query: { cost } }, { enabled: hasId(name) })
 export const useMultipleTesting = () => useApiQuery('/api/multiple-testing', {})
+/** SV3 over every registered hypothesis on the common Basis A daily construction (SV3a); [POST HOC], no verdict. */
+export const useDeflated = (enabled = true) => useApiQuery('/api/analytics/deflated', {}, { enabled })
 export const useConfirmations = () => useApiQuery('/api/confirmations', {})
 export const useSealedIndex = () => useApiQuery('/api/sealed', {})
 export const useSealedFile = (name: string) =>
@@ -137,13 +140,16 @@ export const useOosLog = (query: OosLogQuery = {}) => useApiQuery('/api/audit/oo
 export const useOpenings = () => useApiQuery('/api/audit/openings', {})
 export const useSpecHashes = () => useApiQuery('/api/audit/spec-hashes', {})
 
-// Live (read only, polled)
+// Live (read only; streamed while LIVE or JRNL is open, polled otherwise)
 export type JournalQuery = NonNullable<RequestOf<'/api/live/journal'>['query']>
-export const useLiveStatus = () => useApiQuery('/api/live/status', {}, live)
-export const useLiveJournal = (query: JournalQuery = {}) => useApiQuery('/api/live/journal', { query }, live)
+export const useLiveStatus = () => useApiQuery('/api/live/status', {}, useLive())
+export const useLiveJournal = (query: JournalQuery = {}) => useApiQuery('/api/live/journal', { query }, useLive())
 export const useLiveLog = (file: string, tail?: number) =>
-  useApiQuery('/api/live/log', { query: { file, tail } }, { ...live, enabled: hasId(file) })
+  useApiQuery('/api/live/log', { query: { file, tail } }, useLive({ enabled: hasId(file) }))
 export const useLivePerformance = (file?: string) =>
-  useApiQuery('/api/live/performance', { query: { file } }, live)
+  useApiQuery('/api/live/performance', { query: { file } }, useLive())
 /** LIVE's Routes and Fills sections from the book journal's close rows (read only: there is no order path). */
-export const useLiveRoutes = (file?: string) => useApiQuery('/api/live/routes', { query: { file } }, live)
+export const useLiveRoutes = (file?: string) => useApiQuery('/api/live/routes', { query: { file } }, useLive())
+/** LV5: paper P&L against the rule's target on the same closes (performance rows only). */
+export const usePaperTracking = (file?: string) =>
+  useApiQuery('/api/analytics/paper-tracking', { query: { file } }, useLive())

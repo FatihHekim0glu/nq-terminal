@@ -238,6 +238,7 @@ describe('tokens.css: CVD themes (section 2.3)', () => {
     expect(t['heat-up-1']).toBe('#399CFF')
     expect(t.data).toBe('#FFA028')
     expect(t.exc).toBe('#FF5566')
+    expect([t['bar-pos'], t['bar-neg'], t['perf-pos'], t['perf-neg']]).toEqual(['#2F80E0', '#D0485A', '#0F4C9A', '#6A1020'])
   })
 
   it('prot: blue up, orange down, amber swaps to #FEBA11', () => {
@@ -246,12 +247,14 @@ describe('tokens.css: CVD themes (section 2.3)', () => {
     expect(t['c-down']).toBe('#FF7329')
     expect(t.data).toBe('#FEBA11')
     expect(t['field-bg']).toBe('#FEBA11')
+    expect([t['bar-pos'], t['bar-neg'], t['perf-pos'], t['perf-neg']]).toEqual(['#2B7FE0', '#D5501A', '#0F4C9A', '#6B2A08'])
   })
 
   it('leaves the default theme untouched by the CVD blocks', () => {
     const t = readTokens(tokensCss)
     expect(t['c-up']).toBe('#51EE6C')
     expect(t.data).toBe('#FFA028')
+    expect([t['bar-pos'], t['bar-neg']]).toEqual(['#00851C', '#C31834'])
   })
 })
 

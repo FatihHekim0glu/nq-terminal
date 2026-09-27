@@ -8,6 +8,17 @@
   exposure only through the bar service (caller "terminal", the in-sample window); TA6 from
   `results/quote_check_v1.json` (read only) and the paper book journal's performance rows (plumbing rows dropped).
 
+P1 (TASKS Phase 10), all GET and all descriptive "[POST HOC]":
+- `.../extended` (hypothesis or run): PF7 to PF9 tiles, RK3, RL3, RL4, BR3, BR4, RD4, RK5 (frozen windows; the spent
+  2022 row only for the volmanaged_v0 hypothesis, from the sealed allowlist) and RG1 (the realised variance
+  `sigma2` of `results/screens/volmanaged_v0_daily.csv`, read only);
+- `.../bootstrap` (hypothesis or run): SV5 intervals and the SV6 cone (fixed seed, 10,000 replications);
+- `/api/analytics/deflated`: SV3 over every registered hypothesis at 1 tick (SV3a; no bar service, no gate read);
+  one trial that cannot be built refuses the whole view (503 naming it);
+- `/api/analytics/run/{run_id}/excursions`: TA2 over the run's own 1-minute bars through the gate (intraday runs);
+- `/api/analytics/run/{run_id}/trade-paths`: TA4 holding times and TA5 streaks over the whole trade list;
+- `/api/analytics/paper-tracking?file=`: LV5 over a journal's performance rows (plumbing rows never reach it).
+
 Series come from `analytics/series.py` (stage A) over the shared runs and research services; prices only through
 the data router's `BarService`, whose every serve is `nq_lab.data.serve` with caller "terminal". In fixture mode
 without an injected serve there is no price source, so series that need NQ as a benchmark simply have none.
@@ -23,21 +34,25 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi import Path as PathParam
 
-from nq_terminal.analytics import series, validity
+from nq_terminal import constants
+from nq_terminal.analytics import deflated, series, validity
 from nq_terminal.analytics.exposure import BookUnusable, CostError, ExposureError, RunBook
 from nq_terminal.analytics.series import SeriesError, SeriesNotCompoundable, SeriesUnusable, SessionSeries
+from nq_terminal.analytics.tracking import TrackingError
 from nq_terminal.analytics.trades import TradeError
 from nq_terminal.api.data import DAILY_TF, DAILY_VARIANT, get_services
 from nq_terminal.api.live import live_monitor
 from nq_terminal.api.research import MAX_COST, MAX_NAME, NAME_PATTERN
 from nq_terminal.api.runs import get_run_service
 from nq_terminal.models.analytics import Analytics, Context, Freq, HomePanel
+from nq_terminal.models.analytics_p1 import BootstrapView, DeflatedView, ExtendedAnalytics, PaperTracking, RunExcursions
 from nq_terminal.models.common import error_responses
-from nq_terminal.models.run_views import RunCosts, RunExposure, RunTrades
-from nq_terminal.services import run_books, stored_alpha, tearsheet
+from nq_terminal.models.run_views import RunCosts, RunExposure, RunTradePaths, RunTrades
+from nq_terminal.services import journals, run_books, stored_alpha, tearsheet, tearsheet_extended, tearsheet_trades
 from nq_terminal.services.bars import BarService, GateRefusal, UnknownSeries
 from nq_terminal.services.research import ResearchDataError, ResearchService, UnknownNameError, service_for_root
 from nq_terminal.services.runs import RunNotFound, RunService, RunUnreadable
@@ -81,7 +96,8 @@ def _http_errors() -> Iterator[None]:
     except UnknownSeries as exc:
         raise HTTPException(status_code=503, detail=f"benchmark prices are not available: {exc}") from exc
     except (SeriesError, ResearchDataError, RunUnreadable, TradeError, CostError, ExposureError,
-            run_books.ViewError) as exc:
+            run_books.ViewError, tearsheet_trades.ExcursionSourceError, TrackingError,
+            journals.PlumbingLeakError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except OSError as exc:  # the catalogue's stat of a processed file; the OS text would name the path
         raise HTTPException(status_code=503, detail=f"a source could not be read ({type(exc).__name__})") from exc
@@ -194,3 +210,151 @@ def run_exposure(request: Request, run_id: str = _run_id()) -> RunExposure:
         src = _sources(request)
         book = run_books.load_book(src.runs, run_id)
         return run_books.exposure_view(book, _raw_prices(src, request, book))
+
+
+# ---------------------------------------------------------------- P1 (TASKS Phase 10)
+
+RV_FILE, RV_COLUMN = "volmanaged_v0_daily.csv", "sigma2"
+MAX_JOURNAL_NAME = 160
+
+
+def _realised_variance(research: ResearchService) -> pd.Series | None:
+    """RG1's variable as the sizing screen recorded it (read only); None when the file or column is missing."""
+    try:
+        frame = research.cache.read_csv(research.screens / RV_FILE)
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    if frame is None or RV_COLUMN not in frame.columns or "date" not in frame.columns:
+        return None
+    rv = pd.Series(pd.to_numeric(frame[RV_COLUMN], errors="coerce").to_numpy(),
+                   index=pd.DatetimeIndex(pd.to_datetime(frame["date"])), dtype=float).dropna()
+    return rv if len(rv) else None
+
+
+Spent = tuple[pd.Series, pd.Series | None]
+
+
+def _spent(research: ResearchService, name: str, cost: int) -> tuple[Spent | None, str | None]:
+    """RK5's 2022 row for the parent hypothesis: the sealed daily file through the research allowlist.
+
+    Returns the series (or None) and, when the parent's file is not there, the note that says so: the spent row is
+    one optional row of the stress table, so a missing file drops that row and never the rest of the P1 view."""
+    if name != constants.STRESS_SPENT_PARENT:
+        return None, None
+    try:
+        values = research.sealed(constants.STRESS_SPENT_FILE).values or {}
+    except UnknownNameError:
+        return None, tearsheet_extended.SPENT_MISSING.format(file=constants.STRESS_SPENT_FILE)
+    r_col, b_col = f"r_m_{cost}", f"r_bh_{cost}"
+    if r_col not in values or "date" not in values or "variant" not in values:
+        return None, None
+    frame = pd.DataFrame({"date": values["date"], "variant": values["variant"], "r": values[r_col],
+                          "b": values.get(b_col, [None] * len(values["date"]))})
+    frame = frame[(frame["variant"] == constants.STRESS_SPENT_VARIANT) & frame["r"].notna()]
+    index = pd.DatetimeIndex(pd.to_datetime(frame["date"]))
+    return (pd.Series(pd.to_numeric(frame["r"]).to_numpy(dtype=float), index=index),
+            pd.Series(pd.to_numeric(frame["b"], errors="coerce").to_numpy(dtype=float), index=index)), None
+
+
+@router.get("/hypothesis/{name}/extended", response_model=ExtendedAnalytics)
+def hypothesis_extended(request: Request, name: str = _name(), cost: int = _cost()) -> ExtendedAnalytics:
+    """P1 views of a hypothesis's screen series: PF7 to PF9, RK3, RL3, RL4, BR3, BR4, RD4, RK5 and RG1."""
+    with _http_errors():
+        src = _sources(request)
+        s = _hypothesis(src, name, cost)
+        spent, spent_note = _spent(src.research, name, cost)
+        return tearsheet_extended.extended(s, Context(kind="hypothesis", name=name, cost=cost, freq="D"),
+                                           rv=_realised_variance(src.research), spent=spent, spent_note=spent_note)
+
+
+@router.get("/run/{run_id}/extended", response_model=ExtendedAnalytics)
+def run_extended(request: Request, run_id: str = _run_id(), freq: Freq = _freq()) -> ExtendedAnalytics:
+    """P1 views of a Nautilus run's account series (no spent row: the sealed file belongs to a hypothesis)."""
+    with _http_errors():
+        src = _sources(request)
+        s = _run(src, run_id, freq)
+        return tearsheet_extended.extended(s, Context(kind="run", name=run_id, cost=None, freq=freq),
+                                           rv=_realised_variance(src.research))
+
+
+def _bootstrap(s: SessionSeries, context: Context) -> BootstrapView:
+    try:
+        return tearsheet_extended.bootstrap_view(s, context)
+    except ValueError as exc:  # too few sessions or no spread: the series has no bootstrap
+        raise HTTPException(status_code=422, detail=f"no bootstrap for this series: {exc}") from exc
+
+
+@router.get("/hypothesis/{name}/bootstrap", response_model=BootstrapView)
+def hypothesis_bootstrap(request: Request, name: str = _name(), cost: int = _cost()) -> BootstrapView:
+    """SV5 bootstrap intervals (Sharpe, CAGR, max drawdown) and the SV6 cone of a hypothesis's series."""
+    with _http_errors():
+        s = _hypothesis(_sources(request), name, cost)
+    return _bootstrap(s, Context(kind="hypothesis", name=name, cost=cost, freq="D"))
+
+
+@router.get("/run/{run_id}/bootstrap", response_model=BootstrapView)
+def run_bootstrap(request: Request, run_id: str = _run_id(), freq: Freq = _freq()) -> BootstrapView:
+    """SV5 bootstrap intervals and the SV6 cone of a Nautilus run's account series."""
+    with _http_errors():
+        s = _run(_sources(request), run_id, freq)
+    return _bootstrap(s, Context(kind="run", name=run_id, cost=None, freq=freq))
+
+
+def registry_trials(research: ResearchService) -> list[deflated.Trial]:
+    """SV3a steps 1 and 2: every registered hypothesis's Basis A series at 1 tick, no bar service (no gate read)."""
+    trials = []
+    for row in research.registry_rows():
+        if not row.registered:
+            continue
+        try:
+            s = series.hypothesis_series(research, row.name, deflated.COST)
+        except (SeriesError, ResearchDataError, UnknownNameError) as exc:
+            raise HTTPException(status_code=503, detail=f"the Deflated Sharpe needs every registered trial; "
+                                                        f"{row.name} could not be built: {exc}") from exc
+        trials.append(deflated.Trial(name=row.name, kind=s.kind, periods=s.periods, r=s.r))
+    return trials
+
+
+@router.get("/deflated", response_model=DeflatedView)
+def deflated_sharpe(request: Request) -> DeflatedView:
+    """SV3 Deflated Sharpe over the registered hypotheses on the common Basis A daily construction (SV3a); an extra
+    view only, never a verdict."""
+    with _http_errors():
+        trials = registry_trials(service_for_root(request.app.state.settings.data_root))
+        try:
+            return tearsheet_extended.deflated_view(trials)
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=f"the Deflated Sharpe could not be computed: {exc}") from exc
+
+
+@router.get("/run/{run_id}/trade-paths", response_model=RunTradePaths)
+def run_trade_paths(request: Request, run_id: str = _run_id()) -> RunTradePaths:
+    """TA4 holding times (log histogram) and TA5 streaks with the runs test over the whole trade list."""
+    with _http_errors():
+        return run_books.trade_paths_view(_sources(request).runs, run_id)
+
+
+@router.get("/run/{run_id}/excursions", response_model=RunExcursions)
+def run_excursions(request: Request, run_id: str = _run_id()) -> RunExcursions:
+    """TA2 MAE and MFE per trade over the run's own 1-minute bars (intraday runs), read through the gate."""
+    with _http_errors():
+        src = _sources(request)
+        catalog = get_services(request).catalog
+
+        def version(symbol: str, variant: str) -> tuple[int, int] | None:
+            return catalog.version(symbol, tearsheet_trades.MINUTE_TF, variant)
+
+        return tearsheet_trades.excursions_view(src.runs, src.bars, run_id, version=version)
+
+
+@router.get("/paper-tracking", response_model=PaperTracking)
+def paper_tracking(
+    request: Request,
+    file: str = Query(default=journals.BOOK_JOURNAL, max_length=MAX_JOURNAL_NAME),
+) -> PaperTracking:
+    """LV5: daily paper P&L against the rule's target on the same closes; plumbing rows never reach it."""
+    monitor = live_monitor(request)
+    if monitor.journal(file) is None and file not in journals.EXPECTED_JOURNALS:
+        raise HTTPException(status_code=404, detail=journals.NO_JOURNAL)
+    with _http_errors():
+        return tearsheet_trades.paper_tracking_view(monitor, file)

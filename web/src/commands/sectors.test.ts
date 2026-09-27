@@ -3,6 +3,7 @@ import {
   SECTOR_KEYS,
   displayContext,
   displayInstrument,
+  insertSectorWord,
   genericFor,
   mergeGenericTokens,
   rootForGeneric,
@@ -93,5 +94,23 @@ describe('generic tickers (spec 5.1, item 2)', () => {
     expect(displayContext({ kind: 'instrument', value: 'NQ' }, null)).toBe('NQ1 Index')
     expect(displayContext({ kind: 'hypothesis', value: 'rebal_v0' }, null)).toBe('rebal_v0')
     expect(displayContext(null, null)).toBe('-')
+  })
+})
+
+describe('insertSectorWord (F8 to F11 at the caret)', () => {
+  it('separates the word from the text before the caret by one space, and adds none at the start', () => {
+    expect(insertSectorWord('', 0, 'Comdty')).toEqual({ line: 'Comdty', caret: 6 })
+    expect(insertSectorWord('NQ1', 3, 'Index')).toEqual({ line: 'NQ1 Index', caret: 9 })
+    expect(insertSectorWord('NQ1 ', 4, 'Index')).toEqual({ line: 'NQ1 Index', caret: 9 })
+  })
+
+  it('keeps the text after the caret one space away', () => {
+    expect(insertSectorWord('NQ1GP', 3, 'Index')).toEqual({ line: 'NQ1 Index GP', caret: 9 })
+    expect(insertSectorWord('NQ1 GP', 3, 'Index')).toEqual({ line: 'NQ1 Index GP', caret: 9 })
+  })
+
+  it('trims the word and clamps a caret outside the line', () => {
+    expect(insertSectorWord('NQ1', 99, ' Curncy ')).toEqual({ line: 'NQ1 Curncy', caret: 10 })
+    expect(insertSectorWord('NQ1', -4, 'Index')).toEqual({ line: 'Index NQ1', caret: 5 })
   })
 })

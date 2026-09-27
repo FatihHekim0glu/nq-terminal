@@ -7,7 +7,7 @@ import type { UplotConstructor } from './lazy'
 import type { RANGE_TOOLBAR } from './theme'
 
 /** Series styles from the charts theme (lineStackSeries): colour, width and fill come from tokens. */
-export type LineStyleKey = 'primary' | 'benchmark' | 'underwater' | 'perfDiff' | 'rollShort' | 'rollLong' | 'rollVol'
+export type LineStyleKey = 'primary' | 'benchmark' | 'underwater' | 'perfDiff' | 'rollShort' | 'rollLong' | 'rollVol' | 'ciBound'
 
 export interface LineStackSeries {
   readonly name: string

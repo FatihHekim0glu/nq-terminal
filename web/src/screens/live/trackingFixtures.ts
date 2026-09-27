@@ -1,0 +1,7 @@
+// GET /api/analytics/paper-tracking from the terminal's own route (2026-09-27) over a scratch copy of the test
+// fixture tree whose book journal also holds the three hand-built roll rows of test_dump_for_qa_p1 (ROLL_ROWS),
+// so LV5 has sessions with a close on both days (the fixture journal alone has none). The crosscheck verifies
+// the same rows (tracking_fixture_journal: n 2, total -1, sd 0.7071).
+import type { Schemas } from '../../api/types'
+
+export const TRACKING_POPULATED: Schemas['PaperTracking'] = {"journal": "volmanaged_paper_journal.jsonl", "present": true, "empty_state": null, "banner": "PLUMBING TEST, DELAYED DATA: not strategy performance", "basis": "performance rows only (plumbing rows dropped)", "tag": "[POST HOC]", "label": "paper P&L (contracts held x change of each contract's close) against the rule's target on the same closes; descriptive tracking, not strategy evidence", "unit": "USD per session", "multiplier": 2.0, "plumbing_rows_skipped": 1, "t": [1790726400, 1790812800, 1796601600, 1796688000, 1796774400], "date": ["2026-09-30", "2026-10-01", "2026-12-07", "2026-12-08", "2026-12-09"], "paper": [null, null, null, 12.0, -6.0], "model": [null, null, null, 12.0, -5.0], "difference": [null, null, null, 0.0, -1.0], "paper_cumulative": [null, null, null, 12.0, 6.0], "model_cumulative": [null, null, null, 12.0, 7.0], "n": 2, "total_difference": -1.0, "tracking_sd": 0.7071067811865476}

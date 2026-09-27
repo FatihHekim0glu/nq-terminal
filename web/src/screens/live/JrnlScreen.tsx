@@ -1,10 +1,13 @@
 // JRNL: the paper book's journals (TASKS 7.3; UI_SPEC section 7 LIVE and JRNL; look spec 7.11;
-// ANALYTICS_CATALOG LV1, LV4). GETs only, polled: /api/live/status for the file list and empty states,
-// /api/live/journal for the rows. Rows are newest first and numbered; plumbing rows are hatched and
+// ANALYTICS_CATALOG LV1, LV4). GETs only: /api/live/status for the file list and empty states,
+// /api/live/journal for the rows. The live stream (TASKS 9.2) is open while JRNL is on screen: a streamed row
+// refreshes the page and the status arrives as an event, so nothing polls unless the stream is down
+// (StreamState says which). Rows are newest first and numbered; plumbing rows are hatched and
 // carry the exact banner (JournalTable). A journal that is not written yet is never requested: its
 // empty state names the expected file.
 import { useEffect, useMemo, useState } from 'react'
-import { LIVE_POLL_MS, useApiQuery, useLiveStatus } from '../../api/queries'
+import { useApiQuery, useLiveStatus } from '../../api/queries'
+import { useLivePollInterval } from '../../api/useLiveStream'
 import { DropdownField, ParamRow } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
@@ -13,6 +16,7 @@ import { JRNL, LIVE } from '../../copy/live'
 import { fillCopy } from '../../copy/workspace'
 import { actionsItem } from '../oos/panelMenu'
 import JournalTable from '../../grids/JournalTable'
+import StreamState from './StreamState'
 import { fileOptions, journalEmptyText, journalQueryEnabled, newestOffset, type LiveStatus } from './liveModel'
 import './live.css'
 
@@ -34,7 +38,7 @@ function Rows({ status, file, type, panelId }: RowsProps) {
   const query = useApiQuery(
     '/api/live/journal',
     { query: { file: file || undefined, type: type || undefined, limit: PAGE, offset: newestOffset(total, PAGE) } },
-    { refetchInterval: LIVE_POLL_MS, staleTime: 0, enabled },
+    { refetchInterval: useLivePollInterval(), staleTime: 0, enabled },
   )
   const data = query.data
   const seen = data?.total
@@ -73,6 +77,7 @@ export default function JrnlScreen(_props: ScreenProps) {
           actionsItem(actions),
         ]}
       />
+      <StreamState />
       <ParamRow label={JRNL.paramsLabel}>
         <DropdownField label={JRNL.typeField} value={type} options={TYPE_OPTIONS} onChange={setType} />
         {plumbing ? <span className="jrnl-tag">{LIVE.plumbingTag}</span> : null}

@@ -170,7 +170,7 @@ def _rows(monitor: journals.LiveMonitor, file: str | None) -> list[journals.Jour
         return [r for _, t in monitor.journals() for r in t.rows]
     tail = monitor.journal(file)
     if tail is None:
-        raise HTTPException(status_code=404, detail=f"no journal named {file} in live/logs")
+        raise HTTPException(status_code=404, detail=journals.NO_JOURNAL)
     return list(tail.rows)
 
 
@@ -196,7 +196,7 @@ def log(
     """The last `tail` lines of a Nautilus log from live/logs, parsed, with IB account ids masked."""
     path = _monitor(request).log_path(file)
     if path is None:
-        raise HTTPException(status_code=404, detail=f"no log named {file} in live/logs")
+        raise HTTPException(status_code=404, detail=journals.NO_LOG)
     try:
         text = _files(request).read_text(path, errors="replace")
     except FileAccessError as exc:
@@ -216,7 +216,7 @@ def performance(
     tail = _monitor(request).journal(file)
     present = tail is not None
     if not present and file not in journals.EXPECTED_JOURNALS:
-        raise HTTPException(status_code=404, detail=f"no journal named {file} in live/logs")
+        raise HTTPException(status_code=404, detail=journals.NO_JOURNAL)
     series = journals.performance_series(tail.rows if present else ())
     return Performance(journal=file, present=present, empty_state=None if present else journals.empty_state(file),
                        basis=PERFORMANCE_BASIS, banner=paper_plumbing.BANNER, **series)
@@ -231,7 +231,7 @@ def routes(
     tail = _monitor(request).journal(file)
     present = tail is not None
     if not present and file not in journals.EXPECTED_JOURNALS:
-        raise HTTPException(status_code=404, detail=f"no journal named {file} in live/logs")
+        raise HTTPException(status_code=404, detail=journals.NO_JOURNAL)
     found = live_routes.routes_and_fills(tail.rows if present else ())
     return LiveRoutes(journal=file, present=present, empty_state=None if present else journals.empty_state(file),
                       banner=paper_plumbing.BANNER, basis=ROUTES_BASIS, order_time_rule=live_routes.ORDER_TIME_RULE,

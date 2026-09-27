@@ -216,3 +216,21 @@ def test_qa_lists_and_serves_reports(qa_root, fake):
 def test_qa_refuses_names_outside_the_index(qa_root, fake, name):
     c = make_client({"NQT_FIXTURE_DIR": str(qa_root)}, serve=fake)
     assert c.get(f"/api/qa/{name}").status_code == 404
+
+
+def test_universe_builds_its_panel_once_across_windows_and_again_after_a_file_changes(client, monkeypatch):
+    # HOME asks for two windows at once; the horizon-return panel does not depend on the window, so it is built
+    # once per version of the served daily files (improvement run 3: it was 81 of the 85 ms of each request).
+    from nq_terminal.services import market
+    built: list[int] = []
+    real = market.build_panel
+    monkeypatch.setattr(market, "build_panel", lambda *a, **k: built.append(1) or real(*a, **k))
+    short = client.get("/api/market/universe", params={"window": 22}).json()
+    long = client.get("/api/market/universe", params={"window": 252}).json()
+    assert len(built) == 1
+    assert short["window"] == 22 and long["window"] == 252
+    assert short["rows"][0]["returns"] == long["rows"][0]["returns"]
+    assert short["rows"][0]["realised_vol"] != long["rows"][0]["realised_vol"]
+    client.app.state.catalog.touch("NQ.V.0", "1d", "vendor")  # a rewritten processed file
+    again = client.get("/api/market/universe", params={"window": 22}).json()
+    assert len(built) == 2 and again["rows"] == short["rows"]

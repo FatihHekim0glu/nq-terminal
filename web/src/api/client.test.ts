@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ApiError, CLIENT_HEADER, CLIENT_ID, apiGet, buildApiUrl, findWriteRequests } from './client'
+import { ApiError, CLIENT_HEADER, CLIENT_ID, apiGet, buildApiUrl, findWriteRequests, openEventStream } from './client'
 import type { ApiPath, ErrorBodyOf, ErrorDetail } from './types'
 
 // The whole front end, not just src/api: a screen that called fetch or opened a socket would be a
@@ -134,6 +134,44 @@ describe('apiGet', () => {
   })
 })
 
+describe('openEventStream (TASKS 9.2)', () => {
+  it('opens the live stream as a same-origin relative GET without credentials to another origin', () => {
+    const made: Array<{ url: string; init: EventSourceInit | undefined }> = []
+    class Recorder {
+      constructor(url: string, init?: EventSourceInit) {
+        made.push({ url, init })
+      }
+    }
+    vi.stubGlobal('EventSource', Recorder)
+    try {
+      openEventStream('/api/live/stream')
+      expect(made).toEqual([{ url: '/api/live/stream', init: { withCredentials: false } }])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('refuses a path outside /api before opening anything', () => {
+    const spy = vi.fn()
+    vi.stubGlobal('EventSource', spy)
+    try {
+      expect(() => openEventStream('//evil.example/api/live/stream' as '/api/live/stream')).toThrow(ApiError)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('answers null where the browser has no EventSource (the caller then polls)', () => {
+    vi.stubGlobal('EventSource', undefined)
+    try {
+      expect(openEventStream('/api/live/stream')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
 describe('GET only (PRD G6, DL5)', () => {
   it('no module under src issues anything but GET, and only src/api/client.ts calls fetch', () => {
     const files = Object.keys(sources)
@@ -172,6 +210,11 @@ describe('GET only (PRD G6, DL5)', () => {
   it('lets the client keep its own fetch, and still flags a write method there', () => {
     expect(findWriteRequests('/src/api/client.ts', 'globalThis.fetch(url, init)')).toEqual([])
     expect(findWriteRequests('/src/api/client.ts', "method: 'delete'")).toEqual([expect.stringMatching(/DELETE/)])
+  })
+
+  it('lets the client open the one event stream (a GET), and flags it anywhere else', () => {
+    expect(findWriteRequests('/src/api/client.ts', "new EventSource(url)")).toEqual([])
+    expect(findWriteRequests('/src/api/liveStream.ts', "new EventSource(url)")).toEqual([expect.stringMatching(/EventSource/)])
   })
 })
 

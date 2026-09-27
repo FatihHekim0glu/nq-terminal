@@ -21,6 +21,9 @@ import { expect, type Locator, type Page, type PageScreenshotOptions, type Reque
 
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
+/** Masked areas are painted the page black (--bg), not Playwright's default magenta, in every baseline. */
+export const MASK_COLOR = '#000000'
+
 export interface GalleryViewport {
   readonly width: number
   readonly height: number
@@ -90,7 +93,7 @@ export async function screenshotGallery(page: Page, name: string, opts: GalleryS
   for (const viewport of GALLERY_VIEWPORTS) {
     const main = await openGallery(page, name, viewport)
     await opts.prepare?.(page, main)
-    const shot: PageScreenshotOptions & { maxDiffPixelRatio?: number } = { mask: [...(opts.mask ?? [])] }
+    const shot: PageScreenshotOptions & { maxDiffPixelRatio?: number } = { mask: [...(opts.mask ?? [])], maskColor: MASK_COLOR }
     if (opts.maxDiffPixelRatio !== undefined) shot.maxDiffPixelRatio = opts.maxDiffPixelRatio
     const file = galleryBaselineName(name, viewport, opts.variant)
     if (opts.target) await expect(opts.target(page)).toHaveScreenshot(file, shot)

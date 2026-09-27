@@ -7,7 +7,8 @@
 //   body         the log table (newest first, days banded) or the swimlane timeline by caller
 //
 // Counts describe the whole log (the API's own totals); the table and the timeline show the matching
-// entries, newest first, up to the API's page limit.
+// entries, newest first, up to the API's page limit. View Pivot opens the same entries in the Perspective
+// pivot grid (TASKS 9.1), grouped by caller.
 import { useMemo, useState } from 'react'
 import { useOosLog } from '../../api/queries'
 import { Swimlane } from '../../charts/echarts/Swimlane'
@@ -18,15 +19,17 @@ import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { OOS } from '../../copy/oos'
+import { PIVOT } from '../../copy/perspective'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, fillCopy } from '../../copy/workspace'
 import { saveText } from '../../chrome/download'
+import { OosPivot } from '../../perspective'
 import OosLogGrid from './OosLogGrid'
 import OpeningsCard from './OpeningsCard'
 import { actionsItem } from './panelMenu'
 import { callerOptions, entriesCsv, newestFirst, severityLegend, sinceValid, swimlaneData, type OosLog } from './oosModel'
 import './oos.css'
 
-type View = 'log' | 'timeline'
+type View = 'log' | 'timeline' | 'pivot'
 
 /** The API's largest page (ARCHITECTURE section 4): the newest 5,000 matching entries. */
 const MAX_PAGE = 5000
@@ -34,6 +37,7 @@ const MAX_PAGE = 5000
 const VIEWS = [
   { value: 'log', label: OOS.viewLog },
   { value: 'timeline', label: OOS.viewTimeline },
+  { value: 'pivot', label: PIVOT.pivot },
 ] as const
 
 function Counts({ log }: { readonly log: OosLog | undefined }) {
@@ -87,6 +91,7 @@ function Body({ log, view, lanes, panelId }: BodyProps) {
   const timeline = useMemo(() => swimlaneData(log.entries, lanes), [log.entries, lanes])
   const empty = log.log_present ? OOS.empty : OOS.noLog
   if (view === 'log') return <OosLogGrid rows={rows} emptyText={empty} panelId={panelId || undefined} levels={log.severity_levels} />
+  if (view === 'pivot') return <div className="nqt-pivot-frame"><OosPivot entries={rows} /></div>
   if (log.entries.length === 0) return <p className="oos-message">{empty}</p>
   return (
     <div className="oos-timeline">

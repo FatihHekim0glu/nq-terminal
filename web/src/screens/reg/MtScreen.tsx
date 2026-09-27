@@ -2,7 +2,8 @@
 // line (k, alpha, stored against recomputed), sorted p against rank (PScatter) with the Bonferroni,
 // Holm and BH lines, a check that those drawn lines are the API's lines at every rank, the table of
 // stored adjusted values, and the sealed confirmations listed apart with their own alpha. Enter on a
-// table row opens DES. One GET: /api/multiple-testing.
+// table row opens DES. GETs: /api/multiple-testing, and /api/analytics/deflated for SV3 (the Deflated Sharpe
+// over the registered trials, [POST HOC], an extra view only) under the confirmations.
 import { useCallback, useMemo, useState } from 'react'
 import { useMultipleTesting } from '../../api/queries'
 import type { Schemas } from '../../api/types'
@@ -16,6 +17,7 @@ import MonitorGrid from '../../grids/MonitorGrid'
 import { MT_COLUMNS, mtRowId } from './regColumns'
 import { badgeText, confirmationRows, formatCount, formatPValue, verdictTone } from './regModel'
 import { boundaryCheck, buildMtRows, familyLine, linesLine, mtScatterInput, type MtRow, type PScale } from './mtModel'
+import DeflatedPanel from './DeflatedPanel'
 import { openDes } from './open'
 import './reg.css'
 
@@ -114,7 +116,10 @@ export default function MtScreen(_props: ScreenProps) {
       {mt.isError ? (
         <p className="reg-msg down" role="alert">{fillCopy(MT.failed, { detail: mt.error.detail })}</p>
       ) : mt.data ? (
-        <MtBody mt={mt.data} scale={scale} />
+        <>
+          <MtBody mt={mt.data} scale={scale} />
+          <DeflatedPanel />
+        </>
       ) : (
         <p className="reg-msg" role="status">{MT.loading}</p>
       )}

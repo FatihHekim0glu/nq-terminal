@@ -88,3 +88,69 @@ export function useRunBooks(runId: string, enabled: boolean): RunBooks {
     exposure: useApiQuery('/api/analytics/run/{run_id}/exposure', path, on),
   }
 }
+
+// ---------------------------------------------------------------- P1 (TASKS Phase 10 on screen)
+
+export type Extended = Schemas['ExtendedAnalytics']
+export type Bootstrap = Schemas['BootstrapView']
+
+export interface TearP1Query<T> {
+  readonly data: T | undefined
+  readonly error: ApiError | null
+}
+
+/** One P1 view of the tear sheet's own series (the run at its Freq, the hypothesis at its Cost); idle until on. */
+function useTearP1<T>(
+  run: UseQueryResult<T, ApiError>,
+  hypothesis: UseQueryResult<T, ApiError>,
+  target: TearTarget,
+): TearP1Query<T> {
+  const q = target.kind === 'run' ? run : hypothesis
+  return { data: q.data, error: q.error }
+}
+
+/** PF7 to PF9, RK3, RL3, RL4, BR3, BR4, RD4, RK5 and RG1 of the series the tab shows. */
+export function useTearExtended(target: TearTarget, freq: Freq, cost: number | null, enabled: boolean): TearP1Query<Extended> {
+  const isRun = target.kind === 'run'
+  const run = useApiQuery('/api/analytics/run/{run_id}/extended', { path: { run_id: target.name }, query: { freq } }, { enabled: enabled && isRun && target.name !== '' })
+  const hypothesis = useApiQuery(
+    '/api/analytics/hypothesis/{name}/extended',
+    { path: { name: target.name }, query: cost === null ? {} : { cost } },
+    { enabled: enabled && !isRun && target.name !== '' && cost !== null },
+  )
+  return useTearP1(run, hypothesis, target)
+}
+
+/**
+ * The fewest observations the bootstrap routes accept (the backend's analytics.bootstrap.MIN_N; a backend test,
+ * test_p1_web_bootstrap_minimum.py, keeps the two equal). Below it the API answers 422, so the tear sheet does
+ * not ask and says why instead.
+ */
+export const BOOTSTRAP_MIN_N = 30
+
+/** Whether a series of n observations can have a bootstrap. */
+export function bootstrapPossible(n: number): boolean {
+  return n >= BOOTSTRAP_MIN_N
+}
+
+/** SV5 intervals and the SV6 cone of the series the tab shows. */
+export function useTearBootstrap(target: TearTarget, freq: Freq, cost: number | null, enabled: boolean): TearP1Query<Bootstrap> {
+  const isRun = target.kind === 'run'
+  const run = useApiQuery('/api/analytics/run/{run_id}/bootstrap', { path: { run_id: target.name }, query: { freq } }, { enabled: enabled && isRun && target.name !== '' })
+  const hypothesis = useApiQuery(
+    '/api/analytics/hypothesis/{name}/bootstrap',
+    { path: { name: target.name }, query: cost === null ? {} : { cost } },
+    { enabled: enabled && !isRun && target.name !== '' && cost !== null },
+  )
+  return useTearP1(run, hypothesis, target)
+}
+
+/** TA2 (MAE and MFE over the run's own gated 1m bars) and TA4, TA5 (holding times, streaks) of a run. */
+export function useRunPaths(runId: string, enabled: boolean) {
+  const on = { enabled: enabled && runId !== '' }
+  const path = { path: { run_id: runId } }
+  return {
+    excursions: useApiQuery('/api/analytics/run/{run_id}/excursions', path, on),
+    paths: useApiQuery('/api/analytics/run/{run_id}/trade-paths', path, on),
+  }
+}

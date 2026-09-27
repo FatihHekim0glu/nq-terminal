@@ -8,6 +8,9 @@ import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { stubLayout } from '../../grids/testing'
 import { REGISTRY } from './regFixtures'
+import { DEFLATED } from '../../copy/deflated'
+import { fillCopy } from '../../copy/workspace'
+import { DEFLATED_REAL } from './deflatedFixtures'
 import RegScreen from './RegScreen'
 import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
 
@@ -152,11 +155,40 @@ describe('REG: registry board', () => {
   })
 
   it('reads the four research endpoints with GET and nothing else', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 1400, height: 600, x: 0, y: 0, top: 0, left: 0, right: 1400, bottom: 600, toJSON: () => ({}) } as DOMRect)
     const seen = stubApi()
     await ready()
     await waitFor(() => expect(screen.getByRole('region', { name: /Sealed confirmations/ })).toBeTruthy())
     expect(seen.every((s) => s.method === 'GET')).toBe(true)
-    expect(new Set(seen.map((s) => s.url))).toEqual(new Set(['/api/registry', '/api/hypotheses', '/api/multiple-testing', '/api/confirmations']))
+    expect(new Set(seen.map((s) => s.url))).toEqual(new Set(['/api/registry', '/api/hypotheses', '/api/multiple-testing', '/api/confirmations', '/api/analytics/deflated']))
+  })
+
+  /** REG's measured width (jsdom lays nothing out): full width shows every column, a HOME cell the narrow set. */
+  function stubWidth(width: number): void {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width, height: 600, x: 0, y: 0, top: 0, left: 0, right: width, bottom: 600, toJSON: () => ({}) } as DOMRect)
+  }
+
+  it('born failing: a narrow REG (the HOME cell) never asks for SV3, since it shows no DSR column', async () => {
+    stubWidth(682)
+    const seen = stubApi()
+    await ready()
+    await waitFor(() => expect(screen.getByText(/Columns hidden here/)).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(seen.some((s) => s.url === '/api/analytics/deflated')).toBe(false)
+  })
+
+  it('shows the DSR of each registered trial ([POST HOC]) in its own column, and none for a check row', async () => {
+    stubWidth(1400)
+    stubApi()
+    await ready()
+    await waitFor(() => expect(screen.getByText(fillCopy(DEFLATED.regNote, { n: 21 }))).toBeTruthy())
+    const grid = screen.getByRole('grid', { name: /Registry board/ })
+    const headers = within(grid).getAllByRole('columnheader').map((h) => h.textContent)
+    expect(headers).toContain(DEFLATED.regColumn)
+    const vm = DEFLATED_REAL.rows.find((r) => r.name === 'volmanaged_v0')!
+    const vmRow = within(grid).getByText('volmanaged_v0').closest('[role="row"]')!
+    // REG's column is the DSR under V0 (under V every real trial is below 1e-30, SV3a step 5).
+    expect(vmRow.textContent).toContain(vm.dsr_null!.toFixed(3))
   })
 
   it('names the failure when the registry cannot be read, and shows no rows', async () => {

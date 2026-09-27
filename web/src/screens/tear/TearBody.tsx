@@ -2,7 +2,9 @@
 // and Freq for a run or Cost for a hypothesis), then the API's state: loading, a refusal in the
 // panel (an unusable run reads [UNUSABLE: BALANCE] and draws nothing, rule 4), an empty state for a
 // hypothesis whose card records no series (a check row links to its parent's tear sheet), or the KPI row, the
-// open tab's view and, for a run, its trades, costs and exposure panels.
+// open tab's view and, for a run, its trades, costs and exposure panels. Under the tab view, the tab's P1
+// views (TearP1: SV5 and SV6 on EQ; PF7 to PF9, RK3, RD3, RD4 and the RK5 stress panel on RET; RL3, RL4, BR3,
+// BR4 and RG1 on RR), and RR's rolling Sharpe carries each window's RL1 range (the API's rolling.sharpe_bands).
 import { useMemo, useState } from 'react'
 import type { ApiError } from '../../api/client'
 import { useExportSource } from '../../chrome/exportSource'
@@ -13,6 +15,7 @@ import type { PanelLink } from '../../state/linkGroups'
 import KpiTile, { KpiRow } from '../../tiles/KpiTile'
 import CommandLink from '../help/CommandLink'
 import RunBooks from './RunBooks'
+import TearP1 from './TearP1'
 import type { TearCode } from './TearSheet'
 import { TearView } from './TearViews'
 import { tearExport } from './tearExport'
@@ -114,7 +117,11 @@ function Kpis({ data }: { readonly data: Analytics }) {
   )
 }
 
-function Loaded({ target, tab, link, data }: TearBodyProps & { readonly data: Analytics }) {
+interface LoadedProps extends TearBodyProps {
+  readonly data: Analytics
+}
+
+function Loaded({ target, tab, link, data }: LoadedProps) {
   useExportSource(useMemo(() => tearExport(tab, data, target.name), [tab, data, target.name]))
   return (
     <div className="tear-view">
@@ -148,6 +155,7 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
           <p className="tear-note" role="status" aria-busy="true">{TEAR.loading}</p>
         )}
       </div>
+      {!query.unusable && !error && query.data ? <TearP1 target={target} tab={tab} data={query.data} freq={freq} cost={cost} link={link} /> : null}
       {!query.unusable && !error && query.data && target.kind === 'run' ? <RunBooks runId={target.name} link={link} /> : null}
     </div>
   )

@@ -272,10 +272,16 @@ test.describe('in the workspace', () => {
         const panel = page.locator(`[data-nqt-title="${HYP} ${code}"]`).filter({ visible: true })
         await expect(panel.getByRole('list', { name: 'Tear sheet key figures' })).toBeVisible()
         await expect(panel.locator('[aria-busy="true"]')).toHaveCount(0)
-        const body = await panel.locator('.nqt-panel-body').evaluate((b) => ({ sh: b.scrollHeight, ch: b.clientHeight, sw: b.scrollWidth, cw: b.clientWidth }))
+        const body = await panel.locator('.nqt-panel-body').evaluate((b) => {
+          const view = b.querySelector('.tear-screen') as HTMLElement | null
+          return { sh: b.scrollHeight, ch: b.clientHeight, sw: b.scrollWidth, cw: b.clientWidth, view: view?.offsetHeight ?? Number.NaN }
+        })
         expect(body.sw, `${code} width`).toBeLessThanOrEqual(body.cw)
-        // A hypothesis has no run books below the view: the view is exactly one screen of the body.
-        expect(body.sh, `${code} height`).toBeLessThanOrEqual(body.ch)
+        // The tab view is exactly one screen of the body. A hypothesis has no run books; EQ, RET and RR have their
+        // P1 cards below the view in the body's scroll (UI_SPEC, P1 views on screen), DD and MRET have none.
+        expect(body.view, `${code} view height`).toBeLessThanOrEqual(body.ch)
+        if (code === 'DD' || code === 'MRET') expect(body.sh, `${code} height`).toBeLessThanOrEqual(body.ch)
+        else await expect(panel.getByRole('region', { name: `Extended analytics for ${HYP}` })).toBeAttached()
       }
     })
   }

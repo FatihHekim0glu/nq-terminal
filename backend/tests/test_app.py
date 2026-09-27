@@ -135,6 +135,7 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/live/status", "/api/live/journal", "/api/live/log", "/api/live/performance",
     # Phase 8 (A1): the instrument DES, GP's RV22 line, MON's 2Day sparkline, LIVE's routes and fills
     "/api/instruments/{root}", "/api/market/rv", "/api/market/two-day", "/api/live/routes",
+    "/api/live/stream",  # Phase 9 (9.2): the SSE stream for LIVE and JRNL
 }
 PHASE_3_PREFIX = "/api/analytics/"  # section 4 routes a concurrent Phase 3 build adds; checked by the contract
 
@@ -223,6 +224,9 @@ def test_the_launcher_binds_loopback_only(monkeypatch):
     assert first["host"] == second["host"] == "127.0.0.1"
     assert (first["port"], second["port"]) == (8765, 9001)
     assert first["server_header"] is False and first["proxy_headers"] is False
+    # an open live stream must not hold a shutdown for its whole lifetime (TASKS 9.2)
+    from nq_terminal.api.live_stream import StreamLimits
+    assert 0 < first["timeout_graceful_shutdown"] == launcher.SHUTDOWN_GRACE_S < StreamLimits().lifetime_s
     assert non_get_routes(app) == []
 
 

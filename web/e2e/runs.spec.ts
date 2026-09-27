@@ -12,7 +12,7 @@
 // The first block needs the merge step's registration (RUNS, RUN and LEDG in BUILT_SCREENS); the last
 // block checks the same screens through their gallery entries, which need no registration.
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { expectGalleryAxeClean, watchGallery, type GalleryWatch } from './gallery.ts'
+import { MASK_COLOR, expectGalleryAxeClean, watchGallery, type GalleryWatch } from './gallery.ts'
 
 // 14:02:11 ET (look spec 4.10), the frozen status-line time the shell baselines use.
 const FROZEN_NOW = new Date('2026-09-25T18:02:11Z')
@@ -225,7 +225,7 @@ test.describe('RUNS, RUN and LEDG in the workspace', () => {
         await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
         // The gate read count depends on what ran before in this backend process: masked.
         const gate = page.getByRole('contentinfo').locator('.seg', { hasText: /^Gate reads/ })
-        await expect(page).toHaveScreenshot(`${shot.name}-${size.width}x${size.height}.png`, { mask: [gate] })
+        await expect(page).toHaveScreenshot(`${shot.name}-${size.width}x${size.height}.png`, { mask: [gate], maskColor: MASK_COLOR })
       })
     }
   }

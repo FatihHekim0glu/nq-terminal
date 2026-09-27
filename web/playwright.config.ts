@@ -27,6 +27,17 @@ for (const port of [API_PORT, WEB_PORT]) {
   }
 }
 
+// The paper-book settings of this machine are blanked in the fixture backend's environment: LIVE shows
+// whether each is set, so a baseline must not depend on the shell it ran in. Playwright spreads
+// process.env under a web server's env, so each key is overridden with an empty value (read as unset).
+const MACHINE_SETTINGS = ['IB_HOST', 'IB_PORT', 'IB_ACCOUNT_ID', 'IB_BASE_USD_RATE', 'IB_PAPER_DELAYED_DATA', 'VOLMAN_C'] as const
+const FIXTURE_ENV: Record<string, string> = {
+  ...(process.env as Record<string, string>),
+  ...Object.fromEntries(MACHINE_SETTINGS.map((key) => [key, ''])),
+}
+
+const BUDGETS_SPEC = /perf[\\/]budgets\.spec\.ts$/
+
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`
 const WEB_ORIGIN = `http://127.0.0.1:${WEB_PORT}`
 const q = (p: string) => `"${p}"`
@@ -56,14 +67,24 @@ export default defineConfig({
     timezoneId: 'Europe/London',
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium' }],
+  // The wall-clock performance budgets (e2e/perf/budgets.spec.ts) are their own project and their own command:
+  // `pnpm e2e` runs the main project (with --workers=4 if wanted), then `pnpm e2e:perf` runs the budgets alone
+  // in one worker, so CPU contention from other specs never decides them. The budgets depend on no other
+  // project: a failure in the main run no longer skips them (improvement run 3).
+  // The main project runs at most two workers, even under --workers=4: four workers left about 5,900 loopback
+  // sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes), and runs lost a page load
+  // there to net::ERR_NO_BUFFER_SPACE or an empty workspace (a keyboard flow and a books spec failed that way).
+  projects: [
+    { name: 'chromium', testIgnore: BUDGETS_SPEC, workers: 2 },
+    { name: 'perf', testMatch: BUDGETS_SPEC },
+  ],
   webServer: [
     {
       name: 'backend (fixture mode)',
       command: `${q(PYTHON)} -m uvicorn fixture_app:app --app-dir ${q(BACKEND_TESTS)} --host 127.0.0.1 --port ${API_PORT}`,
       url: `${API_ORIGIN}/api/health`,
       env: {
-        ...(process.env as Record<string, string>),
+        ...FIXTURE_ENV,
         NQT_FIXTURE_DIR: FIXTURES,
         // The backend's same-origin check lists the terminal origins by port: the preview is one.
         NQT_PORT: String(WEB_PORT),

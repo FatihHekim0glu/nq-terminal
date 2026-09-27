@@ -27,6 +27,15 @@ exit by reason: close, stop, target) and from the live close rows' `slippage_tic
 caller drops plumbing rows first). Percentiles are linear (numpy's default), as the quote check computed them,
 and every quote check group is compared with the stored summary. Backtest fills are modelled, so they get no
 slippage distribution.
+
+TA4 (P1) holding time per trade, `exit_ts - entry_ts` in minutes, with a histogram on log10 minutes (Sturges' edges
+over the positive durations; a zero duration has no logarithm and is counted apart) and the median, mean, 5th and
+95th percentiles (numpy linear).
+TA5 (P1) streaks over the trades in their stored order (the exit order): the longest run of winners (P&L > 0) and of
+losers (P&L < 0), a flat trade breaking both (quantstats `consecutive_wins` and `consecutive_losses`), and the
+Wald-Wolfowitz runs test on the signs of the non-zero trades: runs R, `E[R] = 2 n1 n2 / n + 1`,
+`Var[R] = 2 n1 n2 (2 n1 n2 - n) / (n^2 (n - 1))`, z and the two-sided normal p on the whole sequence (never on a slice
+the user picks). Both are [POST HOC] and descriptive.
 """
 from __future__ import annotations
 
@@ -37,8 +46,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
-__all__ = ["GROUPINGS", "TradeError", "by_entry", "pnl_values", "slippage_distribution", "summary_values",
-           "trade_stats", "trade_tiles"]
+__all__ = ["GROUPINGS", "TradeError", "by_entry", "holding_times", "pnl_values", "slippage_distribution",
+           "streaks", "summary_values", "trade_stats", "trade_tiles"]
 
 ET = "America/New_York"
 CI_LEVEL = 0.95
@@ -226,3 +235,67 @@ def slippage_distribution(quote_check: Mapping[str, Any], live_ticks: Sequence[A
     checked = [g["matches_stored"] for g in groups if g["matches_stored"] is not None]
     return {"unit": SLIPPAGE_UNIT, "label": SLIPPAGE_LABEL, "groups": groups,
             "matches_stored": bool(checked) and all(checked)}
+
+
+# ---------------------------------------------------------------- TA4 (P1)
+
+HOLD_PERCENTILES = (5, 95)
+
+
+def _minutes(row: Mapping[str, Any], number: int) -> float:
+    entry, exit_ = row.get("entry_ts"), row.get("exit_ts")
+    if not (isinstance(entry, str) and entry and isinstance(exit_, str) and exit_):
+        raise TradeError(f"trade {number} lacks entry_ts or exit_ts")
+    minutes = (pd.Timestamp(exit_) - pd.Timestamp(entry)).total_seconds() / 60
+    if minutes < 0:
+        raise TradeError(f"trade {number} exits before it enters")
+    return float(minutes)
+
+
+def holding_times(trades: Iterable[Any]) -> dict:
+    """TA4: durations in minutes, the log10 histogram of the positive ones and a summary."""
+    durations = np.asarray([_minutes(_plain(row), i) for i, row in enumerate(trades)], dtype=float)
+    positive = np.log10(durations[durations > 0])
+    edges = np.histogram_bin_edges(positive, bins="sturges") if len(positive) else np.array([])
+    counts = np.histogram(positive, bins=edges)[0] if len(positive) else np.array([], dtype=int)
+    pct = {f"p{q}": float(np.percentile(durations, q)) if len(durations) else math.nan for q in HOLD_PERCENTILES}
+    return {"unit": "minutes", "n": int(len(durations)), "zero": int((durations == 0).sum()),
+            "durations": durations.tolist(), "log10_edges": edges.tolist(), "edges": (10 ** edges).tolist(),
+            "counts": counts.astype(int).tolist(), "bin_rule": "Sturges on log10 minutes",
+            "median": float(np.median(durations)) if len(durations) else math.nan,
+            "mean": _mean(durations), "min": float(durations.min()) if len(durations) else math.nan,
+            "max": float(durations.max()) if len(durations) else math.nan, **pct, "tag": POST_HOC}
+
+
+# ---------------------------------------------------------------- TA5 (P1)
+
+
+def _longest(flags: np.ndarray) -> int:
+    best = run = 0
+    for flag in flags:
+        run = run + 1 if flag else 0
+        best = max(best, run)
+    return int(best)
+
+
+def runs_test(signs: np.ndarray) -> dict:
+    """Wald-Wolfowitz runs test on a boolean sequence (True a winner); z and p are None without both kinds."""
+    n1, n2 = int(signs.sum()), int(len(signs) - signs.sum())
+    runs = int(1 + np.count_nonzero(signs[1:] != signs[:-1])) if len(signs) else 0
+    n = n1 + n2
+    if n1 == 0 or n2 == 0 or n < 3:
+        return {"wins": n1, "losses": n2, "runs": runs, "expected": None, "sd": None, "z": None, "p": None}
+    expected = 2 * n1 * n2 / n + 1
+    sd = math.sqrt(2 * n1 * n2 * (2 * n1 * n2 - n) / (n ** 2 * (n - 1)))
+    z = (runs - expected) / sd
+    return {"wins": n1, "losses": n2, "runs": runs, "expected": expected, "sd": sd, "z": z,
+            "p": float(2 * sps.norm.sf(abs(z)))}
+
+
+def streaks(trades: Iterable[Any]) -> dict:
+    """TA5: longest winning and losing runs (a flat trade breaks both) and the runs test on the non-zero trades."""
+    pnl = pnl_values(trades)
+    nonzero = pnl[pnl != 0]
+    return {"n": int(len(pnl)), "longest_win": _longest(pnl > 0), "longest_loss": _longest(pnl < 0),
+            "runs_test": runs_test(nonzero > 0), "tag": POST_HOC,
+            "note": "flat trades break both streaks and are left out of the runs test"}

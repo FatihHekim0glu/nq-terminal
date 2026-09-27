@@ -74,9 +74,11 @@ describe('default layouts (UI_SPEC sections 2 and 7, look spec 7.1)', () => {
     expect(Object.isFrozen(layoutFor('HOME').panels)).toBe(true)
   })
 
-  it('names a build phase for every P0 screen, and none for P1 or P2', () => {
+  it('names a build phase for every P0 screen, Phase 9 or later for a built P1 screen, and none for P2', () => {
+    const builtP1 = new Set(['COST', 'BLK', 'EXPO', 'SEAL'])
     for (const m of MNEMONICS) {
       if (m.priority === 'P0') expect(SCREEN_PHASES[m.code], m.code).toMatch(/^\d+$/)
+      else if (m.priority === 'P1' && builtP1.has(m.code)) expect(Number(SCREEN_PHASES[m.code]), m.code).toBeGreaterThanOrEqual(9)
       else expect(SCREEN_PHASES[m.code], m.code).toBeUndefined()
     }
     expect(SCREEN_PHASES.HOME).toBe('7')

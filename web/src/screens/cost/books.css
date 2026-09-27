@@ -1,0 +1,117 @@
+/* COST, BLK, EXPO and SEAL (TASKS 9.4; look spec 7): flat black body, the DES card bands (tiles.css),
+   20px table rows (grid.css), amber names, --text values right-aligned, the name line in --cyan-name.
+   Tokens only, square corners, no transitions. At 700 CSS px and narrower the two columns stack
+   (look spec 2.4, reflow). */
+
+.books {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.books-status {
+  margin: 0;
+  padding: 4px 5px;
+  line-height: var(--row-h);
+}
+.books-error { color: var(--c-down); }
+
+.books-note {
+  margin: 0;
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: var(--fs-nav);
+  line-height: 18px;
+}
+
+.books-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 2px 5px;
+  line-height: var(--row-h);
+}
+
+.books-name {
+  margin: 0;
+  color: var(--cyan-name);
+  font-size: var(--fs-quote);
+  font-weight: 400;
+}
+
+.books-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.books-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 8px;
+  padding: 0 5px;
+}
+
+.books-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.books-ladder {
+  position: relative;
+  height: 300px;
+  padding: 4px 5px;
+}
+
+.books-chart {
+  position: relative;
+  height: 280px;
+  padding: 4px 5px;
+}
+
+.books-grid {
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  height: 420px;
+}
+
+.books-table .num { font-variant-numeric: tabular-nums lining-nums; }
+.books-table .books-no { width: 4em; }
+.books-table tr.charged-row td { color: var(--white); font-weight: 700; }
+
+.books-pick {
+  min-height: 24px;
+  padding: 0 4px;
+  border: 1px solid var(--border-int);
+  background: var(--bg);
+  color: var(--link);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.books-pick:hover { background: var(--hover-cell); }
+.books-pick[aria-pressed="true"] { background: var(--sel-list); color: var(--white); }
+.books-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.books-json {
+  margin: 0;
+  padding: 4px 5px;
+  overflow: auto;
+  max-height: 480px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+  line-height: 16px;
+  color: var(--text);
+  white-space: pre;
+}
+
+@media (max-width: 700px) {
+  .books-cols { grid-template-columns: minmax(0, 1fr); }
+}

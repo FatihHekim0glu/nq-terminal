@@ -1,5 +1,5 @@
 // What the chrome's keys do (spec 4.2 and 5.2): the key toolbar buttons, the nav toolbar controls and
-// the global keys (F1, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn, Alt+1 to 9, Alt+K) all land
+// the global keys (F1, F2 and F4, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn, Alt+1 to 9, Alt+K) all land
 // here, so a button and its key always do the same thing. Every action is a read or a focus change:
 // nothing here can place, change or withdraw anything.
 import { withValue } from '../commands/messages'
@@ -75,7 +75,7 @@ export function createChromeActions(env: ChromeEnv) {
     if (!pagePanel(env.focusedPanelId(), { dir, pages })) postMessage(MESSAGES.onePage)
   }
   const sector = (s: KeyedSector) => {
-    env.cmd()?.insert(` ${SECTOR_TITLES[s]}`)
+    env.cmd()?.insert(SECTOR_TITLES[s])
     if (s === 'EQUITY') postMessage(MESSAGES.noEquities)
   }
   const panel = (n: number) => {
@@ -135,6 +135,8 @@ export function runGlobalKey(a: ChromeActions, env: ChromeEnv, action: GlobalKey
       return a.panel(action.n)
     case 'keymap':
       return env.toggleKeymap()
+    case 'reserved':
+      return postMessage(MESSAGES.reservedKeys[action.key])
     default:
       return undefined
   }

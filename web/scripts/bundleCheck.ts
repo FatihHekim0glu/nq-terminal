@@ -22,6 +22,8 @@ export const BUNDLE_BUDGET = {
     /** Tree-shaken to the five chart types in src/charts/echarts/core.ts: about 206 kB. The full package is far larger. */
     echarts: 230_000,
     'tanstack-grid': 45_000,
+    /** The Perspective client, viewer and datagrid plugin (TASKS 9.1): about 88 kB. Its WebAssembly is a separate asset. */
+    perspective: 100_000,
   },
 } as const
 
@@ -32,6 +34,7 @@ export const LIBRARY_MARKERS: Readonly<Record<LibraryName, readonly string[]>> =
   'lightweight-charts': ['tv-lightweight-charts'],
   echarts: ['__ec_inner'],
   'tanstack-grid': ['coreRowModelsFeature', 'getVirtualIndexes'],
+  perspective: ['PerspectiveViewerElement'],
 }
 
 /** React's own code; it belongs in the react-*.js vendor chunk only (vite.config.ts CHUNK_GROUPS). */

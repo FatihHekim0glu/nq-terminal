@@ -641,6 +641,50 @@
         "title": "Bars",
         "type": "object"
       },
+      "BlockLength": {
+        "properties": {
+          "circular": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circular"
+          },
+          "m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "M"
+          },
+          "stationary": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stationary"
+          }
+        },
+        "required": [
+          "stationary",
+          "circular",
+          "m"
+        ],
+        "title": "BlockLength",
+        "type": "object"
+      },
       "BlockValue": {
         "properties": {
           "label": {
@@ -666,6 +710,212 @@
         "title": "BlockValue",
         "type": "object"
       },
+      "BootstrapInterval": {
+        "properties": {
+          "hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lo"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "point": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point"
+          },
+          "ruin": {
+            "description": "CAGR only: replications whose book touches zero at any point, kept at -1 (total loss)",
+            "title": "Ruin",
+            "type": "integer"
+          },
+          "sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sd"
+          },
+          "statistic": {
+            "enum": [
+              "sharpe",
+              "cagr",
+              "max_drawdown"
+            ],
+            "title": "Statistic",
+            "type": "string"
+          },
+          "undefined": {
+            "description": "replications where the statistic is not defined (left out and counted)",
+            "title": "Undefined",
+            "type": "integer"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statistic",
+          "label",
+          "unit",
+          "point",
+          "lo",
+          "hi",
+          "median",
+          "mean",
+          "sd",
+          "undefined",
+          "ruin",
+          "note"
+        ],
+        "title": "BootstrapInterval",
+        "type": "object"
+      },
+      "BootstrapView": {
+        "description": "SV5 percentile intervals and the SV6 cone from one set of stationary bootstrap replications.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "block": {
+            "$ref": "#/components/schemas/BlockLength"
+          },
+          "cone": {
+            "$ref": "#/components/schemas/ConeView"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "intervals": {
+            "items": {
+              "$ref": "#/components/schemas/BootstrapInterval"
+            },
+            "title": "Intervals",
+            "type": "array"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "periods_per_year": {
+            "title": "Periods Per Year",
+            "type": "integer"
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context",
+          "basis",
+          "unit",
+          "periods_per_year",
+          "n",
+          "tag",
+          "method",
+          "block",
+          "reps",
+          "seed",
+          "confidence",
+          "intervals",
+          "cone"
+        ],
+        "title": "BootstrapView",
+        "type": "object"
+      },
       "CacheStats": {
         "properties": {
           "bytes": {
@@ -684,6 +934,54 @@
           "bytes"
         ],
         "title": "CacheStats",
+        "type": "object"
+      },
+      "CaptureView": {
+        "description": "BR3: ratios of geometric annualised returns over benchmark-up and benchmark-down sessions.",
+        "properties": {
+          "down": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Down"
+          },
+          "down_n": {
+            "title": "Down N",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "up": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Up"
+          },
+          "up_n": {
+            "title": "Up N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "up",
+          "down",
+          "up_n",
+          "down_n"
+        ],
+        "title": "CaptureView",
         "type": "object"
       },
       "CatalogColumn": {
@@ -1040,6 +1338,96 @@
         "title": "CompareStats",
         "type": "object"
       },
+      "ConeView": {
+        "description": "SV6: pointwise percentiles of resampled paths at each step, not a band whole paths stay inside; realised overlaid.",
+        "properties": {
+          "horizon": {
+            "title": "Horizon",
+            "type": "integer"
+          },
+          "how": {
+            "enum": [
+              "summed",
+              "compounded"
+            ],
+            "title": "How",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "percentiles": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Percentiles",
+            "type": "array"
+          },
+          "quantiles": {
+            "additionalProperties": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Quantiles",
+            "type": "object"
+          },
+          "realised": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Realised",
+            "type": "array"
+          },
+          "realised_dates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Realised Dates",
+            "type": "array"
+          },
+          "steps": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "unit",
+          "how",
+          "horizon",
+          "steps",
+          "percentiles",
+          "quantiles",
+          "realised",
+          "realised_dates"
+        ],
+        "title": "ConeView",
+        "type": "object"
+      },
       "Confirmation": {
         "description": "A sealed-window confirmatory test: its own alpha, outside the exploratory family.",
         "properties": {
@@ -1254,6 +1642,198 @@
           "source"
         ],
         "title": "ContractSpec",
+        "type": "object"
+      },
+      "CornishFisherLevel": {
+        "properties": {
+          "cornish_fisher": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null outside the monotone domain",
+            "title": "Cornish Fisher"
+          },
+          "historical": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "RK1's historical VaR at the same tail, the comparator beside it",
+            "title": "Historical"
+          },
+          "in_domain": {
+            "title": "In Domain",
+            "type": "boolean"
+          },
+          "level": {
+            "enum": [
+              "95",
+              "99"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "normal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gaussian VaR -(mu + sigma z), a positive loss; shown greyed outside the domain",
+            "title": "Normal"
+          },
+          "raw_expansion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the Cornish-Fisher value even outside its domain (for the record)",
+            "title": "Raw Expansion"
+          },
+          "tail": {
+            "title": "Tail",
+            "type": "number"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the tile: Cornish-Fisher inside the domain, else the historical VaR",
+            "title": "Value"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "level",
+          "tail",
+          "z",
+          "normal",
+          "historical",
+          "raw_expansion",
+          "cornish_fisher",
+          "value",
+          "in_domain",
+          "method"
+        ],
+        "title": "CornishFisherLevel",
+        "type": "object"
+      },
+      "CornishFisherVarView": {
+        "description": "RK3: normal and Cornish-Fisher VaR with PerformanceAnalytics' population moments.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "domain": {
+            "description": "the monotone domain the tile is greyed outside of, and the fallback",
+            "title": "Domain",
+            "type": "string"
+          },
+          "excess_kurtosis": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excess Kurtosis"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/CornishFisherLevel"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "sigma": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigma"
+          },
+          "skew": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skew"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "basis",
+          "unit",
+          "horizon",
+          "mean",
+          "sigma",
+          "skew",
+          "excess_kurtosis",
+          "domain",
+          "levels"
+        ],
+        "title": "CornishFisherVarView",
         "type": "object"
       },
       "Correlation": {
@@ -1612,6 +2192,371 @@
           "unrecognised"
         ],
         "title": "DataCatalog",
+        "type": "object"
+      },
+      "DeflatedLeaveOneOut": {
+        "description": "V without the one trial whose removal lowers it most, N kept at the full count (SV3a step 9).",
+        "properties": {
+          "n_trials": {
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sr0_annual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Annual"
+          },
+          "sr0_session": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Session"
+          },
+          "variance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variance"
+          }
+        },
+        "required": [
+          "name",
+          "variance",
+          "sr0_session",
+          "sr0_annual",
+          "n_trials"
+        ],
+        "title": "DeflatedLeaveOneOut",
+        "type": "object"
+      },
+      "DeflatedRow": {
+        "properties": {
+          "annual_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Sharpe"
+          },
+          "dsr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PSR at SR0 from the empirical cross-trial variance V (the paper's construction)",
+            "title": "Dsr"
+          },
+          "dsr_null": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PSR at the SR0 from V0, the variance the expected maximum assumes (no skill)",
+            "title": "Dsr Null"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kurt": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "raw kurtosis (normal 3)",
+            "title": "Kurt"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "periods": {
+            "title": "Periods",
+            "type": "integer"
+          },
+          "skew": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skew"
+          },
+          "sr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sharpe per period of the trial's own series",
+            "title": "Sr"
+          },
+          "sr0_null_own_period": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SR0 from the null variance V0, in the trial's own period",
+            "title": "Sr0 Null Own Period"
+          },
+          "sr0_own_period": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Own Period"
+          },
+          "sr_session": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "per-session Sharpe on the common basis (SV3a step 4)",
+            "title": "Sr Session"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "periods",
+          "n",
+          "sr",
+          "sr_session",
+          "annual_sharpe",
+          "skew",
+          "kurt",
+          "sr0_own_period",
+          "dsr",
+          "sr0_null_own_period",
+          "dsr_null"
+        ],
+        "title": "DeflatedRow",
+        "type": "object"
+      },
+      "DeflatedView": {
+        "description": "SV3 over the registered hypotheses on the common Basis A daily construction (SV3a).",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "construction": {
+            "title": "Construction",
+            "type": "string"
+          },
+          "cost": {
+            "title": "Cost",
+            "type": "integer"
+          },
+          "dominant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the trial farthest from the mean per-session Sharpe, named",
+            "title": "Dominant"
+          },
+          "euler_gamma": {
+            "title": "Euler Gamma",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "leave_one_out": {
+            "$ref": "#/components/schemas/DeflatedLeaveOneOut"
+          },
+          "monthly_note": {
+            "title": "Monthly Note",
+            "type": "string"
+          },
+          "n_note": {
+            "description": "what N assumes: independent registered rows, no pre-registration variants",
+            "title": "N Note",
+            "type": "string"
+          },
+          "n_trials": {
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DeflatedRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sr0_annual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Annual"
+          },
+          "sr0_null_annual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Null Annual"
+          },
+          "sr0_null_session": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Null Session"
+          },
+          "sr0_session": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Session"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "variance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variance"
+          },
+          "variance_null": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "V0: the mean sampling variance of the trials' per-session Sharpe estimates at SR = 0, 1/(n - 1) x P/252",
+            "title": "Variance Null"
+          }
+        },
+        "required": [
+          "tag",
+          "label",
+          "construction",
+          "basis",
+          "cost",
+          "monthly_note",
+          "n_trials",
+          "variance",
+          "sr0_session",
+          "sr0_annual",
+          "variance_null",
+          "sr0_null_session",
+          "sr0_null_annual",
+          "leave_one_out",
+          "n_note",
+          "euler_gamma",
+          "dominant",
+          "rows"
+        ],
+        "title": "DeflatedView",
         "type": "object"
       },
       "DesExtract": {
@@ -2304,6 +3249,128 @@
         "title": "ErrorDetail",
         "type": "object"
       },
+      "ExcursionRow": {
+        "properties": {
+          "direction": {
+            "title": "Direction",
+            "type": "integer"
+          },
+          "entry_ts": {
+            "title": "Entry Ts",
+            "type": "string"
+          },
+          "exit_ts": {
+            "title": "Exit Ts",
+            "type": "string"
+          },
+          "final_pts": {
+            "title": "Final Pts",
+            "type": "number"
+          },
+          "final_r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final R"
+          },
+          "mae_pts": {
+            "title": "Mae Pts",
+            "type": "number"
+          },
+          "mae_r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mae R"
+          },
+          "mae_usd": {
+            "title": "Mae Usd",
+            "type": "number"
+          },
+          "mfe_pts": {
+            "title": "Mfe Pts",
+            "type": "number"
+          },
+          "mfe_r": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfe R"
+          },
+          "mfe_usd": {
+            "title": "Mfe Usd",
+            "type": "number"
+          },
+          "no_bars": {
+            "title": "No Bars",
+            "type": "boolean"
+          },
+          "off_basis": {
+            "description": "a fill lies outside every bar it could have happened in, by more than a tick",
+            "title": "Off Basis",
+            "type": "boolean"
+          },
+          "partial_bars": {
+            "title": "Partial Bars",
+            "type": "integer"
+          },
+          "pnl_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnl Usd"
+          },
+          "whole_bars": {
+            "title": "Whole Bars",
+            "type": "integer"
+          },
+          "win": {
+            "title": "Win",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entry_ts",
+          "exit_ts",
+          "direction",
+          "mae_pts",
+          "mfe_pts",
+          "final_pts",
+          "mae_r",
+          "mfe_r",
+          "final_r",
+          "mae_usd",
+          "mfe_usd",
+          "pnl_usd",
+          "win",
+          "whole_bars",
+          "partial_bars",
+          "no_bars",
+          "off_basis"
+        ],
+        "title": "ExcursionRow",
+        "type": "object"
+      },
       "ExpectedJournal": {
         "properties": {
           "empty_state": {
@@ -2504,6 +3571,140 @@
           "positions_reconcile"
         ],
         "title": "ExposureView",
+        "type": "object"
+      },
+      "ExtendedAnalytics": {
+        "description": "The P1 additions to one tear sheet: PF7 to PF9 tiles, RK3, RL3, RL4, BR3, BR4, RD4, RK5 and RG1.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "capture": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "cornish_fisher_var": {
+            "$ref": "#/components/schemas/CornishFisherVarView"
+          },
+          "jarque_bera": {
+            "$ref": "#/components/schemas/JarqueBeraView"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "periods_per_year": {
+            "title": "Periods Per Year",
+            "type": "integer"
+          },
+          "ratios": {
+            "items": {
+              "$ref": "#/components/schemas/Kpi"
+            },
+            "title": "Ratios",
+            "type": "array"
+          },
+          "regimes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegimeView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "regimes_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regimes Note"
+          },
+          "relative_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relative Note"
+          },
+          "rolling_relative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RollingRelativeView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scatter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScatterView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stress": {
+            "$ref": "#/components/schemas/StressView"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context",
+          "basis",
+          "unit",
+          "periods_per_year",
+          "n",
+          "tag",
+          "ratios",
+          "cornish_fisher_var",
+          "jarque_bera",
+          "rolling_relative",
+          "capture",
+          "scatter",
+          "relative_note",
+          "stress",
+          "regimes",
+          "regimes_note"
+        ],
+        "title": "ExtendedAnalytics",
         "type": "object"
       },
       "Fence": {
@@ -2866,6 +4067,137 @@
           "var_99"
         ],
         "title": "HistogramView",
+        "type": "object"
+      },
+      "HoldingView": {
+        "description": "TA4: holding time per trade in minutes; the histogram is on log10 minutes (Sturges' edges over the positive\ndurations), a zero duration is counted apart (it has no logarithm).",
+        "properties": {
+          "bin_rule": {
+            "title": "Bin Rule",
+            "type": "string"
+          },
+          "counts": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "array"
+          },
+          "edges": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "log10_edges": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Log10 Edges",
+            "type": "array"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "p5": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P5"
+          },
+          "p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95"
+          },
+          "tag": {
+            "const": "[POST HOC]",
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "zero": {
+            "title": "Zero",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unit",
+          "tag",
+          "n",
+          "zero",
+          "bin_rule",
+          "log10_edges",
+          "edges",
+          "counts",
+          "median",
+          "mean",
+          "min",
+          "max",
+          "p5",
+          "p95"
+        ],
+        "title": "HoldingView",
         "type": "object"
       },
       "HomePanel": {
@@ -3841,6 +5173,49 @@
           "source"
         ],
         "title": "InstrumentNote",
+        "type": "object"
+      },
+      "JarqueBeraView": {
+        "description": "RD4 on the whole series (never on a slice the user picks).",
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P"
+          },
+          "statistic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statistic"
+          }
+        },
+        "required": [
+          "statistic",
+          "p",
+          "n",
+          "note"
+        ],
+        "title": "JarqueBeraView",
         "type": "object"
       },
       "JournalInfo": {
@@ -6405,6 +7780,197 @@
         "title": "PairCorrelationSeries",
         "type": "object"
       },
+      "PaperTracking": {
+        "description": "LV5: daily paper P&L against the rule's target on the same closes, performance rows only.",
+        "properties": {
+          "banner": {
+            "title": "Banner",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "difference": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Difference",
+            "type": "array"
+          },
+          "empty_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty State"
+          },
+          "journal": {
+            "title": "Journal",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Model",
+            "type": "array"
+          },
+          "model_cumulative": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Model Cumulative",
+            "type": "array"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "paper": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Paper",
+            "type": "array"
+          },
+          "paper_cumulative": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Paper Cumulative",
+            "type": "array"
+          },
+          "plumbing_rows_skipped": {
+            "minimum": 0.0,
+            "title": "Plumbing Rows Skipped",
+            "type": "integer"
+          },
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          },
+          "t": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "total_difference": {
+            "title": "Total Difference",
+            "type": "number"
+          },
+          "tracking_sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Sd"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "journal",
+          "present",
+          "empty_state",
+          "banner",
+          "basis",
+          "tag",
+          "label",
+          "unit",
+          "multiplier",
+          "plumbing_rows_skipped",
+          "t",
+          "date",
+          "paper",
+          "model",
+          "difference",
+          "paper_cumulative",
+          "model_cumulative",
+          "n",
+          "total_difference",
+          "tracking_sd"
+        ],
+        "title": "PaperTracking",
+        "type": "object"
+      },
       "PassCheck": {
         "description": "One entry of a screen's `pass_checks`: `passed` for a boolean, else the recorded value.",
         "properties": {
@@ -7077,6 +8643,171 @@
           "gate"
         ],
         "title": "RealisedVolSeries",
+        "type": "object"
+      },
+      "RegimeRow": {
+        "properties": {
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "regime": {
+            "enum": [
+              "low",
+              "mid",
+              "high"
+            ],
+            "title": "Regime",
+            "type": "string"
+          },
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe"
+          }
+        },
+        "required": [
+          "regime",
+          "n",
+          "mean",
+          "sharpe",
+          "hit_rate"
+        ],
+        "title": "RegimeRow",
+        "type": "object"
+      },
+      "RegimeView": {
+        "description": "RG1: fixed terciles of NQ's lagged realised variance (expanding, no look-ahead); Welch's t, no p-value.",
+        "properties": {
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "min_history": {
+            "title": "Min History",
+            "type": "integer"
+          },
+          "regime": {
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "low",
+                    "mid",
+                    "high"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Regime",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/RegimeRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unlabelled": {
+            "title": "Unlabelled",
+            "type": "integer"
+          },
+          "welch_df": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welch Df"
+          },
+          "welch_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welch T"
+          }
+        },
+        "required": [
+          "tag",
+          "label",
+          "source",
+          "min_history",
+          "rows",
+          "welch_t",
+          "welch_df",
+          "unlabelled",
+          "t",
+          "date",
+          "regime"
+        ],
+        "title": "RegimeView",
         "type": "object"
       },
       "RegistryCounts": {
@@ -7790,9 +9521,165 @@
         "title": "RollMarker",
         "type": "object"
       },
+      "RollingRelativeView": {
+        "description": "RL3 rolling beta and RL4 rolling correlation against the benchmark, on the strategy's sessions.",
+        "properties": {
+          "beta": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Beta",
+            "type": "array"
+          },
+          "correlation": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Correlation",
+            "type": "array"
+          },
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "full_beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Beta"
+          },
+          "full_correlation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Correlation"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          },
+          "window_unit": {
+            "title": "Window Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "window_unit",
+          "t",
+          "date",
+          "beta",
+          "correlation",
+          "full_beta",
+          "full_correlation"
+        ],
+        "title": "RollingRelativeView",
+        "type": "object"
+      },
+      "RollingSharpeBand": {
+        "description": "RL1 band: the range (95%) a `window`-period Sharpe would span if the full-sample Sharpe held throughout.",
+        "properties": {
+          "centre": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centre"
+          },
+          "hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi"
+          },
+          "lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lo"
+          },
+          "se": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mertens standard error of a window-length Sharpe, annualised",
+            "title": "Se"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window",
+          "centre",
+          "lo",
+          "hi",
+          "se"
+        ],
+        "title": "RollingSharpeBand",
+        "type": "object"
+      },
       "RollingView": {
         "description": "RL1 and RL2 over a short and a long window (`windows`, in `window_unit`): 63 and 252 sessions for a daily\nseries, 12 and 36 months for a monthly one (P = 12).",
         "properties": {
+          "band_label": {
+            "title": "Band Label",
+            "type": "string"
+          },
           "date": {
             "items": {
               "type": "string"
@@ -7821,6 +9708,14 @@
               }
             ],
             "title": "Full Vol"
+          },
+          "sharpe_bands": {
+            "description": "one per window, in `windows` order",
+            "items": {
+              "$ref": "#/components/schemas/RollingSharpeBand"
+            },
+            "title": "Sharpe Bands",
+            "type": "array"
           },
           "sharpe_long": {
             "items": {
@@ -7930,7 +9825,9 @@
           "vol_long",
           "full_sharpe",
           "full_vol",
-          "vol_extremes"
+          "vol_extremes",
+          "sharpe_bands",
+          "band_label"
         ],
         "title": "RollingView",
         "type": "object"
@@ -8208,6 +10105,140 @@
           "run_log_file"
         ],
         "title": "RunDetail",
+        "type": "object"
+      },
+      "RunExcursions": {
+        "description": "TA2 MAE and MFE of an intraday run over its own gated 1-minute bars.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "basis_checked": {
+            "description": "trades with at least one fill that has a bar to check it against",
+            "title": "Basis Checked",
+            "type": "integer"
+          },
+          "in_r": {
+            "title": "In R",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "no_bars": {
+            "title": "No Bars",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "off_basis": {
+            "description": "checked trades with a fill outside its bars (another price basis)",
+            "title": "Off Basis",
+            "type": "integer"
+          },
+          "point_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Point Value"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ExcursionRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "tick": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the contract's tick in points, the slack of the price basis check",
+            "title": "Tick"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "variant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variant"
+          }
+        },
+        "required": [
+          "run_id",
+          "tag",
+          "available",
+          "note",
+          "label",
+          "unit",
+          "symbol",
+          "variant",
+          "point_value",
+          "tick",
+          "n",
+          "no_bars",
+          "in_r",
+          "basis_checked",
+          "off_basis",
+          "rows"
+        ],
+        "title": "RunExcursions",
         "type": "object"
       },
       "RunExposure": {
@@ -8579,6 +10610,34 @@
         "title": "RunSummary",
         "type": "object"
       },
+      "RunTradePaths": {
+        "description": "TA4 holding times and TA5 streaks of one run's trades (its own route, so `RunTrades` keeps its shape).",
+        "properties": {
+          "holding": {
+            "$ref": "#/components/schemas/HoldingView"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "streaks": {
+            "$ref": "#/components/schemas/StreakView"
+          },
+          "tag": {
+            "const": "[POST HOC]",
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "tag",
+          "holding",
+          "streaks"
+        ],
+        "title": "RunTradePaths",
+        "type": "object"
+      },
       "RunTrades": {
         "description": "TA1, TA3 and TA6 for one run. `by_hour` is null for a book that enters at the session close by rule.",
         "properties": {
@@ -8662,6 +10721,155 @@
           "slippage"
         ],
         "title": "RunTrades",
+        "type": "object"
+      },
+      "RunsTest": {
+        "description": "Wald-Wolfowitz runs test on the signs of the non-zero trades, on the whole trade list; null without both\nsigns.",
+        "properties": {
+          "expected": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "losses": {
+            "title": "Losses",
+            "type": "integer"
+          },
+          "p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sd"
+          },
+          "wins": {
+            "title": "Wins",
+            "type": "integer"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z"
+          }
+        },
+        "required": [
+          "wins",
+          "losses",
+          "runs",
+          "expected",
+          "sd",
+          "z",
+          "p"
+        ],
+        "title": "RunsTest",
+        "type": "object"
+      },
+      "ScatterView": {
+        "description": "BR4: strategy against benchmark on the aligned rows, with BR1's OLS line.",
+        "properties": {
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "intercept": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intercept"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "slope": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slope"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "x": {
+            "items": {
+              "type": "number"
+            },
+            "title": "X",
+            "type": "array"
+          },
+          "x_label": {
+            "title": "X Label",
+            "type": "string"
+          },
+          "y": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Y",
+            "type": "array"
+          },
+          "y_label": {
+            "title": "Y Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "x_label",
+          "y_label",
+          "date",
+          "x",
+          "y",
+          "slope",
+          "intercept",
+          "n"
+        ],
+        "title": "ScatterView",
         "type": "object"
       },
       "SealedItem": {
@@ -9682,6 +11890,500 @@
           "t_pnl_usd"
         ],
         "title": "StoredTradeSummary",
+        "type": "object"
+      },
+      "StreakView": {
+        "description": "TA5: longest winning and losing runs in exit order (a flat trade breaks both) and the runs test.",
+        "properties": {
+          "longest_loss": {
+            "title": "Longest Loss",
+            "type": "integer"
+          },
+          "longest_win": {
+            "title": "Longest Win",
+            "type": "integer"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "runs_test": {
+            "$ref": "#/components/schemas/RunsTest"
+          },
+          "tag": {
+            "const": "[POST HOC]",
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "n",
+          "longest_win",
+          "longest_loss",
+          "runs_test",
+          "note"
+        ],
+        "title": "StreakView",
+        "type": "object"
+      },
+      "StreamBye": {
+        "description": "Last event before the server ends the stream (lifetime reached); reconnect with Last-Event-ID.",
+        "properties": {
+          "kind": {
+            "const": "bye",
+            "default": "bye",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "retry_ms": {
+            "minimum": 0.0,
+            "title": "Retry Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "reason",
+          "retry_ms"
+        ],
+        "title": "StreamBye",
+        "type": "object"
+      },
+      "StreamHeartbeat": {
+        "properties": {
+          "interval_s": {
+            "title": "Interval S",
+            "type": "number"
+          },
+          "kind": {
+            "const": "heartbeat",
+            "default": "heartbeat",
+            "title": "Kind",
+            "type": "string"
+          },
+          "utc": {
+            "title": "Utc",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "utc",
+          "interval_s"
+        ],
+        "title": "StreamHeartbeat",
+        "type": "object"
+      },
+      "StreamHello": {
+        "description": "First event of every connection: how the stream will behave and whether it resumed a cursor.",
+        "properties": {
+          "banner": {
+            "title": "Banner",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "heartbeat_s": {
+            "title": "Heartbeat S",
+            "type": "number"
+          },
+          "kind": {
+            "const": "hello",
+            "default": "hello",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lifetime_s": {
+            "description": "the server ends the stream after this long; the browser reconnects",
+            "title": "Lifetime S",
+            "type": "number"
+          },
+          "order_path": {
+            "title": "Order Path",
+            "type": "string"
+          },
+          "poll_s": {
+            "title": "Poll S",
+            "type": "number"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "resume_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "why a Last-Event-ID was not used, else null",
+            "title": "Resume Note"
+          },
+          "resumed": {
+            "title": "Resumed",
+            "type": "boolean"
+          },
+          "retry_ms": {
+            "minimum": 0.0,
+            "title": "Retry Ms",
+            "type": "integer"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "schema_version",
+          "resumed",
+          "resume_note",
+          "poll_s",
+          "heartbeat_s",
+          "lifetime_s",
+          "retry_ms",
+          "banner",
+          "basis",
+          "read_only",
+          "order_path"
+        ],
+        "title": "StreamHello",
+        "type": "object"
+      },
+      "StreamJournalReset": {
+        "description": "Drop what is held for `file`; the rows that follow start at `first_line_no`.\n\nsync: the journal as it stands on a fresh connection; new: a journal first seen now; changed: the file no longer\nholds the rows already sent (truncated or replaced); backlog: more rows were waiting than the stream sends in one\ngo, so the oldest were skipped (read them from /api/live/journal); removed: the file is gone.",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "first_line_no": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Line No"
+          },
+          "kind": {
+            "const": "journal_reset",
+            "default": "journal_reset",
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "sync",
+              "new",
+              "changed",
+              "backlog",
+              "removed"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "skipped_rows": {
+            "description": "rows before first_line_no that the stream does not send",
+            "minimum": 0.0,
+            "title": "Skipped Rows",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "file",
+          "path",
+          "reason",
+          "skipped_rows",
+          "first_line_no"
+        ],
+        "title": "StreamJournalReset",
+        "type": "object"
+      },
+      "StreamJournalRow": {
+        "properties": {
+          "kind": {
+            "const": "journal_row",
+            "default": "journal_row",
+            "title": "Kind",
+            "type": "string"
+          },
+          "row": {
+            "$ref": "#/components/schemas/JournalRowOut"
+          }
+        },
+        "required": [
+          "kind",
+          "row"
+        ],
+        "title": "StreamJournalRow",
+        "type": "object"
+      },
+      "StreamKillSwitch": {
+        "properties": {
+          "kind": {
+            "const": "kill_switch",
+            "default": "kill_switch",
+            "title": "Kind",
+            "type": "string"
+          },
+          "on": {
+            "title": "On",
+            "type": "boolean"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "on",
+          "path"
+        ],
+        "title": "StreamKillSwitch",
+        "type": "object"
+      },
+      "StreamStatus": {
+        "description": "The same body as GET /api/live/status, sent on connect and whenever it changes.",
+        "properties": {
+          "kind": {
+            "const": "status",
+            "default": "status",
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LiveStatus"
+          }
+        },
+        "required": [
+          "kind",
+          "status"
+        ],
+        "title": "StreamStatus",
+        "type": "object"
+      },
+      "StressRow": {
+        "properties": {
+          "bench_n": {
+            "title": "Bench N",
+            "type": "integer"
+          },
+          "bench_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bench Return"
+          },
+          "covered_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the first row the window holds (a monthly book: its first month-end)",
+            "title": "Covered From"
+          },
+          "covered_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the last row the window holds (a monthly book: its last month-end)",
+            "title": "Covered To"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "nq_depth": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NQ buy and hold over the window, compounded (a negative fraction)",
+            "title": "Nq Depth"
+          },
+          "peak": {
+            "title": "Peak",
+            "type": "string"
+          },
+          "recovery": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "spent": {
+            "description": "the 2022 row: from the sealed daily file only, labelled spent",
+            "title": "Spent",
+            "type": "boolean"
+          },
+          "strategy_max_drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Max Drawdown"
+          },
+          "strategy_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Return"
+          },
+          "trough": {
+            "title": "Trough",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "peak",
+          "trough",
+          "recovery",
+          "nq_depth",
+          "source",
+          "spent",
+          "n",
+          "covered_from",
+          "covered_to",
+          "strategy_return",
+          "bench_return",
+          "bench_n",
+          "strategy_max_drawdown"
+        ],
+        "title": "StressRow",
+        "type": "object"
+      },
+      "StressView": {
+        "description": "RK5: the frozen windows (constants.STRESS_WINDOWS) and, where one exists, the spent 2022 row.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "frozen": {
+            "title": "Frozen",
+            "type": "string"
+          },
+          "monthly_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "set for a monthly book: its rows cover every month a window overlaps",
+            "title": "Monthly Note"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StressRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "spent_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spent Note"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "basis",
+          "unit",
+          "frozen",
+          "monthly_note",
+          "rows",
+          "spent_note"
+        ],
+        "title": "StressView",
         "type": "object"
       },
       "Tails": {
@@ -10740,6 +13442,68 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/analytics/deflated": {
+      "get": {
+        "description": "SV3 Deflated Sharpe over the registered hypotheses on the common Basis A daily construction (SV3a); an extra\nview only, never a verdict.",
+        "operationId": "deflated_sharpe_api_analytics_deflated_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeflatedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Deflated Sharpe",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/hypothesis/{name}": {
       "get": {
         "description": "Tear sheet of a registered hypothesis on its screen series (Basis A), with the alpha the screen recorded\n([PRE-REG]) next to the terminal's own fit and the registry's adjusted p values.",
@@ -10829,6 +13593,184 @@
         ]
       }
     },
+    "/api/analytics/hypothesis/{name}/bootstrap": {
+      "get": {
+        "description": "SV5 bootstrap intervals (Sharpe, CAGR, max drawdown) and the SV6 cone of a hypothesis's series.",
+        "operationId": "hypothesis_bootstrap_api_analytics_hypothesis__name__bootstrap_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+            "in": "query",
+            "name": "cost",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Cost",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Hypothesis Bootstrap",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/hypothesis/{name}/extended": {
+      "get": {
+        "description": "P1 views of a hypothesis's screen series: PF7 to PF9, RK3, RL3, RL4, BR3, BR4, RD4, RK5 and RG1.",
+        "operationId": "hypothesis_extended_api_analytics_hypothesis__name__extended_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+            "in": "query",
+            "name": "cost",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Cost",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtendedAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Hypothesis Extended",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/hypothesis/{name}/panel": {
       "get": {
         "description": "HOME [B] panel of a hypothesis: equity against its benchmark, with the underwater curve and the rolling\n252-session Sharpe.",
@@ -10913,6 +13855,81 @@
           }
         },
         "summary": "Hypothesis Panel",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/paper-tracking": {
+      "get": {
+        "description": "LV5: daily paper P&L against the rule's target on the same closes; plumbing rows never reach it.",
+        "operationId": "paper_tracking_api_analytics_paper_tracking_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "file",
+            "required": false,
+            "schema": {
+              "default": "volmanaged_paper_journal.jsonl",
+              "maxLength": 160,
+              "title": "File",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperTracking"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Paper Tracking",
         "tags": [
           "analytics"
         ]
@@ -11008,6 +14025,96 @@
         ]
       }
     },
+    "/api/analytics/run/{run_id}/bootstrap": {
+      "get": {
+        "description": "SV5 bootstrap intervals and the SV6 cone of a Nautilus run's account series.",
+        "operationId": "run_bootstrap_api_analytics_run__run_id__bootstrap_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+            "in": "query",
+            "name": "freq",
+            "required": false,
+            "schema": {
+              "default": "D",
+              "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+              "enum": [
+                "D",
+                "M"
+              ],
+              "title": "Freq",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Bootstrap",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/run/{run_id}/costs": {
       "get": {
         "description": "EX3 cost waterfall (net equals the run's pnl_total exactly) and EX4 cost sensitivity with break-even.",
@@ -11082,6 +14189,80 @@
         ]
       }
     },
+    "/api/analytics/run/{run_id}/excursions": {
+      "get": {
+        "description": "TA2 MAE and MFE per trade over the run's own 1-minute bars (intraday runs), read through the gate.",
+        "operationId": "run_excursions_api_analytics_run__run_id__excursions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunExcursions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Excursions",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/run/{run_id}/exposure": {
       "get": {
         "description": "EX1 gross and net exposure at the raw contract close and EX2 turnover per session (runs with snapshots).",
@@ -11151,6 +14332,96 @@
           }
         },
         "summary": "Run Exposure",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/run/{run_id}/extended": {
+      "get": {
+        "description": "P1 views of a Nautilus run's account series (no spent row: the sealed file belongs to a hypothesis).",
+        "operationId": "run_extended_api_analytics_run__run_id__extended_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+            "in": "query",
+            "name": "freq",
+            "required": false,
+            "schema": {
+              "default": "D",
+              "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+              "enum": [
+                "D",
+                "M"
+              ],
+              "title": "Freq",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtendedAnalytics"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Extended",
         "tags": [
           "analytics"
         ]
@@ -11241,6 +14512,80 @@
           }
         },
         "summary": "Run Panel",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/run/{run_id}/trade-paths": {
+      "get": {
+        "description": "TA4 holding times (log histogram) and TA5 streaks with the runs test over the whole trade list.",
+        "operationId": "run_trade_paths_api_analytics_run__run_id__trade_paths_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunTradePaths"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Trade Paths",
         "tags": [
           "analytics"
         ]
@@ -12566,6 +15911,125 @@
           }
         },
         "summary": "Status",
+        "tags": [
+          "live"
+        ]
+      }
+    },
+    "/api/live/stream": {
+      "get": {
+        "description": "LIVE and JRNL as Server-Sent Events: journal rows, status and kill switch changes, heartbeats; read only.",
+        "operationId": "stream_api_live_stream_get",
+        "parameters": [
+          {
+            "description": "the id of the last event received; the browser sends it on reconnection",
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the id of the last event received; the browser sends it on reconnection",
+              "title": "Last-Event-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "properties": {
+                    "data": {
+                      "contentMediaType": "application/json",
+                      "contentSchema": {
+                        "discriminator": {
+                          "mapping": {
+                            "bye": "#/components/schemas/StreamBye",
+                            "heartbeat": "#/components/schemas/StreamHeartbeat",
+                            "hello": "#/components/schemas/StreamHello",
+                            "journal_reset": "#/components/schemas/StreamJournalReset",
+                            "journal_row": "#/components/schemas/StreamJournalRow",
+                            "kill_switch": "#/components/schemas/StreamKillSwitch",
+                            "status": "#/components/schemas/StreamStatus"
+                          },
+                          "propertyName": "kind"
+                        },
+                        "oneOf": [
+                          {
+                            "$ref": "#/components/schemas/StreamHello"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamStatus"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamKillSwitch"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamJournalReset"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamJournalRow"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamHeartbeat"
+                          },
+                          {
+                            "$ref": "#/components/schemas/StreamBye"
+                          }
+                        ],
+                        "title": "Streamitem Stream Api Live Stream Get"
+                      },
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "too many live streams are open"
+          }
+        },
+        "summary": "Stream",
         "tags": [
           "live"
         ]

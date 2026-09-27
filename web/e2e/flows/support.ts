@@ -124,11 +124,17 @@ export async function expectCleanFlow(page: Page, watch: FlowWatch): Promise<voi
   const origin = new URL(page.url()).origin
   expect(watch.requests.length).toBeGreaterThan(0)
   expect(nonGetRequests(watch.requests.map((r) => ({ method: r.method(), url: r.url() })), origin)).toEqual([])
-  const api = watch.requests.filter((r) => new URL(r.url()).pathname.startsWith('/api/'))
+  // The live stream (TASKS 9.2) is an EventSource, which cannot set a header: it is a same-origin GET that asks
+  // for text/event-stream, and every other API request carries the client header.
+  const isStream = (r: Request) => new URL(r.url()).pathname === '/api/live/stream'
+  const api = watch.requests.filter((r) => new URL(r.url()).pathname.startsWith('/api/') && !isStream(r))
   expect(api.length).toBeGreaterThan(0)
   const headers = await Promise.all(api.map((r) => r.headerValue(CLIENT_HEADER)))
   const unmarked = api.filter((_, i) => headers[i] !== CLIENT_NAME).map((r) => r.url())
   expect(unmarked).toEqual([])
+  const streams = watch.requests.filter(isStream)
+  const accepts = await Promise.all(streams.map((r) => r.headerValue('accept')))
+  expect(accepts.filter((a) => a !== 'text/event-stream')).toEqual([])
   expect(watch.errors).toEqual([])
   expect(await page.evaluate(() => (window as unknown as { __nqtCsp: string[] }).__nqtCsp)).toEqual([])
   await Promise.all(watch.priceReads)

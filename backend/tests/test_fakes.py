@@ -567,3 +567,17 @@ def test_the_fake_serve_refuses_a_protected_log_path(where):
 def test_fakes_module_offers_no_sealed_door():
     names = set(dir(fakes))
     assert not {n for n in names if "sealed" in n.lower()}
+
+
+def test_the_fake_catalog_describes_each_series_once(monkeypatch):
+    # The fixture backend's catalog built synthetic bars on every request just to name their columns (about
+    # 100 ms of each HOME load in the performance budget); the columns of a series never change.
+    import fakes
+    made: list[str] = []
+    real = fakes.synthetic_loader
+    monkeypatch.setattr(fakes, "synthetic_loader", lambda *a, **k: made.append(a[0]) or real(*a, **k))
+    fakes._columns.cache_clear()
+    catalog = fakes.FakeCatalog()
+    first = catalog.entries()
+    assert catalog.entries() == first
+    assert len(made) == len(fakes.fake_series_ids())

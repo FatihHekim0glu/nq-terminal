@@ -16,6 +16,7 @@ PF4  Sharpe `mean / sd(ddof=1) * sqrt(P)` (`nq_lab.sizing_stats.sharpe`; tested 
 PF5  Sortino `mean / sqrt(mean(min(r, 0)^2)) * sqrt(P)`: target 0, denominator over all n sessions
      (Nautilus `SortinoRatio`).
 PF6  Calmar `CAGR / abs(MaxDD)` over the full sample (not the 36-month classic), MaxDD from DD1 on the same basis.
+PF7  Omega(0), PF8 tail ratio and PF9 gain to pain (P1) are at the end of the module.
 PF10 stats table: hit rate (positive over non-zero sessions, as quantstats `win_rate`), best and worst session
      and month, share of positive months, skew `scipy.stats.skew(bias=False)`, excess kurtosis
      `kurtosis(fisher=True, bias=False)` (as the screens), n and years = n / P.
@@ -192,3 +193,37 @@ def performance_difference(r, bench, basis: str) -> pd.Series:
     else:
         mine, theirs = (1.0 + series).cumprod() - 1.0, (1.0 + present).cumprod() - 1.0
     return (mine - theirs.reindex(series.index)).astype(float)
+
+
+# ---------------------------------------------------------------- P1: PF7, PF8, PF9
+
+
+def omega(r) -> float:
+    """PF7 Omega(0): sum of gains over sum of losses, `sum max(r, 0) / sum max(-r, 0)` (empyrical `omega_ratio` at a
+    zero threshold); NaN below two sessions or without a losing session."""
+    values = returns_array(r)
+    losses = float(np.maximum(-values, 0.0).sum())
+    if len(values) < 2 or not losses > 0:
+        return math.nan
+    return float(np.maximum(values, 0.0).sum()) / losses
+
+
+def tail_ratio(r) -> float:
+    """PF8 `abs(Q95 / Q5)` with numpy's linear quantiles; NaN when Q5 is 0 or there is no data."""
+    values = returns_array(r)
+    if not len(values):
+        return math.nan
+    low = float(np.quantile(values, 0.05))
+    return abs(float(np.quantile(values, 0.95)) / low) if low != 0 else math.nan
+
+
+def gain_to_pain(r, basis: str, periods: int = PERIODS_DAILY) -> float:
+    """PF9 on months: `sum r_m / abs(sum min(r_m, 0))`; Basis A month sums, Basis B compounded months (RD2); a monthly
+    book's rows are its months. NaN without a losing month or without dates on a daily series."""
+    check_basis(basis)
+    check_periods(periods)
+    months = _month_values(returns_series(r), basis, periods)
+    if months is None or not len(months):
+        return math.nan
+    pain = abs(float(np.minimum(months, 0.0).sum()))
+    return float(months.sum()) / pain if pain > 0 else math.nan

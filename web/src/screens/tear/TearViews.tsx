@@ -14,7 +14,7 @@ import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, yearlyLadder,
+  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, yearlyLadder,
   type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
@@ -25,6 +25,7 @@ interface ViewProps {
   readonly data: Analytics
   readonly name: string
   readonly link: PanelLink
+  /** RR only: the full-sample SV5 Sharpe interval, drawn as two dashed bounds (null until it arrives). */
 }
 
 const scrollBox = { [ROVING_ATTR]: '', [ROVING_SCROLL_ATTR]: '' }
@@ -189,6 +190,7 @@ function EmptyPanes({ title, empty }: { readonly title: string; readonly empty: 
 
 function RrView({ data, name, link }: ViewProps) {
   const spec = useMemo(() => rrStack(data, name), [data, name])
+  const bandNote = useMemo(() => rrBandNote(data), [data])
   const empty = useMemo(() => rrEmpty(data), [data])
   const r = data.rolling
   const full = fillCopy(TEAR_RR.full, { sharpe: formatNumber(r.full_sharpe, 2), vol: formatValue(r.full_vol, r.vol_unit, 2) })
@@ -199,6 +201,7 @@ function RrView({ data, name, link }: ViewProps) {
       <ul className="tear-extremes" aria-label={TEAR_RR.extremesLabel}>
         {rrExtremes(data).map((line) => <li key={line}>{line}</li>)}
       </ul>
+      {bandNote && empty.panes.length === 0 ? <p className="tear-note">{bandNote}</p> : null}
     </>
   )
 }

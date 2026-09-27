@@ -11,6 +11,7 @@ import { useCallback, useEffect, useId, useImperativeHandle, useRef, useState, t
 import { displayLine } from '../commands/line'
 import { withValue } from '../commands/messages'
 import type { MnemonicCode } from '../commands/registry'
+import { insertSectorWord } from '../commands/sectors'
 import type { CommandIndexData } from '../commands/types'
 import { COMMAND_LINE } from '../copy/commands'
 import { onLineRequest } from './CommandLine.bus'
@@ -32,7 +33,7 @@ export type { RunTarget } from './CommandLine.state'
 /** What the rest of the chrome asks of the command line (key toolbar, F-keys, nav toolbar). */
 export interface CommandLineHandle {
   focus(select?: boolean): void
-  /** Insert text at the caret (F8 to F11 sector keys) and focus the line. */
+  /** Put a sector word at the caret, one space from its neighbours (F8 to F11), and focus the line. */
   insert(text: string): void
   runLine(line: string, newPanel?: boolean): void
   /** The CANCEL key: one step of the Esc cascade, without moving focus. */
@@ -77,9 +78,12 @@ function useHandle(ref: Ref<CommandLineHandle> | undefined, p: CommandLineParts)
       if (select) p.inputRef.current?.select()
     },
     insert: (text) => {
-      const at = p.inputRef.current?.selectionStart ?? p.s.line.length
-      p.s.edit(`${p.s.line.slice(0, at)}${text}${p.s.line.slice(at)}`)
+      const input = p.inputRef.current
+      const next = insertSectorWord(p.s.line, input?.selectionStart ?? p.s.line.length, text)
+      p.s.edit(next.line)
       focus()
+      // The caret follows the word once the line has rendered (a controlled value moves it to the end).
+      requestAnimationFrame(() => p.inputRef.current?.setSelectionRange(next.caret, next.caret))
     },
     runLine: (line, newPanel = false) => runText(p, line, newPanel),
     cancel: () => void cancelStep(p),

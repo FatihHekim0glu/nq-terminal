@@ -38,6 +38,8 @@ export interface RegRow {
   readonly amendments: number
   readonly amendmentFiles: readonly string[]
   readonly amendmentsOk: boolean | null
+  /** SV3's Deflated Sharpe for a registered trial ([POST HOC], deflatedModel.withDeflated); null otherwise. */
+  readonly dsr: number | null
 }
 
 const MISSING = '--'
@@ -69,6 +71,7 @@ export function buildRegRows(registry: Schemas['RegistryView'], cards: readonly 
       sha: r.spec_sha256,
       shaOk: r.spec_sha_ok,
       rehashOk: card ? card.spec_rehash_ok : null,
+      dsr: null,
       tag: r.tag,
       amendments: r.amendments,
       amendmentFiles: r.amendment_files,
@@ -261,7 +264,7 @@ export function confirmationRows(list: readonly Schemas['Confirmation'][]): Conf
 
 const CSV_HEAD = [
   'name', 'registered', 'tag', 'round', 'verdict', 'n', 'p', 'control_p', 'bonferroni_p', 'holm_p', 'bh_q',
-  'spec_sha256', 'spec_sha_ok', 'spec_rehash_ok', 'amendments', 'amendments_ok',
+  'spec_sha256', 'spec_sha_ok', 'spec_rehash_ok', 'amendments', 'amendments_ok', 'dsr',
 ] as const
 
 function csvField(value: string | number | boolean | null): string {
@@ -272,7 +275,7 @@ function csvField(value: string | number | boolean | null): string {
 /** The rows as CSV (RFC 4180 line ends), every number at the precision the API sent. */
 export function toCsv(rows: readonly RegRow[]): string {
   const lines = rows.map((r) =>
-    [r.name, r.registered, r.tag, r.round, r.badge, r.n, r.p, r.controlP, r.bonferroni, r.holm, r.bhQ, r.sha, r.shaOk, r.rehashOk, r.amendments, r.amendmentsOk]
+    [r.name, r.registered, r.tag, r.round, r.badge, r.n, r.p, r.controlP, r.bonferroni, r.holm, r.bhQ, r.sha, r.shaOk, r.rehashOk, r.amendments, r.amendmentsOk, r.dsr]
       .map(csvField)
       .join(','),
   )

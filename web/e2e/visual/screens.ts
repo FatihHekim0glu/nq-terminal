@@ -33,7 +33,9 @@ export interface ScreenCase {
   readonly line: string | null
   /** The mnemonic the status line names once the screen is open. */
   readonly code: string
-  /** The charts the screen draws with the fixture data (the audit checks the count, so it is never empty). */
+  /** The charts the screen draws with the fixture data (the audit checks the count, so it is never empty). From P1
+   *  the counts include the P1 figures: the cone (EQ), the QQ plot (RET), the BR4 scatter (RR), the DSR ladder (MT, and
+   *  REG through its MT panel) and a run's trade paths (MAE, MFE, holding times). */
   readonly charts: number
 }
 
@@ -52,17 +54,18 @@ export const SCREENS: readonly ScreenCase[] = [
   { name: 'JRNL', line: 'JRNL', code: 'JRNL', charts: 0 },
   { name: 'DES-hypothesis', line: `${HYP} DES`, code: 'DES', charts: 1 },
   { name: 'DES-instrument', line: 'NQ DES', code: 'DES', charts: 1 },
-  { name: 'REG', line: 'REG', code: 'REG', charts: 1 },
-  { name: 'MT', line: 'MT', code: 'MT', charts: 1 },
+  { name: 'REG', line: 'REG', code: 'REG', charts: 2 },
+  { name: 'MT', line: 'MT', code: 'MT', charts: 2 },
   { name: 'RUNS', line: 'RUNS', code: 'RUNS', charts: 0 },
   { name: 'RUN', line: `${RUN} RUN`, code: 'RUN', charts: 1 },
   { name: 'LEDG', line: 'LEDG', code: 'LEDG', charts: 0 },
-  { name: 'EQ-run', line: 'smoke_2015_01 EQ', code: 'EQ', charts: 3 },
-  { name: 'EQ', line: `${HYP} EQ`, code: 'EQ', charts: 1 },
+  // 4 charts: the fixture serve's bars sit on another price basis than the run's fills, so TA2 is refused (no MAE or MFE chart).
+  { name: 'EQ-run', line: 'smoke_2015_01 EQ', code: 'EQ', charts: 4 },
+  { name: 'EQ', line: `${HYP} EQ`, code: 'EQ', charts: 2 },
   { name: 'DD', line: `${HYP} DD`, code: 'DD', charts: 1 },
-  { name: 'RET', line: `${HYP} RET`, code: 'RET', charts: 1 },
-  { name: 'RR', line: `${HYP} RR`, code: 'RR', charts: 0 },
-  { name: 'RR-run', line: 'nt_dtsmom_v0_fixture_ts1 RR', code: 'RR', charts: 3 },
+  { name: 'RET', line: `${HYP} RET`, code: 'RET', charts: 2 },
+  { name: 'RR', line: `${HYP} RR`, code: 'RR', charts: 1 },
+  { name: 'RR-run', line: 'nt_dtsmom_v0_fixture_ts1 RR', code: 'RR', charts: 4 },
   { name: 'MRET', line: `${HYP} MRET`, code: 'MRET', charts: 2 },
   { name: 'HELP', line: 'HELP', code: 'HELP', charts: 0 },
 ]

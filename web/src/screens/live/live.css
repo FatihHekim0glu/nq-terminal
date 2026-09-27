@@ -86,6 +86,14 @@
 .jrnl-tag { color: var(--warn); font-weight: 700; }
 .jrnl-status { margin-left: auto; padding-right: 6px; color: var(--text); white-space: nowrap; }
 
+/* The live stream line (TASKS 9.2): the mode and its reason in words; the tone only repeats them. */
+.live-stream-reason { font-weight: 400; color: var(--text); white-space: normal; }
+.live-stream .live-item:first-child { white-space: normal; }
+
+/* LV5 paper against model: a fixed-height chart in the body's scroll, under Routes and Fills. */
+.live-tracking { flex: 0 0 auto; padding-top: 2px; }
+.live-tracking-chart { height: 260px; min-width: 0; }
+
 /* A short panel (the 1366x768 split, about 275px) shows the whole target-against-actual chart at
    rest, sized to the panel, rather than the top of it: the chart block comes first, and the strips,
    countdown, tiles, reconciliation, routes and journals follow in the body's scroll (TASKS Phase 8).

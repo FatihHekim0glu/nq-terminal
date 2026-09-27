@@ -126,6 +126,19 @@ def test_tailer_starts_again_when_the_file_is_replaced(tmp_path: Path):
     assert [r.data["target"] for r in tailer.poll().rows] == [7, 8]
 
 
+def test_tailer_returns_the_same_rows_until_the_file_changes(tmp_path: Path):
+    """An unchanged journal costs no copy per poll (TASKS 9.2: many streams poll the one shared tailer)."""
+    path = tmp_path / "j.jsonl"
+    path.write_text(row(target=1), encoding="utf-8")
+    tailer = journals.JournalTailer(path)
+    first, second = tailer.poll(), tailer.poll()
+    assert first.rows is second.rows
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(row(target=2))
+    third = tailer.poll()
+    assert third.rows is not second.rows and [r.data["target"] for r in third.rows] == [1, 2]
+
+
 def test_tailer_reports_bad_lines_and_a_missing_file(tmp_path: Path):
     path = tmp_path / "j.jsonl"
     path.write_text(row(target=1) + "{broken\n" + "[1, 2]\n", encoding="utf-8")
@@ -133,6 +146,69 @@ def test_tailer_reports_bad_lines_and_a_missing_file(tmp_path: Path):
     assert len(state.rows) == 1 and [b.line_no for b in state.bad_lines] == [2, 3]
     gone = journals.JournalTailer(tmp_path / "none.jsonl").poll()
     assert gone.rows == () and gone.present is False
+
+
+# ---------------------------------------------------------------- the stream cursor (TASKS 9.2, Last-Event-ID)
+
+
+def rows_of(path: Path) -> tuple[journals.JournalRow, ...]:
+    return journals.JournalTailer(path).poll().rows
+
+
+def test_cursor_round_trips_and_sorts_by_name():
+    entries = {"b.jsonl": journals.CursorEntry(3, "0123456789ab"), "a.jsonl": journals.CursorEntry(1, "ba9876543210")}
+    text = journals.encode_cursor(entries)
+    assert text == "c1|a.jsonl:1:ba9876543210|b.jsonl:3:0123456789ab"
+    assert journals.parse_cursor(text) == entries
+    assert journals.encode_cursor({}) == "c1" and journals.parse_cursor("c1") == {}
+
+
+@pytest.mark.parametrize("text", [
+    "", "c2", "c1|", "c1|a.jsonl:0:0123456789ab", "c1|a.jsonl:1:0123456789AB", "c1|a.jsonl:1:0123",
+    "c1|../results/oos_access_log.jsonl:1:0123456789ab", "c1|a\\b.jsonl:1:0123456789ab", " c1",
+    "c1|a.jsonl:1:0123456789ab|a.jsonl:2:0123456789ab", "c1|a.jsonl:01:0123456789ab",
+    "c1" + "".join(f"|a{n}.jsonl:1:0123456789ab" for n in range(400)),
+], ids=lambda text: repr(text[:40]))
+def test_cursor_parser_refuses_anything_it_did_not_write(text: str):
+    with pytest.raises(journals.CursorError):
+        journals.parse_cursor(text)
+
+
+def test_row_digest_is_stable_across_tailers_and_sees_a_changed_row(tmp_path: Path):
+    path = tmp_path / "j.jsonl"
+    path.write_text(row(target=1) + row(target=2), encoding="utf-8")
+    first, again = rows_of(path), rows_of(path)  # a new tailer is a restarted server
+    assert [journals.row_digest(r) for r in first] == [journals.row_digest(r) for r in again]
+    path.write_text(row(target=1) + row(target=3), encoding="utf-8")
+    assert journals.row_digest(rows_of(path)[1]) != journals.row_digest(first[1])
+    assert len(journals.row_digest(first[0])) == journals.DIGEST_CHARS
+
+
+def test_resume_point_continues_after_a_matching_row(tmp_path: Path):
+    path = tmp_path / "j.jsonl"
+    path.write_text(row(target=1) + "{broken\n" + row(target=2) + row(target=3), encoding="utf-8")
+    rows = rows_of(path)
+    entry = journals.CursorEntry(rows[1].line_no, journals.row_digest(rows[1]))
+    assert journals.resume_point(rows, entry) == 2
+    assert journals.resume_point(rows, None) == 0
+
+
+def test_resume_point_is_none_when_the_row_changed_born_failing(tmp_path: Path):
+    """A resume that trusted the line number alone would skip the rewritten rows; the digest catches it."""
+    path = tmp_path / "j.jsonl"
+    path.write_text(row(target=1) + row(target=2), encoding="utf-8")
+    entry = journals.CursorEntry(2, journals.row_digest(rows_of(path)[1]))
+    path.write_text(row(target=1) + row(target=9) + row(target=10), encoding="utf-8")
+    assert journals.resume_point(rows_of(path), entry) is None
+    path.write_text(row(target=1), encoding="utf-8")  # truncated below the cursor
+    assert journals.resume_point(rows_of(path), entry) is None
+
+
+def test_a_mislabelled_row_is_caught_born_failing():
+    plumbing = {"type": "close", "date": "2026-10-02", "strategy_performance": False}
+    journals.check_row_label(journals.JournalRow("j.jsonl", 1, True, plumbing))
+    with pytest.raises(journals.PlumbingLeakError):
+        journals.check_row_label(journals.JournalRow("j.jsonl", 1, False, plumbing))
 
 
 # ---------------------------------------------------------------- the performance path

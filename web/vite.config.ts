@@ -26,13 +26,22 @@ export const LIBRARY_CHUNKS = [
   // tslib stays out: the shell's dialog helpers (cmdk) use it too, so it belongs in vendor.
   { name: 'echarts', test: nodeModule('echarts|zrender') },
   { name: 'tanstack-grid', test: nodeModule(String.raw`@tanstack[\\/+](react-table|table-core|react-virtual|virtual-core|react-store|store)`) },
+  // The Perspective pivot grid (TASKS 9.1): client, viewer, datagrid plugin and their table and layout
+  // elements, reached only through src/perspective/engine.ts. Its WebAssembly binaries and engine worker
+  // are separate assets, fetched when a pivot view first mounts.
+  { name: 'perspective', test: nodeModule('@perspective-dev|regular-table|regular-layout|pro_self_extracting_wasm') },
 ] as const
 
 // Stable vendor chunks, cached across releases of the app code. Rolldown's groups take each captured
 // module's dependencies with them (includeDependenciesRecursively, on by default), so React must be
 // captured first: a library group ranked above it pulled React into tanstack-grid-*.js, and the shell
 // then loaded that library chunk with every page. scripts/bundleCheck.test.ts checks the order.
+// Vite's own preload helper wraps every import() in library code too (Perspective's viewer has some), so
+// a library group would capture it and the shell, which needs the helper for its lazy screens, would
+// then load that whole library chunk. It is captured first, into a tiny chunk of its own.
+export const PRELOAD_HELPER = /(^|[\\/\0])vite[\\/]preload-helper/
 export const CHUNK_GROUPS = [
+  { name: 'preload', test: PRELOAD_HELPER, priority: 50 },
   { name: 'react', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?(react|react-dom|scheduler)[@\\/]/, priority: 40 },
   { name: 'dockview', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?dockview(-core|-react)?[@\\/]/, priority: 20 },
   ...LIBRARY_CHUNKS.map((c) => ({ ...c, priority: 30 })),

@@ -81,6 +81,13 @@ describe('pane options from the charts theme (look spec 6.3)', () => {
     expect(rr.slice(1).map((s) => s.stroke)).toEqual(['#FFFFFF', '#F06000', '#00B5F7'])
   })
 
+  it('draws an interval bound (the SV5 bootstrap band on RR) as a thin dashed amber line', () => {
+    const band: LineStackPane = { id: 'band', series: [{ name: 'Bootstrap 95% low', style: 'ciBound', values: [] }] }
+    const s = build({ pane: band, data: [t.map(() => 0.5)] }).series[1]!
+    expect(s).toMatchObject({ label: 'Bootstrap 95% low', stroke: '#FFA028', width: 1, dash: [4, 3], spanGaps: false })
+    expect(s.fill).toBeUndefined()
+  })
+
   it('born failing: draws the primary line last, over the benchmark, with its area fill under every line', () => {
     // uPlot draws series in index order: the area first, the benchmark, then the strategy line on top.
     const eq = build().series.slice(1)

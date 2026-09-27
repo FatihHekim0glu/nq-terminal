@@ -62,7 +62,8 @@ function Stop-Start([string]$Message) {
 function Get-BackendArgs {
     if ($Dev) {
         return @('-m', 'uvicorn', 'nq_terminal.app:create_app', '--factory', '--reload',
-            '--host', $Loopback, '--port', "$Port", '--no-server-header', '--no-proxy-headers')
+            '--host', $Loopback, '--port', "$Port", '--no-server-header', '--no-proxy-headers',
+            '--timeout-graceful-shutdown', '2')
     }
     return @('-m', 'nq_terminal')
 }

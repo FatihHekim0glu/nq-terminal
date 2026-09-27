@@ -11,6 +11,14 @@ describe('the screen registry after phases 6 and 7', () => {
     expect(phased.filter((code) => !built.has(code))).toEqual([])
   })
 
+  it('registers COST, BLK, EXPO and SEAL as screens of their own, in Phase 9 (TASKS 9.4)', () => {
+    const built = builtScreens(BUILT_SCREENS)
+    for (const code of ['COST', 'BLK', 'EXPO', 'SEAL'] as const) {
+      expect(built.has(code), code).toBe(true)
+      expect(SCREEN_PHASES[code], code).toBe('9')
+    }
+  })
+
   it('registers only mnemonics the command registry knows', () => {
     const known = new Set(MNEMONICS.map((m) => m.code))
     expect(Object.keys(BUILT_SCREENS).filter((code) => !known.has(code as never))).toEqual([])

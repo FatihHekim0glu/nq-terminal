@@ -1,7 +1,11 @@
 // Performance budgets (TASKS 8.3), each measured with a CDP trace against the fixture-mode backend of
 // playwright.config.ts (the real-data run is smoke.real.ts, started by terminal/scripts/smoke_real.ps1):
 // - HOME first render under 1.5 s: from navigation start to the four panels showing their data, painted,
-//   in a fresh browser context each time (empty cache); the median of three loads is held to the budget;
+//   in a fresh browser context each time (empty cache); the median of three loads is held to the budget.
+//   The budgets run alone on a freshly started backend (`pnpm e2e:perf`), so HOME's API reads are made once,
+//   unmeasured, before the loads: a running terminal's backend is warm, and the fixture double builds each
+//   series' synthetic bars on first use (seconds in all); before improvement run 3 the other specs ran first and
+//   did the same. The browser side stays cold: every measured load is a fresh context with an empty cache;
 // - GIP pan and zoom near 60 fps: one wheel step, then one drag step, per animation frame on the intraday
 //   chart; frames are the compositor's DrawFrame events in the trace (trace.ts, judgeFrames);
 // - an 8,411-fill grid under 500 ms: the RUN 3) Fills tab (first page of 5,000 rows), a sort on Price,
@@ -9,7 +13,7 @@
 //   fills, so /api/runs/<run>/fills is answered in the page with 8,411 synthetic rows in the API's shape;
 //   the real run's 8,411 fills are measured by the real-data smoke run.
 // Every run also checks there are no console errors and that every request is a same-origin GET.
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test'
 import { BUDGETS } from './trace.ts'
 import { canvasPrint, measureFills, measureHome, measurePanZoom, median, offOriginOrNotGet, paint, report, runLine, settle, watch } from './pages.ts'
 
@@ -67,10 +71,19 @@ async function serveSyntheticFills(page: Page, run: string): Promise<void> {
   })
 }
 
+/** HOME's API reads once, unmeasured: the universe at both windows, the catalog, RV22 and every MON 2Day cell. */
+async function warmBackend(request: APIRequestContext): Promise<void> {
+  const get = async (path: string) => expect((await request.get(path)).ok(), path).toBe(true)
+  const universe = (await (await request.get('/api/market/universe?window=22')).json()) as { rows: Array<{ symbol: string }> }
+  await Promise.all([get('/api/market/universe?window=252'), get('/api/data/catalog'), get('/api/market/rv?symbol=NQ.V.0&window=22')])
+  await Promise.all(universe.rows.map((r) => get(`/api/market/two-day?symbols=${r.symbol}`)))
+}
+
 test.describe('performance budgets (fixture backend, CDP trace)', () => {
   test.describe.configure({ timeout: 180_000 })
 
-  test('HOME first render is under 1.5 s', async ({ browser }, info) => {
+  test('HOME first render is under 1.5 s', async ({ browser, request }, info) => {
+    await warmBackend(request)
     const loads = []
     for (let i = 0; i < HOME_LOADS; i += 1) loads.push(await measureHome(browser, info, `home-${i + 1}`))
     const ready = median(loads.map((l) => l.readyMs))

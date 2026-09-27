@@ -25,6 +25,8 @@ Status: plan, 2026-09-26. Decisions marked DLn are in `PRD.md` section 7. Facts 
 
 Versions came from `npm view` and `uv pip install --dry-run` on 2026-09-26. Phase 4 pins them exactly in `package.json` and `pnpm-lock.yaml`.
 
+Perspective's scope, checked with `npm view` on 2026-09-27 (Phase 10 security review): `@finos/perspective` 3.8.0 is deprecated on the registry with the message "no longer maintained. Please upgrade to @perspective-dev/client"; `@perspective-dev/client` 5.5.1 points at github.com/perspective-dev/perspective and is published by timkpaine and texodus, texodus being a maintainer of `@finos/perspective` too; its `pro_self_extracting_wasm` 0.0.9 dependency (github.com/prospectiveco) is published by texodus alone; the lock's integrity hash for `@perspective-dev/client` 5.5.1 equals the registry's. The client's `ws` and `stoppable` dependencies serve its Node server mode and are not in the browser bundle's code path; the browser engine loads only through `src/perspective/engine.ts`, same-origin, under the CSP's `'wasm-unsafe-eval'`.
+
 ## 2. Folder layout
 
 ```
@@ -189,7 +191,7 @@ Contract rules (Phase 2 improvement run): every response model derives from `mod
 - `GET /api/live/journal?file=&type=&limit=&offset=` → rows with computed `plumbing` and ISO versions of `*_ns` fields.
 - `GET /api/live/log?file=&tail=500` → parsed lines; `file` is one of `status.logs[].name`. IB account ids are masked (lettered paper forms such as `DUX123456` included, and the configured `IB_ACCOUNT_ID` wherever it appears).
 - `GET /api/live/performance?file=` → target against actual from one journal's performance rows only (plumbing rows dropped and counted): `{journal, present, empty_state, basis, banner, plumbing_rows_skipped, t[], line_no[], date[], contract[], target[], expected[], actual[], reconciled_ok[], exposure[], slippage_ticks[], sent[], refused[], error[], halted[]}`. Added in Phase 2 for the LIVE step chart (LV2). `t` is epoch seconds at 00:00 UTC of each date and `line_no` the journal line of each close row, so LIVE matches its rows line for line with `/api/live/journal`.
-- Live updates in P0 use react-query polling every 2 s. SSE (`fastapi.sse.EventSourceResponse`) is P1.
+- Live updates in P0 use react-query polling every 2 s. From P1 (TASKS 9.2), `GET /api/live/stream` sends the same data as Server-Sent Events (`fastapi.sse.EventSourceResponse`; kinds hello, status, kill_switch, journal_reset, journal_row, heartbeat, bye; each event's id is the journal cursor, sent back as Last-Event-ID on a reconnect). The web client (`web/src/api/liveStream.ts`, `useLiveStream.ts`) opens one stream while LIVE or JRNL is on screen: a status event is written into the status query's cache, a journal event refreshes the journal-derived GETs once a burst settles, and nothing polls while the stream is open. It falls back to the 2 s polling when the browser has no EventSource, the stream is refused (503 when too many are open) or a reconnect takes over 8 s, retries a refused stream after 5 to 60 s, and replaces a stream silent for three heartbeats. Only `web/src/api/client.ts` may open an EventSource (the GET-only source scan). LIVE and JRNL show the stream's state in words.
 
 **P2 only (needs U3):** `POST/GET/DELETE /api/jobs...` and `GET /api/ib/snapshot` (section 8).
 

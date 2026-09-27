@@ -279,28 +279,37 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   },
   COST: {
     summary: 'Costs of a run or hypothesis on a screen of their own.',
-    shows: ['The cost waterfall and the cost sensitivity. P0 shows the cost ladder inside DES.', P1],
-    data: 'GET /api/analytics/run/{run_id}/costs.',
-    examples: ['{nt_dtsmom_v0_ts1 COST <GO>}'],
+    shows: [
+      'For a hypothesis: the cost ladder the screen JSON recorded, as a numbered table beside the bar ladder, with the break-even cost. The values are the ones DES shows.',
+      'For a run: the cost waterfall, the costs by instrument and the net P&L at each slippage cost per side.',
+    ],
+    data: 'GET /api/hypotheses/{name} for a hypothesis; GET /api/analytics/run/{run_id}/costs for a run.',
+    examples: ['{rebal_v0 COST <GO>}', '{nt_dtsmom_v0_ts1 COST <GO>}'],
     related: ['DES', 'RUN'],
   },
   BLK: {
     summary: 'The blocks of a hypothesis on a screen of their own.',
-    shows: ['The block results as a bar ladder. P0 shows the blocks inside DES.', P1],
+    shows: ['The block results the screen JSON recorded, as a numbered table beside the bar ladder. The values are the ones DES shows.'],
     data: 'GET /api/hypotheses/{name}.',
     examples: ['{rebal_v0 BLK <GO>}'],
     related: ['DES'],
   },
   EXPO: {
     summary: 'Exposure and turnover of a run.',
-    shows: ['Exposure, turnover, notional: each over time.', P1],
+    shows: [
+      'Gross and net exposure over turnover, per session, with the price basis; the means the API sends; every session in a grid, newest first.',
+      'A run with no mark to market snapshots (an intraday run) says so and shows none.',
+    ],
     data: 'GET /api/analytics/run/{run_id}/exposure.',
     examples: ['{nt_dtsmom_v0_ts1 EXPO <GO>}'],
     related: ['RUN'],
   },
   SEAL: {
     summary: 'The sealed-window files of a hypothesis.',
-    shows: ['The servable sealed files, each labelled spent.', P1],
+    shows: [
+      'The sealed-window files of a hypothesis, numbered; a number and <GO> shows one: CSV columns from the allowlist, JSON without price keys, markdown as text.',
+      'Where a confirmation tested the hypothesis, the in-sample against sealed comparison with its own alpha. The name of a confirmation shows the files of its parent.',
+    ],
     data: 'GET /api/sealed and GET /api/sealed/{name}, through a column allowlist.',
     honesty: 'Spent window, opened 2026-09-26, descriptive only.',
     examples: ['{rebal_v0 SEAL <GO>}'],

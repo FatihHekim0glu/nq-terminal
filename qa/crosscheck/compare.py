@@ -18,10 +18,12 @@ import numpy as np
 
 from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump
 from crosscheck.market_reference import market_references
+from crosscheck.p1_reference import P1_REFERENCES
 from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
 from crosscheck.trade_reference import costs_references, trades_references
 
-BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "market": market_references}
+BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "market": market_references,
+                     **P1_REFERENCES}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9

@@ -98,6 +98,8 @@ export function lineStackSeries(tokens: ChartTokens = DEFAULT_CHART_TOKENS) {
     rollLong: { stroke: c.accent2, width: G.primaryWidth },
     rollZero: { stroke: c.zeroLine, width: w },
     rollVol: { stroke: c.rollVol, width: G.primaryWidth },
+    /** RR: the ends of the full-sample bootstrap interval (SV5), thin amber dashes. */
+    ciBound: { stroke: c.data, width: w, dash: [...G.fenceDash] },
     fence: { stroke: c.fence, width: w, dash: [...G.fenceDash] },
   } as const
 }

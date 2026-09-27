@@ -101,6 +101,16 @@ class VolExtremes(ResponseModel):
     lo_date: str | None
 
 
+class RollingSharpeBand(ResponseModel):
+    """RL1 band: the range (95%) a `window`-period Sharpe would span if the full-sample Sharpe held throughout."""
+
+    window: int
+    centre: Num
+    lo: Num
+    hi: Num
+    se: Num = Field(description="Mertens standard error of a window-length Sharpe, annualised")
+
+
 class RollingView(ResponseModel):
     """RL1 and RL2 over a short and a long window (`windows`, in `window_unit`): 63 and 252 sessions for a daily
     series, 12 and 36 months for a monthly one (P = 12)."""
@@ -118,6 +128,8 @@ class RollingView(ResponseModel):
     full_sharpe: Num
     full_vol: Num
     vol_extremes: list[VolExtremes] = Field(description="one per window, in `windows` order")
+    sharpe_bands: list[RollingSharpeBand] = Field(description="one per window, in `windows` order")
+    band_label: str
 
 
 class YearValue(ResponseModel):

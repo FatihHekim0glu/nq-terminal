@@ -236,7 +236,7 @@ describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, comma
     expect(notPrevented).toBe(false)
     const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
     expect(document.activeElement).toBe(input)
-    expect(input.value).toBe(' Index')
+    expect(input.value).toBe('Index')
   })
 
   it('born failing: before any panel has focus, the nav toolbar and command zone name panel 1; a command moves them to its panel', async () => {

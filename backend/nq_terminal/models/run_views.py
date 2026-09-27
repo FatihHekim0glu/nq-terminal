@@ -1,4 +1,4 @@
-"""Response models for a run's trade, cost and exposure views (ANALYTICS_CATALOG TA1, TA3, TA6, EX1 to EX4).
+"""Response models for a run's trade, cost and exposure views (ANALYTICS_CATALOG TA1, TA3 to TA6, EX1 to EX4).
 
 Served by `/api/analytics/run/{run_id}/trades`, `/costs` and `/exposure` (ARCHITECTURE s4 Analytics), apart from the
 tear sheet so it stays light. Every value is descriptive and computed by the terminal ("[POST HOC]"), except the
@@ -100,6 +100,50 @@ class SlippageView(ResponseModel):
     plumbing_banner: str
 
 
+class HoldingView(ResponseModel):
+    """TA4: holding time per trade in minutes; the histogram is on log10 minutes (Sturges' edges over the positive
+    durations), a zero duration is counted apart (it has no logarithm)."""
+
+    unit: str
+    tag: Tag
+    n: int
+    zero: int
+    bin_rule: str
+    log10_edges: list[float]
+    edges: list[float]
+    counts: list[int]
+    median: Num
+    mean: Num
+    min: Num
+    max: Num
+    p5: Num
+    p95: Num
+
+
+class RunsTest(ResponseModel):
+    """Wald-Wolfowitz runs test on the signs of the non-zero trades, on the whole trade list; null without both
+    signs."""
+
+    wins: int
+    losses: int
+    runs: int
+    expected: Num
+    sd: Num
+    z: Num
+    p: Num
+
+
+class StreakView(ResponseModel):
+    """TA5: longest winning and losing runs in exit order (a flat trade breaks both) and the runs test."""
+
+    tag: Tag
+    n: int
+    longest_win: int
+    longest_loss: int
+    runs_test: RunsTest
+    note: str
+
+
 class RunTrades(ResponseModel):
     """TA1, TA3 and TA6 for one run. `by_hour` is null for a book that enters at the session close by rule."""
 
@@ -115,6 +159,15 @@ class RunTrades(ResponseModel):
     by_weekday: EntryGroups
     by_month: EntryGroups
     slippage: SlippageView
+
+
+class RunTradePaths(ResponseModel):
+    """TA4 holding times and TA5 streaks of one run's trades (its own route, so `RunTrades` keeps its shape)."""
+
+    run_id: str
+    tag: Tag
+    holding: HoldingView
+    streaks: StreakView
 
 
 class WaterfallStep(ResponseModel):

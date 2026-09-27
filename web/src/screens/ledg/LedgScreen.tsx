@@ -5,6 +5,7 @@
 // colour and text and the anchor pair status; then the anchor pairs themselves. `98) Export` saves the
 // shown rows as CSV (the grid's columns, numbers at full precision). Enter, a double click or
 // Number <GO> on a row opens RUN for its run. Read only: the ledger is written by ledger_append alone.
+// View [Grid | Pivot] opens the shown rows in the Perspective pivot grid (TASKS 9.1), grouped by strategy.
 import { useMemo, useState } from 'react'
 import { useLedger } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
@@ -18,6 +19,7 @@ import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { LEDG, LEDG_HELP_LINE } from '../../copy/ledg'
+import { LedgerPivot, PivotToggle, type GridView } from '../../perspective'
 import AnchorPairs from './AnchorPairs'
 import { ledgerColumns } from './ledgerColumns'
 import {
@@ -133,6 +135,7 @@ export default function LedgScreen(_props: ScreenProps) {
   const [text, setText] = useState('')
   const [strategy, setStrategy] = useState(ALL)
   const [balance, setBalance] = useState<BalanceFilter>('all')
+  const [gridView, setGridView] = useState<GridView>('grid')
   const filters = useMemo(() => ({ text, strategy, balance }), [text, strategy, balance])
   const view = query.data
   const counts = ledgerCounts(view?.rows ?? [])
@@ -146,12 +149,14 @@ export default function LedgScreen(_props: ScreenProps) {
       <ParamRow label={LEDG.paramsLabel}>
         <DropdownField label={LEDG.strategyLabel} value={strategy} options={strategies} onChange={setStrategy} />
         <DropdownField label={LEDG.balanceLabel} value={balance} options={BALANCE_OPTIONS} onChange={(v) => setBalance(v as BalanceFilter)} />
+        <PivotToggle value={gridView} onChange={setGridView} />
         <span className="runs-counts" data-testid="ledger-counts">{fillCopy(LEDG.counts, { rows: counts.rows, balanced: counts.balanced, matching: counts.matching })}</span>
       </ParamRow>
       <p className="runs-note">{LEDG.note}</p>
       {query.error ? <p className="run-msg" role="status">{fillCopy(LEDG.failed, { detail: query.error.detail })}</p> : null}
       {query.isPending ? <p className="run-msg" role="status">{LEDG.loading}</p> : null}
-      {view ? <Ledger view={view} rows={rows} columns={shownColumns} compact={compact} /> : null}
+      {view && gridView === 'pivot' ? <div className="nqt-pivot-frame"><LedgerPivot rows={rows} /></div> : null}
+      {view && gridView === 'grid' ? <Ledger view={view} rows={rows} columns={shownColumns} compact={compact} /> : null}
     </div>
   )
 }

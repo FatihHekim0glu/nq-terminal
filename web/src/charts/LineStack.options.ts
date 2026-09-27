@@ -132,6 +132,10 @@ function seriesOptions(s: LineStackSeries, styles: Styles, part: SeriesPart = 'w
       const { stroke, width, fillPos, fillNeg } = styles.perfDiff
       return { ...base, stroke, width, fill: signedFill(fillPos, fillNeg), fillTo: 0 }
     }
+    case 'ciBound': {
+      const { stroke, width, dash } = styles.ciBound
+      return { ...base, stroke, width, dash: [...dash] }
+    }
     default: {
       const { stroke, width } = styles[s.style]
       return { ...base, stroke, width }

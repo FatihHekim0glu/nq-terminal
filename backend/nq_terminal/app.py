@@ -122,6 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(data.router)  # 2.3
     from nq_terminal.api import analytics; app.include_router(analytics.router)  # noqa: E702  3.3
     from nq_terminal.api import instruments; app.include_router(instruments.router)  # noqa: E702  8 (A1)
+    from nq_terminal.api import live_stream; app.include_router(live_stream.router)  # noqa: E702  9.2 (SSE)
     _mount_web(app, settings.web_dist)
     assert_get_only(app)
     return app

@@ -1,9 +1,8 @@
 // A run's trades, costs and exposure panels (UI_SPEC section 7, the tear sheet's last row; ANALYTICS
-// TA1, TA3, TA6, EX1 to EX4). Three DES-style cards under the tab view. The trade card appears only
+// TA1, TA3, TA6, EX1 to EX4, and in P1 TA2, TA4, TA5 as the trade paths card). DES-style cards under the tab view. The trade card appears only
 // when the run has closed trades; the exposure card says why when a run has no snapshots. Each card
 // is [POST HOC] and names its unit; the slippage table holds real fills only, as the API sends them.
-import { useId, useMemo, useState, type ReactNode } from 'react'
-import type { ApiError } from '../../api/client'
+import { useId, useMemo, useState } from 'react'
 import { useRun } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import LineStack from '../../charts/LineStack'
@@ -15,46 +14,15 @@ import {
   exposureStack, groupLadder, hasTrades, sensitivityLadder, slippageView, tradeStatRows, waterfallRows,
   type Grouping, type RunCosts, type RunExposure, type RunTrades,
 } from './tearBooks'
+import RunTradePaths from './RunTradePaths'
+import { Card, Pending as CardPending, Rows, chartId } from './TearCard'
 import { formatNumber } from './tearFormat'
 import { useRunBooks } from './tearQueries'
 import '../../grids/grid.css'
 import '../../tiles/tiles.css'
 
-function chartId(prefix: string, uid: string): string {
-  return `${prefix}-${uid.replace(/[^A-Za-z0-9_-]/g, '')}`
-}
-
-function Card({ title, tag, children }: { readonly title: string; readonly tag?: string; readonly children: ReactNode }) {
-  return (
-    <div className="nqt-card tear-card">
-      <h3 className="nqt-card-title tear-card-title">
-        {title}
-        {tag ? <span className="tear-card-tag">{tag}</span> : null}
-      </h3>
-      <div className="tear-card-body">{children}</div>
-    </div>
-  )
-}
-
-function Pending({ error }: { readonly error: ApiError | null }) {
-  if (error) return <p className="tear-note" role="alert">{fillCopy(B.failed, { detail: error.detail })}</p>
-  return <p className="tear-note" role="status" aria-busy="true">{TEAR.loadingBooks}</p>
-}
-
-function Rows({ caption, rows }: { readonly caption: string; readonly rows: ReadonlyArray<{ id: string; label: string; value: string }> }) {
-  return (
-    <table className="nqt-grid tear-kv">
-      <caption className="sr-only">{caption}</caption>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.id}>
-            <th scope="row" className="name tear-rowhead">{r.label}</th>
-            <td className="num tear-value">{r.value}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
+function Pending({ error }: { readonly error: Parameters<typeof CardPending>[0]['error'] }) {
+  return <CardPending error={error} failed={B.failed} loading={TEAR.loadingBooks} />
 }
 
 /** TA6 (ARCHITECTURE s4): the real-fill rows of this run's own strategy only, the sample named. */
@@ -118,7 +86,7 @@ function TradesCard({ trades, runId }: { readonly trades: RunTrades; readonly ru
   )
 }
 
-function CostsCard({ costs, runId }: { readonly costs: RunCosts; readonly runId: string }) {
+export function CostsCard({ costs, runId }: { readonly costs: RunCosts; readonly runId: string }) {
   const rows = useMemo(() => waterfallRows(costs), [costs])
   const ladder = useMemo(() => sensitivityLadder(costs, runId), [costs, runId])
   const uid = useId()
@@ -148,7 +116,7 @@ function CostsCard({ costs, runId }: { readonly costs: RunCosts; readonly runId:
   )
 }
 
-function ExposureCard({ exposure, runId, link }: { readonly exposure: RunExposure; readonly runId: string; readonly link: PanelLink }) {
+export function ExposureCard({ exposure, runId, link }: { readonly exposure: RunExposure; readonly runId: string; readonly link: PanelLink }) {
   const spec = useMemo(() => exposureStack(exposure, runId), [exposure, runId])
   const e = exposure.exposure
   const t = exposure.turnover
@@ -180,6 +148,7 @@ export default function RunBooks({ runId, link = '-' }: { readonly runId: string
         {trades ? (
           hasTrades(trades) ? <TradesCard trades={trades} runId={runId} /> : <Card title={B.tradesTitle}><p className="tear-note">{B.noTrades}</p></Card>
         ) : <Card title={B.tradesTitle}><Pending error={books.trades.error} /></Card>}
+        {trades && hasTrades(trades) ? <RunTradePaths runId={runId} /> : null}
         {books.costs.data ? <CostsCard costs={books.costs.data} runId={runId} /> : <Card title={B.costsTitle}><Pending error={books.costs.error} /></Card>}
         {books.exposure.data ? <ExposureCard exposure={books.exposure.data} runId={runId} link={link} /> : <Card title={B.exposureTitle}><Pending error={books.exposure.error} /></Card>}
       </div>

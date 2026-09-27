@@ -20,6 +20,8 @@ import { numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { describePScatter } from '../../charts/echarts/pScatterModel'
 import { stubLayout } from '../../grids/testing'
 import { mtScatterInput } from './mtModel'
+import { DEFLATED } from '../../copy/deflated'
+import { DEFLATED_REAL } from './deflatedFixtures'
 import MtScreen from './MtScreen'
 import { MULTIPLE_TESTING } from './regFixtures'
 import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
@@ -47,16 +49,19 @@ async function ready() {
   })
 }
 
+/** The last option the p-value scatter drew (MT also draws SV3's DSR ladder, which has no BH line). */
 function lastOption(): { yAxis: { type: string } } {
-  const calls = fake.chart.setOption.mock.calls
-  return calls[calls.length - 1]![0] as { yAxis: { type: string } }
+  const scatter = fake.chart.setOption.mock.calls
+    .map((c) => c[0] as { yAxis: { type: string }; series?: Array<{ id?: string }> })
+    .filter((o) => o.series?.some((s) => s.id === 'bh'))
+  return scatter[scatter.length - 1]!
 }
 
 describe('MT: multiple-testing view', () => {
   it('draws every family p-value against rank, named by the chart summary', async () => {
     stubApi()
     await ready()
-    const img = screen.getByRole('img')
+    const img = screen.getByRole('img', { name: describePScatter(mtScatterInput(MULTIPLE_TESTING, 'log')) })
     expect(img.getAttribute('aria-label')).toBe(describePScatter(mtScatterInput(MULTIPLE_TESTING, 'log')))
     expect(lastOption().yAxis.type).toBe('log')
   })
@@ -114,10 +119,27 @@ describe('MT: multiple-testing view', () => {
     expect(numberedItems(PANEL_ID).map((i) => i.n)).toEqual(expect.arrayContaining([96, 97]))
   })
 
-  it('reads only /api/multiple-testing, with GET', async () => {
+  it('reads /api/multiple-testing and the SV3 view /api/analytics/deflated, with GET only', async () => {
     const seen = stubApi()
     await ready()
-    expect(seen.map((s) => `${s.method} ${s.url}`)).toEqual(['GET /api/multiple-testing'])
+    await screen.findByRole('region', { name: DEFLATED.label })
+    expect(new Set(seen.map((s) => `${s.method} ${s.url}`))).toEqual(new Set(['GET /api/multiple-testing', 'GET /api/analytics/deflated']))
+  })
+
+  it('shows the Deflated Sharpe over the registered trials, [POST HOC], with the trial that dominates V and no verdict', async () => {
+    stubApi()
+    await ready()
+    const section = await screen.findByRole('region', { name: DEFLATED.label })
+    await waitFor(() => expect(section.textContent).toContain('N 21 registered trials'))
+    expect(section.textContent).toContain('[POST HOC]')
+    expect(section.textContent).toContain(DEFLATED.extra)
+    expect(section.textContent).toContain(DEFLATED_REAL.dominant!)
+    const table = within(section).getByRole('table', { name: DEFLATED.caption })
+    expect(within(table).getAllByRole('row')).toHaveLength(22)
+    const vm = DEFLATED_REAL.rows.find((r) => r.name === 'volmanaged_v0')!
+    const row = within(table).getByRole('rowheader', { name: 'volmanaged_v0' }).closest('tr')!
+    expect(row.textContent).toContain(vm.dsr!.toFixed(3))
+    expect(section.textContent).not.toMatch(/\[(PASS|FAIL)\]/)
   })
 
   it('names the failure when the family cannot be read', async () => {

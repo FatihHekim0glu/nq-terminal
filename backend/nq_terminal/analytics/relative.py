@@ -9,6 +9,11 @@ Conventions (catalogue section 0):
 
 Inputs are aligned first: two Series join on their index, two arrays must have equal length, and any row where
 either side is NaN is dropped (the screens drop their first session this way: 2,687 rows, n_eval 2,686).
+
+BR3 (P1): up and down capture as Nautilus `UpCaptureRatio` and `DownCaptureRatio` (empyrical's convention): over the
+sessions where the benchmark is above (below) zero, the ratio of the two geometric annualised returns
+`prod(1 + x)^(P / m) - 1`, m the number of those sessions. Labelled "annualised geometric"; NaN without such sessions.
+BR4 (P1): the scatter of r against r_b on the aligned rows, with BR1's OLS line (`a` and `b` of the same fit).
 """
 from __future__ import annotations
 
@@ -99,3 +104,34 @@ def relative_summary(r: pd.Series, b: pd.Series, lags: tuple = NW_LAGS,
         "alpha": alpha_beta(r, b, lags, periods),
         "blocks": alpha_by_block(r, b, lags, periods),
     }
+
+
+def _annual_geometric(x: np.ndarray, periods: int) -> float:
+    return float(np.prod(1.0 + x) ** (periods / len(x)) - 1.0) if len(x) else math.nan
+
+
+def _capture(r, b, periods: int, up: bool) -> float:
+    check_periods(periods)
+    x, y, _ = align_pair(r, b)
+    keep = y > 0 if up else y < 0
+    theirs = _annual_geometric(y[keep], periods)
+    if not keep.any() or theirs == 0 or math.isnan(theirs):
+        return math.nan
+    return _annual_geometric(x[keep], periods) / theirs
+
+
+def up_capture(r, b, periods: int = PERIODS_PER_YEAR) -> float:
+    """BR3 over the sessions where the benchmark rose."""
+    return _capture(r, b, periods, up=True)
+
+
+def down_capture(r, b, periods: int = PERIODS_PER_YEAR) -> float:
+    """BR3 over the sessions where the benchmark fell."""
+    return _capture(r, b, periods, up=False)
+
+
+def scatter(r, b, periods: int = PERIODS_PER_YEAR) -> dict:
+    """BR4: the aligned points (x the benchmark, y the strategy) and BR1's line y = intercept + slope x."""
+    mine, theirs, index = align_pair(r, b)
+    fit = spanning_alpha(mine, theirs, NW_LAGS, check_periods(periods))
+    return {"x": theirs, "y": mine, "index": index, "slope": fit["b"], "intercept": fit["a"], "n": int(len(mine))}

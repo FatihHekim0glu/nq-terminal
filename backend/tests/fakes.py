@@ -33,6 +33,7 @@ the fixtures folder are refused.
 """
 from __future__ import annotations
 
+import functools
 import json
 import threading
 from dataclasses import dataclass
@@ -302,6 +303,7 @@ def _file_name(sid: SeriesId) -> str:
     return f"{sid.symbol}_{sid.timeframe}_back{suffix}.parquet"
 
 
+@functools.lru_cache(maxsize=None)  # a series' columns never change; building its bars cost ~3 ms each
 def _columns(sid: SeriesId) -> tuple[ColumnInfo, ...]:
     frame = synthetic_loader(sid.symbol, sid.timeframe, sid.variant)(*SCHEMA_WINDOW)
     return tuple(ColumnInfo(f.name, str(f.type)) for f in pa.Schema.from_pandas(frame, preserve_index=False))

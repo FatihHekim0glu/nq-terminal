@@ -17,12 +17,17 @@
     "test:types": "tsc -b",
     "gen:api": "node src/api/codegen/gen-api.mjs",
     "check:api": "node src/api/codegen/gen-api.mjs --check",
-    "e2e": "playwright test",
+    "e2e": "playwright test --project=chromium",
+    "e2e:perf": "playwright test --project=perf --workers=1",
     "test:e2e-types": "tsc -p e2e/tsconfig.json"
   },
   "dependencies": {
     "@fontsource/pt-mono": "5.3.0",
     "@fontsource/source-sans-3": "5.3.0",
+    "@perspective-dev/client": "5.5.1",
+    "@perspective-dev/server": "5.5.1",
+    "@perspective-dev/viewer": "5.5.1",
+    "@perspective-dev/viewer-datagrid": "5.5.1",
     "@tanstack/react-query": "5.103.2",
     "@tanstack/react-table": "9.2.4",
     "@tanstack/react-virtual": "3.14.13",

@@ -26,8 +26,18 @@ describe('global keys (spec 5.2)', () => {
     expect(globalKeyAction(key('F11'), inPanel)).toEqual({ kind: 'sector', sector: 'CURNCY' })
   })
 
+  it('holds F2 and F4 back from the browser with no terminal action (spec 5.2 drops the F-key plan)', () => {
+    for (const where of [inPanel, inLine, inTypedLine]) {
+      expect(globalKeyAction(key('F2'), where)).toEqual({ kind: 'reserved', key: 'F2' })
+      expect(globalKeyAction(key('F4'), where)).toEqual({ kind: 'reserved', key: 'F4' })
+    }
+    // Alt+F4 and Ctrl+F4 stay the system's and the browser's.
+    expect(globalKeyAction(key('F4', { altKey: true }), inPanel)).toBeNull()
+    expect(globalKeyAction(key('F4', { ctrlKey: true }), inPanel)).toBeNull()
+  })
+
   it('leaves the F-keys nq-lab does not use to the browser', () => {
-    for (const f of ['F2', 'F3', 'F5', 'F6', 'F7', 'F12']) expect(globalKeyAction(key(f), inPanel)).toBeNull()
+    for (const f of ['F3', 'F5', 'F6', 'F7', 'F12']) expect(globalKeyAction(key(f), inPanel)).toBeNull()
   })
 
   it('End is BACK from a panel or an empty line, and the caret key inside a typed line', () => {

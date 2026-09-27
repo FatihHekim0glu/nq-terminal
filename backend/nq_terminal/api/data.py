@@ -22,8 +22,8 @@ from __future__ import annotations
 import math
 import re
 import threading
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import Callable, Hashable, Literal
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -82,10 +82,13 @@ from nq_terminal.services.market import (
     RV_UNIT,
     RV_WINDOW,
     CorrelationBlock,
+    UniversePanel,
     UniverseResult,
+    last_in_sample_day,
     pair_correlation,
     realised_vol_series,
     universe,
+    universe_panel,
 )
 from nq_terminal.services.sessions import session_flags
 from nq_terminal.settings import Settings
@@ -113,12 +116,31 @@ TWO_DAY_BASIS = ("back-adjusted hourly closes, vendor 1m through the gate; a bar
                  "date two hours after its open (the daily bucket rule)")
 
 
+class PanelCache:
+    """The last universe panel and the key it was built for (improvement run 3): HOME asks for two windows at once
+    and the panel, 81 of the 85 ms of each request, does not depend on the window. The key holds every served daily
+    series' file version and the last in-sample day, so a rewritten file or a new day rebuilds it. One entry; the
+    lock makes a concurrent request wait for the build instead of repeating it."""
+
+    def __init__(self) -> None:
+        self._key: Hashable | None = None
+        self._value: UniversePanel | None = None
+        self._lock = threading.Lock()
+
+    def get(self, key: Hashable, build: Callable[[], UniversePanel]) -> UniversePanel:
+        with self._lock:
+            if self._value is None or self._key != key:
+                self._value, self._key = build(), key
+            return self._value
+
+
 @dataclass(frozen=True)
 class DataServices:
     bars: BarService | None
     catalog: Catalog  # or a harness's stand-in with the same four methods
     files: FileCache
     settings: Settings
+    panels: PanelCache = field(default_factory=PanelCache)
 
 
 def default_catalog(settings: Settings) -> Catalog:
@@ -297,7 +319,10 @@ def market_universe(
         frames, years, cached = daily_frames(service, services.catalog)
     except GateRefusal as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    result = universe(frames, window=window, contracts=TABLE)
+    key = (tuple((s, services.catalog.version(s, DAILY_TF, DAILY_VARIANT)) for s in sorted(frames)),
+           last_in_sample_day())
+    prepared = services.panels.get(key, lambda: universe_panel(frames, TABLE))
+    result = universe(frames, window=window, contracts=TABLE, prepared=prepared)
     return universe_model(result, gate_info(service, years, cached))
 
 

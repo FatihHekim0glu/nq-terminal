@@ -1,0 +1,66 @@
+/* The Perspective viewer in the look (TASKS 9.1; look spec 2, 3 and 4.8). The package's dark theme
+   supplies the icons and labels; every colour, face and size below is a look token, so the colour-blind
+   schemes (data-cvd on the root) reach the viewer with no code. Square corners, no transitions. */
+
+.nqt-psp-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: 2px;
+}
+
+/* .nqt-psp-note, -status, -tag and -error are in toggle.css: the accessible table uses them without this sheet. */
+
+.nqt-psp-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 320px;
+  background: var(--bg);
+  outline: none;
+}
+
+/* The keyboard focus ring sits on an overlay above the viewer (look spec 2.4, chart focus ring). */
+.nqt-psp-host:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  z-index: 2;
+}
+
+.nqt-psp-host > perspective-viewer.nqt-psp {
+  position: absolute;
+  inset: 0;
+}
+
+/* The package theme sets its values on the viewer and on every themed element inside it, with an
+   attribute selector; these selectors outrank it wherever the stylesheets land in the page. Numbers
+   stay --text; only a negative value turns --c-down, and its sign is always printed. */
+.nqt-psp-host perspective-viewer.nqt-psp,
+.nqt-psp-host perspective-viewer.nqt-psp [theme] {
+  --psp--background-color: var(--bg);
+  --psp--color: var(--text);
+  --psp-active--color: var(--link);
+  --psp-active--background: var(--sel-bg);
+  --psp-inactive--color: var(--muted);
+  --psp-inactive--border-color: var(--th-rule);
+  --psp-error--color: var(--c-down);
+  --psp-warning--color: var(--black);
+  --psp-warning--background: var(--warn);
+  --psp-sidebar--background: var(--raised);
+  --psp-datagrid--border-color: var(--th-rule);
+  --psp-datagrid--hover--border-color: var(--border-int);
+  --psp-datagrid--pos-cell--color: var(--text);
+  --psp-datagrid--neg-cell--color: var(--c-down);
+  --psp-datagrid--row--height: var(--row-h);
+  --psp-interface-monospace--font-family: var(--font-sans);
+  --psp-button--font-family: var(--font-sans);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  color: var(--text);
+  background-color: var(--bg);
+  border-radius: 0;
+}

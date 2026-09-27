@@ -3,7 +3,8 @@
 // date, the journal's own non-plumbing close rows (/api/live/journal?type=close), so a plumbing row can
 // never reach the chart even if the server let one through.
 import { useMemo } from 'react'
-import { LIVE_POLL_MS, useApiQuery, useLivePerformance } from '../../api/queries'
+import { useApiQuery, useLivePerformance } from '../../api/queries'
+import { useLivePollInterval } from '../../api/useLiveStream'
 import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import { LIVE } from '../../copy/live'
@@ -43,7 +44,7 @@ function Chart({ perf }: { readonly perf: Performance }) {
   const closes = useApiQuery(
     '/api/live/journal',
     { query: { file: perf.journal, type: 'close', limit: CLOSE_PAGE } },
-    { refetchInterval: LIVE_POLL_MS, staleTime: 0, enabled: perf.present },
+    { refetchInterval: useLivePollInterval(), staleTime: 0, enabled: perf.present },
   )
   const result = useMemo(
     () => (closes.data ? performanceChart(perf, closes.data.items, closes.data.total) : null),

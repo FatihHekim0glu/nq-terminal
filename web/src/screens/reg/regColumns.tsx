@@ -3,9 +3,11 @@
 // Module scope, so MonitorGrid gets a stable array.
 import type { RowData } from '@tanstack/react-table'
 import type { MonitorColumn } from '../../grids/MonitorGrid'
+import { DEFLATED } from '../../copy/deflated'
 import { MT, REG } from '../../copy/reg'
 import { amendmentText, badgeText, formatCount, formatPValue, hashStatus, shortSha, tagText, verdictTone, type RegRow } from './regModel'
 import { passesText, type MtRow } from './mtModel'
+import { formatDsr } from './deflatedModel'
 
 const P_WIDTH = 58
 
@@ -29,6 +31,7 @@ export const REG_COLUMNS: readonly MonitorColumn<RegRow>[] = [
   pColumn<RegRow>('bonferroni', C.bonferroni, (r) => r.bonferroni),
   pColumn<RegRow>('holm', C.holm, (r) => r.holm),
   pColumn<RegRow>('bhQ', C.bhQ, (r) => r.bhQ),
+  { id: 'dsr', header: DEFLATED.regColumn, width: 56, kind: 'num', value: (r) => r.dsr, format: (r) => formatDsr(r.dsr) },
   { id: 'sha', header: C.sha, width: 84, kind: 'text', value: (r) => r.sha, format: (r) => shortSha(r.sha) },
   {
     id: 'hash', header: C.hash, width: 76, kind: 'text', value: (r) => hashStatus(r).text,

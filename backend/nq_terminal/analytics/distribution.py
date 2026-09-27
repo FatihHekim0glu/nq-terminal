@@ -9,6 +9,10 @@ Freedman-Diaconis width is 0 and numpy falls back to a single bin, so Sturges' r
 RD2, per basis (C1): Basis A sums the returns in each month (or year); Basis B compounds them,
 `prod(1 + r) - 1` (Nautilus `_aggregate_period_returns(compounding=True)`). Months are calendar months of the
 session dates as given (a UTC index groups on UTC dates). Months with no session are absent (NaN in the grid).
+
+RD3: the QQ plot against the normal, `scipy.stats.probplot` (Filliben's order statistic medians, the least squares
+line and its correlation). RD4 (P1): the Jarque-Bera statistic and its chi-squared(2) p-value,
+`scipy.stats.jarque_bera`, on the whole series (never on a slice the user picks).
 """
 from __future__ import annotations
 
@@ -73,3 +77,20 @@ def monthly_heatmap(r, basis: str) -> pd.DataFrame:
     """RD2 grid: one row per year, columns 1 to 12, NaN where a month has no session."""
     grid = monthly_returns(r, basis).unstack("month")
     return grid.reindex(columns=MONTHS)
+
+
+def qq_plot(r) -> dict:
+    """RD3: ordered returns against normal quantiles, with the fitted line."""
+    values = returns_array(r)
+    (theoretical, ordered), (slope, intercept, corr) = sps.probplot(values, dist="norm")
+    return {"theoretical": theoretical, "ordered": ordered, "slope": float(slope), "intercept": float(intercept),
+            "r": float(corr)}
+
+
+def jarque_bera(r) -> dict:
+    """RD4: statistic, p-value and n; NaN below three returns."""
+    values = returns_array(r)
+    if len(values) < 3:
+        return {"statistic": math.nan, "p": math.nan, "n": int(len(values))}
+    stat, p = sps.jarque_bera(values)
+    return {"statistic": float(stat), "p": float(p), "n": int(len(values))}

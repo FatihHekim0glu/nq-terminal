@@ -233,6 +233,16 @@ Empty states name the expected file ("no journal yet: live/logs/volmanaged_paper
 
 **HELP.** Numbered mnemonic index, keys, link-group guide, licences and attributions (TradingView notice and link, fonts OFL).
 
+### P1 views on screen (Phases 9.2 and 10, 2026-09-27)
+
+Every view below is `[POST HOC]`, descriptive and in sample, never a verdict; every chart keeps its data summary and table view (section 9). The tear sheet's P1 views sit under the tab view in the body's scroll, as DES-style cards like a run's books.
+- **EQ**: SV5 bootstrap intervals (Sharpe, CAGR, max drawdown; method, block length, replications and seed named) and the SV6 cone, labelled "resampled history, not a forecast", with a key under the chart. The Sharpe tile keeps its Mertens interval.
+- **RET**: PF7 to PF9 tiles; RK3 normal and Cornish-Fisher VaR by level (outside the monotone domain Cornish-Fisher is "not defined", the historical VaR (RK1) is shown beside the greyed normal VaR, and the row says so); RD4 Jarque-Bera on the whole series with the RD3 QQ plot; RK5 stress windows as a panel of their own (the frozen windows, and the spent 2022 row only for volmanaged_v0, tagged `[SPENT]`). No p-value on a window.
+- **RR**: each window's RL1 range as two dashed amber bounds on the rolling Sharpe pane, only for a window with a rolling value: the range (95%) of a w-period Sharpe if the full-sample Sharpe held throughout, named in the legend and in words under the chart ("a line outside its range is not by itself a regime change"). SV5's full-sample interval is not drawn on the rolling pane: it is far too narrow for 63 or 252 values; RL3 and RL4 rolling beta and correlation (a note instead of empty panes when the series is shorter than the window); BR3 capture; BR4 scatter with BR1's OLS line; RG1 volatility regimes with Welch t and no p-value.
+- **A run's books**: a trade paths card beside the trades card: TA2 MAE and MFE against the final result (in R where every trade has one, a losing trade hollow; intraday runs only, the card says why otherwise; when the served bars are on another price basis than the fills the card says so with the counts and draws nothing, and a few trades off their bars are counted in a note), TA4 holding times on log minutes, TA5 streaks and the runs test on the whole trade list.
+- **REG, MT, DES**: SV3's Deflated Sharpe: a `DSR` column on REG (not in the narrow column set) with a one-line note; the full table, the facts (N, V, SR0) and a DSR ladder on MT under the confirmations; one line in DES's registration box ("not an SV3 trial" for a check row).
+- **LIVE and JRNL**: the live stream line (live, reconnecting, or polling and why; last event in ET; rows streamed; whether the server resumed after the last event id); LV5 paper against model tracking on LIVE under Routes and Fills.
+
 ## 8. Components
 
 | Component | Library | Notes |
@@ -265,6 +275,7 @@ Empty states name the expected file ("no journal yet: live/logs/volmanaged_paper
 - 2.5.8: table and list rows are 20px (D1), with Number `<GO>` in the command box as the equivalent control for every numbered row. Every other control (title-bar buttons, red-bar buttons, tabs, menu rows, key buttons, fields) is at least 24px. The 22px command box and the 21px nav toolbar buttons meet 2.5.8 through the spacing exception.
 - Where the reference colour fails AA, the nearest passing value is used (`--c-down-raised`, `--c-down-hover`, `--muted-hover`, `--sb-thumb`, white text on `#BA152D`); the look spec lists each one.
 - Every canvas chart: `role="img"` with an `aria-label` data summary (range, last value, max drawdown) and a table view toggle, because axe cannot see into canvas.
+- Every pivot view (LEDG pivot, RUN trades and fills, the OOS log) has a visible Show as [Table | Pivot grid] toggle over the same rows. The Perspective viewer draws its grid in a shadow tree that axe leaves out and no screen reader has been run over, so Table shows those rows in the house MonitorGrid: the pivot grid's opening layout (every row in its columns and sort, or for a grouped preset a total row and one row per group, each header naming its aggregate), one keyboard stop, the active cell announced, a polite status naming the rows. Table is the default under `prefers-reduced-motion` and takes over, with an alert, when the pivot grid cannot start; a choice made on the toggle holds for the page (`src/perspective/pivots.tsx`, `pivotTable.ts`; `e2e/perspective.spec.ts` checks it with axe over the whole page and from the keyboard).
 - `prefers-reduced-motion` honoured.
 - 1.4.10: at 700 CSS px and narrower the panels stack at full width in reading order and only the page scrolls vertically (look spec 2.4); `e2e/shell.spec.ts` checks 320 CSS px.
 - 1.4.12: no chrome or panel text is clipped under the text-spacing overrides; `e2e/shell.spec.ts` checks HOME.

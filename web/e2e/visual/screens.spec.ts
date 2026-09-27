@@ -14,7 +14,7 @@
 // RR on the fixture hypothesis draws no chart (its 39 sessions are shorter than the rolling windows),
 // so RR is also checked on a fixture run whose series is long enough.
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { expectGalleryClean, watchGallery } from '../gallery.ts'
+import { MASK_COLOR, expectGalleryClean, watchGallery } from '../gallery.ts'
 import {
   auditCharts,
   axeViolations,
@@ -57,10 +57,14 @@ async function checkTables(page: Page, charts: number): Promise<void> {
 
 // The fixture backend counts gate reads over the whole E2E run, so these texts depend on which specs
 // ran before this one: the status line's `Gate reads N` (and the segments after it, which it moves) and
-// the GP footer's served years and reads. They are masked; every other pixel is compared.
+// the GP footer's served years and reads. The live stream line's last event time and row count follow the wall
+// clock and the stream's timing (TASKS 9.2). They are masked; every other pixel is compared.
 function runCounters(page: Page): Locator[] {
   const status = page.getByRole('contentinfo')
-  return [status.locator('.seg').filter({ hasText: 'Gate reads' }), status.locator('.seg.flag'), page.locator('.gp-footer')]
+  return [
+    status.locator('.seg').filter({ hasText: 'Gate reads' }), status.locator('.seg.flag'), page.locator('.gp-footer'),
+    page.locator('[data-key="stream-lastEvent"], [data-key="stream-rows"]'),
+  ]
 }
 
 function sizeName(viewport: Viewport): string {
@@ -73,13 +77,17 @@ for (const viewport of VIEWPORTS) {
       test(`${screen.name}: charts, axe at rest, with the dropdown open and in table view; baseline`, async ({ page }) => {
         const watch = await watchGallery(page)
         await openScreen(page, screen, viewport)
+        // LIVE and JRNL: the stream line reads the same on every run once the stream is open (TASKS 9.2).
+        for (const line of await page.getByRole('group', { name: 'Live stream state' }).all()) {
+          await expect(line.getByRole('status')).toHaveText('live, server events', { timeout: 15_000 })
+        }
         await checkCharts(page, screen)
         const charts = (await auditCharts(page, TABLE_TOGGLE)).summaries.length
         expect(await axeViolations(page), 'axe at rest').toEqual([])
 
         await openDropdown(page)
         await page.mouse.move(0, 0)
-        await expect(page).toHaveScreenshot(`${screen.name}-dropdown-${sizeName(viewport)}.png`, { mask: runCounters(page) })
+        await expect(page).toHaveScreenshot(`${screen.name}-dropdown-${sizeName(viewport)}.png`, { mask: runCounters(page), maskColor: MASK_COLOR })
         expect(await axeViolations(page), 'axe with the command dropdown open').toEqual([])
         await closeDropdown(page)
 

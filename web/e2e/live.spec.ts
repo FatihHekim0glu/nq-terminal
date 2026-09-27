@@ -16,7 +16,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { expectGalleryClean, openGallery, watchGallery } from './gallery.ts'
+import { MASK_COLOR, expectGalleryClean, openGallery, watchGallery } from './gallery.ts'
 
 const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const FIXTURE_LIVE = path.resolve(WEB_DIR, '..', 'backend', 'tests', 'fixtures', 'live')
@@ -64,10 +64,11 @@ async function apiJson<T>(page: Page, url: string): Promise<T> {
 const panel = (page: Page, title: string): Locator => page.locator(`[data-nqt-title="${title}"]`)
 const guardStrip = (scope: Page | Locator): Locator => scope.getByRole('list', { name: 'Guards and environment' })
 
-/** The live parts whose text follows the wall clock or file times, masked in screenshots. */
+/** The live parts whose text follows the wall clock, file times or the stream's timing, masked in screenshots. */
 const liveMasks = (page: Page): Locator[] => [
   page.locator('.countdown'),
   page.locator('[data-key="journalAge"], [data-key="logAge"]'),
+  page.locator('[data-key="stream-lastEvent"], [data-key="stream-rows"]'),
 ]
 
 test.describe('screens (gallery entries)', () => {
@@ -163,6 +164,12 @@ test.describe('screens (gallery entries)', () => {
       t: [], line_no: [], date: [], contract: [], target: [], expected: [], actual: [], reconciled_ok: [], exposure: [], slippage_ticks: [], sent: [], refused: [], error: [], halted: [] }
     await page.route('**/api/live/status', (route) => route.fulfill({ json: empty }))
     await page.route('**/api/live/performance**', (route) => route.fulfill({ json: blank }))
+    // The live stream carries the status too (TASKS 9.2): it serves the same empty body, as the server would.
+    const hello = { kind: 'hello', schema_version: 1, resumed: false, resume_note: null, poll_s: 1, heartbeat_s: 10, lifetime_s: 120,
+      retry_ms: 2000, banner: BANNER, basis: 'e2e', read_only: true, order_path: 'none' }
+    const events = [`retry: 2000`, `event: hello`, `data: ${JSON.stringify(hello)}`, ``,
+      `event: status`, `data: ${JSON.stringify({ kind: 'status', status: empty })}`, ``, ``].join('\n')
+    await page.route('**/api/live/stream', (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: events }))
     await openGallery(page, 'LiveScreen')
     await expect(panel(page, 'LIVE')).toContainText(`no journal yet: live/logs/${BOOK}`)
     await expect(panel(page, 'JRNL')).toContainText(expectedFiles.map((n) => `no journal yet: live/logs/${n}`).join('; '))
@@ -177,11 +184,14 @@ test.describe('screens (gallery entries)', () => {
       await expect(page).toHaveScreenshot(`oos-${size.width}x${size.height}.png`)
       await openGallery(page, 'LiveScreen', size)
       await expect(guardStrip(panel(page, 'LIVE'))).toBeVisible()
+      for (const title of ['LIVE', 'JRNL']) {
+        await expect(panel(page, title).getByRole('group', { name: 'Live stream state' }).getByRole('status')).toHaveText('live, server events', { timeout: 15_000 })
+      }
       await expect(panel(page, 'LIVE').getByRole('img', { name: /Target \(ct\)/ })).toBeVisible()
       await expect(panel(page, 'JRNL').locator('tr.plumbing-row').first()).toBeVisible()
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
       await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))))
-      await expect(page).toHaveScreenshot(`live-${size.width}x${size.height}.png`, { mask: liveMasks(page) })
+      await expect(page).toHaveScreenshot(`live-${size.width}x${size.height}.png`, { mask: liveMasks(page), maskColor: MASK_COLOR })
     })
   }
 })

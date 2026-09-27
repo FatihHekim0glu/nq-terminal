@@ -1,6 +1,6 @@
 // Test harness for the REG and MT screens (imported by *.test.tsx files only): a fresh query client,
 // the panel's actions and Number <GO> registrar, and a fetch stub that answers the four research
-// GETs from the fixture data and records every request.
+// GETs and SV3's /api/analytics/deflated from the fixture data and records every request.
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { vi } from 'vitest'
@@ -10,6 +10,7 @@ import { registerNumbered } from '../../chrome/NumberedActions'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
+import { DEFLATED_REAL } from './deflatedFixtures'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 
 export const PANEL_ID = 'reg-test'
@@ -32,6 +33,7 @@ export const ANSWERS: Readonly<Record<string, unknown>> = {
   '/api/hypotheses': HYPOTHESES,
   '/api/multiple-testing': MULTIPLE_TESTING,
   '/api/confirmations': CONFIRMATIONS,
+  '/api/analytics/deflated': DEFLATED_REAL,
 }
 
 /** Stubs fetch; `override` replaces an answer with an error status. Returns the requests seen. */

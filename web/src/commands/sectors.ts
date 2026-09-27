@@ -90,3 +90,21 @@ export function displayContext(context: ResolvedContext | null, index: CommandIn
   if (!context) return '-'
   return context.kind === 'instrument' ? displayInstrument(context.value, index) : context.value
 }
+
+export interface InsertedLine {
+  readonly line: string
+  /** Where the caret goes: just after the inserted word. */
+  readonly caret: number
+}
+
+/**
+ * The line after an F8 to F11 key puts its sector word at the caret: one space between the word and the
+ * text on either side, none at the start of the line. Pure.
+ */
+export function insertSectorWord(line: string, at: number, word: string): InsertedLine {
+  const caret = Math.min(Math.max(0, at), line.length)
+  const before = line.slice(0, caret).replace(/\s+$/, '')
+  const after = line.slice(caret).replace(/^\s+/, '')
+  const head = before === '' ? word.trim() : `${before} ${word.trim()}`
+  return { line: after === '' ? head : `${head} ${after}`, caret: head.length }
+}

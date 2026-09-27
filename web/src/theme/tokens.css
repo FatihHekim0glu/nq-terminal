@@ -298,6 +298,10 @@
   --c-down-raised: #FF5566;
   --heat-up-2: #6BCEFF;
   --heat-up-1: #399CFF;
+  --bar-pos: #2F80E0;         /* sign bars and the performance fill: blue gain, the theme's red loss */
+  --bar-neg: #D0485A;
+  --perf-pos: #0F4C9A;
+  --perf-neg: #6A1020;
 }
 
 :root[data-cvd="prot"],
@@ -308,4 +312,8 @@
   --c-down-hover: #FF8443;    /* nearest passing value to #FF7329 inside a hovered cell (4.54) */
   --data: #FEBA11;
   --field-bg: #FEBA11;
+  --bar-pos: #2B7FE0;         /* sign bars and the performance fill: blue gain, the theme's orange loss */
+  --bar-neg: #D5501A;
+  --perf-pos: #0F4C9A;
+  --perf-neg: #6B2A08;
 }

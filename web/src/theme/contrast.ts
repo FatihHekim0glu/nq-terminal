@@ -199,13 +199,14 @@ function defaultPairs(): ContrastPair[] {
 
 export const CONTRAST_PAIRS: readonly ContrastPair[] = Object.freeze(defaultPairs())
 
-/** Checked on each CVD theme's tokens: the swapped up, down and amber colours on the four surfaces. */
+/** Checked on each CVD theme's tokens: the swapped up, down and amber colours on the four surfaces, and the sign bars. */
 export const CVD_PAIRS: readonly ContrastPair[] = Object.freeze([
   ...on(['c-up', 'c-down-raised', 'data'], ['bg', 'raised', 'th-bg', 'sel-bg'], TEXT_MIN),
   ...on(['c-down'], DOWN_SURFACES, TEXT_MIN),
   { fg: 'c-down-hover', bg: 'hover-cell', min: TEXT_MIN },
   { fg: 'field-fg', bg: 'field-bg', min: TEXT_MIN },
   ...on(['black'], ['heat-up-2', 'heat-up-1'], TEXT_MIN),
+  ...on(['bar-pos', 'bar-neg'], ['bg'], COMPONENT_MIN),
 ])
 
 function measure(tokens: TokenMap, pair: ContrastPair): number | null {

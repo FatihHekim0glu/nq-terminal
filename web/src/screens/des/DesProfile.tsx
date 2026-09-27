@@ -1,13 +1,15 @@
 // Page 1 of the DES tear sheet (look spec 7.3; UI_SPEC section 7 "DES"): the KPI row of registered
 // values, then three columns of boxes (equity; pass checks and cost ladder; registration and linked
-// runs), the in-sample against sealed strip where one exists, and the round summary. Numbers in box
+// runs, with SV3's Deflated Sharpe line, [POST HOC]), the in-sample against sealed strip where one exists,
+// and the round summary. Numbers in box
 // titles are the panel's Number <GO> items (HypothesisDes registers them).
 import type { ReactNode } from 'react'
-import { useSealedIndex, useConfirmations } from '../../api/queries'
+import { useConfirmations, useDeflated, useSealedIndex } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { PanelLink } from '../../state/linkGroups'
 import KpiTile, { KpiRow } from '../../tiles/KpiTile'
+import { DEFLATED } from '../../copy/deflated'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import DesEquity from './DesEquity'
@@ -27,6 +29,7 @@ import {
   type HypothesisDetail,
 } from './desModel'
 import { DES_NUMBERS, runNumber, type DesTab } from './desNumbers'
+import { dsrFor } from '../reg/deflatedModel'
 
 /** Linked runs listed on page 1; the rest are on page 4. */
 const RUNS_ON_PROFILE = 6
@@ -77,6 +80,16 @@ function amendmentsText(card: HypothesisDetail['card']): ReactNode {
   )
 }
 
+/** SV3 for this hypothesis ([POST HOC], an extra view only): its DSR against SR0, or why it has none. */
+function DeflatedLine({ name }: { readonly name: string }) {
+  const query = useDeflated()
+  if (query.isError) return <>{fillCopy(DEFLATED.failed, { detail: query.error.detail })}</>
+  if (!query.data) return <>{MISSING}</>
+  const row = dsrFor(query.data, name)
+  if (!row) return <>{DEFLATED.desNone}</>
+  return <>{fillCopy(DEFLATED.desLine, { dsr: row.dsr, floor: row.sr0, dsrNull: row.dsrNull, floorNull: row.sr0Null, n: query.data.n_trials })}</>
+}
+
 function RegistrationBox({ detail }: { readonly detail: HypothesisDetail }) {
   const actions = usePanelActions()
   const { card } = detail
@@ -94,6 +107,7 @@ function RegistrationBox({ detail }: { readonly detail: HypothesisDetail }) {
     [r.history, detail.history.length > 0 ? detail.history.join(', ') : r.none],
     [r.auxiliaries, Object.keys(detail.auxiliaries).join(', ') || r.none],
     [r.family, <><span className="des-no">{`${DES_NUMBERS.mt})`}</span> <Jump label={fillCopy(DES.go, { code: 'MT' })} name={DES.jumpNames.MT} onRun={() => actions.open('MT')} /></>],
+    [DEFLATED.desLabel, <DeflatedLine name={card.name} />],
   ]
   return (
     <DesCard title={DES.cards.registration} n={DES_NUMBERS.registration} jump={{ label: fillCopy(DES.go, { code: 'REG' }), name: DES.jumpNames.REG, onRun: () => actions.open('REG') }}>

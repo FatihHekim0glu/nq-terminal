@@ -44,6 +44,11 @@ const OosScreen = lazy(() => import('../screens/oos'))
 const liveScreens = () => import('../screens/live')
 const LiveScreen = lazy(() => liveScreens().then((m) => ({ default: m.LiveScreen })))
 const JrnlScreen = lazy(() => liveScreens().then((m) => ({ default: m.JrnlScreen })))
+// 9.4 COST, BLK, EXPO and SEAL, each its own screen
+const CostScreen = lazy(() => import('../screens/cost/CostScreen'))
+const BlkScreen = lazy(() => import('../screens/blk/BlkScreen'))
+const ExpoScreen = lazy(() => import('../screens/expo/ExpoScreen'))
+const SealScreen = lazy(() => import('../screens/seal/SealScreen'))
 
 function HelpPanel() {
   return <HelpScreen built={builtScreens(BUILT_SCREENS)} />
@@ -72,6 +77,10 @@ export const BUILT_SCREENS: ScreenRegistry = {
   OOS: OosScreen,
   LIVE: LiveScreen,
   JRNL: JrnlScreen,
+  COST: CostScreen,
+  BLK: BlkScreen,
+  EXPO: ExpoScreen,
+  SEAL: SealScreen,
 }
 
 export function builtScreens(registry: ScreenRegistry): ReadonlySet<string> {

@@ -238,6 +238,41 @@ MNEMONICS: tuple[tuple[str, str, str, str], ...] = (
     ("JOBS", "Backtest queue", "P2", "none"),
 )
 
+@dataclass(frozen=True)
+class StressWindow:
+    """One RK5 stress window: the sessions after `peak` up to and including `trough` (the fall)."""
+
+    label: str
+    peak: str
+    trough: str
+    recovery: str | None
+    nq_depth: float | None  # NQ buy-and-hold drawdown over the window, compounded (a fraction, negative)
+    source: str
+
+
+# RK5 (ANALYTICS_CATALOG section 5), FROZEN 2026-09-27 before any stress display code existed: the five deepest
+# drawdown episodes of NQ buy and hold, close to close (`r = dB / (N - dB)` on the NYSE sessions, compounded, DD2's
+# episode rule), from the 1d vendor series served once through the gate (caller "terminal", window
+# [2010-01-01, 2022-01-01), 2,850 sessions from 2010-09-08). `tests/test_p1_stress_freeze.py` pins them by sha256.
+_NQ_BH_SOURCE = "NQ buy and hold, 1d vendor through the gate, derived 2026-09-27"
+STRESS_WINDOWS: tuple[StressWindow, ...] = (
+    StressWindow("2020 COVID crash", "2020-02-19", "2020-03-20", "2020-06-05", -0.2884690182432691, _NQ_BH_SOURCE),
+    StressWindow("2018 Q4 sell-off", "2018-08-31", "2018-12-24", "2019-04-23", -0.23753828782563036, _NQ_BH_SOURCE),
+    StressWindow("2011 August sell-off", "2011-07-22", "2011-08-08", "2012-01-18", -0.16237644151565078,
+                 _NQ_BH_SOURCE),
+    StressWindow("2016 January sell-off", "2015-12-04", "2016-02-08", "2016-07-26", -0.16015437936689048,
+                 _NQ_BH_SOURCE),
+    StressWindow("2015 August sell-off", "2015-07-20", "2015-08-25", "2015-10-28", -0.15239726027397216,
+                 _NQ_BH_SOURCE),
+)
+# The 2022 row: calendar 2022 from the sealed daily file only (volmanaged_v0, variant a), labelled spent. No NQ depth:
+# 2022 prices are never read through the gate.
+STRESS_WINDOW_SPENT = StressWindow("2022 (spent window, opened 2026-09-26, descriptive only)", "2021-12-31",
+                                   "2022-12-30", None, None,
+                                   "results/sealed/volmanaged_oos_daily.csv, variant a_realtime_expanding")
+STRESS_SPENT_FILE, STRESS_SPENT_VARIANT, STRESS_SPENT_PARENT = ("volmanaged_oos_daily", "a_realtime_expanding",
+                                                                "volmanaged_v0")
+
 # Instruments the command line resolves beyond the dtsmom table: (root, sector). RTY has a processed 1m series but
 # no daily file (its daily history starts 2017, so the dtsmom rule dropped it).
 EXTRA_INSTRUMENTS: tuple[tuple[str, str], ...] = (("RTY", "equity"),)

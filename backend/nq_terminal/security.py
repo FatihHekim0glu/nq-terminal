@@ -27,7 +27,10 @@ READ_METHODS = frozenset({"GET", "HEAD"})
 SAME_ORIGIN_FETCH_SITES = frozenset({"same-origin", "none"})
 API_PREFIX = "/api"
 WEBSOCKET_POLICY_VIOLATION = 1008
-CONTENT_SECURITY_POLICY = ("default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+# script-src adds 'wasm-unsafe-eval' to 'self' so the Perspective pivot engine (WebAssembly) can compile;
+# it allows no JavaScript eval, and workers fall back to it (same-origin files only). tests/test_csp_wasm.py
+CONTENT_SECURITY_POLICY = ("default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
+                           "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
                            "object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"x-frame-options", b"DENY"),
@@ -94,6 +97,15 @@ class SameOriginApiMiddleware:
         await self.app(scope, receive, send)
 
 
+# A live stream (text/event-stream) is never stored: the framework sends no-cache, which still lets a disk cache or a
+# proxy keep journal rows; no-store replaces it.
+STREAM_CACHE_HEADER = (b"cache-control", b"no-store")
+
+
+def _is_event_stream(headers: list[tuple[bytes, bytes]]) -> bool:
+    return any(k.lower() == b"content-type" and v.lower().startswith(b"text/event-stream") for k, v in headers)
+
+
 class SecurityHeadersMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -106,8 +118,11 @@ class SecurityHeadersMiddleware:
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                kept = [(k, v) for k, v in message.get("headers", ()) if k.lower() not in names]
-                message = {**message, "headers": [*kept, *SECURITY_HEADERS]}
+                headers = list(message.get("headers", ()))
+                drop = names | ({b"cache-control"} if _is_event_stream(headers) else set())
+                kept = [(k, v) for k, v in headers if k.lower() not in drop]
+                extra = [STREAM_CACHE_HEADER] if len(drop) > len(names) else []
+                message = {**message, "headers": [*kept, *SECURITY_HEADERS, *extra]}
             await send(message)
 
         await self.app(scope, receive, send_with_headers)

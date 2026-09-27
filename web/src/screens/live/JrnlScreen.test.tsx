@@ -3,7 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
+import { liveStreamHub } from '../../api/useLiveStream'
 import { JRNL } from '../../copy/live'
+import { STREAM } from '../../copy/liveStream'
 import { stubLayout } from '../../grids/testing'
 import { ALL_ROWS, BANNER, BOOK, BOOK_CLOSE_ROWS, PREFLIGHT, emptyStatus, page, status } from './liveFixtures'
 import JrnlScreen from './JrnlScreen'
@@ -43,7 +45,57 @@ async function gridRows(): Promise<HTMLElement[]> {
 }
 
 beforeEach(() => stubLayout(600))
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  liveStreamHub.reset()
+  vi.unstubAllGlobals()
+})
+
+/** A stand-in EventSource the test drives, as the browser would deliver server events. */
+class FakeSource {
+  static made: FakeSource[] = []
+  readyState = 0
+  onerror: ((event: Event) => void) | null = null
+  private readonly listeners = new Map<string, Array<(event: MessageEvent<string>) => void>>()
+  readonly url: string
+  constructor(url: string) {
+    this.url = url
+    FakeSource.made.push(this)
+  }
+  addEventListener(type: string, fn: (event: MessageEvent<string>) => void): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn])
+  }
+  close(): void {
+    this.readyState = 2
+  }
+  emit(kind: string, data: unknown): void {
+    this.readyState = 1
+    for (const fn of this.listeners.get(kind) ?? []) fn({ data: JSON.stringify(data) } as MessageEvent<string>)
+  }
+}
+
+describe('JRNL on the live stream (TASKS 9.2)', () => {
+  it('opens the stream, stops polling once it is open and refetches the rows when a row is streamed', async () => {
+    FakeSource.made = []
+    vi.stubGlobal('EventSource', FakeSource)
+    const spy = routes()
+    mount()
+    await gridRows()
+    expect(FakeSource.made.map((f) => f.url)).toEqual(['/api/live/stream'])
+    const journalCalls = () => spy.mock.calls.filter(([u]) => String(u).startsWith('/api/live/journal')).length
+    FakeSource.made[0]!.emit('hello', {
+      kind: 'hello', schema_version: 1, resumed: true, resume_note: null, poll_s: 1, heartbeat_s: 10, lifetime_s: 120,
+      retry_ms: 2000, banner: BANNER, basis: 'rows', read_only: true, order_path: 'none',
+    })
+    const line = screen.getByRole('group', { name: STREAM.label })
+    await waitFor(() => expect(within(line).getByRole('status').textContent).toBe(STREAM.modes.open))
+    const before = journalCalls()
+    await new Promise((r) => setTimeout(r, 2500))
+    expect(journalCalls()).toBe(before)
+    FakeSource.made[0]!.emit('journal_row', { kind: 'journal_row', row: ALL_ROWS[0] })
+    await waitFor(() => expect(journalCalls()).toBe(before + 1))
+  })
+})
 
 describe('JRNL screen', () => {
   it('lists every journal row newest first, plumbing rows hatched with the exact banner', async () => {
@@ -95,8 +147,8 @@ describe('JRNL screen', () => {
 
   it('shows the journal error detail', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) =>
-      String(input).startsWith('/api/live/status') ? json(status()) : json({ detail: 'no journal named x in live/logs' }, 404))
+      String(input).startsWith('/api/live/status') ? json(status()) : json({ detail: 'no journal by that name in live/logs' }, 404))
     mount()
-    expect(await screen.findByText('The journal could not be read: no journal named x in live/logs')).toBeTruthy()
+    expect(await screen.findByText('The journal could not be read: no journal by that name in live/logs')).toBeTruthy()
   })
 })

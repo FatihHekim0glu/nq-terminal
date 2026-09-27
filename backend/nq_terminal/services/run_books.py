@@ -1,4 +1,4 @@
-"""Trade, cost and exposure views of a Nautilus run (ANALYTICS_CATALOG TA1, TA3, TA6, EX1 to EX4; ARCHITECTURE s4).
+"""Trade, cost and exposure views of a Nautilus run (ANALYTICS_CATALOG TA1, TA3 to TA6, EX1 to EX4; ARCHITECTURE s4).
 
 With `analytics/series.py`, this is where analytics inputs are read through the injected services (C8); the
 functions in `analytics/trades.py` and `analytics/exposure.py` stay pure:
@@ -35,10 +35,13 @@ from nq_terminal.models.run_views import (
     CostWaterfall,
     EntryGroups,
     ExposureView,
+    HoldingView,
     RunCosts,
     RunExposure,
+    RunTradePaths,
     RunTrades,
     SlippageView,
+    StreakView,
     TurnoverView,
 )
 from nq_terminal.services import journals
@@ -160,6 +163,21 @@ def trades_view(runs: RunService, run_id: str, quote: Mapping[str, Any] | None, 
                               live_journal_found=live["found"],
                               live_plumbing_rows_skipped=live["plumbing_rows_skipped"],
                               plumbing_banner=paper_plumbing.BANNER))
+
+
+def trade_paths_view(runs: RunService, run_id: str) -> RunTradePaths:
+    """TA4 holding times and TA5 streaks over every trade of one run (read only)."""
+    detail = runs.detail(run_id, anchor=False)
+    rows = [row.model_dump() for row in _every_row(lambda offset, limit: runs.trades(run_id, offset, limit),
+                                                   detail.counts.trades)]
+    return RunTradePaths(run_id=run_id, tag=POST_HOC, holding=HoldingView.model_validate(_holding(rows)),
+                         streaks=StreakView.model_validate(clean_json(trades.streaks(rows))))
+
+
+def _holding(rows: Sequence[Any]) -> dict:
+    """TA4 without the per-trade durations (the histogram carries them)."""
+    found = clean_json(trades.holding_times(rows))
+    return {key: value for key, value in found.items() if key != "durations"}
 
 
 # ---------------------------------------------------------------- EX1 to EX4

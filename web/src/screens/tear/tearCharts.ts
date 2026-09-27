@@ -9,6 +9,7 @@ import { mretRows, type HeatmapInput } from '../../charts/echarts/heatmapModel'
 import type { Callout } from '../../charts/LineStack.draw'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import { TEAR, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
+import { TEAR_P1 } from '../../copy/tearP1'
 import { fillCopy } from '../../copy/workspace'
 import type { Analytics } from './tearKpis'
 import { decimalsForUnit, formatNumber, formatShare, formatValue, isPercentUnit, scaleSeries, summaryDrawdown, toDisplay } from './tearFormat'
@@ -62,6 +63,35 @@ export function ddStack(data: Analytics, name: string): StackSpec {
   return { title: fillCopy(TEAR_DD.title, { name }), t: drawdown.t, panes: [equityPane(data, name, 2), under] }
 }
 
+type Band = Analytics['rolling']['sharpe_bands'][number]
+type DrawnBand = Band & { readonly lo: number; readonly hi: number }
+
+/** RL1 bands to draw: one per window that has a rolling value and a defined range, in window order. */
+function drawnBands(data: Analytics): DrawnBand[] {
+  const r = data.rolling
+  const lines = [r.sharpe_short, r.sharpe_long]
+  return r.sharpe_bands.filter((b, i): b is DrawnBand =>
+    typeof b.lo === 'number' && typeof b.hi === 'number' && (lines[i] ?? []).some((v) => typeof v === 'number'))
+}
+
+function bandSeries(band: DrawnBand, unit: string, n: number): LineStackPane['series'][number][] {
+  const words = { n: band.window, unit }
+  return [
+    { name: fillCopy(TEAR_P1.band.low, words), style: 'ciBound', values: Array<number>(n).fill(band.lo) },
+    { name: fillCopy(TEAR_P1.band.high, words), style: 'ciBound', values: Array<number>(n).fill(band.hi) },
+  ]
+}
+
+/** The RL1 bands in words under RR's chart; null when no band is drawn. */
+export function rrBandNote(data: Analytics): string | null {
+  const r = data.rolling
+  const bands = drawnBands(data)
+  if (bands.length === 0) return null
+  const one = TEAR_RR.one[r.window_unit]
+  const windows = bands.map((b) => fillCopy(TEAR_P1.band.window, { n: b.window, one, lo: formatNumber(b.lo, 2), hi: formatNumber(b.hi, 2) }))
+  return fillCopy(TEAR_P1.band.note, { windows: windows.join(TEAR_P1.band.join), sharpe: formatNumber(r.full_sharpe, 2) })
+}
+
 export function rrStack(data: Analytics, name: string): StackSpec {
   const r = data.rolling
   const [short = 0, long = 0] = r.windows
@@ -71,6 +101,7 @@ export function rrStack(data: Analytics, name: string): StackSpec {
     series: [
       { name: fillCopy(TEAR_RR.sharpe, { n: short, unit }), style: 'rollShort', values: r.sharpe_short },
       { name: fillCopy(TEAR_RR.sharpe, { n: long, unit }), style: 'rollLong', values: r.sharpe_long },
+      ...drawnBands(data).flatMap((b) => bandSeries(b, unit, r.t.length)),
     ],
   }
   const vol: LineStackPane = {

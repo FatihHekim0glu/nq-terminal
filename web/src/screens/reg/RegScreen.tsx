@@ -5,15 +5,17 @@
 // control p, Bonferroni, Holm, BH q, spec sha with the registry and re-hash status, the tag (edge,
 // [OVERLAY], check) and the amendments); the accepted amendments re-hashed now; and the sealed
 // confirmations in their own block with their own alpha. Enter, a double click or Number <GO> on a
-// row opens DES for it. Read only: four GETs, no verdict computed here.
+// row opens DES for it. The DSR column is SV3's Deflated Sharpe ([POST HOC], an extra view only, never a
+// verdict) from GET /api/analytics/deflated. Read only: five GETs, no verdict computed here.
 import { useCallback, useMemo, useState } from 'react'
-import { useConfirmations, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
+import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
+import { DEFLATED } from '../../copy/deflated'
 import { REG } from '../../copy/reg'
 import { SPEC } from '../../copy/tiles'
 import MonitorGrid from '../../grids/MonitorGrid'
@@ -23,6 +25,7 @@ import { REG_COLUMNS, REG_COMPACT_COLUMNS, regRowId } from './regColumns'
 import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
 import { openDes } from './open'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
+import { withDeflated } from './deflatedModel'
 import './reg.css'
 
 type FilterCriterion = Exclude<CriterionId, 'rows'>
@@ -68,17 +71,19 @@ function exportRows(rows: readonly RegRow[]): void {
   postMessage(ok ? fillCopy(REG.export.done, { file: REG.export.fileName }) : REG.export.unavailable, ok ? 'info' : 'error')
 }
 
-function useRegData() {
+/** `withDsr`: REG shows the DSR column only at full width, so a narrow panel (HOME's cell) never asks for SV3. */
+function useRegData(withDsr: boolean) {
   const registry = useRegistry()
   const cards = useHypotheses()
   const mt = useMultipleTesting()
   const confirmations = useConfirmations()
+  const deflated = useDeflated(withDsr)
   const rows = useMemo(
-    () => (registry.data && (cards.data || cards.isError) ? buildRegRows(registry.data, cards.data ?? []) : null),
-    [registry.data, cards.data, cards.isError],
+    () => (registry.data && (cards.data || cards.isError) ? withDeflated(buildRegRows(registry.data, cards.data ?? []), deflated.data) : null),
+    [registry.data, cards.data, cards.isError, deflated.data],
   )
   const confirmRows = useMemo(() => (confirmations.data ? confirmationRows(confirmations.data) : null), [confirmations.data])
-  return { registry, cards, alpha: mt.data?.alpha ?? null, rows, confirmations, confirmRows }
+  return { registry, cards, alpha: mt.data?.alpha ?? null, rows, confirmations, confirmRows, deflated: deflated.data }
 }
 
 interface Filters {
@@ -105,13 +110,13 @@ function useRegView(data: ReturnType<typeof useRegData>, f: Filters) {
 
 export default function RegScreen(_props: ScreenProps) {
   const actions = usePanelActions()
-  const data = useRegData()
+  const main = useElementWidth()
+  const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
+  const data = useRegData(main.width !== null && !compact)
   const { registry, cards, rows, confirmations, confirmRows } = data
   const [f, setF] = useState<Filters>(NO_FILTER)
   const { shown, groups, crit } = useRegView(data, f)
   const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
-  const main = useElementWidth()
-  const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
   const tag = <span className="reg-tag">{SPEC.preReg}</span>
   return (
     <div className="reg-screen" data-screen="REG">
@@ -144,6 +149,7 @@ export default function RegScreen(_props: ScreenProps) {
               <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
             </div>
             {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
+            {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
             <VerdictNotes rows={shown} />
             <AcceptanceBlock acceptances={registry.data?.acceptances} />
             <ConfirmBlock

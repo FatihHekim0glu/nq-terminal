@@ -9,8 +9,10 @@ import { captureDownloads } from '../../chrome/download.testUtil'
 import { NumberingContext, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import type { ResolvedContext } from '../../commands/types'
+import { DEFLATED } from '../../copy/deflated'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
+import { DEFLATED_REAL } from '../reg/deflatedFixtures'
 import DesScreen from './DesScreen'
 import { CONFIRMATION, HYPOTHESES, INSTRUMENT_NQ, OVERNIGHT, PANEL, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
 
@@ -73,6 +75,7 @@ function route(url: URL): Response {
   if (path === '/api/data/catalog') return json(CATALOG)
   if (path === '/api/health') return json(HEALTH)
   if (path === '/api/instruments/NQ') return json(INSTRUMENT_NQ)
+  if (path === '/api/analytics/deflated') return json(DEFLATED_REAL)
   const panel = /^\/api\/analytics\/hypothesis\/([^/]+)\/panel$/.exec(path)
   if (panel) return json(PANEL)
   const detail = /^\/api\/hypotheses\/([^/]+)$/.exec(path)
@@ -194,6 +197,23 @@ describe('DES, hypothesis tear sheet', () => {
     expect(strip.textContent).toContain('rebal_v1_confirm')
     expect(strip.textContent).toContain(CONFIRMATION.label)
     await waitFor(() => expect(strip.textContent).toContain('rebal_v1_confirm_trades'))
+  })
+
+  it('shows the hypothesis DSR against SR0 from SV3, [POST HOC], in the registration box', async () => {
+    await openHypothesis('volmanaged_v0')
+    const vm = DEFLATED_REAL.rows.find((r) => r.name === 'volmanaged_v0')!
+    const label = await screen.findByText(DEFLATED.desLabel)
+    const box = label.closest('tr') ?? label.parentElement!
+    await waitFor(() => expect(box.textContent).toContain(
+      `DSR < 0.000001 under V (SR0 ${vm.sr0_own_period!.toFixed(4)}), ${vm.dsr_null!.toFixed(3)} under V0 (SR0 ${vm.sr0_null_own_period!.toFixed(4)}), N 21`))
+    expect(calls.filter((c) => c.url === '/api/analytics/deflated').every((c) => c.method === 'GET')).toBe(true)
+  })
+
+  it('says a check row is not an SV3 trial', async () => {
+    await openHypothesis('za_v0_C3_gao_momentum')
+    const label = await screen.findByText(DEFLATED.desLabel)
+    const box = label.closest('tr') ?? label.parentElement!
+    await waitFor(() => expect(box.textContent).toContain(DEFLATED.desNone))
   })
 
   it('shows no sealed strip where nothing was sealed', async () => {

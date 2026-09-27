@@ -9,6 +9,7 @@ import {
   eqStack,
   mretHeatmap,
   rrEmpty,
+  rrBandNote,
   rrStack,
   statsNotes,
   statsSections,
@@ -101,6 +102,36 @@ describe('RR (look spec 7.5)', () => {
     expect(stack.panes[0]!.series.map((s) => s.name)).toEqual(['Sharpe 63 sessions', 'Sharpe 252 sessions'])
     expect(stack.panes[0]!.series[0]!.values).toBe(SMOKE_ANALYTICS.rolling.sharpe_short)
     expect(stack.panes[1]!.unit).toBe('%')
+  })
+
+  it('draws each window its own range if the full-sample Sharpe held (born failing: one full-sample pair)', () => {
+    // statistics review: SV5's full-sample interval on the 63-session pane left most values outside it at a
+    // constant true Sharpe; each window now gets SR_full +/- 1.96 x its own Mertens error (RL1 band)
+    const r = HYP_ANALYTICS.rolling
+    const lines = { ...HYP_ANALYTICS, rolling: { ...r, sharpe_short: r.t.map(() => 0.5), sharpe_long: r.t.map(() => 0.5) } }
+    const stack = rrStack(lines, 'volmanaged_v0')
+    const n = r.t.length
+    const [short, long] = HYP_ANALYTICS.rolling.sharpe_bands
+    const bounds = stack.panes[0]!.series.slice(2)
+    expect(bounds.map((s) => [s.name, s.style])).toEqual([
+      ['Range low, Sharpe 63 sessions', 'ciBound'], ['Range high, Sharpe 63 sessions', 'ciBound'],
+      ['Range low, Sharpe 252 sessions', 'ciBound'], ['Range high, Sharpe 252 sessions', 'ciBound'],
+    ])
+    expect(bounds[0]!.values).toEqual(Array(n).fill(short!.lo))
+    expect(bounds[3]!.values).toEqual(Array(n).fill(long!.hi))
+    expect(short!.hi! - short!.lo!).toBeGreaterThan(1.9 * (long!.hi! - long!.lo!))
+    expect(rrBandNote(lines)).toBe(
+      'Dashed amber lines: the range (95%) of a 63-session Sharpe, -7.53 to 0.09, and of a 252-session Sharpe, -5.61 to -1.82, if the full-sample Sharpe -3.72 held throughout (Mertens standard error). A line outside its range is not by itself a regime change.',
+    )
+  })
+
+  it('draws no range for a window without a rolling value', () => {
+    const stack = rrStack(SMOKE_ANALYTICS, 'smoke_2015_01')
+    expect(stack.panes[0]!.series).toHaveLength(2)
+    expect(rrBandNote(SMOKE_ANALYTICS)).toBeNull()
+    const r = HYP_ANALYTICS.rolling
+    const shortOnly = { ...HYP_ANALYTICS, rolling: { ...r, sharpe_short: r.t.map(() => 0.5) } }
+    expect(rrStack(shortOnly, 'x').panes[0]!.series.slice(2).map((s) => s.name)).toEqual(['Range low, Sharpe 63 sessions', 'Range high, Sharpe 63 sessions'])
   })
 })
 

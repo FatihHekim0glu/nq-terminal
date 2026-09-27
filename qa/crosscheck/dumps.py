@@ -12,6 +12,8 @@ Schema `nqt-qa-dump/1`. Two kinds:
   each implementation computed for TA1 and TA3, or EX1 to EX4.
 - `market` (a `Bundle`): a market view's inputs (MV3: the session dates, the daily universe returns and the window)
   with the line the terminal serves.
+- P1 bundles (`p1series`, `bootstrap`, `deflated`, `paths`, `regimes`, `stress`, `tracking`): the raw inputs of the
+  Phase 10 metrics with the terminal's values (and Nautilus's where one exists); references in `p1_reference.py`.
 
 This module only reads. It never imports the backend (ARCHITECTURE section 11).
 """
@@ -30,7 +32,13 @@ SIDES = ("ours", "nq_lab", "nautilus", "stored")
 BASES = ("A", "B")
 BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "costs": ("instruments", "ticks", "trade_pnl", "trade_commission", "fills", "snapshots"),
-                 "market": ("dates", "r", "window")}
+                 "market": ("dates", "r", "window"),
+                 # P1 (TASKS Phase 10), written by terminal/backend/tests/test_dump_for_qa_p1.py
+                 "p1series": ("dates", "r", "bench", "basis", "periods", "on_capital"),
+                 "bootstrap": ("r", "basis", "periods", "on_capital", "seed", "reps", "horizon", "confidence"),
+                 "deflated": ("trials", "paper"), "paths": ("trades", "all_trades", "bars", "point_value", "tick"),
+                 "regimes": ("dates", "r", "rv_dates", "rv", "min_history"),
+                 "stress": ("dates", "r", "bench", "basis", "windows"), "tracking": ("rows", "multiplier")}
 
 
 class DumpError(ValueError):

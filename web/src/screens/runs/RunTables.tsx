@@ -3,7 +3,8 @@
 // when a run has more. Trades are newest first with P&L in up and down text; prices show exactly the
 // API value with the decimals the column needs. Log sections are free-form rows: one column per key.
 // A section the run does not record is named, and never requested. Each grid registers its loaded page
-// for the screen's 98) Export.
+// for the screen's 98) Export. Trades and fills also open in the Perspective pivot grid (TASKS 9.1),
+// which reads every page of the run's rows.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useRunFills, useRunLog, useRunTrades } from '../../api/queries'
 import type { Schemas } from '../../api/types'
@@ -15,6 +16,7 @@ import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
 import type { SortSpec } from '../../grids/MonitorGrid.sort'
 import { RUN } from '../../copy/runs'
+import { FillsPivot, PivotToggle, TradesPivot, type GridView } from '../../perspective'
 import { decimalsFor, formatExact, formatRatio, formatUsd, logColumns, logText, signTone } from './model'
 import { PAGE_ROWS, type LogSection } from './runModel'
 
@@ -98,13 +100,27 @@ function TradesGrid({ run, items, total }: { readonly run: string; readonly item
   )
 }
 
-export function TradesTab({ run }: { readonly run: string }) {
+function ViewRow({ view, onView }: { readonly view: GridView; readonly onView: (v: GridView) => void }) {
+  return <div className="nqt-pivot-row"><PivotToggle value={view} onChange={onView} /></div>
+}
+
+function PagedTrades({ run }: { readonly run: string }) {
   const [offset, setOffset] = useState(0)
   const query = useRunTrades(run, { offset, limit: PAGE_ROWS })
   return (
     <Paged query={query} offset={offset} onOffset={setOffset}>
       {(items, total) => <TradesGrid run={run} items={items} total={total} />}
     </Paged>
+  )
+}
+
+export function TradesTab({ run }: { readonly run: string }) {
+  const [view, setView] = useState<GridView>('grid')
+  return (
+    <>
+      <ViewRow view={view} onView={setView} />
+      {view === 'pivot' ? <div className="nqt-pivot-frame"><TradesPivot run={run} /></div> : <PagedTrades run={run} />}
+    </>
   )
 }
 
@@ -134,13 +150,23 @@ function FillsGrid({ run, items, total }: { readonly run: string; readonly items
   )
 }
 
-export function FillsTab({ run }: { readonly run: string }) {
+function PagedFills({ run }: { readonly run: string }) {
   const [offset, setOffset] = useState(0)
   const query = useRunFills(run, { offset, limit: PAGE_ROWS })
   return (
     <Paged query={query} offset={offset} onOffset={setOffset}>
       {(items, total) => <FillsGrid run={run} items={items} total={total} />}
     </Paged>
+  )
+}
+
+export function FillsTab({ run }: { readonly run: string }) {
+  const [view, setView] = useState<GridView>('grid')
+  return (
+    <>
+      <ViewRow view={view} onView={setView} />
+      {view === 'pivot' ? <div className="nqt-pivot-frame"><FillsPivot run={run} /></div> : <PagedFills run={run} />}
+    </>
   )
 }
 

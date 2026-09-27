@@ -158,6 +158,11 @@ def test_rolling_monthly_distribution_and_risk_equal_the_part_a_functions(api):
     for key, line in (("sharpe_short", "sharpe_63"), ("sharpe_long", "sharpe_252"), ("vol_short", "vol_63"),
                       ("vol_long", "vol_252")):
         assert body["rolling"][key] == nums(panel[line]), key
+    bands = body["rolling"]["sharpe_bands"]
+    assert [b["window"] for b in bands] == [63, 252] and "if the full-sample Sharpe held" in body["rolling"]["band_label"]
+    for got, w in zip(bands, (63, 252)):
+        want = rolling.sharpe_band(s.r, w, 252)
+        assert (got["lo"], got["hi"], got["se"], got["centre"]) == (want["lo"], want["hi"], want["se"], want["centre"])
     grid = distribution.monthly_heatmap(s.r, "A")
     assert body["monthly"]["years"] == [int(y) for y in grid.index]
     assert body["monthly"]["grid"] == [nums(row) for row in grid.to_numpy()]

@@ -208,6 +208,17 @@
 }
 .tear-card-body .btn-toggles { align-self: flex-start; margin: 0 5px; }
 
+/* P1 views (TASKS Phase 10 on screen): the charts in cards take a fixed height; the stress windows span
+   the whole grid as a panel of their own; a greyed Cornish-Fisher value reads muted with its words. */
+.tear-chart-p1 { flex: 0 0 auto; height: clamp(200px, 36cqh, 300px); min-height: 0; }
+.tear-card-wide { grid-column: 1 / -1; }
+/* The Cornish-Fisher table has six columns: two grid tracks where the panel has room for three or more. */
+@container tear (min-width: 1180px) {
+  .tear-card-span2 { grid-column: span 2; }
+}
+.tear-spent { color: var(--warn); font-weight: 700; }
+.tear-scroll { max-width: 100%; overflow: auto; }
+
 /* A row with no return series: the command link to its parent's tear sheet (as HOME's links). */
 .tear-refusal .cmd-link-wrap { color: var(--link); }
 .tear-refusal .cmd-link {

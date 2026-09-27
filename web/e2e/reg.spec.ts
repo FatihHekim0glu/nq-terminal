@@ -140,7 +140,8 @@ test.describe('REG and MT', () => {
     await openReg(page)
     const mt = await apiJson<MultipleTesting>(page, '/api/multiple-testing')
     const view = panel(page, MT_TITLE)
-    await expect(view.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`${mt.k} p-values at alpha ${mt.alpha}`))
+    // MT also draws SV3's DSR ladder under the confirmations; the p-value scatter is the one named by its family.
+    await expect(view.getByRole('img', { name: /p-values against rank/ })).toHaveAttribute('aria-label', new RegExp(`${mt.k} p-values at alpha ${mt.alpha}`))
     await expect(view.getByRole('region', { name: 'Multiple-testing family' })).toContainText('Boundary lines match the API at every rank.')
     const rows = await gridRows(view.getByRole('grid', { name: /Adjusted p-values/ }))
     expect(rows).toHaveLength(mt.k)
@@ -154,7 +155,7 @@ test.describe('REG and MT', () => {
       expect(src.holm_line).toBeCloseTo(mt.alpha / (mt.k - src.rank + 1), 12)
       expect(src.bh_line).toBeCloseTo((src.rank * mt.alpha) / mt.k, 12)
     })
-    await view.getByRole('button', { name: 'Table', exact: true }).click()
+    await view.locator('.mt-chart').getByRole('button', { name: 'Table', exact: true }).click()
     await expect(view.getByRole('table', { name: /p-values against rank/ })).toBeVisible()
     await expectGalleryAxeClean(page)
     expect(watch.errors).toEqual([])

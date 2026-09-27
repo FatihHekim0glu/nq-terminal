@@ -140,6 +140,44 @@ async function send(url: string, options: GetOptions): Promise<Response> {
   }
 }
 
+/**
+ * The absolute URL of one of the build's own static files (the Perspective engine's WebAssembly, TASKS
+ * 9.1): same origin as the page and never under /api. Anything else is refused before any request.
+ */
+export function assetUrl(url: string, origin: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(url, `${origin}/`)
+  } catch {
+    throw refuse(url, 'not a URL')
+  }
+  const underApi = parsed.pathname === API_PREFIX || parsed.pathname.startsWith(`${API_PREFIX}/`)
+  const web = parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  if (!web || parsed.origin !== origin || underApi) throw refuse(url, 'only same-origin build assets are fetched')
+  return parsed.href
+}
+
+/** GET a static build file of this origin as a Response (for WebAssembly start-up); ApiError otherwise. */
+export async function fetchAsset(url: string, options: GetOptions = {}): Promise<Response> {
+  const href = assetUrl(url, globalThis.location.origin)
+  let response: Response
+  try {
+    response = await globalThis.fetch(href, {
+      method: 'GET',
+      mode: 'same-origin',
+      credentials: 'same-origin',
+      redirect: 'error',
+      referrerPolicy: 'no-referrer',
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (isAbort(error)) throw error
+    throw new ApiError({ kind: 'network', path: href, detail: error instanceof Error ? error.message : 'the request failed', cause: error })
+  }
+  if (!response.ok) throw await httpError(href, response)
+  return response
+}
+
 /** GET a contract path. Resolves with the typed 200 body; rejects with ApiError otherwise. */
 export async function apiGet<P extends ApiPath>(path: P, ...args: GetArgs<P>): Promise<SuccessOf<P>> {
   const [request, options] = args
@@ -154,6 +192,21 @@ export async function apiGet<P extends ApiPath>(path: P, ...args: GetArgs<P>): P
   }
 }
 
+/** The contract's one Server-Sent Events route (TASKS 9.2): a GET stream, read only like every other route. */
+export type EventStreamPath = '/api/live/stream'
+
+/**
+ * Opens the live stream: a same-origin relative GET under /api with no credentials to another origin. The
+ * browser's EventSource reconnects by itself and sends the last event id back (Last-Event-ID). Null where the
+ * browser has no EventSource, so the caller keeps polling. This is the only module that opens one.
+ */
+export function openEventStream(path: EventStreamPath): EventSource | null {
+  checkTemplate(path)
+  const Source = (globalThis as { EventSource?: typeof EventSource }).EventSource
+  if (typeof Source !== 'function') return null
+  return new EventSource(path, { withCredentials: false })
+}
+
 const WRITE_METHOD = /(['"`])(post|put|patch|delete)\1/gi
 const FETCH_CALL = /\bfetch\s*\(/
 // Other ways a page can reach the network; none belongs anywhere in the terminal.
@@ -165,13 +218,19 @@ const OTHER_CHANNELS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bnew\s+WebSocket\b/, 'WebSocket'],
 ]
 
+/** The client itself opens the live stream (openEventStream), a GET; nowhere else may. */
+const CLIENT_CHANNELS: ReadonlySet<string> = new Set(['EventSource'])
+
 /**
  * Source scan used by the GET-only test over every module under src: quoted write methods (any
- * case) anywhere, fetch outside src/api/client.ts, and every other request channel.
+ * case) anywhere, fetch and EventSource outside src/api/client.ts, and every other request channel.
  */
 export function findWriteRequests(file: string, source: string): string[] {
   const methods = [...source.matchAll(WRITE_METHOD)].map((m) => `${file}: write method ${(m[2] ?? '').toUpperCase()}`)
-  const strayFetch = !file.endsWith('/api/client.ts') && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
-  const channels = OTHER_CHANNELS.filter(([pattern]) => pattern.test(source)).map(([, name]) => `${file}: uses ${name}`)
+  const isClient = file.endsWith('/api/client.ts')
+  const strayFetch = !isClient && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
+  const channels = OTHER_CHANNELS
+    .filter(([pattern, name]) => pattern.test(source) && !(isClient && CLIENT_CHANNELS.has(name)))
+    .map(([, name]) => `${file}: uses ${name}`)
   return [...methods, ...strayFetch, ...channels]
 }

@@ -7,7 +7,7 @@ journal key can never collide with them.
 """
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -235,3 +235,84 @@ class LiveRoutes(ResponseModel):
     routes: list[LiveRouteRow]
     fills: list[LiveFillRow]
     summary: RoutesSummary
+
+
+# ---------------------------------------------------------------- the live stream (TASKS 9.2, GET /api/live/stream)
+# Each SSE event's `event:` name equals its payload's `kind`, and its `id:` is the stream cursor after it (the
+# browser sends it back as `Last-Event-ID`). The stream carries no performance figure of its own: rows are
+# labelled, and the one status payload is LiveStatus, built on the performance path.
+
+STREAM_SCHEMA_VERSION = 1
+ResetReason = Literal["sync", "new", "changed", "backlog", "removed"]
+
+
+class StreamHello(ResponseModel):
+    """First event of every connection: how the stream will behave and whether it resumed a cursor."""
+
+    kind: Literal["hello"] = "hello"
+    schema_version: int
+    resumed: bool
+    resume_note: str | None = Field(description="why a Last-Event-ID was not used, else null")
+    poll_s: float
+    heartbeat_s: float
+    lifetime_s: float = Field(description="the server ends the stream after this long; the browser reconnects")
+    retry_ms: int = Field(ge=0)
+    banner: str
+    basis: str
+    read_only: bool
+    order_path: str
+
+
+class StreamStatus(ResponseModel):
+    """The same body as GET /api/live/status, sent on connect and whenever it changes."""
+
+    kind: Literal["status"] = "status"
+    status: LiveStatus
+
+
+class StreamKillSwitch(ResponseModel):
+    kind: Literal["kill_switch"] = "kill_switch"
+    on: bool
+    path: str
+
+
+class StreamJournalReset(ResponseModel):
+    """Drop what is held for `file`; the rows that follow start at `first_line_no`.
+
+    sync: the journal as it stands on a fresh connection; new: a journal first seen now; changed: the file no longer
+    holds the rows already sent (truncated or replaced); backlog: more rows were waiting than the stream sends in one
+    go, so the oldest were skipped (read them from /api/live/journal); removed: the file is gone.
+    """
+
+    kind: Literal["journal_reset"] = "journal_reset"
+    file: str
+    path: str
+    reason: ResetReason
+    skipped_rows: int = Field(ge=0, description="rows before first_line_no that the stream does not send")
+    first_line_no: int | None
+
+
+class StreamJournalRow(ResponseModel):
+    kind: Literal["journal_row"] = "journal_row"
+    row: JournalRowOut
+
+
+class StreamHeartbeat(ResponseModel):
+    kind: Literal["heartbeat"] = "heartbeat"
+    utc: str
+    interval_s: float
+
+
+class StreamBye(ResponseModel):
+    """Last event before the server ends the stream (lifetime reached); reconnect with Last-Event-ID."""
+
+    kind: Literal["bye"] = "bye"
+    reason: str
+    retry_ms: int = Field(ge=0)
+
+
+LiveStreamEvent = Annotated[
+    StreamHello | StreamStatus | StreamKillSwitch | StreamJournalReset | StreamJournalRow | StreamHeartbeat
+    | StreamBye,
+    Field(discriminator="kind"),
+]

@@ -8,7 +8,16 @@ Journals (`live/logs/*.jsonl`, discovered, never assumed; DL11)
   holds back a last line with no newline until the writer finishes it. Lines are parsed with `json.loads`, which
   accepts the `NaN` tokens the book writes, then sanitised (`files.sanitise`: NaN and Inf to null, ns ints to ISO
   plus `*_epoch_s`).
+  While nothing changes, `poll` hands back the same rows tuple (no copy per poll), so the live stream's many polls
+  of one shared tailer stay cheap.
 - Every row is classed by its own fields with `paper_plumbing.is_plumbing`, never by the file name.
+- The live stream's cursor (TASKS 9.2) is the SSE event id the browser sends back as `Last-Event-ID`:
+  `c1|<journal>:<line_no>:<digest>|...`, one entry per journal with at least one row sent, sorted by name. The
+  digest is the first `DIGEST_CHARS` hex characters of the sha256 of the row's canonical JSON, so after a server
+  restart (nothing in memory) a resume continues after that line only while the file still holds the same row
+  there; a truncated or rewritten journal is sent again from its start. `parse_cursor` accepts only what
+  `encode_cursor` writes (names as `FILE_NAME`, bounded length); names are later matched against the discovered
+  listing, never joined into a path.
 - The performance path goes through `paper_plumbing.performance_rows` (imported, never reimplemented) and then
   through `check_no_plumbing`, so a plumbing row can never reach a performance series even if the filter is
   swapped out (`performance_series(keep=...)` exists so the test can show that guard failing).
@@ -27,7 +36,9 @@ terminal never creates or deletes those files.
 """
 from __future__ import annotations
 
+import bisect
 import datetime as dt
+import hashlib
 import ipaddress
 import json
 import math
@@ -39,11 +50,14 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from nq_lab import live_guards, mnq_roll, paper_plumbing
-from nq_terminal.services.files import freeze, sanitise
+from nq_terminal.services.files import freeze, sanitise, thaw
 
 JOURNAL_SUFFIX = ".jsonl"
 LOG_SUFFIX = ".log"
 BOOK_JOURNAL = "volmanaged_paper_journal.jsonl"
+# 404 details: fixed text, never the name the client asked for (a reflected query value is never sent back).
+NO_JOURNAL = "no journal by that name in live/logs"
+NO_LOG = "no log by that name in live/logs"
 EXPECTED_JOURNALS = (BOOK_JOURNAL, "volmanaged_paper_journal.PLUMBING_DELAYED.jsonl")
 LOGS_PARTS = ("live", "logs")
 KILL_PARTS = ("live", "KILL")
@@ -56,10 +70,19 @@ MIN_KNOWN_ACCOUNT_CHARS = 4
 LOG_LINE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)Z \[(?P<level>[A-Z]+)\] "
                       r"(?P<trader>[^\s.]+)\.(?P<component>[^:]+): ?(?P<message>.*)$")
 NOT_LOOPBACK = "set (not loopback)"
+CURSOR_VERSION = "c1"
+DIGEST_CHARS = 12
+MAX_CURSOR_CHARS = 8192
+CURSOR_ENTRY = re.compile(r"(?P<name>[A-Za-z0-9_][A-Za-z0-9_.-]{0,159}):(?P<line>[1-9][0-9]{0,9}):"
+                          rf"(?P<digest>[0-9a-f]{{{DIGEST_CHARS}}})")
 
 
 class PlumbingLeakError(RuntimeError):
     """A plumbing row reached a performance series (it must never be read as strategy performance)."""
+
+
+class CursorError(ValueError):
+    """A stream cursor (`Last-Event-ID`) that this module did not write."""
 
 
 # ---------------------------------------------------------------- paths
@@ -141,11 +164,19 @@ class JournalTailer:
         self._rows: list[JournalRow] = []
         self._bad: list[BadLine] = []
         self._resets = 0
+        self._snapshot: tuple[tuple[JournalRow, ...], tuple[BadLine, ...]] | None = None
         self._lock = threading.Lock()
 
     def _restart(self) -> None:
         self.offset, self._partial, self._line_no = 0, b"", 0
         self._rows, self._bad = [], []
+        self._snapshot = None
+
+    def _frozen(self) -> tuple[tuple[JournalRow, ...], tuple[BadLine, ...]]:
+        """The rows and bad lines as tuples, rebuilt only after they change."""
+        if self._snapshot is None:
+            self._snapshot = (tuple(self._rows), tuple(self._bad))
+        return self._snapshot
 
     def _read_new(self, size: int) -> bytes:
         with self.path.open("rb") as fh:
@@ -164,6 +195,7 @@ class JournalTailer:
                 continue
             parsed = parse_row(text, self.path.name, self._line_no)
             (self._rows if isinstance(parsed, JournalRow) else self._bad).append(parsed)
+            self._snapshot = None
 
     def poll(self) -> TailState:
         with self._lock:
@@ -180,8 +212,8 @@ class JournalTailer:
             self._identity = identity
             if stat.st_size > self.offset:
                 self._consume(self._read_new(stat.st_size))
-            return TailState(True, tuple(self._rows), tuple(self._bad), bool(self._partial.strip()), self._resets,
-                             stat.st_mtime_ns)
+            rows, bad = self._frozen()
+            return TailState(True, rows, bad, bool(self._partial.strip()), self._resets, stat.st_mtime_ns)
 
 
 class LiveMonitor:
@@ -211,6 +243,53 @@ class LiveMonitor:
         return find(self.folder, LOG_SUFFIX, name)
 
 
+# ---------------------------------------------------------------- the stream cursor (Last-Event-ID)
+
+
+@dataclass(frozen=True)
+class CursorEntry:
+    """The last row a stream sent from one journal: its line number and `row_digest`."""
+
+    line_no: int
+    digest: str
+
+
+def row_digest(row: JournalRow) -> str:
+    """A short sha256 of the row's canonical JSON: the same row gives the same digest in any process."""
+    text = json.dumps(thaw(row.data), sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:DIGEST_CHARS]
+
+
+def encode_cursor(entries: Mapping[str, CursorEntry]) -> str:
+    return CURSOR_VERSION + "".join(f"|{name}:{e.line_no}:{e.digest}" for name, e in sorted(entries.items()))
+
+
+def parse_cursor(text: str) -> dict[str, CursorEntry]:
+    """The entries of a cursor written by `encode_cursor`; CursorError for anything else."""
+    if len(text) > MAX_CURSOR_CHARS:
+        raise CursorError(f"longer than {MAX_CURSOR_CHARS} characters")
+    version, *parts = text.split("|")
+    if version != CURSOR_VERSION:
+        raise CursorError("unknown cursor version")
+    entries: dict[str, CursorEntry] = {}
+    for part in parts:
+        match = CURSOR_ENTRY.fullmatch(part)
+        if match is None or match["name"] in entries:
+            raise CursorError("malformed or repeated journal entry")
+        entries[match["name"]] = CursorEntry(int(match["line"]), match["digest"])
+    return entries
+
+
+def resume_point(rows: Sequence[JournalRow], entry: CursorEntry | None) -> int | None:
+    """Index of the first row after `entry`, 0 without one, None when the journal no longer holds that row."""
+    if entry is None:
+        return 0
+    index = bisect.bisect_left(rows, entry.line_no, key=lambda r: r.line_no)
+    if index < len(rows) and rows[index].line_no == entry.line_no and row_digest(rows[index]) == entry.digest:
+        return index + 1
+    return None
+
+
 # ---------------------------------------------------------------- the performance path
 
 
@@ -219,6 +298,14 @@ def check_no_plumbing(rows: Iterable[Mapping[str, Any]]) -> None:
     if leaked:
         dates = ", ".join(str(r.get("date")) for r in leaked)
         raise PlumbingLeakError(f"{len(leaked)} plumbing row(s) reached a performance series: {dates}")
+
+
+def check_row_label(row: JournalRow) -> JournalRow:
+    """The row, once its `plumbing` label agrees with its own fields (a stream never sends an unlabelled one)."""
+    if row.plumbing != paper_plumbing.is_plumbing(row.data):
+        raise PlumbingLeakError(f"{row.file} line {row.line_no} is labelled plumbing={row.plumbing} against its "
+                                "own fields")
+    return row
 
 
 def _total(positions: Any) -> float | None:

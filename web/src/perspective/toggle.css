@@ -1,0 +1,53 @@
+/* The Grid | Pivot row, the frame a pivot view fills, its Show as row, the accessible table and the notes
+   and status lines both views share (TASKS 9.1). Loaded with the toggle, so the row and the table are laid
+   out before (and without) the pivot grid's code. */
+.nqt-pivot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--param-h);
+  padding: 0 5px;
+}
+
+.nqt-psp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nqt-pivot-frame {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 360px;
+}
+
+.nqt-pivot-view,
+.nqt-pivot-table {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  gap: 2px;
+}
+
+.nqt-pivot-table .nqt-grid-wrap {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+
+.nqt-psp-note,
+.nqt-psp-status {
+  margin: 0;
+  padding: 0 5px;
+  font: var(--fs-small) / 16px var(--font-sans);
+  color: var(--muted);
+}
+
+.nqt-psp-tag {
+  color: var(--warn);
+}
+
+.nqt-psp-error {
+  color: var(--c-down);
+}

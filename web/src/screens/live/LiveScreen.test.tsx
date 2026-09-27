@@ -3,11 +3,16 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
+import { liveStreamHub } from '../../api/useLiveStream'
 import { LIVE } from '../../copy/live'
+import { STREAM } from '../../copy/liveStream'
+import { TRACKING } from '../../copy/tracking'
 import { stubLayout } from '../../grids/testing'
 import { BANNER, BOOK, BOOK_CLOSE_ROWS, ROUTES_BODY, emptyStatus, page, performance, status } from './liveFixtures'
 import { dateSeconds } from './liveModel'
 import LiveScreen from './LiveScreen'
+import { TRACKING_POPULATED } from './trackingFixtures'
+import { formatNumber } from '../tear/tearFormat'
 
 interface StubPane { readonly id: string; readonly series: ReadonlyArray<{ readonly name: string; readonly values: ReadonlyArray<number | null | undefined> }> }
 
@@ -27,6 +32,16 @@ interface Bodies {
   status?: unknown
   performance?: unknown
   closeRows?: unknown
+  tracking?: unknown
+}
+
+const TRACKING_BODY = {
+  journal: 'volmanaged_paper_journal.jsonl', present: true, empty_state: null, banner: BANNER,
+  basis: 'performance rows only (plumbing rows dropped)', tag: '[POST HOC]', label: 'paper P&L against the rule',
+  unit: 'USD per session', multiplier: 2, plumbing_rows_skipped: 2,
+  t: [1790726400, 1790812800, 1790899200], date: ['2026-09-30', '2026-10-01', '2026-10-02'],
+  paper: [null, 12.5, -4], model: [null, 10, -2], difference: [null, 2.5, -2],
+  paper_cumulative: [null, 12.5, 8.5], model_cumulative: [null, 10, 8], n: 2, total_difference: 0.5, tracking_sd: 3.18,
 }
 
 function routes(b: Bodies = {}) {
@@ -36,6 +51,7 @@ function routes(b: Bodies = {}) {
     if (url.startsWith('/api/live/performance')) return json(b.performance ?? performance())
     if (url.startsWith('/api/live/journal')) return json(b.closeRows ?? page(BOOK_CLOSE_ROWS))
     if (url.startsWith('/api/live/routes')) return json(ROUTES_BODY)
+    if (url.startsWith('/api/analytics/paper-tracking')) return json(b.tracking ?? TRACKING_BODY)
     return json({ detail: 'unexpected' }, 404)
   })
 }
@@ -53,7 +69,55 @@ function mount() {
 const strip = (name: string) => screen.getByRole('list', { name })
 
 beforeEach(() => stubLayout(600))
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  liveStreamHub.reset()
+})
+
+describe('LIVE: the live stream line and LV5 (P1)', () => {
+  it('says whether server events flow; without EventSource it polls and says why', async () => {
+    routes()
+    mount()
+    const line = await screen.findByRole('group', { name: STREAM.label })
+    expect(within(line).getByRole('status').textContent).toBe(`polling every 2 s: ${STREAM.reasons.unsupported}`)
+  })
+
+  it('draws paper against model from /api/analytics/paper-tracking with its tag, unit and totals', async () => {
+    const spy = routes()
+    mount()
+    const section = await screen.findByRole('region', { name: TRACKING.label })
+    await waitFor(() => expect(within(section).getByTestId('linestack').getAttribute('data-t')).toBe('1790726400,1790812800,1790899200'))
+    expect(within(section).getByText('[POST HOC]')).toBeTruthy()
+    expect(section.textContent).toContain('Plumbing rows dropped from this view: 2.')
+    expect(section.textContent).toContain('Total difference +0.50 USD. Tracking sd 3.18 USD per session.')
+    expect(section.querySelector('[data-series="Paper, cumulative"]')?.textContent).toBe(',12.5,8.5')
+    expect(spy.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true)
+  })
+
+  it("shows the backend's own populated LV5 response at the displayed precision (roll rows, crosschecked)", async () => {
+    routes({ tracking: TRACKING_POPULATED })
+    mount()
+    const section = await screen.findByRole('region', { name: TRACKING.label })
+    const tr = TRACKING_POPULATED
+    expect(tr.n).toBe(2)
+    await waitFor(() => expect(section.textContent).toContain(
+      `Sessions with a close on both days ${tr.n}. Total difference ${formatNumber(tr.total_difference, 2, { signed: true, thousands: true })} USD. `
+      + `Tracking sd ${formatNumber(tr.tracking_sd, 2, { thousands: true })} USD per session.`))
+    expect(section.textContent).toContain('Total difference -1.00 USD. Tracking sd 0.71 USD per session.')
+    const dated = tr.t.flatMap((t, i) => (typeof t === 'number' ? [i] : []))
+    const shown = (values: ReadonlyArray<number | null>) => dated.map((i) => values[i] ?? '').join(',')
+    expect(section.querySelector('[data-series="Paper, cumulative"]')?.textContent).toBe(shown(tr.paper_cumulative))
+    expect(section.querySelector('[data-series="Model, cumulative"]')?.textContent).toBe(shown(tr.model_cumulative))
+    expect(section.querySelector('[data-series="Paper minus model"]')?.textContent).toBe(shown(tr.difference))
+  })
+
+  it('names the expected journal when the paper book has not written it yet', async () => {
+    routes({ tracking: { ...TRACKING_BODY, present: false, empty_state: 'no journal yet: live/logs/volmanaged_paper_journal.jsonl' } })
+    mount()
+    const section = await screen.findByRole('region', { name: TRACKING.label })
+    await waitFor(() => expect(section.textContent).toContain('no journal yet: live/logs/volmanaged_paper_journal.jsonl'))
+  })
+})
 
 describe('LIVE: Routes, Fills and the footer strip (Phase 8)', () => {
   it('lists the routes and fills from /api/live/routes, B/S as coloured text, the plumbing row with its banner', async () => {
@@ -125,7 +189,11 @@ describe('LIVE screen', () => {
   it('draws target against actual from performance rows only: no plumbing date', async () => {
     routes()
     mount()
-    const chart = await screen.findByTestId('linestack')
+    const chart = await waitFor(() => {
+      const found = document.querySelector('.live-perf [data-testid="linestack"]')
+      if (!found) throw new Error('no target against actual chart yet')
+      return found
+    })
     const t = chart.getAttribute('data-t')!.split(',').map(Number)
     expect(t).toEqual([dateSeconds('2026-09-28'), dateSeconds('2026-09-30'), dateSeconds('2026-10-01')])
     expect(t).not.toContain(dateSeconds('2026-10-02'))
@@ -142,7 +210,8 @@ describe('LIVE screen', () => {
     routes({ performance: leaked })
     mount()
     expect(await screen.findByText(/Not drawn: the performance rows do not match/)).toBeTruthy()
-    expect(screen.queryByTestId('linestack')).toBeNull()
+    // LV5's own chart sits in its section; the target-against-actual chart must not be drawn.
+    expect(screen.queryAllByTestId('linestack').filter((el) => el.closest('.live-tracking') === null)).toEqual([])
   })
 
   it('lists the reconciliation rows and the journals under live/logs', async () => {
@@ -161,6 +230,7 @@ describe('LIVE screen', () => {
       status: emptyStatus(),
       performance: { ...performance({ date: [], contract: [], target: [], expected: [], actual: [], reconciled_ok: [], exposure: [], slippage_ticks: [], sent: [], refused: [], error: [], halted: [], plumbing_rows_skipped: 0 }), present: false, empty_state: `no journal yet: live/logs/${BOOK}` },
       closeRows: page([]),
+      tracking: { ...TRACKING_BODY, present: false, empty_state: `no journal yet: live/logs/${BOOK}` },
     })
     mount()
     expect((await screen.findAllByText(`no journal yet: live/logs/${BOOK}`)).length).toBeGreaterThan(0)

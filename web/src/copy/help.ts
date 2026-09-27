@@ -42,6 +42,7 @@ export const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
   ['Enter', '<GO>: run the command line. NumpadEnter does the same.'],
   ['Shift+Enter', 'Open the result in a new panel instead of replacing the focused one (the same as NXTW before the command).'],
   ['F1', 'HELP for the focused screen, or for the function typed in the line. Twice quickly: this HELP index. If the browser opens its own help instead, press HELP on the key toolbar or type HELP.'],
+  ['F2, F4', 'No function: the key toolbar replaces the old F-key plan. The browser does not act on them either; type REG or LEDG instead.'],
   ['F8', 'Insert Equity. nq-lab has no equities, so it matches nothing.'],
   ['F9', 'Insert Comdty: futures in rates, energy, metals, grains or livestock.'],
   ['F10', 'Insert Index: the equity index futures. If the browser takes F10 for its menu, type INDEX.'],

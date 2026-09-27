@@ -142,15 +142,32 @@ def _row(panel: Panel, a: int, contract: Contract, sessions: dict[str, int], win
                        realised_vol=None if sd is None else sd * math.sqrt(SESSIONS_PER_YEAR), corr_to_nq=nq_corr)
 
 
-def universe(frames: dict[str, pd.DataFrame], *, window: int, contracts: Sequence[Contract]) -> UniverseResult:
-    """The universe table and correlations from served 1d frames keyed by symbol (`<ROOT>.V.0`)."""
-    if window < MIN_CORR_OBS:
-        raise ValueError(f"window must be at least {MIN_CORR_OBS} sessions, got {window}")
-    present = [c for c in contracts if not _empty(frames.get(f"{c.root}.V.0"))]
+@dataclass(frozen=True)
+class UniversePanel:
+    """The part of the universe that does not depend on the window: the aligned panel, and which contracts it has."""
+
+    panel: Panel
+    present: tuple[Contract, ...]
+    missing: tuple[str, ...]
+
+
+def universe_panel(frames: dict[str, pd.DataFrame], contracts: Sequence[Contract]) -> UniversePanel:
+    """The NYSE-aligned panel of the served 1d frames (keyed `<ROOT>.V.0`) that the universe table reads."""
+    present = tuple(c for c in contracts if not _empty(frames.get(f"{c.root}.V.0")))
     missing = tuple(f"{c.root}.V.0" for c in contracts if c not in present)
     ordered = {f"{c.root}.V.0": frames[f"{c.root}.V.0"] for c in present}
     days = master_days(IS_START.date(), last_in_sample_day())
-    panel = build_panel(ordered, days)
+    return UniversePanel(panel=build_panel(ordered, days), present=present, missing=missing)
+
+
+def universe(frames: dict[str, pd.DataFrame], *, window: int, contracts: Sequence[Contract],
+             prepared: UniversePanel | None = None) -> UniverseResult:
+    """The universe table and correlations from served 1d frames keyed by symbol (`<ROOT>.V.0`); `prepared` is
+    `universe_panel(frames, contracts)` when the caller already has it (it does not depend on the window)."""
+    if window < MIN_CORR_OBS:
+        raise ValueError(f"window must be at least {MIN_CORR_OBS} sessions, got {window}")
+    built = prepared if prepared is not None else universe_panel(frames, contracts)
+    panel, present, missing = built.panel, built.present, built.missing
     sessions = horizon_sessions(panel.days)
     corr_window = correlation_block(panel.r, panel.symbols, window)
     corr_full = correlation_block(panel.r, panel.symbols, None)

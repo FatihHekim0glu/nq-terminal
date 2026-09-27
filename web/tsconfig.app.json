@@ -7,6 +7,13 @@
     "types": ["vite/client"],
     "allowArbitraryExtensions": true,
     "skipLibCheck": true,
+    /* The Perspective viewer's typings import its TypeScript sources; src/perspective/vendor declares the
+       little the terminal calls instead (types only; Vite resolves the real packages). */
+    "paths": {
+      "@perspective-dev/viewer": ["./src/perspective/vendor/viewer.d.ts"],
+      "@perspective-dev/viewer/dist/wasm/perspective-viewer.js": ["./src/perspective/vendor/viewer-glue.d.ts"],
+      "@perspective-dev/viewer-datagrid": ["./src/perspective/vendor/viewer-datagrid.d.ts"]
+    },
 
     /* Bundler mode */
     "moduleResolution": "bundler",

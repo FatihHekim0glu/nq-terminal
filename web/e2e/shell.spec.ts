@@ -16,6 +16,7 @@
 // - The HELP index caption is 'Mnemonic index, numbered for <GO>' (7.12): numbers serve Number <GO>.
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page, type Request } from '@playwright/test'
+import { MASK_COLOR } from './gallery.ts'
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
@@ -38,6 +39,8 @@ const ARGUMENT_FOR: Readonly<Record<string, string>> = { GIP: '2019-03-14' }
 const BUILT: ReadonlySet<string> = new Set([
   'HOME', 'GP', 'GIP', 'MON', 'CORR', 'OOS', 'LIVE', 'JRNL', 'DES', 'REG', 'MT', 'RUNS', 'RUN', 'LEDG',
   'EQ', 'DD', 'RET', 'RR', 'MRET', 'HELP',
+  // Phase 9 (TASKS 9.4): the first P1 screens.
+  'COST', 'BLK', 'EXPO', 'SEAL',
 ])
 const MULTI_PANEL_SCREENS: Readonly<Record<string, readonly string[]>> = {
   HOME: HOME_TITLES,
@@ -108,9 +111,12 @@ async function expectSameOriginGets(watched: Watch, baseURL: string): Promise<vo
     expect(r.method(), r.url()).toBe('GET')
     expect(new URL(r.url()).origin, r.url()).toBe(origin)
   }
-  const api = watched.requests.filter((r) => new URL(r.url()).pathname.startsWith('/api/'))
+  // The live stream (TASKS 9.2) is an EventSource, which cannot set a header: it asks for text/event-stream.
+  const isStream = (r: Request) => new URL(r.url()).pathname === '/api/live/stream'
+  const api = watched.requests.filter((r) => new URL(r.url()).pathname.startsWith('/api/') && !isStream(r))
   expect(api.length).toBeGreaterThan(0)
   for (const r of api) expect(await r.headerValue(CLIENT_HEADER), r.url()).toBe('nq-lab-terminal')
+  for (const r of watched.requests.filter(isStream)) expect(await r.headerValue('accept'), r.url()).toBe('text/event-stream')
 }
 
 async function expectAxeClean(page: Page): Promise<void> {
@@ -384,10 +390,10 @@ test.describe('terminal shell', () => {
         return body !== undefined && r.bottom > body.top && r.top < body.bottom && cell.querySelector('svg') === null
       }).length)).toBe(0)
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
-      await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`, { mask: await runCounters(page) })
+      await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`, { mask: await runCounters(page), maskColor: MASK_COLOR })
       await runCommand(page, 'HELP')
       await expect(page.getByRole('table', { name: 'Keyboard reference' })).toBeVisible()
-      await expect(page).toHaveScreenshot(`help-${size.width}x${size.height}.png`, { mask: await runCounters(page) })
+      await expect(page).toHaveScreenshot(`help-${size.width}x${size.height}.png`, { mask: await runCounters(page), maskColor: MASK_COLOR })
     })
   }
 })

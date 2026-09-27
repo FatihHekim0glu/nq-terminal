@@ -24,7 +24,6 @@ from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_lab.dtsmom_stats import LAGS as MONTHLY_NW_LAG
 from nq_terminal.analytics import distribution, drawdown, perf, relative, risk, rolling, validity
@@ -50,6 +49,7 @@ from nq_terminal.models.analytics import (
     RegistryEntry,
     RelativeView,
     RiskView,
+    RollingSharpeBand,
     RollingView,
     SharpeInterval,
     StatsTable,
@@ -219,7 +219,15 @@ def rolling_view(s: SessionSeries, u: Units) -> RollingView:
                        vol_short=nums(panel[f"vol_{short}"]), vol_long=nums(panel[f"vol_{long}"]),
                        full_sharpe=num(perf.sharpe(s.r, s.periods)),
                        full_vol=num(perf.annual_volatility(s.r, s.periods)),
-                       vol_extremes=[vol_extremes(panel[f"vol_{w}"], w, u.vol) for w in (short, long)])
+                       vol_extremes=[vol_extremes(panel[f"vol_{w}"], w, u.vol) for w in (short, long)],
+                       sharpe_bands=[_band(s, w) for w in (short, long)],
+                       band_label=rolling.BAND_LABEL)
+
+
+def _band(s: SessionSeries, window: int) -> RollingSharpeBand:
+    band = rolling.sharpe_band(s.r, window, s.periods)
+    return RollingSharpeBand(window=window, centre=num(band["centre"]), lo=num(band["lo"]), hi=num(band["hi"]),
+                             se=num(band["se"]))
 
 
 def _day(stamp: Any) -> tuple[int | None, str | None]:
@@ -248,15 +256,15 @@ def monthly_view(s: SessionSeries, u: Units) -> MonthlyView:
 
 def distribution_view(s: SessionSeries, u: Units) -> DistributionView:
     hist = distribution.histogram(s.r)
-    (osm, osr), (slope, intercept, r) = sps.probplot(s.r.to_numpy(), dist="norm")
+    qq = distribution.qq_plot(s.r)
     table = perf.stats_table(s.r, s.basis, s.periods)
     return DistributionView(
         histogram=HistogramView(unit=u.level, bin_rule=hist["bin_rule"], edges=nums(hist["edges"]),
                                 counts=[int(c) for c in hist["counts"]],
                                 centres=nums(hist["centres"]), normal=nums(hist["normal"]), mean=num(hist["mean"]),
                                 sd=num(hist["sd"]), var_95=num(hist["var_95"]), var_99=num(hist["var_99"])),
-        qq=QqView(label=QQ_LABEL, theoretical=nums(osm), ordered=nums(osr), slope=num(slope),
-                  intercept=num(intercept), r=num(r)),
+        qq=QqView(label=QQ_LABEL, theoretical=nums(qq["theoretical"]), ordered=nums(qq["ordered"]),
+                  slope=num(qq["slope"]), intercept=num(qq["intercept"]), r=num(qq["r"])),
         stats=StatsTable(unit=u.level, **{k: (v if k == "n" else num(v)) for k, v in table.items()}),
         series=PeriodSeries(unit=u.level, t=axis(s.r.index)[0], date=axis(s.r.index)[1], r=nums(s.r)))
 

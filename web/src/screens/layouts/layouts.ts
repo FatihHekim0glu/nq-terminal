@@ -19,6 +19,7 @@ export const SCREEN_PHASES: Readonly<Partial<Record<MnemonicCode, string>>> = Ob
   DES: '6', REG: '6', MT: '6', RUNS: '6', RUN: '6', LEDG: '6',
   EQ: '6', DD: '6', RET: '6', RR: '6', MRET: '6',
   HELP: '4',
+  COST: '9', BLK: '9', EXPO: '9', SEAL: '9',
 })
 
 const NQ: ResolvedContext = { kind: 'instrument', value: 'NQ' }

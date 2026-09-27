@@ -2,8 +2,10 @@
 //  - globalKeyAction(): a pure map from a keydown to what it asks for, tested on its own;
 //  - useCommandLineKeys(): Esc, Ctrl+K and Home focus the command line from anywhere (the command line
 //    owns these, so it works on its own);
-//  - useTerminalKeys(): the rest (F1, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn, Alt+1 to 9,
-//    Alt+K), bound once by the app, which knows the panels.
+//  - useTerminalKeys(): the rest (F1, F2 and F4, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn,
+//    Alt+1 to 9, Alt+K), bound once by the app, which knows the panels.
+// F2 and F4 are reserved (spec 5.2 drops the old F2 REG and F4 LEDG plan): the browser never gets them,
+// and the message line says what to type instead. Alt+F4 and Ctrl+F4 stay the system's and the browser's.
 // No single printable character is bound (WCAG 2.1.4). A key a panel control already handled
 // (defaultPrevented) is left alone, so a chart's Home and End or a grid's PgUp keep working.
 import { useEffect, useRef, type RefObject } from 'react'
@@ -37,6 +39,15 @@ export type GlobalKeyAction =
   | { readonly kind: 'history'; readonly older: boolean }
   | { readonly kind: 'panel'; readonly n: number }
   | { readonly kind: 'keymap' }
+  | { readonly kind: 'reserved'; readonly key: ReservedFKey }
+
+/** F-keys held back from the browser with no terminal action of their own (spec 5.2). */
+export const RESERVED_F_KEYS = ['F2', 'F4'] as const
+export type ReservedFKey = (typeof RESERVED_F_KEYS)[number]
+
+function isReserved(key: string): key is ReservedFKey {
+  return (RESERVED_F_KEYS as readonly string[]).includes(key)
+}
 
 const SECTOR_F_KEYS: Readonly<Record<string, KeyedSector>> = { F8: 'EQUITY', F9: 'COMDTY', F10: 'INDEX', F11: 'CURNCY' }
 
@@ -55,6 +66,7 @@ function altKey(e: KeyLike): GlobalKeyAction | null {
 
 function plainKey(e: KeyLike, where: KeyWhere): GlobalKeyAction | null {
   if (e.key === 'F1') return { kind: 'help' }
+  if (isReserved(e.key)) return { kind: 'reserved', key: e.key }
   const sector = SECTOR_F_KEYS[e.key]
   if (sector) return { kind: 'sector', sector }
   if (e.key === 'PageUp' || e.key === 'PageDown') return { kind: 'page', dir: e.key === 'PageUp' ? -1 : 1 }

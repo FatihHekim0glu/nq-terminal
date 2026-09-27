@@ -189,8 +189,10 @@ describe('toCsv: the export', () => {
   it('writes the API values at full precision with a header row', () => {
     const csv = toCsv(rows.slice(0, 1))
     const [head, first] = csv.split('\r\n')
-    expect(head).toBe('name,registered,tag,round,verdict,n,p,control_p,bonferroni_p,holm_p,bh_q,spec_sha256,spec_sha_ok,spec_rehash_ok,amendments,amendments_ok')
-    expect(first).toBe(`za_v0,true,edge,0,FAIL,2778,${String(REGISTRY.rows[0]!.p)},,1,1,${String(REGISTRY.rows[0]!.bh_q)},${REGISTRY.rows[0]!.spec_sha256},true,true,0,true`)
+    expect(head).toBe('name,registered,tag,round,verdict,n,p,control_p,bonferroni_p,holm_p,bh_q,spec_sha256,spec_sha_ok,spec_rehash_ok,amendments,amendments_ok,dsr')
+    expect(first).toBe(`za_v0,true,edge,0,FAIL,2778,${String(REGISTRY.rows[0]!.p)},,1,1,${String(REGISTRY.rows[0]!.bh_q)},${REGISTRY.rows[0]!.spec_sha256},true,true,0,true,`)
+    const withDsr = toCsv([{ ...rows[0]!, dsr: 0.0160224 }]).split('\r\n')[1]!
+    expect(withDsr.endsWith(',true,0.0160224')).toBe(true)
   })
 
   it('quotes a field with a comma', () => {

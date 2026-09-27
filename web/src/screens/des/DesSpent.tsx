@@ -17,7 +17,7 @@ export interface DesSpentProps {
 const P_DECIMALS = 4
 const ALPHA_DECIMALS = 2
 
-function Comparison({ card, strip }: DesSpentProps) {
+export function Comparison({ card, strip }: DesSpentProps) {
   const c = DES.spentColumns
   return (
     <table className="nqt-grid des-table">
