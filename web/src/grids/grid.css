@@ -101,6 +101,8 @@
 /* Journal source codes (LIVE, PLMB) in the tape's source colour (look spec 4.9 and 7.11). It fails on
    the selection, the hatch and a hovered cell, so those states lift it to --tape-fg. */
 .nqt-grid .src { color: var(--tape-src); }
+/* Journal times (look spec 7.11): amber, in a right-aligned column at the row's right edge. */
+.nqt-grid .time { color: var(--data); }
 
 /* States (4.12): row hover, cell hover, selection, keyboard focus. Inside a hovered cell the muted
    grey and the down red fail on the hovered-cell grey, so both are lifted there (5.32 and 4.89). */

@@ -2,13 +2,29 @@
 // date, the variant, the run whose fills are drawn) and the range row of contiguous toggle buttons
 // (ranges on GP, bar sizes, rolls). Every control is a roving item of the panel.
 import { useId } from 'react'
+import { useCommands } from '../../api/queries'
+import { requestLine } from '../../chrome/CommandLine.bus'
 import { AmberField, DropdownField, ParamRow } from '../../chrome/Field'
+import { displayInstrument } from '../../commands/sectors'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
-import { GP_COPY as C } from './copy'
+import { GP_COPY as C } from '../../copy/gp'
 import { SPAN_CAP_YEARS, type GpTimeframe, type RangeCode, type Variant } from './model'
 
 const roving = { [ROVING_ATTR]: '' }
+
+/**
+ * The red bar's amber context field (look spec 7.6 `[NQ1 Index ▾]`): every instrument the terminal
+ * serves, by generic ticker; choosing one runs `<root> GP` (or GIP) through the command line, so it
+ * lands in the panel's history like a typed command.
+ */
+export function InstrumentField({ root, mode }: { readonly root: string; readonly mode: 'GP' | 'GIP' }) {
+  const commands = useCommands()
+  const index = commands.data ?? null
+  const roots = (index?.instruments ?? []).map((i) => i.root)
+  const options = (roots.includes(root) ? roots : [root, ...roots]).map((r) => ({ value: r, label: displayInstrument(r, index) }))
+  return <DropdownField label={C.instrument} value={root} options={options} onChange={(next) => (next !== root ? requestLine(`${next} ${mode}`) : undefined)} />
+}
 
 export interface ParamsProps {
   readonly mode: 'GP' | 'GIP'

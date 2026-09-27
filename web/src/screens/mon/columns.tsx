@@ -1,12 +1,14 @@
-// MON grid columns (look spec 7.7): ticker and name in amber, the last close with its fence flag, the
-// six horizons (in % or sd, heat-filled on request), realised vol, correlation to NQ and the price units.
+// MON grid columns (look spec 7.7): ticker and name in amber, the 2Day sparkline, the last close with its
+// fence flag, the six horizons (in % or sd, heat-filled on request), realised vol, correlation to NQ and
+// the price units.
 // Every header names its unit. Built once per (horizons, view, heat) so MonitorGrid gets a stable array.
 import { signTone, type MonitorColumn } from '../../grids/MonitorGrid'
 import { fillCopy } from '../../copy/workspace'
-import { MON } from './copy'
+import { MON } from '../../copy/market'
 import type { MonRow, MonView } from './model'
+import TwoDayCell from './TwoDayCell'
 
-const W = { ticker: 96, name: 128, last: 86, flag: 36, horizon: 62, rv: 54, corr: 54, units: 170 } as const
+const W = { ticker: 96, name: 128, spark: 60, last: 86, flag: 36, horizon: 62, rv: 54, corr: 54, units: 170 } as const
 
 function flagCell(row: MonRow) {
   const stale = row.flag === 'stale'
@@ -41,6 +43,10 @@ export function monColumns(horizons: readonly string[], view: MonView, heat: boo
   const columns: MonitorColumn<MonRow>[] = [
     { id: 'ticker', header: MON.colTicker, width: W.ticker, kind: 'name', value: (r) => r.ticker },
     { id: 'name', header: MON.colName, width: W.name, kind: 'name', value: (r) => r.name },
+    {
+      id: 'twoDay', header: MON.colTwoDay, width: W.spark, kind: 'text', value: () => null, sortable: false,
+      render: (r) => <TwoDayCell symbol={r.symbol} root={r.root} tick={r.tick} />,
+    },
     { id: 'last', header: MON.colLast, width: W.last, kind: 'num', value: (r) => r.lastValue, format: (r) => r.last },
     { id: 'flag', header: MON.colFlag, width: W.flag, kind: 'text', value: (r) => r.flag, render: flagCell, sortable: false },
     ...horizons.map((h) => horizonColumn(h, view, heat)),

@@ -1,7 +1,7 @@
 // Axis layout for LineStack (look spec 6 and 6.1), as plain numbers so it can be tested without a
 // canvas. The time axis has two rows:
 //   - daily data: month abbreviations centred in each month span, then years centred and split by
-//     1px dividers;
+//     1px dividers; over a short range, days as `DD Mon` (look spec 6.1), then the years;
 //   - intraday data: HH:MM at each tick, then the date centred on the day.
 // The level (minutes, hours, days, months or years) is the finest whose labels stay MIN_LABEL_PX
 // apart. All times are UTC epoch seconds (the API's `t`); daily bars sit at 00:00 UTC.
@@ -30,6 +30,8 @@ export interface TimeAxisLayout {
 
 /** Labels closer than this would touch at 13px. */
 export const MIN_LABEL_PX = 44
+/** A day label (`DD Mon`) needs more room than a month or a year label. */
+export const DAY_LABEL_PX = 56
 /** Value-axis labels at least this far apart. */
 export const MIN_TICK_SPACE_PX = 28
 
@@ -117,7 +119,7 @@ function dayTicks(min: number, max: number, n: number): Rows {
       const t = start + (d - 1) * DAY
       if (t < min || t > max) continue
       rows.majors.push(t)
-      const label = stepLabel(t, t + DAY, t + n * DAY, min, max, String(d))
+      const label = stepLabel(t, t + DAY, t + n * DAY, min, max, `${pad2(d)} ${MONTHS[m]}`)
       if (label) rows.row1.push(label)
     }
   })
@@ -159,25 +161,31 @@ function bands(min: number, max: number, level: TimeLevel): Band[] {
   const out: Band[] = []
   if (level === 'minute' || level === 'hour') {
     for (let d = Math.floor(min / DAY) * DAY; d <= max; d += DAY) out.push({ start: d, end: d + DAY, text: isoDay(d) })
-  } else if (level === 'day') {
-    eachMonth(min, max, (y, m) => out.push({ start: monthStart(y, m), end: monthStart(y, m + 1), text: `${MONTHS[m]} ${y}` }))
-  } else if (level === 'month') {
+  } else if (level === 'day' || level === 'month') {
     const last = new Date(max * 1000).getUTCFullYear()
     for (let y = new Date(min * 1000).getUTCFullYear(); y <= last; y += 1) out.push({ start: monthStart(y, 0), end: monthStart(y + 1, 0), text: String(y) })
   }
   return out
 }
 
-function chooseStep(min: number, max: number, widthPx: number, minLabelPx: number): Step {
+function chooseStep(min: number, max: number, widthPx: number, minLabelPx: number, daily: boolean): Step {
   const pxPerSecond = widthPx / (max - min)
-  return STEPS.find((s) => s.minSeconds * pxPerSecond >= minLabelPx) ?? STEPS[STEPS.length - 1]!
+  const need = (s: Step) => (s.level === 'day' ? Math.max(minLabelPx, DAY_LABEL_PX) : minLabelPx)
+  const steps = daily ? STEPS.filter((s) => s.level !== 'minute' && s.level !== 'hour') : STEPS
+  return steps.find((s) => s.minSeconds * pxPerSecond >= need(s)) ?? steps[steps.length - 1]!
+}
+
+/** True when every time sits at 00:00 UTC: one point per session, so the axis never shows clock times. */
+export function isDailyAxis(t: readonly number[]): boolean {
+  return t.length > 0 && t.every((s) => s % DAY === 0)
 }
 
 const EMPTY: TimeAxisLayout = { level: 'day', majors: [], row1: [], row2: [], dividers: [] }
 
-export function timeAxisLayout(min: number, max: number, widthPx: number, minLabelPx: number = MIN_LABEL_PX): TimeAxisLayout {
+/** `daily`: the data has one point per session (isDailyAxis), so the finest level is the day. */
+export function timeAxisLayout(min: number, max: number, widthPx: number, minLabelPx: number = MIN_LABEL_PX, daily = false): TimeAxisLayout {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min || widthPx <= 0) return EMPTY
-  const step = chooseStep(min, max, widthPx, minLabelPx)
+  const step = chooseStep(min, max, widthPx, minLabelPx, daily)
   const ticks =
     step.level === 'minute' ? clockTicks(min, max, step.n * MINUTE)
     : step.level === 'hour' ? clockTicks(min, max, step.n * HOUR)

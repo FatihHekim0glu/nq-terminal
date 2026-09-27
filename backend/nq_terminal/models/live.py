@@ -7,7 +7,7 @@ journal key can never collide with them.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -165,3 +165,73 @@ class Performance(ResponseModel):
     refused: list[str | None]
     error: list[str | None]
     halted: list[bool | None]
+
+
+class LiveRouteRow(ResponseModel):
+    """One close row as a route (`services.live_routes`): the decision's status and the row's own fills."""
+
+    file: str
+    line_no: int = Field(ge=1)
+    plumbing: bool
+    banner: str | None
+    date: str | None
+    t: int | None = Field(description="epoch seconds at 00:00 UTC of the session date")
+    contract: str | None
+    status: Literal["sent", "blocked", "refused", "not sent", "error"]
+    reason: str | None
+    target: float | None
+    sent_target: float | None
+    decision_px: float | None = Field(description="the decision's sizing price `p`")
+    close_px: float | None
+    side: Literal["BUY", "SELL"] | None = Field(description="side of the net filled quantity")
+    filled_qty: int | None
+    net_filled: int | None
+    avg_fill_px: float | None
+    slippage_ticks: float | None
+    reconciled_ok: bool | None
+    halted: bool | None
+
+
+class LiveFillRow(ResponseModel):
+    file: str
+    line_no: int = Field(ge=1)
+    plumbing: bool
+    banner: str | None
+    date: str | None
+    t: int | None
+    contract: str
+    side: Literal["BUY", "SELL"]
+    qty: int = Field(ge=1)
+    price: float
+    notional_usd: float | None = Field(description="qty x price x the MNQ point value; null for another contract")
+
+
+class RoutesSummary(ResponseModel):
+    """Totals over performance rows only; plumbing routes and fills are counted apart."""
+
+    routes: int = Field(ge=0)
+    sent: int = Field(ge=0)
+    blocked: int = Field(ge=0)
+    refused: int = Field(ge=0)
+    errors: int = Field(ge=0)
+    fills: int = Field(ge=0)
+    filled_contracts: int = Field(ge=0)
+    notional_usd: float | None
+    plumbing_routes: int = Field(ge=0)
+    plumbing_fills: int = Field(ge=0)
+    bad_fills: int = Field(ge=0, description="fill entries skipped because they were not [contract, sign, qty, price]")
+
+
+class LiveRoutes(ResponseModel):
+    """LIVE's Routes and Fills from one journal, read only (there is no order path)."""
+
+    journal: str
+    present: bool
+    empty_state: str | None
+    banner: str
+    basis: str
+    order_time_rule: str
+    point_value_usd: float
+    routes: list[LiveRouteRow]
+    fills: list[LiveFillRow]
+    summary: RoutesSummary

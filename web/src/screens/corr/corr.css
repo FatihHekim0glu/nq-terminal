@@ -1,6 +1,7 @@
 /* CORR (look spec 7.8). Tokens only, square corners, hard cuts. The matrix takes most of the body (27
    rows at about 19px plus its axis row and scale legend), the rolling pair panel the rest; both keep a
-   floor so a short panel scrolls rather than squeezing the cells. */
+   floor so a short panel scrolls rather than squeezing the cells. The pair chart's floor leaves its
+   plot (after the range row and the two-row time axis) room for several value labels, not one. */
 
 .corr-matrix {
   display: flex;
@@ -14,7 +15,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
-  min-height: 190px;
+  min-height: 300px;
   border-top: 1px solid var(--th-rule);
 }
 .corr-pair-heading {
@@ -29,7 +30,7 @@
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 110px;
+  min-height: 220px;
 }
 .corr-pair-chart > * { flex: 1 1 auto; min-height: 0; }
 .corr-pair-note { margin: 0; padding: 0 6px; line-height: var(--row-h); color: var(--text); }

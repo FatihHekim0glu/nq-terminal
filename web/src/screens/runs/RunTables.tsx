@@ -2,15 +2,19 @@
 // sections in MonitorGrids, one API page (5,000 rows, the contract's maximum) at a time with a pager
 // when a run has more. Trades are newest first with P&L in up and down text; prices show exactly the
 // API value with the decimals the column needs. Log sections are free-form rows: one column per key.
-// A section the run does not record is named, and never requested.
+// A section the run does not record is named, and never requested. Each grid registers its loaded page
+// for the screen's 98) Export.
 import { useMemo, useState, type ReactNode } from 'react'
 import { useRunFills, useRunLog, useRunTrades } from '../../api/queries'
 import type { Schemas } from '../../api/types'
+import { csvFileName } from '../../chrome/exportCsv'
+import { useExportSource } from '../../chrome/exportSource'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import { gridCsv } from '../../grids/gridCsv'
 import type { SortSpec } from '../../grids/MonitorGrid.sort'
-import { RUN } from './copy'
+import { RUN } from '../../copy/runs'
 import { decimalsFor, formatExact, formatRatio, formatUsd, logColumns, logText, signTone } from './model'
 import { PAGE_ROWS, type LogSection } from './runModel'
 
@@ -19,6 +23,11 @@ type Fill = Schemas['FillRow']
 type LogRow = Readonly<Record<string, unknown>>
 
 const roving = { [ROVING_ATTR]: '' }
+
+/** Registers a grid's loaded page (its columns, as shown) for 98) Export as `<run>_<name>.csv`. */
+function useGridExport<Row extends object>(run: string, name: string, columns: readonly MonitorColumn<Row>[], items: readonly Row[]): void {
+  useExportSource(useMemo(() => ({ fileName: csvFileName(run, name), csv: gridCsv(columns, items), rows: items.length }), [run, name, columns, items]))
+}
 const NEWEST_TRADE: SortSpec = { id: 'exit', desc: true }
 const NEWEST_FILL: SortSpec = { id: 'ts', desc: true }
 
@@ -83,6 +92,7 @@ const tradeId = (r: Trade) => `${r.entry_ts ?? ''}|${r.exit_ts ?? ''}|${r.entry_
 function TradesGrid({ run, items, total }: { readonly run: string; readonly items: readonly Trade[]; readonly total: number }) {
   const decimals = decimalsFor(items.flatMap((t) => [t.entry_px, t.exit_px]))
   const columns = useMemo(() => tradeColumns(decimals), [decimals])
+  useGridExport(run, 'trades', columns, items)
   return (
     <MonitorGrid label={fillCopy(RUN.trades.label, { run, n: total })} rows={items} columns={columns} rowId={tradeId} numbered={false} initialSort={NEWEST_TRADE} emptyText={RUN.trades.empty} />
   )
@@ -118,6 +128,7 @@ const fillId = (r: Fill) => `${r.ts ?? ''}|${r.order_id ?? ''}|${r.position_id ?
 function FillsGrid({ run, items, total }: { readonly run: string; readonly items: readonly Fill[]; readonly total: number }) {
   const decimals = decimalsFor(items.map((f) => f.px))
   const columns = useMemo(() => fillColumns(decimals), [decimals])
+  useGridExport(run, 'fills', columns, items)
   return (
     <MonitorGrid label={fillCopy(RUN.fills.label, { run, n: total })} rows={items} columns={columns} rowId={fillId} numbered={false} initialSort={NEWEST_FILL} emptyText={RUN.fills.empty} />
   )
@@ -148,8 +159,17 @@ function logColumnDefs(items: readonly LogRow[]): MonitorColumn<LogRow>[] {
   })
 }
 
-function LogGrid({ run, section, items, total }: { readonly run: string; readonly section: string; readonly items: readonly LogRow[]; readonly total: number }) {
+interface LogGridProps {
+  readonly run: string
+  readonly section: string
+  readonly sectionKey: LogSection
+  readonly items: readonly LogRow[]
+  readonly total: number
+}
+
+function LogGrid({ run, section, sectionKey, items, total }: LogGridProps) {
   const columns = useMemo(() => logColumnDefs(items), [items])
+  useGridExport(run, sectionKey, columns, items)
   const rowIds = useMemo(() => new Map(items.map((r, i) => [r, String(i)])), [items])
   return (
     <MonitorGrid
@@ -168,7 +188,7 @@ export function LogTab({ run, section, title }: { readonly run: string; readonly
   const query = useRunLog(run, section, { offset, limit: PAGE_ROWS })
   return (
     <Paged query={query} offset={offset} onOffset={setOffset}>
-      {(items, total) => <LogGrid run={run} section={title} items={items} total={total} />}
+      {(items, total) => <LogGrid run={run} section={title} sectionKey={section} items={items} total={total} />}
     </Paged>
   )
 }

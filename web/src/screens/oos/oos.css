@@ -51,3 +51,18 @@
 .nqt-grid .oos-result-served { color: var(--text); }
 .nqt-grid .oos-result-past { color: var(--warn); font-weight: 700; }
 .nqt-grid .oos-result-sealed { color: var(--marker); font-weight: 700; }
+
+/* R: the house severity as 1 to 4 steps (look spec 7.10 `▮▮▮▮`); the level is in words beside it for
+   assistive technology and in the legend. Steps 3 and 4 take the warning and marker colours. */
+.oos-sev { display: inline-flex; gap: 1px; vertical-align: middle; }
+.oos-sev > span[aria-hidden] { display: inline-flex; gap: 1px; }
+.oos-sev-step { display: inline-block; width: 5px; height: 11px; background: var(--border-int); }
+.oos-sev-step.on { background: var(--text); }
+.oos-sev-3 .oos-sev-step.on { background: var(--warn); }
+.oos-sev-4 .oos-sev-step.on { background: var(--marker); }
+
+.oos-legend { flex: 0 0 auto; display: flex; flex-wrap: wrap; column-gap: 8px; padding: 0 6px; line-height: var(--row-h); color: var(--text); }
+.oos-legend-title { color: var(--data); }
+.oos-legend ul { display: contents; margin: 0; padding: 0; list-style: none; }
+.oos-legend li { white-space: nowrap; }
+.oos-legend li + li::before { content: '\00B7'; margin-right: 8px; color: var(--muted); }

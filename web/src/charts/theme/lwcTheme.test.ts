@@ -34,7 +34,8 @@ describe('lwcTheme (look spec 6.3, CandleChart)', () => {
   })
 
   it('puts a white bordered price scale on the right with ticks, and 5 bars of right offset', () => {
-    expect(lwcTheme.chart.rightPriceScale).toEqual({ visible: true, borderVisible: true, borderColor: C.chartAxis, ticksVisible: true })
+    // A corner label that would be cut by the pane edge is not drawn (never half hidden under the Table row).
+    expect(lwcTheme.chart.rightPriceScale).toEqual({ visible: true, borderVisible: true, borderColor: C.chartAxis, ticksVisible: true, entireTextOnly: true })
     expect(lwcTheme.chart.leftPriceScale).toEqual({ visible: false })
     expect(lwcTheme.chart.timeScale).toEqual({ borderVisible: true, borderColor: C.chartAxis, rightOffset: 5 })
   })

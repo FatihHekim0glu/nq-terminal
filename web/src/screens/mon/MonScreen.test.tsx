@@ -14,6 +14,7 @@ import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import { stubLayout } from '../../grids/testing'
 import MonScreen from './MonScreen'
+import { MON_DEFAULTS_KEY } from './MonScreen'
 import { LABEL, makeUniverse } from './testUniverse'
 
 const PANEL_ID = 'p-mon'
@@ -51,11 +52,66 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   Element.prototype.scrollIntoView = () => {}
   fetchSpy.mockClear()
-  replyFor = (url) => ({ status: 200, body: makeUniverse(Number(new URL(url, 'http://x').searchParams.get('window') ?? 252)) })
+  replyFor = (url) => (url.startsWith('/api/market/two-day') ? twoDayReply(url) : { status: 200, body: makeUniverse(Number(new URL(url, 'http://x').searchParams.get('window') ?? 252)) })
   resetNumbered()
+  window.localStorage.removeItem(MON_DEFAULTS_KEY)
 })
 
+/** GET /api/market/two-day for the asked symbols: two sessions of made-up hourly closes (test data). */
+function twoDayReply(url: string): Reply {
+  const symbols = (new URL(url, 'http://x').searchParams.get('symbols') ?? '').split(',').filter(Boolean)
+  const rows = symbols.map((symbol) => ({
+    symbol, root: symbol.split('.')[0]!, t: [1, 2, 3, 4], c: [100, 101, 102, 104], day: [0, 0, 1, 1], last: 104, prior_close: 101,
+  }))
+  return {
+    status: 200,
+    body: { label: LABEL, basis: 'hourly closes', bucket: '1h', sessions: ['2021-12-30', '2021-12-31'], missing: [], rows, gate: { caller: 'terminal', served_years: [2021], cached: true, reads_this_process: 1 } },
+  }
+}
+
+const twoDayUrls = () => urls().filter((u) => u.startsWith('/api/market/two-day'))
+
 afterEach(cleanup)
+
+describe('MON: Phase 8 (look spec 7.7 full template)', () => {
+  it('draws a 2Day cell per row from /api/market/two-day, one symbol per request, the cell in words', async () => {
+    renderMon()
+    const grid = await screen.findByRole('grid', { name: /Futures monitor/ })
+    expect(within(grid).getByRole('columnheader', { name: /^2Day/ })).toBeTruthy()
+    const nq = within(grid).getByText('NQ1 Index').closest('tr')!
+    await waitFor(() => expect(within(nq).getByText('2Day 2021-12-30 to 2021-12-31: last 104.00, prior close 101.00, up')).toBeTruthy())
+    expect(nq.querySelector('.mon-spark svg polyline.mon-spark-up')).toBeTruthy()
+    expect(twoDayUrls()).toContain('/api/market/two-day?symbols=NQ.V.0')
+    expect(twoDayUrls().every((u) => !decodeURIComponent(u).includes(','))).toBe(true)
+  })
+
+  it('carries the [27F] universe field in the red bar', async () => {
+    renderMon()
+    const bar = screen.getByRole('toolbar', { name: /Futures monitor \(27F\)/ })
+    expect(bar.querySelector('.fn-universe')?.textContent).toBe('Universe 27F')
+  })
+
+  it('95) Save defaults keeps the view, heat cells and window in this browser for the next MON', async () => {
+    const first = renderMon()
+    await screen.findByRole('grid', { name: /Futures monitor/ })
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Heat cells' }))
+    fireEvent.click(screen.getByRole('button', { name: /95\) Save defaults/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Save defaults' }))
+    expect(JSON.parse(window.localStorage.getItem(MON_DEFAULTS_KEY) ?? '{}')).toEqual({ view: 'returns', heat: true, window: 252 })
+    first.unmount()
+    renderMon()
+    await screen.findByRole('grid', { name: /Futures monitor/ })
+    expect((screen.getByRole('checkbox', { name: 'Heat cells' }) as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('born failing: a stored value of the wrong shape is ignored, never trusted', async () => {
+    window.localStorage.setItem(MON_DEFAULTS_KEY, JSON.stringify({ view: 'x', heat: 'yes', window: 7 }))
+    renderMon()
+    await screen.findByRole('grid', { name: /Futures monitor/ })
+    expect((screen.getByRole('checkbox', { name: 'Heat cells' }) as HTMLInputElement).checked).toBe(false)
+    expect(urls()).toContain('/api/market/universe?window=252')
+  })
+})
 
 describe('MON screen', () => {
   it('shows the red bar with its title and numbered buttons', async () => {
@@ -69,7 +125,7 @@ describe('MON screen', () => {
   it('reads the universe with one GET at the 252-session window', async () => {
     renderMon()
     await screen.findByRole('grid', { name: /Futures monitor/ })
-    expect(urls()).toEqual(['/api/market/universe?window=252'])
+    expect(urls().filter((u) => !u.startsWith('/api/market/two-day'))).toEqual(['/api/market/universe?window=252'])
     for (const [, init] of fetchSpy.mock.calls as unknown as Array<[string, RequestInit]>) expect(init.method).toBe('GET')
   })
 

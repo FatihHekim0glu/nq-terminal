@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, Sequence
 
 PRICE_COLUMN = re.compile(r"(?i:px|raw|price)|_c$|^[OHLC]$")
 # Sealed JSON keys (a denylist, stricter than the CSV check above, because the JSONs have no allowlist): any key
@@ -85,6 +85,21 @@ STAMP, MONTH_END_SESSION = "stamp", "month_end_session"
 
 
 @dataclass(frozen=True)
+class PortfolioRule:
+    """A series that is the screen's own portfolio of per-market columns rather than one recorded column.
+
+    `values` and `bench` of the source then name column SUFFIXES (`_VT`, `_CE`); the members are every header
+    column `<ROOT><suffix>` whose root is not in `exclude` (anchor markets). The value is the rule in `rule`,
+    computed with the project's own function (never reimplemented): vt_har_v0's P2 portfolio,
+    `nq_lab.vt_har_stats.portfolio` (each market over its own winsorised sd, averaged), divided by the portfolio's
+    own winsorised sd, so its Basis A drawdown is the screen's MDD_port.
+    """
+
+    exclude: tuple[str, ...]
+    rule: str = "vt_har_stats.portfolio / scale"
+
+
+@dataclass(frozen=True)
 class SeriesSource:
     """One hypothesis series: the CSV under results/screens, its time column and the value column per cost.
 
@@ -93,6 +108,8 @@ class SeriesSource:
     its `end` is the first session of the next month, so dating by `end` put every row one month late).
     `void_as_zero`: a row whose value is empty is a void event worth 0, as the screen's own unconditional book
     (eurodrift_v0, `eurodrift_stats.daily_books`); otherwise empty rows are left out.
+    `void_column`: a boolean column; a row where it is true is void and left out (vrp_eq_v0's `void` month).
+    `portfolio`: the series is a portfolio over per-market columns (`PortfolioRule`).
     """
 
     file: str
@@ -105,6 +122,23 @@ class SeriesSource:
     time_rule: str = STAMP
     guard_column: str | None = None
     void_as_zero: bool = False
+    void_column: str | None = None
+    portfolio: PortfolioRule | None = None
+
+    def members(self, header: Sequence[str], suffix: str) -> tuple[str, ...]:
+        """The per-market columns a portfolio reads for one suffix, in file order (none for a plain source)."""
+        if self.portfolio is None:
+            return ()
+        exclude = set(self.portfolio.exclude)
+        return tuple(c for c in header if c.endswith(suffix) and c[:-len(suffix)] not in exclude
+                     and c[:-len(suffix)])
+
+    def columns(self, header: Sequence[str], cost: int) -> tuple[str, ...]:
+        """Every value and benchmark column read at `cost` (the members for a portfolio)."""
+        names = [self.values[cost], *([self.bench[cost]] if cost in self.bench else [])]
+        if self.portfolio is None:
+            return tuple(names)
+        return tuple(c for name in names for c in self.members(header, name))
 
 
 USD_TRADE = "USD per trade, one NQ contract"
@@ -156,6 +190,17 @@ SERIES_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
     "mim_v0": SeriesSource("mim_v0_daily.csv", "date", MappingProxyType({0: "R_gross", 1: "R_net_1tick"}),
                            "return on capital per session", "daily", MappingProxyType({0: "R_lo_gross"}),
                            "long-only book, gross"),
+    # Round 13: the daily CSV holds each market's VT and CE books at 1 era tick only; the series is the screen's P2
+    # portfolio over the 26 test markets (NQ is the anchor and is left out, as the screen's `anchor` flag says).
+    "vt_har_v0": SeriesSource("vt_har_v0_daily.csv", "date", MappingProxyType({1: "_VT"}),
+                              "portfolio return per session, in units of its own winsorised sd", "daily",
+                              MappingProxyType({1: "_CE"}),
+                              "constant-notional books at equal winsorised volatility, same portfolio rule",
+                              portfolio=PortfolioRule(exclude=("NQ",))),
+    # Round 14: `label` is the holding month (the signal forms in the month before); void months are left out.
+    "vrp_eq_v0": SeriesSource("vrp_eq_v0_monthly.csv", "label", _per_cost("r_VRP_t{k}"), "return on capital per month",
+                              "monthly", _per_cost("r_C_t{k}"), "constant long book, ES and YM",
+                              time_rule=MONTH_END_SESSION, void_column="void"),
 })
 
 

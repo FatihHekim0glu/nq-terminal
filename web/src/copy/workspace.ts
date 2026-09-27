@@ -41,6 +41,15 @@ export const FUNCTION_BAR = {
   menuLabel: '{label} menu',
 } as const
 
+/** 98) Export on every screen that has it: the shown rows as a CSV download (nothing is requested). */
+export const EXPORT = {
+  csv: 'Shown rows as CSV',
+  done: 'Saved {n} rows as {file}.',
+  doneOne: 'Saved {n} row as {file}.',
+  empty: 'Nothing to export on this screen yet.',
+  unavailable: 'This browser cannot save a file here.',
+} as const
+
 /** House numbering for red-bar buttons (look spec 4.4). */
 export const FUNCTION_NUMBERS = { compare: 95, actions: 96, settings: 97, export: 98, help: 99 } as const
 

@@ -182,3 +182,31 @@ def pair_correlation(frames: dict[str, pd.DataFrame], a: str, b: str, *, window:
     days = tuple(str(d) for d in panel.days)
     epochs = tuple(int(pd.Timestamp(d, tz="UTC").timestamp()) for d in days)
     return PairCorrelation(days=days, t=epochs, corr=tuple(_finite(x) for x in rolling.tolist()))
+
+
+RV_WINDOW = 22
+RV_UNIT = "fraction per year, annualised (0.18 is 18%)"
+RV_BASIS = ("sd of the daily r over the last `window` sessions (ddof 1, at least 2 values) x sqrt(252), with "
+            "r = dB / (N - dB) as in the universe table, so the last value is the universe's realised volatility at "
+            "the same window; NYSE sessions to 2021-12-31")
+
+
+@dataclass(frozen=True)
+class RealisedVolLine:
+    days: tuple[str, ...]
+    t: tuple[int, ...]
+    rv: tuple[float | None, ...]
+
+
+def realised_vol_series(frame: pd.DataFrame, symbol: str, *, window: int) -> RealisedVolLine:
+    """MV3 for GP's indicator pane: the rolling realised volatility of one served 1d frame, on the universe's own
+    returns and rule (`daily_sd`: finite values in the last `window` sessions, at least two)."""
+    if window < 2:
+        raise ValueError(f"window must be at least 2 sessions, got {window}")
+    panel = build_panel({symbol: frame}, master_days(IS_START.date(), last_in_sample_day()))
+    r = pd.Series(panel.r[:, 0], dtype=float)
+    r = r.where(np.isfinite(r.to_numpy()))
+    line = r.rolling(window, min_periods=2).std(ddof=1) * math.sqrt(SESSIONS_PER_YEAR)
+    days = tuple(str(d) for d in panel.days)
+    epochs = tuple(int(pd.Timestamp(d, tz="UTC").timestamp()) for d in days)
+    return RealisedVolLine(days=days, t=epochs, rv=tuple(_finite(x) for x in line.tolist()))

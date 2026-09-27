@@ -29,6 +29,8 @@ FALLBACK_KEYS = ("mean_r", "mean", "diff_pct", "sharpe", "sharpe_m", "sharpe_a")
 _PTS = "points per trade (NQ), net at 1 tick per side"
 _SIZING_BLOCK = "alpha, % per year, 1 tick per side"
 _MONTHLY = "% per month, return on capital"
+_RHO = "rho_bar: mean over the test markets of 1 - ES21(VT) / ES21(CE); above 0 is a thinner left tail"
+_NO_T = "no t statistic: the gate's p is a joint block bootstrap p"
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,7 @@ class Shape:
     headline: str
     display: str
     unit: str
-    t: str
+    t: str | None  # None: the screen gates on a statistic with no t (the label then says why)
     t_label: str
     blocks: str | None = None
     block_key: str | None = None
@@ -50,7 +52,8 @@ class Shape:
     block: str | None = None  # a sub-block of a shared screen (C3); pass checks are then not the row's own
 
     def paths(self) -> tuple[str, ...]:
-        return (self.headline, self.t, *self.ladder.values(), *((self.break_even,) if self.break_even else ()))
+        return (self.headline, *((self.t,) if self.t else ()), *self.ladder.values(),
+                *((self.break_even,) if self.break_even else ()))
 
 
 def _ladder(template: str, ticks: tuple[int, ...] = (0, 1, 2)) -> Mapping[int, str]:
@@ -113,6 +116,15 @@ SHAPES: Mapping[str, Shape] = MappingProxyType({
     "carry_v0": _monthly_book("cost_stress.mean_pct_by_ticks.{k}"),
     "eomtsy_v0": _monthly_book("cost_ladder_mean_pct.{k}_tick"),
     "cskew_v0": _monthly_book("cost_stress.mean_pct_by_ticks.{k}"),
+    "vt_har_v0": Shape("headline.rho_bar", "Pooled tail cut (rho_bar), 1 tick", _RHO, None, _NO_T,
+                       blocks="secondaries.S6_blocks", block_key="rho_bar",
+                       blocks_unit=f"{_RHO}, 1 tick, each block re-normalised within itself (secondary S6)",
+                       ladder=MappingProxyType({1: "headline.rho_bar", 2: "P4_two_ticks.rho_bar"}), ladder_unit=_RHO),
+    "vrp_eq_v0": Shape("headline.alpha_annual_pct", "Alpha over the constant long book, 1 tick", "% per year",
+                       "headline.t_a", "alpha t (smaller of Newey-West lags 4 and 12)", blocks="P2_blocks",
+                       block_key="alpha_annual_pct", blocks_unit="alpha, % per year, 1 tick",
+                       ladder=MappingProxyType({1: "headline.alpha_annual_pct", 2: "P3_2tick.alpha_annual_pct"}),
+                       ladder_unit="alpha, % per year"),
     "mim_v0": Shape("headline.mean", "Net mean per session, 1 tick plus fees", "return on capital per session",
                     "headline.t_nw", "Newey-West t", blocks="blocks", block_key="mean",
                     blocks_unit="return on capital per session, 1 tick",

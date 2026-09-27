@@ -2,11 +2,13 @@
 // RET, RR and MRET, each opened by its mnemonic. Model: the Performance function of a portfolio
 // analytics screen, rebuilt from tokens: the red function bar titled after the tab, trapezoid tabs
 // numbered 1) to 5), an amber parameter row, the KPI row, the tab's charts, and for a run its trades,
-// costs and exposure panels. The context is the panel's run or hypothesis; anything else is refused
+// costs and exposure panels. `98) Export` saves the open tab's series as CSV (tearExport.ts). The
+// context is the panel's run or hypothesis; anything else is refused
 // in the panel. Inside a workspace a tab opens its own function in the panel (so End walks back
 // through the tabs); outside one the tab switches in place.
 import { useId, useState } from 'react'
 import { requestLine } from '../../chrome/CommandLine.bus'
+import { ExportSlotProvider, useExportSlot } from '../../chrome/exportSource'
 import { AmberField } from '../../chrome/Field'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import FunctionBar from '../../chrome/FunctionBar'
@@ -42,7 +44,7 @@ function useTab(code: MnemonicCode): readonly [TearCode, (next: TearCode) => voi
   return [tab, (next) => setState({ from: initial, tab: next })]
 }
 
-function barItems(actions: PanelActions, target: TearTarget | null) {
+function barItems(actions: PanelActions, target: TearTarget | null, onExport: () => void) {
   const inspect = target?.kind === 'run'
     ? [{ label: TEAR_BAR.openRun, onSelect: () => actions.open('RUN') }]
     : target?.kind === 'hypothesis'
@@ -59,6 +61,7 @@ function barItems(actions: PanelActions, target: TearTarget | null) {
         { label: TEAR_BAR.forward, onSelect: () => actions.forward() },
       ],
     },
+    { n: FUNCTION_NUMBERS.export, label: TEAR_BAR.export, onRun: onExport },
     { n: FUNCTION_NUMBERS.help, label: TEAR_BAR.help, onRun: () => actions.open('HELP') },
   ]
 }
@@ -86,29 +89,32 @@ export default function TearSheet({ params, context }: ScreenProps) {
   const [tab, setTab] = useTab(params.code)
   const target = tearTarget(context)
   const viewId = useId()
+  const slot = useExportSlot()
   const select = (id: string) => {
     if (!isTearCode(id) || id === tab) return
     if (!actions.open(id)) setTab(id)
   }
   return (
-    <div className="tear">
-      <FunctionBar
-        panelId={panelId}
-        title={TEAR.titles[tab]}
-        field={<ContextField key={target?.name ?? ''} value={target?.name ?? ''} tab={tab} />}
-        items={barItems(actions, target)}
-      />
-      <TabStrip
-        panelId={panelId}
-        label={TEAR.tabsLabel}
-        tabs={TEAR_CODES.map((code) => ({ id: code, label: TEAR.tabs[code] }))}
-        selected={tab}
-        onSelect={select}
-        controls={viewId}
-      />
-      <div id={viewId} className="tear-main" role="tabpanel" aria-label={TEAR.tabs[tab]}>
-        {target ? <TearBody target={target} tab={tab} link={params.group} /> : <ContextNote context={context} />}
+    <ExportSlotProvider slot={slot}>
+      <div className="tear">
+        <FunctionBar
+          panelId={panelId}
+          title={TEAR.titles[tab]}
+          field={<ContextField key={target?.name ?? ''} value={target?.name ?? ''} tab={tab} />}
+          items={barItems(actions, target, () => slot.run())}
+        />
+        <TabStrip
+          panelId={panelId}
+          label={TEAR.tabsLabel}
+          tabs={TEAR_CODES.map((code) => ({ id: code, label: TEAR.tabs[code] }))}
+          selected={tab}
+          onSelect={select}
+          controls={viewId}
+        />
+        <div id={viewId} className="tear-main" role="tabpanel" aria-label={TEAR.tabs[tab]}>
+          {target ? <TearBody target={target} tab={tab} link={params.group} /> : <ContextNote context={context} />}
+        </div>
       </div>
-    </div>
+    </ExportSlotProvider>
   )
 }

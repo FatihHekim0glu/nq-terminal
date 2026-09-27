@@ -40,6 +40,10 @@ describe('LineStack.css', () => {
     expect(code).toMatch(/@container\s*\(max-height:\s*\d+px\)\s*\{\s*\.linestack-legend-stat\s*\{\s*display:\s*none/)
   })
 
+  it('sets the legend on one line in a pane under 120px, so it never runs past the pane foot', () => {
+    expect(code).toMatch(/@container\s*\(max-height:\s*120px\)\s*\{\s*\.linestack-legend\s*\{[^}]*grid-auto-flow:\s*column/)
+  })
+
   it("replaces uPlot's dashed grey cursor with solid 1px lines in the crosshair token (look spec 9.2)", () => {
     expect(code).toMatch(/\.u-cursor-x\s*\{[^}]*border-right:\s*1px solid var\(--crosshair\)/)
     expect(code).toMatch(/\.u-cursor-y\s*\{[^}]*border-bottom:\s*1px solid var\(--crosshair\)/)

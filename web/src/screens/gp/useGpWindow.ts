@@ -4,7 +4,7 @@
 // panel shows the gate's refusal for it; the data hook never turns it into a request.
 import { useState } from 'react'
 import { fillCopy } from '../../copy/workspace'
-import { GP_COPY as C } from './copy'
+import { GP_COPY as C } from '../../copy/gp'
 import {
   DEFAULT_RANGE, FENCE_MS, customWindow, gipWindow, isoDate, parseIsoDate, rangeWindow,
   type DateWindow, type GpTimeframe, type RangeCode,

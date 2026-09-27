@@ -9,7 +9,7 @@ import { MENU_SOURCE, useNumbered } from '../../chrome/PanelChrome.numbers'
 import { ROVING_ATTR, ROVING_OVERLAY_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import '../../chrome/RelatedMenu.css'
-import { MON } from './copy'
+import { MON } from '../../copy/market'
 
 export interface DrillFunction {
   readonly n: number

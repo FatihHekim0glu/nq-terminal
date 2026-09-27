@@ -49,7 +49,7 @@ function Rows({ status, file, type, panelId }: RowsProps) {
     <>
       <p className="live-message">{fillCopy(JRNL.rowsShown, { shown: data.items.length, total: data.total })} {JRNL.plumbingNote}</p>
       <div className="jrnl-body">
-        <JournalTable rows={data.items} file={file || JRNL.allFilesName} emptyText={emptyText} panelId={panelId || undefined} />
+        <JournalTable rows={data.items} file={file || JRNL.allFilesName} emptyText={emptyText} panelId={panelId || undefined} scroll="panel" />
       </div>
     </>
   )

@@ -4,7 +4,9 @@
 // sector), every value printed. The rolling pair panel below is /api/market/pair-corr drawn as a
 // LineStack in this panel's link group, so its crosshair follows the group; its last value is set beside
 // the matrix entry for the same window. Every price read happens in the backend, through the gate, to
-// 2021-12-31; the pair series is cut at the fence once more before drawing.
+// 2021-12-31; the pair series is cut at the fence once more before drawing. The red bar carries the
+// [27F] field and 98) Export (the shown matrix as CSV); 95) Create new is not built (a house choice:
+// the universe is the frozen 27F, and a matrix over another set would be a new computation).
 import { useId, useMemo, useState } from 'react'
 import { usePairCorr, useUniverse } from '../../api/queries'
 import { Heatmap } from '../../charts/echarts/Heatmap'
@@ -12,17 +14,19 @@ import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import { ToggleGroup } from '../../chrome/Field.buttons'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
+import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import { MARKET } from '../mon/copy'
+import { MARKET } from '../../copy/market'
+import UniverseField from '../mon/UniverseField'
 import { DEFAULT_WINDOW, WINDOW_OPTIONS, formatCorr, gateText, type Universe } from '../mon/model'
 import QueryStatus from '../mon/QueryStatus'
 import '../mon/market.css'
-import { CORR } from './copy'
-import { blockOf, corrHeatmapInput, defaultPair, matrixEntry, pairSeries, rootOf, type CorrMatrix, type CorrOrder, type PairView } from './model'
+import { CORR } from '../../copy/corr'
+import { blockOf, corrHeatmapInput, defaultPair, matrixCsv, matrixEntry, pairSeries, rootOf, type CorrMatrix, type CorrOrder, type PairView } from './model'
 import './corr.css'
 
 const WINDOW_FIELD_OPTIONS = WINDOW_OPTIONS.map((n) => ({ value: String(n), label: fillCopy(MARKET.windowOption, { n }) }))
@@ -145,13 +149,26 @@ export default function CorrScreen({ params }: ScreenProps) {
   const universe = query.data
   const heat = useMemo(() => (universe ? corrHeatmapInput(universe, s.matrix, s.order) : null), [universe, s.matrix, s.order])
   const pair = s.pair ?? defaultPair(universe ? blockOf(universe, 'window').symbols : [])
+  const onExport = () => {
+    if (!heat) {
+      exportCsv('corr.csv', '', 0)
+      return
+    }
+    const window = s.matrix === 'window' ? String(s.window) : 'full'
+    exportCsv(csvFileName('corr', '27F', window, s.order), matrixCsv(heat), heat.rows.length)
+  }
   useNumbered(actions.panelId, 'corr', [
     { n: NUMBER_WINDOW, label: CORR.numberedWindow, run: () => set((p) => ({ ...p, matrix: 'window' })) },
     { n: NUMBER_FULL, label: CORR.numberedFull, run: () => set((p) => ({ ...p, matrix: 'full' })) },
   ])
   return (
     <div className="mkt corr" data-screen="CORR">
-      <FunctionBar panelId={actions.panelId} title={CORR.title} items={[actionsItem(actions)]} />
+      <FunctionBar
+        panelId={actions.panelId}
+        title={CORR.title}
+        field={<UniverseField label={CORR.universeField} />}
+        items={[actionsItem(actions), { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, onRun: onExport }]}
+      />
       {universe && heat ? (
         <>
           <Params s={s} set={set} universe={universe} pair={pair} />

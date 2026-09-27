@@ -9,7 +9,7 @@ import { displayInstrument } from '../../commands/sectors'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import '../../charts/theme/chart.css'
-import { GP_COPY as C } from './copy'
+import { GP_COPY as C } from '../../copy/gp'
 import { ChartMessage } from './GpStatus'
 import { ET_ZONE, rangeWindow, symbolFor } from './model'
 import { useChartView } from './useChartView'
@@ -40,7 +40,7 @@ export default function InstrumentPreview({ root, link = '-' }: InstrumentPrevie
         {show ? (
           <CandleChart name={ticker} bars={bars} rolls={view.rolls} link={link} timeZone={ET_ZONE} precision={view.precision} minMove={10 ** -view.precision} />
         ) : (
-          <ChartMessage refusal={data.refusal} error={data.barsError} text={symbol ? text : fillCopy(C.badSymbol, { value: root })} />
+          <ChartMessage refusal={data.refusal} error={data.barsError} text={symbol ? text : fillCopy(C.badSymbol, { value: root })} busy={Boolean(symbol) && data.barsLoading} />
         )}
       </div>
     </>

@@ -2,7 +2,7 @@
 // since `config`, `venue` and the checks are free-form), the coverage count, the tab set and the log
 // sections a run actually has. Every value is shown as the API sent it.
 import type { Schemas } from '../../api/types'
-import { BADGE, RUN } from './copy'
+import { BADGE, RUN } from '../../copy/runs'
 import { logText } from './model'
 
 export type RunDetail = Schemas['RunDetail']

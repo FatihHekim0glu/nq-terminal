@@ -293,3 +293,47 @@ export function tagBlocksLabel(
   const reach = (G.tagHeight / 2 + font.size / 2 + LABEL_MARGIN) * pr
   return tags.some((tag) => Math.abs(tag.y - y) < reach)
 }
+
+// ---------------------------------------------------------------------------------------------
+// Hi and Low callouts (look spec 7.5 RR, GV style)
+
+/** A marked point: a dot at (t, value) with its label; `Hi` labels sit above the dot, others below. */
+export interface Callout {
+  /** Epoch seconds on the stack's time axis. */
+  readonly t: number
+  /** In the pane's display unit. */
+  readonly value: number
+  readonly label: string
+}
+
+const CALLOUT_RADIUS = 3
+const CALLOUT_GAP = 4
+
+/** A dot and a label per callout; a label that would leave the plot on the right goes left of its dot. */
+export function drawCallouts(u: DrawPlot, callouts: readonly Callout[], colour: string, font: ChartTokens['font']): void {
+  const xMin = u.scales.x?.min
+  const xMax = u.scales.x?.max
+  if (callouts.length === 0 || xMin == null || xMax == null) return
+  const pr = pixelRatio(u)
+  const { ctx } = u
+  const right = u.bbox.left + u.bbox.width
+  ctx.save()
+  ctx.font = canvasFontOf(font, pr)
+  ctx.fillStyle = colour
+  for (const c of callouts) {
+    if (c.t < xMin || c.t > xMax || !Number.isFinite(c.value)) continue
+    const x = u.valToPos(c.t, 'x', true)
+    const y = u.valToPos(c.value, 'y', true)
+    ctx.beginPath()
+    ctx.arc(x, y, CALLOUT_RADIUS * pr, 0, 2 * Math.PI)
+    ctx.fill()
+    const width = ctx.measureText(c.label).width
+    const leftSide = x + (CALLOUT_RADIUS + CALLOUT_GAP) * pr + width > right
+    ctx.textAlign = leftSide ? 'right' : 'left'
+    ctx.textBaseline = 'middle'
+    const dx = (CALLOUT_RADIUS + CALLOUT_GAP) * pr * (leftSide ? -1 : 1)
+    const dy = (font.size / 2 + CALLOUT_GAP) * pr * (c.label.startsWith('Hi') ? -1 : 1)
+    ctx.fillText(c.label, x + dx, y + dy)
+  }
+  ctx.restore()
+}

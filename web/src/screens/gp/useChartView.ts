@@ -2,8 +2,8 @@
 // kept stable across renders (GP, GIP and the instrument DES). RV22 and the day return come from the
 // universe endpoint when the daily chart ends at the fence; nothing here computes a statistic.
 import { useMemo } from 'react'
-import type { CandleRoll } from '../../charts/CandleChart.model'
-import { dayReturnPercent, isoDate, priceDecimals, quoteFromBars, rollsFrom, rv22Percent, type GpTimeframe } from './model'
+import type { CandleIndicator, CandleRoll } from '../../charts/CandleChart.model'
+import { dayReturnPercent, isoDate, priceDecimals, quoteFromBars, rollsFrom, rv22Percent, rvIndicator, type GpTimeframe } from './model'
 import type { GpData } from './useGpData'
 
 const NO_ROLLS: readonly CandleRoll[] = []
@@ -14,6 +14,8 @@ interface ChartView {
   readonly precision: number
   /** The universe date when the header shows its RV22 and 1D return, else null. */
   readonly rvDate: string | null
+  /** The RV22 pane under the volume (look spec 7.6), or null when there is no line to draw. */
+  readonly indicator: CandleIndicator | null
 }
 
 const NO_BARS = { t: [], o: [], h: [], l: [], c: [], v: [] }
@@ -30,6 +32,8 @@ export function useChartView(data: GpData, root: string, ticker: string, tf: GpT
   )
   const rolls = useMemo(() => (bars && showRolls ? rollsFrom(bars.rolls) : NO_ROLLS), [bars, showRolls])
   const precision = useMemo(() => (bars ? priceDecimals(bars) : 2), [bars])
-  return { quote, rolls, precision, rvDate: rv22 !== null || dayReturnPct !== null ? lastDate : null }
+  const rv = data.rv
+  const indicator = useMemo(() => (bars && rv && tf === '1d' ? rvIndicator(bars, rv) : null), [bars, rv, tf])
+  return { quote, rolls, precision, rvDate: rv22 !== null || dayReturnPct !== null ? lastDate : null, indicator }
 }
 

@@ -161,3 +161,42 @@ class QaReport(ResponseModel):
     fence_end: str
     fenced_out: int = Field(ge=0)
     content: Any
+
+
+class RealisedVolSeries(ResponseModel):
+    """MV3, the RV22 line of GP's indicator pane: one value per session to 2021-12-31 (null until two returns)."""
+
+    symbol: str
+    window: int
+    label: str
+    basis: str
+    unit: str
+    t: list[int]
+    date: list[str]
+    rv: list[float | None]
+    last: float | None
+    gate: GateInfo
+
+
+class TwoDayRow(ResponseModel):
+    """One symbol's hourly closes over the last two sessions; `day` is 0 for the prior session, 1 for the last."""
+
+    symbol: str
+    root: str
+    t: list[int]
+    c: list[float | None]
+    day: list[int]
+    prior_close: float | None
+    last: float | None
+
+
+class TwoDay(ResponseModel):
+    """MON's 2Day sparkline column: back-adjusted hourly closes of the last two in-sample sessions."""
+
+    label: str
+    basis: str
+    bucket: str
+    sessions: list[str]
+    rows: list[TwoDayRow]
+    missing: list[str]
+    gate: GateInfo

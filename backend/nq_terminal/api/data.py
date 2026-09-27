@@ -1,5 +1,5 @@
-"""Data endpoints (GET only): /api/bars, /api/data/catalog, /api/market/universe, /api/market/pair-corr, /api/qa
-and /api/qa/{name}.
+"""Data endpoints (GET only): /api/bars, /api/data/catalog, /api/market/universe, /api/market/pair-corr,
+/api/market/rv (GP's RV22 line), /api/market/two-day (MON's 2Day sparkline), /api/qa and /api/qa/{name}.
 
 Services are built lazily, once per app, on the first data request (`get_services`):
 - `BarService` over `app.state.serve_fn` when a test or fixture harness injected one, else over
@@ -20,6 +20,7 @@ own message and the loader is never called (see `services/bars.py`).
 from __future__ import annotations
 
 import math
+import re
 import threading
 from dataclasses import dataclass
 from typing import Literal
@@ -31,6 +32,7 @@ from fastapi import Path as PathParam
 from nq_lab import data as nq_data
 from nq_lab.config import IS_END, IS_START, ROOT
 from nq_lab.dtsmom_universe import TABLE
+from nq_lab.sessions import nyse_sessions
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.data import (
     Bars,
@@ -43,8 +45,11 @@ from nq_terminal.models.data import (
     QaIndex,
     QaReport,
     QaReportInfo,
+    RealisedVolSeries,
     RollMarker,
     SessionFlags,
+    TwoDay,
+    TwoDayRow,
     Universe,
     UniverseRow,
 )
@@ -73,9 +78,13 @@ from nq_terminal.services.market import (
     HORIZONS,
     LABEL,
     MIN_CORR_OBS,
+    RV_BASIS,
+    RV_UNIT,
+    RV_WINDOW,
     CorrelationBlock,
     UniverseResult,
     pair_correlation,
+    realised_vol_series,
     universe,
 )
 from nq_terminal.services.sessions import session_flags
@@ -96,6 +105,12 @@ NO_PRICE_SOURCE = "no gated price source in fixture mode (inject app.state.serve
 Timeframe = Literal["1m", "5m", "15m", "1h", "4h", "1d"]
 Variant = Literal["vendor", "repaired"]
 _BUILD_LOCK = threading.Lock()
+MAX_SYMBOLS_CHARS = 27 * 8
+TWO_DAY_TF = "1h"
+TWO_DAY_SESSIONS = 2
+SESSION_SHIFT = pd.Timedelta(hours=2)  # a CME session's bars start about 22:00 UTC the day before (bars.py)
+TWO_DAY_BASIS = ("back-adjusted hourly closes, vendor 1m through the gate; a bar belongs to the session of the UTC "
+                 "date two hours after its open (the daily bucket rule)")
 
 
 @dataclass(frozen=True)
@@ -340,3 +355,94 @@ def qa_report(name: str = PathParam(..., max_length=MAX_NAME_CHARS),
     local = redact_local_paths(fenced, services.settings.data_root)
     return QaReport(name=found.name, modified_utc=found.modified_utc, fence_end=IS_END.date().isoformat(),
                     fenced_out=dropped, content=local)
+
+
+def _universe_symbol(symbol: str) -> None:
+    if symbol not in {f"{c.root}.V.0" for c in TABLE}:
+        raise HTTPException(status_code=404, detail=f"not in the futures universe: {symbol}")
+
+
+@router.get("/market/rv", response_model=RealisedVolSeries)
+def market_rv(
+    symbol: str = Query(..., pattern=SYMBOL_PATTERN, description="a universe symbol, e.g. NQ.V.0"),
+    window: int = Query(RV_WINDOW, ge=2, le=MAX_WINDOW, description="sessions per value"),
+    services: DataServices = Depends(get_services),
+) -> RealisedVolSeries:
+    """GP's RV22 line (MV3) on the universe's return convention, to 2021-12-31; the last value equals the
+    universe's realised volatility at the same window."""
+    _universe_symbol(symbol)
+    service = _bar_service(services)
+    try:
+        frames, years, cached = daily_frames(service, services.catalog, symbols=(symbol,))
+    except GateRefusal as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    if symbol not in frames:
+        raise HTTPException(status_code=404, detail=f"no processed daily series for {symbol}")
+    line = realised_vol_series(frames[symbol], symbol, window=window)
+    last = next((v for v in reversed(line.rv) if v is not None), None)
+    return RealisedVolSeries(symbol=symbol, window=window, label=LABEL, basis=RV_BASIS, unit=RV_UNIT, t=list(line.t),
+                             date=list(line.days), rv=list(line.rv), last=last,
+                             gate=gate_info(service, years, cached))
+
+
+def last_sessions(count: int = TWO_DAY_SESSIONS) -> list[pd.Timestamp]:
+    """The last `count` NYSE sessions before the fence, as 00:00 UTC stamps."""
+    table = nyse_sessions((IS_END - pd.Timedelta(days=21)).date(), (IS_END - pd.Timedelta(days=1)).date())
+    return [pd.Timestamp(d.isoformat(), tz="UTC") for d in list(table.index)[-count:]]
+
+
+def _symbols(text: str | None) -> list[str]:
+    if text is None:
+        return [f"{c.root}.V.0" for c in TABLE]
+    names = [part.strip() for part in text.split(",") if part.strip()]
+    bad = [n for n in names if not re.fullmatch(SYMBOL_PATTERN, n)]
+    if not names or bad:
+        raise HTTPException(status_code=422, detail="symbols must be a comma list like NQ.V.0,ZN.V.0")
+    for name in names:
+        _universe_symbol(name)
+    return list(dict.fromkeys(names))
+
+
+def two_day_row(result: BarsResult, symbol: str, sessions: list[pd.Timestamp]) -> TwoDayRow:
+    """Hourly closes tagged 0 (prior session) or 1 (last session); bars of any other session are left out."""
+    keep_t, keep_c, keep_day = [], [], []
+    for t, c in zip(result.t, result.c):
+        day = (pd.Timestamp(t, unit="s", tz="UTC") + SESSION_SHIFT).normalize()
+        if day in sessions:
+            keep_t.append(t)
+            keep_c.append(c)
+            keep_day.append(sessions.index(day))
+    closes = {d: [c for c, k in zip(keep_c, keep_day) if k == d and c is not None] for d in (0, 1)}
+    return TwoDayRow(symbol=symbol, root=symbol.removesuffix(".V.0"), t=keep_t, c=keep_c, day=keep_day,
+                     prior_close=closes[0][-1] if closes[0] else None, last=closes[1][-1] if closes[1] else None)
+
+
+@router.get("/market/two-day", response_model=TwoDay)
+def market_two_day(
+    symbols: str | None = Query(None, max_length=MAX_SYMBOLS_CHARS, description="comma list; default all 27"),
+    services: DataServices = Depends(get_services),
+) -> TwoDay:
+    """MON's 2Day sparkline: hourly closes of the last two in-sample sessions for each asked universe symbol."""
+    wanted = _symbols(symbols)
+    service = _bar_service(services)
+    sessions = last_sessions()
+    lo = sessions[0] - SESSION_SHIFT
+    rows, missing, years, cached = [], [], [], True
+    for symbol in wanted:
+        if not services.catalog.has(symbol, "1m", DAILY_VARIANT):
+            missing.append(symbol)
+            continue
+        try:
+            result = service.bars(symbol, TWO_DAY_TF, DAILY_VARIANT, lo, IS_END,
+                                  version=services.catalog.version(symbol, "1m", DAILY_VARIANT))
+        except GateRefusal as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except UnknownSeries:
+            missing.append(symbol)
+            continue
+        rows.append(two_day_row(result, symbol, sessions))
+        years.extend(result.years)
+        cached = cached and result.cached
+    return TwoDay(label=LABEL, basis=TWO_DAY_BASIS, bucket=TWO_DAY_TF,
+                  sessions=[d.date().isoformat() for d in sessions], rows=rows, missing=missing,
+                  gate=gate_info(service, tuple(years), cached))

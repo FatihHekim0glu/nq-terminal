@@ -321,15 +321,32 @@ def test_bh_step_up_rejects_below_the_largest_passing_rank() -> None:
 
 
 def test_boundaries_on_the_registry_reject_what_the_stored_columns_reject(registry_frame: pd.DataFrame) -> None:
-    """The recomputed rejections equal the registry's own adjusted columns at alpha 0.05. With round 11 in the
-    family, Holm rejects eomtsy_v0 and overnight_v0, and Bonferroni eomtsy_v0 only (overnight's 0.051)."""
+    """The recomputed rejections equal the registry's own adjusted columns at alpha 0.05. The rule is pinned, not a
+    name: the family grows with every registered round (overnight_v0 left the Holm set at 21 rows), so the test
+    checks the step-down and step-up definitions on whatever the file holds."""
     reg = _registered(registry_frame).reset_index(drop=True)
     table = mt_boundaries(reg["p"].to_numpy(dtype=float), alpha=0.05)
     rejected = {reg["name"][i] for i in table.loc[table["reject_holm"], "input_position"]}
     assert rejected == set(reg.loc[reg["holm_p"] < 0.05, "name"])
-    assert "overnight_v0" in rejected
     bonferroni = set(reg["name"][table.loc[table["reject_bonferroni"], "input_position"]])
     assert bonferroni == set(reg.loc[reg["bonferroni_p"] < 0.05, "name"])
+    bh = set(reg["name"][table.loc[table["reject_bh"], "input_position"]])
+    assert bh == set(reg.loc[reg["bh_q"] < 0.05, "name"])
+    # Holm rejects a prefix of the sorted p values; Bonferroni rejects no more than Holm, Holm no more than BH.
+    holm_flags = table["reject_holm"].tolist()
+    assert holm_flags == sorted(holm_flags, reverse=True)
+    assert bonferroni <= rejected <= bh
+    k = len(reg)
+    assert all(p <= 0.05 / k for p in reg.loc[reg["name"].isin(bonferroni), "p"])
+
+
+def test_the_registry_rule_test_is_born_failing_on_a_changed_stored_column(registry_frame: pd.DataFrame) -> None:
+    """Born failing: a stored Holm column that no longer matches the p values breaks the equality above."""
+    reg = _registered(registry_frame).reset_index(drop=True)
+    table = mt_boundaries(reg["p"].to_numpy(dtype=float), alpha=0.05)
+    rejected = {reg["name"][i] for i in table.loc[table["reject_holm"], "input_position"]}
+    tampered = reg.assign(holm_p=1.0)
+    assert rejected and rejected != set(tampered.loc[tampered["holm_p"] < 0.05, "name"])
 
 
 def test_boundaries_reject_a_bad_alpha() -> None:

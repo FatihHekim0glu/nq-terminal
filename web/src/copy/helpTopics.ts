@@ -53,14 +53,16 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     related: ['GP', 'MON', 'EQ', 'REG', 'LIVE', 'OOS'],
   },
   GP: {
-    summary: 'Candles and volume for one instrument, with roll markers.',
+    summary: 'Candles and volume for one instrument, with roll markers and, on daily bars, an RV22 pane.',
     shows: [
-      'Timeframes 1m, 5m, 1h and 1d, on vendor or repaired bars.',
+      'Timeframes 1m, 5m, 1h or 1d, on vendor or repaired bars.',
       'Roll markers, the dashed 2022-01-01 fence and [GATED] or [REPAIRED] session tags.',
       'Fills from a linked RUN in the same link group.',
-      'A readout of time, open, high, low, close and volume; the quote header adds RV22 on daily charts that end at the fence.',
+      'A readout of the time and the bar (open, high, low, close, volume); the quote header adds RV22 on daily charts that end at the fence.',
+      'On daily bars, an RV22 pane under the volume: 22-session realised volatility, annualised, in per cent [POST HOC].',
+      'The amber field in the red bar opens another instrument on the same function.',
     ],
-    data: 'GET /api/bars, through the OOS gate with the caller terminal. In-sample only: nothing after 2021-12-31 is served.',
+    data: 'GET /api/bars and, on daily bars, GET /api/market/rv, through the OOS gate with the caller terminal. In-sample only: nothing after 2021-12-31 is served.',
     honesty: 'A window past the fence shows the gate\'s refusal text in the panel instead of a chart.',
     examples: ['{NQ1 Index GP <GO>}', '{ZN COMDTY GP 1h <GO>}', '{ES GP 5m <GO>}'],
     related: ['GIP', 'DES', 'MON', 'CORR'],
@@ -68,7 +70,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   GIP: {
     summary: 'GP for one date, intraday.',
     shows: [
-      'Bar sizes 1m, 5m and 1h, with a two-row time and date axis.',
+      'Bar sizes 1m, 5m or 1h, with a two-row time and date axis.',
       'Dashed day separators; the date must lie inside the in-sample window.',
     ],
     data: 'GET /api/bars for that session, through the OOS gate.',
@@ -79,9 +81,9 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   DES: {
     summary: 'The hypothesis tear sheet, or an instrument description.',
     shows: [
-      'Registration: spec sha256 with its re-hash check, round, verdict and the pass bar, verbatim.',
-      'Key figures: n, t, p, control p, Bonferroni, Holm and BH q, and the headline value.',
-      'Pass checks, the blocks and the cost ladder at 0, 1 and 2 ticks.',
+      'Registration: the spec sha256 with its re-hash check; the round; the verdict; the pass bar, verbatim.',
+      'Key figures: the headline value, then n, t, p, control p, Bonferroni, Holm, BH q.',
+      'Pass checks, the blocks and the cost ladder from 0 to 2 ticks per side.',
       'An in-sample against sealed strip, marked [SPENT], where a confirmation exists.',
       'For an instrument: contract notes, trading hours, roll dates and data coverage.',
     ],
@@ -106,19 +108,19 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   MT: {
     summary: 'Multiple testing across the registry.',
     shows: [
-      'Sorted p values against rank, with the Bonferroni, Holm and BH lines.',
+      'Sorted p values against rank, with the Bonferroni and Holm boundaries and the BH line.',
       'The adjusted values table.',
     ],
-    data: 'GET /api/multiple-testing: the registry p values, recomputed and compared with the stored columns.',
+    data: 'GET /api/multiple-testing: the registry p values, recomputed, then compared with the stored columns.',
     examples: ['{MT <GO>}'],
     related: ['REG', 'DES'],
   },
   RUNS: {
     summary: 'Every Nautilus backtest run on disk.',
     shows: [
-      'Badges: probe, anchor, ledgered, balance, MTM and coverage.',
-      'Trades, net P&L, Sharpe and max drawdown on Basis B.',
-      'Filters: all, ledgered, anchors, probes and unusable.',
+      'Badges: probe, anchor, ledgered; checks: balance, MTM, coverage.',
+      'Trades and net P&L, with Sharpe and max drawdown on Basis B.',
+      'Filters: all, ledgered, anchors, probes, unusable.',
     ],
     data: 'GET /api/runs.',
     honesty: 'Probe runs carry [PROBE: never a result] and stay out of compare views by default.',
@@ -129,12 +131,12 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     summary: 'One backtest run, inspected.',
     shows: [
       'Config, Nautilus version, elapsed time, venue, fill model and cost per side.',
-      'Balance check, MTM max difference, coverage and the anchor verdict.',
+      'Balance check and MTM max difference; coverage; the anchor verdict.',
       'Equity on Basis B with the underwater curve.',
-      'Trades, fills, decisions, closes, rolls and notes.',
+      'Trades, fills, then the log: decisions, closes, rolls, notes.',
       'The ledger copy command for an eligible run; the terminal never writes the ledger.',
     ],
-    data: 'GET /api/runs/{run_id} with its trades, fills, logs and equity.',
+    data: 'GET /api/runs/{run_id}, plus /trades, /fills, /log and /equity.',
     honesty: 'A run whose balance check fails shows [UNUSABLE: BALANCE] and no equity line.',
     examples: ['{nt_dtsmom_v0_ts1 RUN <GO>}'],
     related: ['RUNS', 'EQ', 'LEDG'],
@@ -142,7 +144,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   EQ: {
     summary: 'Analytics tear sheet, tab 1: equity.',
     shows: [
-      'Key figures: total return, CAGR, volatility, Sharpe with its interval, Sortino, Calmar, max drawdown, PSR, MinTRL, IR, TE and alpha t.',
+      'Key figures: total return, CAGR, volatility, Sharpe with its interval, Sortino, Calmar, max drawdown, PSR, MinTRL, IR, TE, alpha t.',
       'Equity against the benchmark, with a log toggle and the range buttons.',
       'A performance difference pane (m - BH).',
     ],
@@ -155,7 +157,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     summary: 'Analytics tear sheet, tab 2: drawdown.',
     shows: [
       'Equity against the benchmark over the underwater curve.',
-      'The top-10 drawdown table: start, trough, recovery, depth and length.',
+      'The top-10 drawdown table: start, trough, recovery, depth, length.',
     ],
     data: TEAR_DATA,
     honesty: TEAR_HONESTY,
@@ -198,9 +200,9 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   MON: {
     summary: 'The 27-futures monitor.',
     shows: [
-      'Grouped by sector: the last close to 2021-12-31 and the 1D, 1W, 1M, 3M, YTD and 12M returns.',
+      'Grouped by sector: the last close to 2021-12-31 and the returns over 1D, 1W, 1M, 3M, YTD, 12M.',
       'A vol-normalised toggle, realised volatility and the correlation to NQ.',
-      'Enter on a row opens its related functions: GP, GIP, DES and CORR.',
+      'Enter on a row opens its related functions: GP, GIP, DES, CORR.',
     ],
     data: 'GET /api/market/universe, on daily bars served through the OOS gate.',
     honesty: POST_HOC_PRICES,
@@ -232,7 +234,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     summary: 'The OOS gate\'s access log and the openings record.',
     shows: [
       'Swimlanes by caller with the fence line; sealed reads are marked.',
-      'Log entries: time, caller, reason, symbol, window and result.',
+      'Log entries: time, caller, reason, symbol, window, result.',
       'The openings card: opened 2026-09-26, CLOSED, with its pin status.',
       'The count of reads the terminal made.',
     ],
@@ -291,7 +293,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   },
   EXPO: {
     summary: 'Exposure and turnover of a run.',
-    shows: ['Exposure, turnover and notional over time.', P1],
+    shows: ['Exposure, turnover, notional: each over time.', P1],
     data: 'GET /api/analytics/run/{run_id}/exposure.',
     examples: ['{nt_dtsmom_v0_ts1 EXPO <GO>}'],
     related: ['RUN'],

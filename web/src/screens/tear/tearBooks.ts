@@ -80,9 +80,11 @@ export interface SlippageRowView {
   readonly source: string
 }
 
-export function slippageRows(trades: RunTrades): SlippageRowView[] {
+type SlippageGroup = RunTrades['slippage']['groups'][number]
+
+function slippageRow(g: SlippageGroup): SlippageRowView {
   const signed = (v: number | null) => formatNumber(v, 2, { signed: true })
-  return trades.slippage.groups.map((g) => ({
+  return {
     name: g.name,
     n: formatNumber(g.n, 0, { thousands: true }),
     mean: signed(g.mean),
@@ -90,7 +92,44 @@ export function slippageRows(trades: RunTrades): SlippageRowView[] {
     p50: signed(g.p50),
     p95: signed(g.p95),
     source: g.source,
-  }))
+  }
+}
+
+export function slippageRows(trades: RunTrades): SlippageRowView[] {
+  return trades.slippage.groups.map(slippageRow)
+}
+
+/** The quote check's own file: its groups are a za_orb sample (results/quote_check_v1.json). */
+const QUOTE_SOURCE = 'results/quote_check_v1.json'
+/** The strategies each real-fill sample belongs to (TA6, ARCHITECTURE s4). */
+const QUOTE_STRATEGY = 'za_orb'
+const LIVE_STRATEGY = 'volmanaged'
+
+export interface SlippageView {
+  readonly kind: 'quote' | 'live' | 'none'
+  readonly caption: string
+  readonly rows: readonly SlippageRowView[]
+}
+
+/**
+ * TA6: the real-fill rows that belong to this run's strategy, and a caption that names the sample. The
+ * quote check's rows show on za_orb runs, the paper book's close rows on volmanaged runs; any other
+ * strategy shows none (a sample under the wrong strategy's name would read as that strategy's cost).
+ */
+export function slippageView(trades: RunTrades, strategy: string | null): SlippageView {
+  const s = trades.slippage
+  const isQuote = (g: SlippageGroup) => g.source.startsWith(QUOTE_SOURCE)
+  if (strategy === QUOTE_STRATEGY) {
+    return { kind: 'quote', caption: fillCopy(B.slippageQuote, { unit: s.unit }), rows: s.groups.filter(isQuote).map(slippageRow) }
+  }
+  if (strategy === LIVE_STRATEGY) {
+    return {
+      kind: 'live',
+      caption: fillCopy(B.slippageLive, { unit: s.unit, journal: s.live_journal }),
+      rows: s.groups.filter((g) => !isQuote(g)).map(slippageRow),
+    }
+  }
+  return { kind: 'none', caption: fillCopy(B.slippageNone, { strategy: strategy ?? B.strategyUnknown }), rows: [] }
 }
 
 export interface WaterfallRowView {

@@ -49,13 +49,17 @@ class SharpeInterval(ResponseModel):
 
 
 class EquityView(ResponseModel):
-    """EQ: equity after each session, the benchmark on the same axis (null where it has no value)."""
+    """EQ: equity after each session, the benchmark on the same axis (null where it has no value), and the
+    performance difference (strategy minus benchmark cumulative return, `perf.performance_difference`; null where
+    the benchmark has no value, and the whole field null without a benchmark)."""
 
     unit: str
     t: list[int]
     date: list[str]
     equity: list[Num]
     bench: list[Num] | None
+    perf_diff: list[Num] | None
+    perf_diff_unit: str | None
 
 
 class DrawdownView(ResponseModel):
@@ -83,6 +87,20 @@ class DrawdownRow(ResponseModel):
     open: bool
 
 
+class VolExtremes(ResponseModel):
+    """RR's Hi and Low callouts: the highest and lowest value of one rolling volatility line and the first session
+    each falls on (null when the line has no value)."""
+
+    window: int
+    unit: str
+    hi: Num
+    hi_t: int | None
+    hi_date: str | None
+    lo: Num
+    lo_t: int | None
+    lo_date: str | None
+
+
 class RollingView(ResponseModel):
     """RL1 and RL2 over a short and a long window (`windows`, in `window_unit`): 63 and 252 sessions for a daily
     series, 12 and 36 months for a monthly one (P = 12)."""
@@ -99,6 +117,7 @@ class RollingView(ResponseModel):
     vol_long: list[Num]
     full_sharpe: Num
     full_vol: Num
+    vol_extremes: list[VolExtremes] = Field(description="one per window, in `windows` order")
 
 
 class YearValue(ResponseModel):
@@ -161,10 +180,20 @@ class StatsTable(ResponseModel):
     pct_positive_months: Num
 
 
+class PeriodSeries(ResponseModel):
+    """RET's time series beside the histogram: the returns the histogram bins, one per session (or month)."""
+
+    unit: str
+    t: list[int]
+    date: list[str]
+    r: list[Num]
+
+
 class DistributionView(ResponseModel):
     histogram: HistogramView
     qq: QqView
     stats: StatsTable
+    series: PeriodSeries
 
 
 class Tails(ResponseModel):

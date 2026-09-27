@@ -5,11 +5,13 @@
 // the strategy log sections.
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureDownloads } from '../../chrome/download.testUtil'
+import { useMessage } from '../../chrome/MessageLine.store'
 import { resetNumbered } from '../../chrome/NumberedActions'
 import type { LineStackProps } from '../../charts/LineStack.types'
 import { stubLayout } from '../../grids/testing'
 import RunScreen from './RunScreen'
-import { RUN } from './copy'
+import { RUN } from '../../copy/runs'
 import {
   DECISIONS_DTSMOM,
   DETAIL_DTSMOM,
@@ -208,5 +210,45 @@ describe('RUN: no run chosen', () => {
     mountScreen(<RunScreen params={{ code: 'RUN', context: null, args: {}, group: '-' }} context={null} />)
     expect(screen.getByText(/Type a run id, then RUN/)).toBeTruthy()
     expect(seen).toEqual([])
+  })
+})
+
+describe('RUN: 98) Export', () => {
+  it('saves the tab on screen: the chart series, then the trades page, with no request', async () => {
+    const seen = mountRun(DTS, DTS_ROUTES)
+    await waitFor(() => expect(screen.getByTestId('linestack')).toBeTruthy())
+    const saved = captureDownloads()
+    try {
+      const before = seen.length
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const chart = (await saved.text(`${DTS}_chart.csv`)).split('\r\n')
+      expect(chart[0]).toBe('date,equity,bench_equity,underwater,bench_underwater')
+      expect(chart).toHaveLength(PANEL_DTSMOM.t.length + 1)
+      expect(chart[1]).toBe([PANEL_DTSMOM.date[0], PANEL_DTSMOM.equity[0], PANEL_DTSMOM.bench_equity?.[0] ?? '', PANEL_DTSMOM.underwater[0], PANEL_DTSMOM.bench_underwater?.[0] ?? ''].join(','))
+      expect(seen.length).toBe(before)
+      fireEvent.click(screen.getByRole('tab', { name: /Trades/ }))
+      await screen.findByRole('grid', { name: /trades/i })
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const trades = (await saved.text(`${DTS}_trades.csv`)).split('\r\n')
+      expect(trades).toHaveLength(TRADES_DTSMOM.items.length + 1)
+      expect(useMessage.getState().text).toContain(`${DTS}_trades.csv`)
+    } finally {
+      saved.restore()
+    }
+  })
+
+  it('saves the configuration as section, key and value', async () => {
+    mountRun(DTS, DTS_ROUTES)
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Config/ })).toBeTruthy())
+    fireEvent.click(screen.getByRole('tab', { name: /Config/ }))
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const lines = (await saved.text(`${DTS}_config.csv`)).split('\r\n')
+      expect(lines[0]).toBe('section,key,value')
+      expect(lines.length).toBeGreaterThan(2)
+    } finally {
+      saved.restore()
+    }
   })
 })

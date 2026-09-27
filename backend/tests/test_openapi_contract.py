@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -95,3 +96,40 @@ def test_contract_difference_is_born_failing():
     for label, mutated in _mutations(schema):
         found = contract_differences(schema, mutated)
         assert any(line.startswith(label) for line in found), (label, found)
+
+
+# ---------------------------------------------------------------- no order-path names (ARCHITECTURE s9)
+
+ACTION_STEM = re.compile(r"^(order|submit|cancel|modif)", re.IGNORECASE)
+
+
+def name_words(name: str) -> list[str]:
+    """The words of a name as `web/e2e/flows/scan.ts` splits them: separators, then camelCase and PascalCase."""
+    spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
+    spaced = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", spaced)
+    return [w for w in re.split(r"[^A-Za-z0-9]+", spaced) if w]
+
+
+def action_names(schema: dict) -> list[str]:
+    """Route paths, operation ids and schema names with a word that starts with order, submit, cancel or modif."""
+    named = [("route", path) for path in schema.get("paths", {})]
+    named += [("operation", op["operationId"]) for ops in schema.get("paths", {}).values()
+              for method, op in ops.items() if method in METHODS and "operationId" in op]
+    named += [("schema", name) for name in schema.get("components", {}).get("schemas", {})]
+    return sorted({f"{kind}: {name}" for kind, name in named
+                   if any(ACTION_STEM.match(word) for word in name_words(name))})
+
+
+def test_action_name_scan_is_born_failing():
+    planted = {"paths": {"/api/live/orders": {"get": {"operationId": "orders_api_live_orders_get"}},
+                         "/api/runs": {"get": {"operationId": "runs_api_runs_get"}}},
+               "components": {"schemas": {"LiveOrders": {}, "OrdersSummary": {}, "CancelRequest": {},
+                                          "LiveRouteRow": {}, "BorderInfo": {}, "RecorderPane": {}}}}
+    assert action_names(planted) == ["operation: orders_api_live_orders_get", "route: /api/live/orders",
+                                     "schema: CancelRequest", "schema: LiveOrders", "schema: OrdersSummary"]
+
+
+def test_no_route_operation_or_schema_name_reads_as_an_order_action():
+    assert action_names(current_schema()) == []
+    if CONTRACT.exists():
+        assert action_names(json.loads(CONTRACT.read_text(encoding="utf-8"))) == []

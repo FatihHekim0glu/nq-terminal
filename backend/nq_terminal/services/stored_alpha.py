@@ -36,6 +36,7 @@ class AlphaShape:
     annual_key: str | None = "alpha_annual_pct"
     annual_scale: float = 1.0
     t_key: str = "t_min"
+    t_map_key: str = "t"  # the mapping of t by Newey-West lag
     blocks: str | None = None  # dotted path of the per-block fits, recorded at 1 tick per side
     blocks_cost: int = 1
 
@@ -65,6 +66,8 @@ SHAPES: Mapping[str, AlphaShape] = MappingProxyType({
                              annual_key=None),
     "rebal_v0": AlphaShape(_one("pass_checks.alpha"), "points per interval (NQ)",
                            "the screen's timing control (Newey-West lags 1 and 3)", annual_key=None),
+    "vrp_eq_v0": AlphaShape(_one("headline"), "return on capital per month", "constant long book, ES and YM (P0)",
+                            t_key="t_a", t_map_key="t_nw", blocks="P2_blocks"),
 })
 
 
@@ -127,5 +130,5 @@ def stored_fit(name: str, cost: int, screen: Mapping[str, Any] | None) -> Stored
     p = resolve(fit, "p") if resolve(fit, "p") is not None else resolve(fit, "p_one_sided")
     return StoredAlpha(path=path, against=shape.against, a_unit=shape.a_unit, n=_count(fit.get("n")),
                        a=resolve(fit, "a"), b=resolve(fit, "b"), alpha_annual_pct=_annual(fit, shape),
-                       t=_t_map(fit.get("t")), t_min=resolve(fit, shape.t_key), p=p,
+                       t=_t_map(fit.get(shape.t_map_key)), t_min=resolve(fit, shape.t_key), p=p,
                        blocks=_blocks(screen, shape, cost), raw=clean_json(fit))

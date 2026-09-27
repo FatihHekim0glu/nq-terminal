@@ -12,6 +12,10 @@ OOS log (`results/oos_access_log.jsonl`)
   and is not an error.
 - Each entry gains `line_no`, `key_set`, `is_sealed` (`"sealed": true`), `past_fence` (the window ends after
   `IS_END`), and epoch seconds for `ts_utc`, `start` and `end` (chart axes).
+- Each entry also gains `severity` (1 to 4) and `alert` (severity 3 or 4), house semantics for OOS's `A` and `R`
+  columns (`SEVERITY_LEVELS`): 4 a sealed read; 3 a window that ends past the fence, starts before the in-sample
+  start, or cannot be read (the gate refuses such windows, so a logged one needs a look); 2 a read by any caller
+  other than the terminal (a research read); 1 a terminal display read.
 - `start` and `end` are served as ISO 8601 UTC (`2010-09-28T00:00:00+00:00`), the form `ts_utc` already has; the
   gate records them as `2010-09-28 00:00:00+00:00`, and a time without an offset is read as UTC. Text that does not
   parse is passed through unchanged, with a None epoch.
@@ -35,7 +39,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from nq_lab.config import IS_END
+from nq_lab.config import IS_END, IS_START
 from nq_terminal.models.audit import SpecHash
 from nq_terminal.models.research import RegistryRow
 from nq_terminal.services.files import freeze
@@ -55,6 +59,24 @@ TEXT_KEYS = ("ts_utc", "caller", "reason", "start", "end")
 SPEC_STEM = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 SEALED_LABEL = "spent window, opened 2026-09-26, descriptive only"
 _FENCE = IS_END.to_pydatetime()
+_IS_START_S = int(IS_START.timestamp())
+SEVERITY_LEVELS: tuple[tuple[int, str], ...] = (
+    (1, "terminal display read, inside the in-sample window"),
+    (2, "research read by another caller, inside the in-sample window"),
+    (3, "window past the fence, before the in-sample start, or unreadable: check it"),
+    (4, "sealed read (spent window)"),
+)
+ALERT_FROM = 3
+
+
+def severity(entry: Mapping[str, Any]) -> int:
+    """The house severity of one annotated log entry (see `SEVERITY_LEVELS`)."""
+    if entry.get("is_sealed"):
+        return 4
+    start = entry.get("start_epoch_s")
+    if entry.get("past_fence") is not False or start is None or start < _IS_START_S:
+        return 3
+    return 1 if entry.get("caller") == TERMINAL_CALLER else 2
 
 
 @dataclass(frozen=True)
@@ -112,7 +134,7 @@ def _shape_problem(obj: Any) -> str | None:
 
 def _annotate(obj: dict[str, Any], line_no: int) -> Mapping[str, Any]:
     start, end = _when(obj["start"]), _when(obj["end"])
-    return freeze({
+    entry = {
         **obj,
         "start": _iso_utc(obj["start"], start),
         "end": _iso_utc(obj["end"], end),
@@ -123,7 +145,9 @@ def _annotate(obj: dict[str, Any], line_no: int) -> Mapping[str, Any]:
         "ts_epoch_s": _epoch(_when(obj["ts_utc"])),
         "start_epoch_s": _epoch(start),
         "end_epoch_s": _epoch(end),
-    })
+    }
+    level = severity(entry)
+    return freeze({**entry, "severity": level, "alert": level >= ALERT_FROM})
 
 
 def _parse_line(text: str) -> tuple[dict | None, str | None]:
@@ -166,6 +190,11 @@ def key_set_counts(entries: Iterable[Mapping[str, Any]]) -> dict[str, int]:
 
 def caller_counts(entries: Iterable[Mapping[str, Any]]) -> dict[str, int]:
     return dict(Counter(e["caller"] for e in entries))
+
+
+def severity_counts(entries: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """Entries per severity level over the whole log, keyed by the level as text."""
+    return {str(k): v for k, v in sorted(Counter(e["severity"] for e in entries).items())}
 
 
 def parse_since(text: str) -> datetime:

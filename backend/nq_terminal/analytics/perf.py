@@ -176,3 +176,19 @@ def stats_table(r, basis: str, periods: int = PERIODS_DAILY) -> dict:
     values = series.to_numpy()
     return {"n": int(len(values)), "years": len(values) / periods, **_session_stats(values, periods),
             **_month_stats(_month_values(series, basis, periods))}
+
+
+def performance_difference(r, bench, basis: str) -> pd.Series:
+    """EQ's lower pane: the strategy's cumulative return minus its benchmark's, in fractions of K (Basis A: running
+    sums, `cumsum r - cumsum b`; Basis B: `prod(1 + r) - prod(1 + b)`), on the strategy's index. The benchmark
+    accumulates over the sessions where it has a value (as its own equity curve does) and the difference is NaN
+    elsewhere. Times K it is the gap between the two equity curves."""
+    check_basis(basis)
+    series = returns_series(r)
+    bench = pd.Series(bench, dtype=float).reindex(series.index)
+    present = bench.dropna()
+    if basis == "A":
+        mine, theirs = series.cumsum(), present.cumsum()
+    else:
+        mine, theirs = (1.0 + series).cumprod() - 1.0, (1.0 + present).cumprod() - 1.0
+    return (mine - theirs.reindex(series.index)).astype(float)

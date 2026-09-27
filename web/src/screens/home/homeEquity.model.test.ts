@@ -56,18 +56,27 @@ describe('homeTiles: every figure equals the API value to its displayed precisio
   })
 })
 
+/** PANEL_A with rolling values on its last two rows (the fixture series is shorter than the window). */
+const ROLLING: typeof PANEL_A = { ...PANEL_A, rolling_sharpe: [null, null, 0.51, 0.62] }
+
 describe('homeStack: equity, underwater and rolling Sharpe panes on one time axis', () => {
   it('passes the API arrays through unchanged where no unit change is needed', () => {
-    const stack = homeStack(PANEL_A)
-    expect(stack.t).toBe(PANEL_A.t)
+    const stack = homeStack(ROLLING)
+    expect(stack.t).toBe(ROLLING.t)
     const [eq, uw, roll] = stack.panes
-    expect(eq!.series.map((s) => [s.style, s.values])).toEqual([['primary', PANEL_A.equity], ['benchmark', PANEL_A.bench_equity]])
-    expect(eq!.series[0]!.values).toBe(PANEL_A.equity)
-    expect(roll!.series[0]!.values).toBe(PANEL_A.rolling_sharpe)
+    expect(eq!.series.map((s) => [s.style, s.values])).toEqual([['primary', ROLLING.equity], ['benchmark', ROLLING.bench_equity]])
+    expect(eq!.series[0]!.values).toBe(ROLLING.equity)
+    expect(roll!.series[0]!.values).toBe(ROLLING.rolling_sharpe)
     expect(roll!.series[0]!.style).toBe('rollLong')
     expect(roll!.zero).toBe('grey')
     expect(uw!.series[0]!.style).toBe('underwater')
     expect(eq!.zero).not.toBe('grey')
+  })
+
+  it('leaves the rolling pane out when it has no value (the notes say why), so the other panes get the room', () => {
+    const empty = { ...PANEL_A, rolling_sharpe: PANEL_A.rolling_sharpe.map(() => null) }
+    expect(homeStack(empty).panes.map((p) => p.id)).toEqual(['equity', 'underwater'])
+    expect(homeStack(ROLLING).panes.map((p) => p.id)).toEqual(['equity', 'underwater', 'rolling'])
   })
 
   it('shows a fraction of K as percent: underwater values times 100 with a % unit', () => {
@@ -89,7 +98,7 @@ describe('homeStack: equity, underwater and rolling Sharpe panes on one time axi
     expect(homeStack(PANEL_USD).panes[0]!.summaryDrawdown).toEqual({ value: '-134.48 USD', basis: `Basis ${PANEL_USD.basis}` })
     expect(homeStack(PANEL_B).panes[0]!.summaryDrawdown).toEqual({ value: '-0.40%', basis: 'Basis B' })
     expect(homeStack(PANEL_A).panes[1]!.summaryDrawdown).toBeUndefined()
-    expect(homeStack(PANEL_A).panes[2]!.summaryDrawdown).toBeUndefined()
+    expect(homeStack(ROLLING).panes[2]!.summaryDrawdown).toBeUndefined()
   })
 
   it('draws no benchmark series when the context has none', () => {
@@ -105,7 +114,7 @@ describe('homeStack: equity, underwater and rolling Sharpe panes on one time axi
   })
 
   it('names each series and titles the stack after the context', () => {
-    const stack = homeStack(PANEL_A)
+    const stack = homeStack(ROLLING)
     expect(stack.title).toContain('volmanaged_v0')
     expect(stack.panes[2]!.series[0]!.name).toBe('Rolling 252-session Sharpe')
   })

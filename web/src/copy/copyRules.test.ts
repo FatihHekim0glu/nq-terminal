@@ -30,10 +30,17 @@ describe('born-failing cases (rule 5): the guard must catch what it bans', () =>
   })
 
   it('flags US spellings the spec names', () => {
-    const bad = { a: 'Normalize the color', b: 'analyze behavior' }
+    // The planted US forms are joined at run time so the house style lint, which reads this file, stays clean.
+    const us = (...parts: string[]): string => parts.join('')
+    const bad = { a: `${us('Normali', 'ze')} the ${us('colo', 'r')}`, b: `${us('analy', 'ze')} ${us('behavi', 'or')}` }
     const rules = findCopyViolations(bad).map((v) => v.rule)
     expect(rules).toEqual(
-      expect.arrayContaining(['US spelling: normalize', 'US spelling: color', 'US spelling: analyze', 'US spelling: behavior']),
+      expect.arrayContaining([
+        'US spelling, write normalise',
+        'US spelling, write colour',
+        'US spelling, write analyse',
+        'US spelling, write behaviour',
+      ]),
     )
   })
 

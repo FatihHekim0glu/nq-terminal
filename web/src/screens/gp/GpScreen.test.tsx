@@ -6,12 +6,13 @@ import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
 import type { ResolvedContext } from '../../commands/types'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
+import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { useLinkGroups } from '../../state/linkGroups'
 import { GIPScreen, GPScreen } from './index'
 
 // The chart library needs a canvas; the screen's job is what it feeds the chart, so the chart is a probe.
 vi.mock('../../charts/CandleChart', () => ({
-  default: (props: { name: string; bars: { t: number[] }; fills?: unknown[]; rolls?: unknown[]; link?: string; grid?: boolean }) => (
+  default: (props: { name: string; bars: { t: number[] }; fills?: unknown[]; rolls?: unknown[]; link?: string; grid?: boolean; indicator?: { name: string; values: Array<number | null> } }) => (
     <div
       data-testid="candle"
       data-name={props.name}
@@ -20,6 +21,7 @@ vi.mock('../../charts/CandleChart', () => ({
       data-rolls={props.rolls?.length ?? 0}
       data-link={props.link}
       data-grid={String(Boolean(props.grid))}
+      data-indicator={props.indicator ? `${props.indicator.name}:${props.indicator.values.map((v) => v ?? '').join(',')}` : ''}
     />
   ),
 }))
@@ -50,6 +52,16 @@ const CATALOG = {
   ].map((s) => ({ ...s, file: 'x', size_bytes: 1, modified_utc: '', rows: 1, row_groups: 1, columns: [], first_ts: null, extends_past_fence: false, error: null })),
 }
 
+const RV = {
+  symbol: 'NQ.V.0', window: 22, label: '[POST HOC] descriptive, in-sample, not a registered test',
+  basis: 'sd of the daily r over the last `window` sessions (ddof 1) x sqrt(252)', unit: 'fraction per year, annualised (0.18 is 18%)',
+  t: [D('2021-12-30'), D('2021-12-31')], date: ['2021-12-30', '2021-12-31'], rv: [0.3, 0.3057044013941762], last: 0.3057044013941762,
+  gate: { caller: 'terminal', served_years: [2021], cached: true, reads_this_process: 5 },
+}
+const COMMANDS = {
+  grammar: '', mnemonics: [], universe: ['27F'], hypotheses: [], confirmations: [], runs: [], registry_error: null,
+  instruments: [{ root: 'NQ', symbol: 'NQ.V.0', sector: 'equity' }, { root: 'ES', symbol: 'ES.V.0', sector: 'equity' }, { root: 'ZN', symbol: 'ZN.V.0', sector: 'rates' }],
+}
 const UNIVERSE = { rows: [{ root: 'NQ', realised_vol: 0.3057, last_date: '2021-12-31', returns: { '1D': -0.0011787 } }] }
 const RUNS = [{ run_id: 'nt_volmanaged_v0_fixture_m1' }, { run_id: 'nt_dtsmom_v0_fixture_ts1' }]
 const FILLS = {
@@ -81,6 +93,8 @@ function serve(route: Router = () => undefined) {
     if (url.pathname === '/api/bars') return json(barsBody({ timeframe: url.searchParams.get('timeframe'), variant: url.searchParams.get('variant') }))
     if (url.pathname === '/api/data/catalog') return json(CATALOG)
     if (url.pathname === '/api/market/universe') return json(UNIVERSE)
+    if (url.pathname === '/api/market/rv') return json(RV)
+    if (url.pathname === '/api/commands') return json(COMMANDS)
     if (url.pathname === '/api/runs') return json(RUNS)
     if (url.pathname.endsWith('/fills')) return json(FILLS)
     return json({ detail: 'not found' }, 404)
@@ -106,6 +120,38 @@ beforeEach(() => useLinkGroups.getState().clearAll())
 afterEach(() => {
   cleanup()
   useLinkGroups.getState().clearAll()
+})
+
+describe('GP: the RV22 indicator pane and the instrument field (Phase 8, look spec 7.6)', () => {
+  it('draws the RV22 line from /api/market/rv under the volume on a daily chart, in percent', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    const chart = await screen.findByTestId('candle')
+    await waitFor(() => expect(chart.dataset.indicator).toBe('RV22:,30,30.57044013941762'))
+    expect(urls).toContain('/api/market/rv?symbol=NQ.V.0&window=22')
+    expect(screen.getByText(/RV22 pane: \[POST HOC\] descriptive, in-sample/)).toBeTruthy()
+  })
+
+  it('asks for no RV line on an intraday chart', async () => {
+    serve()
+    mount(<GIPScreen params={params('GIP', { date: '2021-12-30' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    expect(urls.some((u) => u.startsWith('/api/market/rv'))).toBe(false)
+    expect(screen.getByTestId('candle').dataset.indicator).toBe('')
+  })
+
+  it('the amber instrument field in the red bar opens another instrument on the same function', async () => {
+    serve()
+    const lines: LineRequest[] = []
+    const off = onLineRequest((r) => lines.push(r))
+    mount(<GPScreen params={params('GP')} context={NQ} />)
+    await screen.findByTestId('candle')
+    const bar = screen.getByRole('toolbar', { name: 'Candle chart functions' })
+    fireEvent.click(await within(bar).findByRole('combobox', { name: 'Instrument' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'TY1 Comdty' }))
+    off()
+    expect(lines.map((l) => l.line)).toEqual(['ZN GP'])
+  })
 })
 
 describe('GP: candles from /api/bars', () => {
@@ -197,6 +243,22 @@ describe('GP: candles from /api/bars', () => {
     expect(screen.queryByTestId('candle')).toBeNull()
     expect(barRequests().length).toBe(before)
     expect(urls.every((u) => !u.includes('2022'))).toBe(true)
+  })
+
+  // A screen still waiting for its bars is busy (aria-busy), so a screen reader, a screenshot or a
+  // keyboard flow waits for the chart rather than reading the loading line as the screen.
+  it('born failing: marks the loading message busy while the bars are on their way', async () => {
+    const pending = serve()
+    pending.mockImplementation(async (input) => {
+      const url = new URL(String(input), 'http://127.0.0.1')
+      if (url.pathname === '/api/bars') return new Promise<Response>(() => undefined)
+      if (url.pathname === '/api/data/catalog') return json(CATALOG)
+      if (url.pathname === '/api/commands') return json(COMMANDS)
+      return json({ detail: 'not found' }, 404)
+    })
+    mount(<GIPScreen params={params('GIP', { date: '2019-03-14' })} context={NQ} />)
+    const loading = await screen.findByText('Loading bars through the OOS gate.')
+    expect(loading.closest('[role="status"]')?.getAttribute('aria-busy')).toBe('true')
   })
 
   it('shows the gate text of a 403 verbatim', async () => {

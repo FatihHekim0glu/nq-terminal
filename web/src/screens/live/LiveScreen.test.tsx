@@ -5,7 +5,7 @@ import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
 import { LIVE } from '../../copy/live'
 import { stubLayout } from '../../grids/testing'
-import { BOOK, BOOK_CLOSE_ROWS, emptyStatus, page, performance, status } from './liveFixtures'
+import { BANNER, BOOK, BOOK_CLOSE_ROWS, ROUTES_BODY, emptyStatus, page, performance, status } from './liveFixtures'
 import { dateSeconds } from './liveModel'
 import LiveScreen from './LiveScreen'
 
@@ -35,6 +35,7 @@ function routes(b: Bodies = {}) {
     if (url.startsWith('/api/live/status')) return json(b.status ?? status())
     if (url.startsWith('/api/live/performance')) return json(b.performance ?? performance())
     if (url.startsWith('/api/live/journal')) return json(b.closeRows ?? page(BOOK_CLOSE_ROWS))
+    if (url.startsWith('/api/live/routes')) return json(ROUTES_BODY)
     return json({ detail: 'unexpected' }, 404)
   })
 }
@@ -53,6 +54,26 @@ const strip = (name: string) => screen.getByRole('list', { name })
 
 beforeEach(() => stubLayout(600))
 afterEach(() => cleanup())
+
+describe('LIVE: Routes, Fills and the footer strip (Phase 8)', () => {
+  it('lists the routes and fills from /api/live/routes, B/S as coloured text, the plumbing row with its banner', async () => {
+    routes()
+    mount()
+    const table = await screen.findByRole('table', { name: LIVE.routesLabel })
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(ROUTES_BODY.routes.length)
+    expect(rows[0]!.className).toContain('plumbing-row')
+    expect(rows[0]!.textContent).toContain(BANNER)
+    const buy = within(rows[3]!).getByText('BUY')
+    expect(buy.className).toContain('up')
+    const fills = screen.getByRole('table', { name: LIVE.fillsLabel })
+    expect(within(fills).getAllByRole('row')).toHaveLength(ROUTES_BODY.fills.length + 1)
+    expect(within(fills).getAllByText('298,215.00').length).toBeGreaterThan(0)
+    const foot = strip(LIVE.footerLabel)
+    expect(foot.textContent).toContain('1 routes, 1 fills (not counted)')
+    expect(screen.getByText(/the journal records no send time/)).toBeTruthy()
+  })
+})
 
 describe('LIVE screen', () => {
   it('draws the red bar titled as read only, with GET requests only', async () => {

@@ -2,6 +2,7 @@
 // DD, RR and the RUN equity panes (look spec 6 and 7.5).
 import type { PanelLink } from '../state/linkGroups'
 import type { SummaryDrawdown } from './ChartA11ySummary'
+import type { Callout } from './LineStack.draw'
 import type { UplotConstructor } from './lazy'
 import type { RANGE_TOOLBAR } from './theme'
 
@@ -37,6 +38,8 @@ export interface LineStackPane {
    * The chart never derives a drawdown from the plotted values.
    */
   readonly summaryDrawdown?: SummaryDrawdown
+  /** Marked points (RR's volatility Hi and Low): a white dot and its label, in the pane's display unit. */
+  readonly callouts?: readonly Callout[]
 }
 
 export type RangeKey = (typeof RANGE_TOOLBAR.ranges)[number]

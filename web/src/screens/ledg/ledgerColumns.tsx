@@ -4,7 +4,7 @@
 import type { MonitorColumn } from '../../grids/MonitorGrid'
 import { fillCopy } from '../../copy/workspace'
 import { balanceBadge, formatCount, formatFraction, formatRatio, formatUsd, signTone } from '../runs/model'
-import { LEDG } from './copy'
+import { LEDG } from '../../copy/ledg'
 import { weekdayDate, type AnchorPair, type LedgerRow } from './model'
 
 const C = LEDG.cols
@@ -62,7 +62,14 @@ function checkColumns(anchors: ReadonlyMap<string, AnchorPair>): MonitorColumn<L
   ]
 }
 
-/** Keep the result stable per anchor map: MonitorGrid rebuilds its model when the array changes. */
-export function ledgerColumns(anchors: ReadonlyMap<string, AnchorPair>): MonitorColumn<LedgerRow>[] {
-  return [...rowColumns(), ...checkColumns(anchors)]
+/** The columns a panel narrower than the full ledger drops (look spec 7.9 keeps the rest). */
+const WIDE_ONLY: ReadonlySet<string> = new Set(['exp', 'variant', 'window', 'fees'])
+
+/**
+ * Keep the result stable per anchor map: MonitorGrid rebuilds its model when the array changes.
+ * `compact` drops the exp id, variant, window and fees columns, so a 1366px panel has no sideways scroll.
+ */
+export function ledgerColumns(anchors: ReadonlyMap<string, AnchorPair>, compact = false): MonitorColumn<LedgerRow>[] {
+  const all = [...rowColumns(), ...checkColumns(anchors)]
+  return compact ? all.filter((c) => !WIDE_ONLY.has(c.id)) : all
 }

@@ -11,22 +11,24 @@ const DASHES: ReadonlyArray<readonly [RegExp, string]> = [
   [/\u2013/, 'en dash'],
 ]
 
+/** US forms the spec bans, each named by the UK form to write instead (the source itself stays clean
+ * under the house style lint, which reads this file too). */
 const US_SPELLINGS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\bnormaliz/i, 'normalize'],
-  [/\bcolor/i, 'color'],
-  [/\banalyz/i, 'analyze'],
-  [/\bbehavior/i, 'behavior'],
-  [/\bcenter(ed|s)?\b/i, 'center'],
-  [/\bfavorite/i, 'favorite'],
-  [/\boptimiz/i, 'optimize'],
-  [/\bsummariz/i, 'summarize'],
+  [/\bnormaliz/i, 'normalise'],
+  [/\bcolor/i, 'colour'],
+  [/\banalyz/i, 'analyse'],
+  [/\bbehavior/i, 'behaviour'],
+  [/\bcenter(ed|s)?\b/i, 'centre'],
+  [/\bfavorite/i, 'favourite'],
+  [/\boptimiz/i, 'optimise'],
+  [/\bsummariz/i, 'summarise'],
 ]
 
 function checkString(path: string, text: string): CopyViolation[] {
   const dashes = DASHES.filter(([re]) => re.test(text)).map(([, rule]) => ({ path, rule }))
-  const spelling = US_SPELLINGS.filter(([re]) => re.test(text)).map(([, word]) => ({
+  const spelling = US_SPELLINGS.filter(([re]) => re.test(text)).map(([, uk]) => ({
     path,
-    rule: `US spelling: ${word}`,
+    rule: `US spelling, write ${uk}`,
   }))
   return [...dashes, ...spelling]
 }

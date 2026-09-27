@@ -1,0 +1,34 @@
+/* Scroll boxes inside a panel (UI_SPEC section 9, WCAG 2.1.1; axe scrollable-region-focusable).
+   A panel is one Tab stop, its body (src/chrome/PanelChrome.tsx), and the roving tabindex
+   (src/chrome/WorkspaceFocus.ts) takes every other box inside it out of the Tab order. A box that
+   scrolls on its own inside the body is then a scroll region no Tab reaches. The boxes below hand their
+   scrolling to the body instead: each one stops scrolling (overflow visible) and it and every box
+   around it inside the body keep at least their content height (min-height: min-content). Where the
+   content fits, nothing moves; where it does not, the screen grows past the panel and the body, the
+   panel's Tab stop, scrolls to the rest, as MON, REG and JRNL already do (MonitorGrid scroll="panel").
+   Size containers (the screen roots, LineStack panes) keep their size, since their min-content is 0;
+   flex and grid place what follows after the grown box, so nothing is drawn over it.
+
+   The boxes (found by the Phase 8 visual pass, e2e/visual):
+   - a chart's table view (ChartA11y), which scrolled inside the chart's box in every panel;
+   - the RUN statistics side, the RUNS grid and the MT grid, which scrolled in a 1366x768 panel. The two
+     grids are bounded (one row per run, one per hypothesis), so letting them render every row costs
+     little; the long grids (LEDG, the fills, the OOS log) are not listed, and neither is the RET
+     statistics table, since the tear sheet's tab view is one screen of the panel by design
+     (e2e/tear.spec.ts). */
+
+.nqt-panel .nqt-panel-body .chart-a11y-tablewrap,
+.nqt-panel .nqt-panel-body .runs-grid .nqt-grid-scroll,
+.nqt-panel .nqt-panel-body .mt-grid .nqt-grid-scroll {
+  overflow: visible;
+  min-height: min-content;
+}
+
+.nqt-panel .nqt-panel-body :has(.chart-a11y-tablewrap, .runs-grid .nqt-grid-scroll, .mt-grid .nqt-grid-scroll) {
+  min-height: min-content;
+}
+
+/* The RUN statistics side is the last box in its column and nothing follows the RUN screen, so it only
+   stops scrolling: its cards run on below the panel's foot, the body scrolls to them, and the chart
+   beside it keeps the panel's height (it would stretch to the side's height if the row grew). */
+.nqt-panel .nqt-panel-body .run-side { overflow: visible; }

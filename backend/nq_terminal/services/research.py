@@ -30,6 +30,7 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from nq_lab import vt_har_stats
 from nq_lab.config import IS_END
 from nq_lab.sessions import nyse_sessions
 from nq_terminal import des_shapes
@@ -50,6 +51,7 @@ from nq_terminal.constants import (
     SeriesSource,
 )
 from nq_terminal.models.research import (
+    AmendmentAcceptances,
     BlockValue,
     Confirmation,
     DesExtract,
@@ -67,6 +69,7 @@ from nq_terminal.models.research import (
     SealedView,
     SpecCheck,
 )
+from nq_terminal.services import amendments
 from nq_terminal.services.files import (
     RETRY_DELAY_S,
     FileCache,
@@ -81,6 +84,9 @@ DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 WORD_SPLIT = re.compile(r"[^a-z0-9]+")
 REGISTRY_FIELDS = ("name", "registered", "n", "p", "control_p", "verdict", "family_k", "bonferroni_p", "holm_p",
                    "bh_q", "spec", "spec_sha256", "spec_sha_ok")
+# Columns later registries carry (tag and amendments, round 13 on); read when present, else their defaults.
+OPTIONAL_FIELDS = ("overlay", "amendments", "amendment_files", "amendments_ok")
+AMENDMENT_SEPARATOR = ";"
 VERDICT_TOKENS = ("PASS", "FAIL")
 HISTORY_MARKS = (".first.", ".prev_")
 FAMILY_ALPHA = 0.05
@@ -198,18 +204,42 @@ def _finite(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def registry_tag(overlay: bool, registered: bool) -> str:
+    """As `nq_lab.registry`: overlay, else check for a row outside the family, else edge."""
+    return "overlay" if overlay else ("edge" if registered else "check")
+
+
+def _optional(record: Mapping[str, str | None], present: set[str]) -> dict[str, Any]:
+    """The tag and amendment columns of one record; defaults when the file has no such column."""
+    out: dict[str, Any] = {}
+    if "overlay" in present:
+        out["overlay"] = (record.get("overlay") or "").strip() == "True"
+    if "amendment_files" in present:
+        text = record.get("amendment_files") or ""
+        out["amendment_files"] = [f.strip() for f in text.split(AMENDMENT_SEPARATOR) if f.strip()]
+    if "amendments" in present:
+        out["amendments"] = _blank_to_none(record.get("amendments")) or 0
+    if "amendments_ok" in present:
+        out["amendments_ok"] = _blank_to_none(record.get("amendments_ok"))
+    return out
+
+
 def parse_registry(raw: bytes) -> tuple[RegistryRow, ...]:
     """Typed registry rows; ValueError (so FileCache retries once) on a missing column or a cut-off file."""
     text = raw.decode("utf-8")
     reader = csv.DictReader(io.StringIO(text))
-    missing = set(REGISTRY_FIELDS) - set(reader.fieldnames or ())
+    fields = set(reader.fieldnames or ())
+    missing = set(REGISTRY_FIELDS) - fields
     if missing:
         raise ValueError(f"registry.csv lacks the columns {', '.join(sorted(missing))}")
+    present = fields & set(OPTIONAL_FIELDS)
     rows = []
     for record in reader:
-        if None in record or any(record.get(f) is None for f in REGISTRY_FIELDS):
+        if None in record or any(record.get(f) is None for f in (*REGISTRY_FIELDS, *present)):
             raise ValueError(f"registry.csv row {len(rows) + 1} is cut off")
-        rows.append(RegistryRow.model_validate({f: _blank_to_none(record[f]) for f in REGISTRY_FIELDS}))
+        values = {f: _blank_to_none(record[f]) for f in REGISTRY_FIELDS} | _optional(record, present)
+        row = RegistryRow.model_validate(values)
+        rows.append(row.model_copy(update={"tag": registry_tag(row.overlay, row.registered)}))
     if not text.endswith("\n"):
         raise ValueError("registry.csv does not end with a newline (still being written)")
     return tuple(rows)
@@ -228,7 +258,7 @@ def _headline(name: str, screen: Mapping[str, Any] | None) -> dict[str, Any]:
                 "t_stat": None, "t_label": None}
     return {"headline_label": shape.headline, "headline_value": des_shapes.resolve(screen, shape.headline),
             "headline_display": shape.display, "headline_unit": shape.unit,
-            "t_stat": des_shapes.resolve(screen, shape.t), "t_label": shape.t_label}
+            "t_stat": des_shapes.resolve(screen, shape.t) if shape.t else None, "t_label": shape.t_label}
 
 
 def _des(name: str, screen: Mapping[str, Any] | None) -> DesExtract:
@@ -291,10 +321,29 @@ def series_stamps(source: SeriesSource, frame: pd.DataFrame) -> pd.Series:
         raise ResearchDataError(f"{source.file}: the {source.time_column} column is not a date") from exc
 
 
+def portfolio_columns(source: SeriesSource, frame: pd.DataFrame, value: str, bench: str | None) -> pd.DataFrame:
+    """The source's portfolio (`constants.PortfolioRule`): the screen's own P2 construction over the member
+    columns, `vt_har_stats.portfolio` divided by the portfolio's own winsorised sd, for the value and the benchmark
+    suffix; a member with a missing value makes the whole series unusable (the screen's panel has none)."""
+    header = list(frame.columns)
+    out = frame.loc[:, [source.time_column, *(c for c in frame.columns if c in (source.guard_column,))]].copy()
+    for suffix in (value, *([bench] if bench else [])):
+        members = list(source.members(header, suffix))
+        block = frame.loc[:, members].to_numpy(dtype=float)
+        if not np.isfinite(block).all():
+            raise ResearchDataError(f"{source.file}: a {suffix} member column holds an empty or non-finite value")
+        combined = vt_har_stats.portfolio(block)
+        out[suffix] = combined / float(vt_har_stats.scale(combined))
+    return out
+
+
 def _counts(rows: Sequence[RegistryRow]) -> RegistryCounts:
     badges = [verdict_parts(r.verdict)[0] for r in rows]
+    edges = [r.tag == "edge" for r in rows]
     return RegistryCounts(rows=len(rows), registered=sum(r.registered for r in rows), passed=badges.count("PASS"),
-                          failed=badges.count("FAIL"), checks=badges.count("CHECK"))
+                          failed=badges.count("FAIL"), checks=badges.count("CHECK"), edges=sum(edges),
+                          overlays=sum(r.tag == "overlay" for r in rows),
+                          passed_edges=sum(e and b == "PASS" for e, b in zip(edges, badges)))
 
 
 # ---------------------------------------------------------------- the service
@@ -348,7 +397,13 @@ class ResearchService:
 
     def registry(self) -> RegistryView:
         rows = self.registry_rows()
-        return RegistryView(counts=_counts(rows), rows=list(rows))
+        return RegistryView(counts=_counts(rows), rows=list(rows), acceptances=self.acceptances(rows))
+
+    def acceptances(self, rows: Sequence[RegistryRow]) -> AmendmentAcceptances:
+        """The accepted amendments, each re-hashed now (`services.amendments`)."""
+        text = self._read(self.results / "amendment_acceptances.md", "text", amendments.SOURCE)
+        return amendments.acceptances(self.root, text, rows,
+                                      hasher=lambda path: self._read(path, "sha256", path.name))
 
     def _row(self, name: str) -> RegistryRow:
         if not safe_name(name):
@@ -418,7 +473,8 @@ class ResearchService:
             name=row.name, registered=row.registered, verdict=row.verdict, verdict_badge=badge, verdict_note=note,
             n=row.n, p=row.p, control_p=row.control_p, bonferroni_p=row.bonferroni_p, holm_p=row.holm_p,
             bh_q=row.bh_q, spec=row.spec, spec_sha256=row.spec_sha256, spec_sha_ok=row.spec_sha_ok,
-            spec_rehash_ok=check.ok, screen=check.screen if screen is not None else None,
+            spec_rehash_ok=check.ok, tag=row.tag, amendment_files=list(row.amendment_files),
+            amendments_ok=row.amendments_ok, screen=check.screen if screen is not None else None,
             round=self._round(row.name)[0], pass_checks=_own_pass_checks(row.name, screen),
             **_headline(row.name, screen), series_kind=source.kind if source else None,
             series_costs=sorted(source.values) if source else [],
@@ -477,14 +533,33 @@ class ResearchService:
 
     # series -----------------------------------------------------------------
 
-    def _series_frame(self, name: str, source: SeriesSource, columns: list[str]) -> pd.DataFrame:
+    def _series_file(self, name: str, source: SeriesSource) -> pd.DataFrame:
         frame = self._read(self.screens / source.file, "csv", source.file)
         if frame is None:
             raise ResearchDataError(f"the series file {source.file} for {name} was not found")
-        missing = [c for c in columns if c not in frame.columns]
-        if missing:
-            raise ResearchDataError(f"{source.file} lacks the columns {', '.join(missing)}")
-        return frame.loc[:, columns]
+        return frame
+
+    def _series_frame(self, name: str, source: SeriesSource, cost: int) -> tuple[pd.DataFrame, str, str | None]:
+        """The rows and columns one series reads at `cost`: (frame, value column, benchmark column or None). A
+        portfolio source gets its value and benchmark computed into those two columns (`portfolio_columns`)."""
+        raw = self._series_file(name, source)
+        value, bench = source.values[cost], source.bench.get(cost)
+        extra = [c for c in (source.guard_column, source.void_column) if c]
+        wanted = [source.time_column, *extra, *source.columns(list(raw.columns), cost)]
+        if source.portfolio is None:
+            wanted = [source.time_column, value, *([bench] if bench else []), *extra]
+        missing = [c for c in wanted if c not in raw.columns]
+        if missing or (source.portfolio is not None and not source.members(list(raw.columns), value)):
+            raise ResearchDataError(f"{source.file} lacks the columns {', '.join(missing) or value}")
+        frame = raw.loc[:, wanted]
+        if source.void_column:
+            void = frame[source.void_column]
+            if not pd.api.types.is_bool_dtype(void):
+                raise ResearchDataError(f"{source.file}: the {source.void_column} column is not True or False")
+            frame = frame.loc[~void]
+        if source.portfolio is not None:
+            frame = portfolio_columns(source, frame, value, bench)
+        return frame, value, bench
 
     def series(self, name: str, cost: int) -> HypothesisSeries:
         self._row(name)
@@ -494,10 +569,7 @@ class ResearchService:
         if cost not in source.values:
             raise UnknownNameError(f"{name} has no series at cost {cost}; recorded costs: "
                                    f"{', '.join(str(c) for c in sorted(source.values))}")
-        value, bench = source.values[cost], source.bench.get(cost)
-        columns = [source.time_column, value, *([bench] if bench else []),
-                   *([source.guard_column] if source.guard_column else [])]
-        frame = self._series_frame(name, source, columns)
+        frame, value, bench = self._series_frame(name, source, cost)
         frame = frame.assign(**{value: frame[value].fillna(0.0)}) if source.void_as_zero else frame.dropna(subset=[value])
         stamps = series_stamps(source, frame)
         if (stamps >= IS_END).any():
@@ -527,7 +599,8 @@ class ResearchService:
                 diffs.append(abs(stored - mine) if stored is not None else 0.0)
             complete = complete and row.family_k == k
             out.append(MultipleTestingRow(
-                name=row.name, rank=rank, p=row.p, bonferroni_p=row.bonferroni_p, holm_p=row.holm_p, bh_q=row.bh_q,
+                name=row.name, tag=row.tag, rank=rank, p=row.p, bonferroni_p=row.bonferroni_p, holm_p=row.holm_p,
+                bh_q=row.bh_q,
                 computed_bonferroni=b, computed_holm=h, computed_bh=q, bonferroni_line=FAMILY_ALPHA / k,
                 holm_line=FAMILY_ALPHA / (k - rank + 1), bh_line=rank * FAMILY_ALPHA / k))
         worst = max(diffs, default=0.0)

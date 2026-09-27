@@ -8,7 +8,7 @@ import { ReadOnlyValue } from '../../chrome/Field'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import { readBalance } from '../../tiles/BalanceCheck'
-import { BADGE, RUN } from './copy'
+import { BADGE, RUN } from '../../copy/runs'
 import { balanceBadge, checkText, checkTone, runTags } from './model'
 import { coverageOf, runFacts, type RunDetail } from './runModel'
 

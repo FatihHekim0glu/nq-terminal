@@ -2,7 +2,8 @@
 // and a portfolio upload screen for the counts row): the red function bar with an amber `<Enter filter>`
 // field, `96) Actions` and `99) Help`; a parameter row with the strategy and balance filters and the
 // counts; the ledger rows from GET /api/ledger, newest first, with a weekday on the date, the balance in
-// colour and text and the anchor pair status; then the anchor pairs themselves. Enter, a double click or
+// colour and text and the anchor pair status; then the anchor pairs themselves. `98) Export` saves the
+// shown rows as CSV (the grid's columns, numbers at full precision). Enter, a double click or
 // Number <GO> on a row opens RUN for its run. Read only: the ledger is written by ledger_append alone.
 import { useMemo, useState } from 'react'
 import { useLedger } from '../../api/queries'
@@ -11,9 +12,12 @@ import { AmberField, DropdownField, ParamRow } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
+import { exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import MonitorGrid from '../../grids/MonitorGrid'
-import { LEDG, LEDG_HELP_LINE } from './copy'
+import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import { gridCsv } from '../../grids/gridCsv'
+import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
+import { LEDG, LEDG_HELP_LINE } from '../../copy/ledg'
 import AnchorPairs from './AnchorPairs'
 import { ledgerColumns } from './ledgerColumns'
 import {
@@ -37,7 +41,15 @@ const rowLabel = (r: LedgerRow) => r.run_id
 const openRun = (r: LedgerRow) => requestLine(`${r.run_id} RUN`)
 const BALANCE_OPTIONS = BALANCE_FILTERS.map((f) => ({ value: f, label: f === 'all' ? LEDG.all : f }))
 
-function LedgBar({ filter, onFilter }: { readonly filter: string; readonly onFilter: (v: string) => void }) {
+const EXPORT_FILE = 'ledger.csv'
+
+interface LedgBarProps {
+  readonly filter: string
+  readonly onFilter: (v: string) => void
+  readonly onExport: () => void
+}
+
+function LedgBar({ filter, onFilter, onExport }: LedgBarProps) {
   const actions = usePanelActions()
   return (
     <FunctionBar
@@ -54,6 +66,7 @@ function LedgBar({ filter, onFilter }: { readonly filter: string; readonly onFil
             { label: PANEL.forward, onSelect: () => actions.forward() },
           ],
         },
+        { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, onRun: onExport },
         { n: FUNCTION_NUMBERS.help, label: FUNCTION_BAR.help, onRun: () => requestLine(LEDG_HELP_LINE) },
       ]}
     />
@@ -66,22 +79,45 @@ interface Filters {
   readonly balance: BalanceFilter
 }
 
-function Ledger({ view, filters }: { readonly view: LedgerView; readonly filters: Filters }) {
-  const anchors = useMemo(() => anchorsByRun(view.anchor_pairs), [view.anchor_pairs])
+const NO_ROWS: readonly LedgerRow[] = []
+
+/**
+ * The shown rows (newest first, filtered), every column (98) Export saves them all) and the columns the
+ * grid shows: all of them when the panel is wide enough, else the compact set (no sideways scroll).
+ */
+function useLedgerView(view: LedgerView | undefined, filters: Filters, width: number | null) {
+  const pairs = view?.anchor_pairs
+  const anchors = useMemo(() => anchorsByRun(pairs ?? []), [pairs])
   const columns = useMemo(() => ledgerColumns(anchors), [anchors])
+  const compact = width !== null && width < gridWidth(columns)
+  const shownColumns = useMemo(() => (compact ? ledgerColumns(anchors, true) : columns), [compact, anchors, columns])
   const rows = useMemo(
     () =>
-      newestFirst(view.rows).filter(
-        (r) => matchesLedgerFilter(r, filters.text) && matchesBalance(r, filters.balance) && (filters.strategy === ALL || r.strategy === filters.strategy),
-      ),
-    [view.rows, filters],
+      view
+        ? newestFirst(view.rows).filter(
+            (r) => matchesLedgerFilter(r, filters.text) && matchesBalance(r, filters.balance) && (filters.strategy === ALL || r.strategy === filters.strategy),
+          )
+        : NO_ROWS,
+    [view, filters],
   )
+  return { columns, shownColumns, compact, rows }
+}
+
+interface LedgerProps {
+  readonly view: LedgerView
+  readonly rows: readonly LedgerRow[]
+  readonly columns: readonly MonitorColumn<LedgerRow>[]
+  readonly compact: boolean
+}
+
+function Ledger({ view, rows, columns, compact }: LedgerProps) {
   if (!view.ledger_found) return <p className="run-msg" role="status">{LEDG.missing}</p>
   return (
     <>
       <div className="ledg-grid">
         <MonitorGrid label={fillCopy(LEDG.gridLabel, { n: rows.length })} rows={rows} columns={columns} rowId={rowId} rowLabel={rowLabel} onOpen={openRun} emptyText={LEDG.empty} />
       </div>
+      {compact ? <p className="runs-note">{LEDG.compactNote}</p> : null}
       <AnchorPairs pairs={view.anchor_pairs} />
     </>
   )
@@ -101,9 +137,12 @@ export default function LedgScreen(_props: ScreenProps) {
   const view = query.data
   const counts = ledgerCounts(view?.rows ?? [])
   const strategies = useMemo(() => strategyOptions(view), [view])
+  const screen = useElementWidth()
+  const { columns, shownColumns, compact, rows } = useLedgerView(view, filters, screen.width)
+  const onExport = () => exportCsv(EXPORT_FILE, gridCsv(columns, rows), rows.length)
   return (
-    <div className="runs-screen ledg-screen" data-screen="LEDG">
-      <LedgBar filter={text} onFilter={setText} />
+    <div className="runs-screen ledg-screen" data-screen="LEDG" ref={screen.ref}>
+      <LedgBar filter={text} onFilter={setText} onExport={onExport} />
       <ParamRow label={LEDG.paramsLabel}>
         <DropdownField label={LEDG.strategyLabel} value={strategy} options={strategies} onChange={setStrategy} />
         <DropdownField label={LEDG.balanceLabel} value={balance} options={BALANCE_OPTIONS} onChange={(v) => setBalance(v as BalanceFilter)} />
@@ -112,7 +151,7 @@ export default function LedgScreen(_props: ScreenProps) {
       <p className="runs-note">{LEDG.note}</p>
       {query.error ? <p className="run-msg" role="status">{fillCopy(LEDG.failed, { detail: query.error.detail })}</p> : null}
       {query.isPending ? <p className="run-msg" role="status">{LEDG.loading}</p> : null}
-      {view ? <Ledger view={view} filters={filters} /> : null}
+      {view ? <Ledger view={view} rows={rows} columns={shownColumns} compact={compact} /> : null}
     </div>
   )
 }

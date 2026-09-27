@@ -267,3 +267,54 @@ def test_protected_project_folders_are_refused(monkeypatch, part):
     monkeypatch.setenv(paths.ENV, str(folder))
     with pytest.raises(ValueError, match="refused dump folder"):
         paths.dump_dir(None)
+
+
+# ---------- Phase 8: EQ performance difference, RR volatility extremes, MV3 (market dumps) ----------
+
+def test_performance_difference_reference_by_hand():
+    r, b = np.array([0.01, -0.02, 0.03, 0.0]), np.array([0.0, 0.01, np.nan, 0.02])
+    got = reference.performance_difference(r, b, "A")  # a gap in the benchmark stays a gap
+    assert got[:2] == pytest.approx([0.01, -0.02]) and math.isnan(got[2]) and got[3] == pytest.approx(-0.01)
+    compounded = refs_for(doc("B", r=[0.1, 0.1, -0.1], bench=[0.0, 0.2, 0.0]))["perf_difference"].value
+    assert compounded == pytest.approx([0.1, 1.21 - 1.2, 1.089 - 1.2])
+
+
+def test_born_failing_a_perf_difference_off_by_one_session_fails():
+    r, b = [0.01, -0.02, 0.03, 0.0], [0.0, 0.01, 0.0, 0.02]
+    right = refs_for(doc("A", r=r, bench=b))["perf_difference"].value
+    shifted = [right[0]] + right[:-1]
+    rows = compare.compare_case(dumps.parse_case(doc("A", r=r, bench=b, ours={"perf_difference": shifted})))
+    assert next(row for row in rows if row.metric == "perf_difference").status == FAIL
+
+
+def test_rolling_volatility_extremes_are_the_line_max_and_min():
+    rng = np.random.default_rng(7)
+    r = (0.01 * rng.standard_normal(300)).tolist()
+    refs = refs_for(doc("B", r=r))
+    line = np.array(refs["rolling_vol_63"].value[62:], dtype=float)
+    assert refs["rolling_vol_63_hi"].value == pytest.approx(line.max(), rel=1e-12)
+    assert refs["rolling_vol_63_lo"].value == pytest.approx(line.min(), rel=1e-12)
+    assert "rolling_vol_252_hi" in refs
+
+
+def _market(ours: dict) -> dict:
+    return {"schema": dumps.SCHEMA, "case": "market_hand", "kind": "market", "source": "hand-built",
+            "inputs": {"dates": ["2020-01-02", "2020-01-03", "2020-01-06", "2020-01-07"],
+                       "r": [None, 0.01, -0.02, 0.005], "window": 2}, "values": {"ours": ours}, "missing": {}}
+
+
+def test_market_rv_reference_by_hand_and_born_failing():
+    sd = lambda a, b: float(np.std([a, b], ddof=1)) * math.sqrt(252)  # noqa: E731 - one-line helper
+    good = {"rv": [None, None, sd(0.01, -0.02), sd(-0.02, 0.005)], "rv_last": sd(-0.02, 0.005)}
+    rows = compare.compare_bundle(dumps.parse_bundle(_market(good)))
+    assert {row.status for row in rows} == {PASS}
+    bad = {**good, "rv_last": good["rv_last"] * math.sqrt(365 / 252)}
+    rows = compare.compare_bundle(dumps.parse_bundle(_market(bad)))
+    assert next(row for row in rows if row.metric == "rv_last").status == FAIL
+
+
+def test_a_market_dump_with_mismatched_inputs_is_refused():
+    broken = _market({})
+    broken["inputs"]["dates"] = broken["inputs"]["dates"][:2]
+    with pytest.raises(dumps.DumpError, match="market dump"):
+        dumps.parse_bundle(broken)

@@ -23,7 +23,7 @@ import { saveText } from '../../chrome/download'
 import OosLogGrid from './OosLogGrid'
 import OpeningsCard from './OpeningsCard'
 import { actionsItem } from './panelMenu'
-import { callerOptions, entriesCsv, newestFirst, sinceValid, swimlaneData, type OosLog } from './oosModel'
+import { callerOptions, entriesCsv, newestFirst, severityLegend, sinceValid, swimlaneData, type OosLog } from './oosModel'
 import './oos.css'
 
 type View = 'log' | 'timeline'
@@ -45,6 +45,20 @@ function Counts({ log }: { readonly log: OosLog | undefined }) {
       <span>{fillCopy(OOS.totalReads, { n: log.total })}</span>
       <span>{fillCopy(OOS.matched, { n: log.matched })}</span>
     </span>
+  )
+}
+
+/** The R column's house levels (from the API) with their counts over the whole log. */
+function SeverityLegend({ log }: { readonly log: OosLog }) {
+  const items = useMemo(() => severityLegend(log.severity_levels, log.severity_counts), [log.severity_levels, log.severity_counts])
+  if (items.length === 0) return null
+  return (
+    <div className="oos-legend">
+      <span className="oos-legend-title" aria-hidden="true">{OOS.severityLegendTitle}</span>
+      <ul aria-label={OOS.severityLegendLabel}>
+        {items.map((i) => <li key={i.level} className={`oos-sev-${i.level}`}>{i.text}</li>)}
+      </ul>
+    </div>
   )
 }
 
@@ -72,7 +86,7 @@ function Body({ log, view, lanes, panelId }: BodyProps) {
   const rows = useMemo(() => newestFirst(log.entries), [log.entries])
   const timeline = useMemo(() => swimlaneData(log.entries, lanes), [log.entries, lanes])
   const empty = log.log_present ? OOS.empty : OOS.noLog
-  if (view === 'log') return <OosLogGrid rows={rows} emptyText={empty} panelId={panelId || undefined} />
+  if (view === 'log') return <OosLogGrid rows={rows} emptyText={empty} panelId={panelId || undefined} levels={log.severity_levels} />
   if (log.entries.length === 0) return <p className="oos-message">{empty}</p>
   return (
     <div className="oos-timeline">
@@ -132,6 +146,7 @@ export default function OosScreen(_props: ScreenProps) {
       </ParamRow>
       <OpeningsCard />
       {log ? <Notes log={log} /> : null}
+      {log ? <SeverityLegend log={log} /> : null}
       <div className="oos-body">
         {query.isError ? (
           <p className="oos-message" role="alert">{fillCopy(OOS.error, { detail: query.error.detail })}</p>

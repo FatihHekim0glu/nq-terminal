@@ -64,6 +64,19 @@ function LadderBox({ detail, onTab }: { readonly detail: HypothesisDetail; reado
   )
 }
 
+/** The spec's accepted amendments and whether each binds to its spec and result (the registry's check). */
+function amendmentsText(card: HypothesisDetail['card']): ReactNode {
+  const r = DES.registration
+  if (card.amendment_files.length === 0) return r.none
+  const ok = card.amendments_ok
+  return (
+    <>
+      {card.amendment_files.join(', ')}{' '}
+      <span className={ok === false ? 'tone-down' : ok ? 'tone-up' : undefined}>{ok === false ? r.amendmentsBad : ok ? r.amendmentsOk : r.amendmentsUnknown}</span>
+    </>
+  )
+}
+
 function RegistrationBox({ detail }: { readonly detail: HypothesisDetail }) {
   const actions = usePanelActions()
   const { card } = detail
@@ -72,6 +85,8 @@ function RegistrationBox({ detail }: { readonly detail: HypothesisDetail }) {
     [r.registered, card.registered ? r.yes : r.no],
     [r.verdict, <VerdictBadge badge={card.verdict_badge} />],
     ...(card.verdict_note ? [[r.note, card.verdict_note] as const] : []),
+    [r.tag, card.tag === 'overlay' ? r.tagOverlay : card.tag],
+    [r.amendments, amendmentsText(card)],
     [r.round, card.round === null ? MISSING : String(card.round)],
     [r.spec, card.spec],
     [r.sha, <span title={card.spec_sha256}>{shortSha(card.spec_sha256)} <ShaChecks ok={card.spec_sha_ok} rehash={card.spec_rehash_ok} /></span>],

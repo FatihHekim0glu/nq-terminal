@@ -4,6 +4,7 @@
 // is [POST HOC] and names its unit; the slippage table holds real fills only, as the API sends them.
 import { useId, useMemo, useState, type ReactNode } from 'react'
 import type { ApiError } from '../../api/client'
+import { useRun } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import LineStack from '../../charts/LineStack'
 import { ToggleGroup } from '../../chrome/Field.buttons'
@@ -11,7 +12,7 @@ import { TEAR, TEAR_BOOKS as B } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import {
-  exposureStack, groupLadder, hasTrades, sensitivityLadder, slippageRows, tradeStatRows, waterfallRows,
+  exposureStack, groupLadder, hasTrades, sensitivityLadder, slippageView, tradeStatRows, waterfallRows,
   type Grouping, type RunCosts, type RunExposure, type RunTrades,
 } from './tearBooks'
 import { formatNumber } from './tearFormat'
@@ -56,13 +57,16 @@ function Rows({ caption, rows }: { readonly caption: string; readonly rows: Read
   )
 }
 
-function SlippageTable({ trades }: { readonly trades: RunTrades }) {
-  const rows = useMemo(() => slippageRows(trades), [trades])
+/** TA6 (ARCHITECTURE s4): the real-fill rows of this run's own strategy only, the sample named. */
+function SlippageTable({ trades, strategy }: { readonly trades: RunTrades; readonly strategy: string | null }) {
+  const view = useMemo(() => slippageView(trades, strategy), [trades, strategy])
   const C = B.slippageCols
+  if (view.kind === 'none') return <p className="tear-note">{view.caption}</p>
+  const rows = view.rows
   return (
     <div className="nqt-grid-scroll tear-table">
       <table className="nqt-grid">
-        <caption className="tear-caption">{`${B.slippageTitle}, ${trades.slippage.unit}`}</caption>
+        <caption className="tear-caption">{view.caption}</caption>
         <thead>
           <tr>
             <th scope="col">{C.name}</th>
@@ -89,6 +93,8 @@ function SlippageTable({ trades }: { readonly trades: RunTrades }) {
 }
 
 function TradesCard({ trades, runId }: { readonly trades: RunTrades; readonly runId: string }) {
+  const run = useRun(runId)
+  const strategy = run.data?.summary.strategy ?? null
   const [grouping, setGrouping] = useState<Grouping>(trades.by_hour ? 'hour' : 'weekday')
   const ladder = useMemo(() => groupLadder(trades, grouping, runId), [trades, grouping, runId])
   const rows = useMemo(() => tradeStatRows(trades), [trades])
@@ -105,9 +111,9 @@ function TradesCard({ trades, runId }: { readonly trades: RunTrades; readonly ru
       {trades.hour_note ? <p className="tear-note">{trades.hour_note}</p> : null}
       <ToggleGroup label={B.groupLabel} options={options} value={grouping} onChange={(v) => setGrouping(v as Grouping)} />
       {ladder ? <div className="tear-chart tear-chart-short"><BarLadder data={ladder} chartId={chartId('tear-group', uid)} /></div> : null}
-      <SlippageTable trades={trades} />
+      {run.data || run.isError ? <SlippageTable trades={trades} strategy={strategy} /> : null}
       <p className="tear-note">{s.label}</p>
-      {s.live_plumbing_rows_skipped > 0 ? <p className="tear-note">{fillCopy(B.slippagePlumbing, { n: s.live_plumbing_rows_skipped })}</p> : null}
+      {strategy === 'volmanaged' && s.live_plumbing_rows_skipped > 0 ? <p className="tear-note">{fillCopy(B.slippagePlumbing, { n: s.live_plumbing_rows_skipped })}</p> : null}
     </Card>
   )
 }

@@ -32,6 +32,17 @@ export interface HeatmapInput {
    * They are drawn, but the summary's low and high come from the other rows only.
    */
   readonly derivedRows?: number
+  /**
+   * CORR in sector order: a heading over each run of columns (`from` to `to`, inclusive), drawn in a row
+   * above the column labels (look spec 7.8, the sector header row). Column indexes, left to right.
+   */
+  readonly columnGroups?: readonly HeatColumnGroup[]
+}
+
+export interface HeatColumnGroup {
+  readonly label: string
+  readonly from: number
+  readonly to: number
 }
 
 export interface HeatCellView {
@@ -168,13 +179,52 @@ type CustomElement =
       style: { text: string; fill: string; align: 'center'; verticalAlign: 'middle'; font: string }
     }
 
+/** Height of the column-label row above the grid, and of the group row above that. */
+const LABEL_ROW = 22
+const GROUP_ROW = 18
+
+/** The group headings, one text per span centred over it, with a 1px rule under it (a custom series). */
+function groupSeries(input: HeatmapInput, groups: readonly HeatColumnGroup[], tokens: ChartTokens): CustomSeriesOption {
+  const font = textFont(tokens)
+  const cols = input.columns.length
+  return {
+    id: 'groups',
+    type: 'custom',
+    silent: true,
+    clip: false,
+    data: [[0, 0]],
+    renderItem: (params) => {
+      const plot = params.coordSys as unknown as PlotRect
+      const edge = (i: number) => plot.x + (plot.width * i) / cols
+      const y = plot.y - LABEL_ROW - GROUP_ROW / 2
+      return {
+        type: 'group',
+        children: groups.flatMap((g) => [
+          {
+            type: 'text' as const,
+            x: (edge(g.from) + edge(g.to + 1)) / 2,
+            y,
+            style: { text: g.label, fill: tokens.color.white, align: 'center' as const, verticalAlign: 'middle' as const, font: `${font.fontSize}px ${font.fontFamily}` },
+          },
+          {
+            type: 'rect' as const,
+            shape: { x: Math.round(edge(g.from)) + 2, y: Math.round(y + GROUP_ROW / 2 - 2), width: Math.max(0, Math.round(edge(g.to + 1) - edge(g.from)) - 4), height: 1 },
+            style: { fill: tokens.color.chartAxis },
+          },
+        ]),
+      }
+    },
+  }
+}
+
 export function heatmapOption(input: HeatmapInput, tokens: ChartTokens = DEFAULT_CHART_TOKENS): EChartsOption {
   const cells = heatmapCells(input, tokens)
   const c = tokens.color
-  const series = cellSeries(input, cells, tokens)
+  const groups = input.columnGroups && input.columnGroups.length > 0 ? input.columnGroups : null
+  const series = groups ? [cellSeries(input, cells, tokens), groupSeries(input, groups, tokens)] : cellSeries(input, cells, tokens)
   return {
     ...baseOption(tokens),
-    grid: { left: rowLabelWidth(input), right: 8, top: 22, bottom: 2 },
+    grid: { left: rowLabelWidth(input), right: 8, top: LABEL_ROW + (groups ? GROUP_ROW : 0), bottom: 2 },
     xAxis: {
       type: 'category',
       position: 'top',
@@ -183,7 +233,7 @@ export function heatmapOption(input: HeatmapInput, tokens: ChartTokens = DEFAULT
       axisLabel: { ...textFont(tokens), color: c.white, interval: 0, margin: 6 },
     },
     yAxis: { type: 'category', inverse: true, data: [...input.rows], ...bareAxis(), axisLabel: rowLabel(input, tokens) },
-    series: [series],
+    series: Array.isArray(series) ? series : [series],
   }
 }
 

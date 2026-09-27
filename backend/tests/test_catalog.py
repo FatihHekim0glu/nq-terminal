@@ -3,6 +3,8 @@ plus the QA report index. Everything here runs on files in tmp_path; the real tr
 """
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import pytest
 
@@ -109,6 +111,63 @@ def test_has_answers_from_the_listing(tmp_path):
     assert catalog.has("NQ.V.0", "1m", "vendor")
     assert not catalog.has("NQ.V.0", "1m", "repaired")
     assert not catalog.has("ES.V.0", "1m", "vendor")
+
+
+def later_mtime(folder) -> None:
+    """Move the folder's own mtime one second on, as the next add, remove or rename in it would."""
+    stat = folder.stat()
+    os.utime(folder, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+
+def counted_scans(monkeypatch) -> list:
+    scans: list = []
+    real = catalog_mod.list_folder
+    monkeypatch.setattr(catalog_mod, "list_folder", lambda folder: scans.append(folder) or real(folder))
+    return scans
+
+
+def test_the_folder_is_listed_once_for_many_lookups_until_it_changes(tmp_path, monkeypatch):
+    roots = ("NQ", "ES", "YM", "RTY", "CL", "GC", "ZN", "6E")
+    for root in roots:
+        (tmp_path / f"{root}.V.0_1d_back.parquet").write_bytes(b"x")
+    scans = counted_scans(monkeypatch)
+    catalog = Catalog(tmp_path)
+    for root in roots:  # a multi-symbol request: has() and version() per symbol
+        assert catalog.has(f"{root}.V.0", "1d", "vendor")
+        assert catalog.version(f"{root}.V.0", "1d", "vendor") is not None
+    catalog.entries()
+    assert len(scans) == 1
+
+    (tmp_path / "HG.V.0_1d_back.parquet").write_bytes(b"x")
+    later_mtime(tmp_path)
+    assert catalog.has("HG.V.0", "1d", "vendor")
+    assert len(scans) == 2
+
+    (tmp_path / "HG.V.0_1d_back.parquet").unlink()
+    later_mtime(tmp_path)
+    assert not catalog.has("HG.V.0", "1d", "vendor")
+    assert catalog.version("HG.V.0", "1d", "vendor") is None
+    assert len(scans) == 3
+
+
+def test_a_rewritten_file_changes_its_version_without_a_new_listing(tmp_path, monkeypatch):
+    path = tmp_path / "NQ.V.0_1m_back.parquet"
+    path.write_bytes(b"x")
+    scans = counted_scans(monkeypatch)
+    catalog = Catalog(tmp_path)
+    before = catalog.version("NQ.V.0", "1m", "vendor")
+    path.write_bytes(b"longer content")
+    assert catalog.version("NQ.V.0", "1m", "vendor") != before
+    assert len(scans) == 1
+
+
+def test_a_missing_folder_lists_nothing_and_is_seen_once_created(tmp_path):
+    folder = tmp_path / "processed"
+    catalog = Catalog(folder)
+    assert not catalog.has("NQ.V.0", "1m", "vendor")
+    folder.mkdir()
+    (folder / "NQ.V.0_1m_back.parquet").write_bytes(b"x")
+    assert catalog.has("NQ.V.0", "1m", "vendor")
 
 
 def test_diff_series_is_born_failing_in_both_directions(tmp_path):

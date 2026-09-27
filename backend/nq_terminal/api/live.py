@@ -13,6 +13,8 @@ switch is read with `live_guards.kill_switch_on` and never touched.
   the exact `BANNER` on plumbing rows; without `file`, every journal merged.
 - `/api/live/log?file=&tail=`: parsed Nautilus log lines, account ids masked.
 - `/api/live/performance?file=`: target against actual over performance rows only (plumbing rows dropped).
+- `/api/live/routes?file=`: LIVE's routes (one per close row) and fills (the close rows' `fills`), every row
+  labelled plumbing or not, the totals over performance rows only (`services.live_routes`).
 
 `file` is matched against the discovered listing by name; a name that was not discovered gives 404.
 """
@@ -26,6 +28,7 @@ from typing import Any, Mapping
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from nq_lab import paper_plumbing
+from nq_lab.live_guards import MNQ_POINT_VALUE
 from nq_terminal.models.common import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
@@ -40,6 +43,7 @@ from nq_terminal.models.live import (
     JournalRowOut,
     LastClose,
     LiveEnv,
+    LiveRoutes,
     LiveStatus,
     LogFileInfo,
     LogLineOut,
@@ -47,7 +51,7 @@ from nq_terminal.models.live import (
     NextTimes,
     Performance,
 )
-from nq_terminal.services import journals
+from nq_terminal.services import journals, live_routes
 from nq_terminal.services.files import FileAccessError, FileCache, thaw
 from nq_terminal.settings import Settings
 
@@ -59,6 +63,8 @@ MAX_TYPE_CHARS = 40
 DEFAULT_TAIL = 500
 LOG_NOTE = "IB account ids are masked"
 PERFORMANCE_BASIS = "performance rows only (plumbing rows dropped)"
+ROUTES_BASIS = ("journal close rows: one route per row, fills as the book counted them; every row labelled, totals "
+                "over performance rows only")
 
 
 def _settings(request: Request) -> Settings:
@@ -214,3 +220,19 @@ def performance(
     series = journals.performance_series(tail.rows if present else ())
     return Performance(journal=file, present=present, empty_state=None if present else journals.empty_state(file),
                        basis=PERFORMANCE_BASIS, banner=paper_plumbing.BANNER, **series)
+
+
+@router.get("/routes", response_model=LiveRoutes)
+def routes(
+    request: Request,
+    file: str = Query(default=journals.BOOK_JOURNAL, max_length=MAX_NAME_CHARS),
+) -> LiveRoutes:
+    """Routes and fills from one journal's close rows, read only; plumbing rows labelled and out of the totals."""
+    tail = _monitor(request).journal(file)
+    present = tail is not None
+    if not present and file not in journals.EXPECTED_JOURNALS:
+        raise HTTPException(status_code=404, detail=f"no journal named {file} in live/logs")
+    found = live_routes.routes_and_fills(tail.rows if present else ())
+    return LiveRoutes(journal=file, present=present, empty_state=None if present else journals.empty_state(file),
+                      banner=paper_plumbing.BANNER, basis=ROUTES_BASIS, order_time_rule=live_routes.ORDER_TIME_RULE,
+                      point_value_usd=MNQ_POINT_VALUE, **found)

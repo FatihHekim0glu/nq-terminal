@@ -3,9 +3,10 @@
 // a weekday prefix on the date, the balance column in colour and text, the anchor pair status joined
 // from `anchor_pairs`, run links (Enter opens RUN), and an empty state that names the expected file.
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Schemas } from '../../api/types'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
+import { captureDownloads } from '../../chrome/download.testUtil'
 import { activateNumbered, resetNumbered } from '../../chrome/NumberedActions'
 import { stubLayout } from '../../grids/testing'
 import { LEDGER } from '../runs/runs.fixtures'
@@ -98,5 +99,46 @@ describe('LEDG: the run ledger', () => {
     stubApi({ '/api/ledger': { ledger_found: false, rows: [], anchor_pairs: [] } })
     mountScreen(<LedgScreen params={PARAMS} context={null} />)
     expect(await screen.findByText('No ledger yet: results/ledger.csv')).toBeTruthy()
+  })
+})
+
+describe('LEDG in a panel narrower than the full ledger (1366x768)', () => {
+  it('drops exp id, variant, window and fees rather than scroll sideways, and says so; Export keeps them', async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { width: this.classList.contains('ledg-screen') ? 1360 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+    const saved = captureDownloads()
+    try {
+      const { grid } = await mountLedg(WITH_PAIR)
+      const heads = within(grid).getAllByRole('columnheader').map((h) => h.textContent)
+      expect(heads).not.toContain('Exp id')
+      expect(heads).not.toContain('Fees (USD)')
+      expect(heads).toContain('Anchor pair')
+      expect(screen.getByText(/Columns hidden here/)).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      expect((await saved.text('ledger.csv')).split('\r\n')[0]).toContain('Exp id')
+    } finally {
+      saved.restore()
+      rect.mockRestore()
+    }
+  })
+})
+
+describe('LEDG: 98) Export', () => {
+  it('saves the shown ledger rows, newest first, as CSV with no request', async () => {
+    const { seen } = await mountLedg(WITH_PAIR)
+    const before = seen.length
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const lines = (await saved.text('ledger.csv')).split('\r\n')
+      expect(lines[0]?.startsWith('Date (UTC),Run id,')).toBe(true)
+      expect(lines[0]).toContain('Anchor pair')
+      expect(lines.slice(1).map((l) => l.split(',')[1])).toEqual([BASE.run_id, ANCHOR_ROW.run_id])
+      expect(lines[2]).toContain('IDENTICAL')
+      expect(seen.length).toBe(before)
+    } finally {
+      saved.restore()
+    }
   })
 })

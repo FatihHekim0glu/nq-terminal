@@ -19,8 +19,8 @@ type Entry = Schemas['OosLogEntry']
 
 function entry(over: Partial<Entry>): Entry {
   return {
-    caller: 'za_screen', end: '2022-01-01 00:00:00+00:00', end_epoch_s: 1640995200, is_sealed: false, key_set: 'k4',
-    line_no: 1, past_fence: false, reason: 'pre-registered za_v0 screen', rows: 3129157, sealed: null, spec_sha256: null,
+    alert: false, caller: 'za_screen', end: '2022-01-01 00:00:00+00:00', end_epoch_s: 1640995200, is_sealed: false, key_set: 'k4',
+    line_no: 1, past_fence: false, reason: 'pre-registered za_v0 screen', rows: 3129157, sealed: null, severity: 2, spec_sha256: null,
     start: '2010-09-28 00:00:00+00:00', start_epoch_s: 1285632000, symbol: 'NQ.V.0', timeframe: '1m', variant: 'repaired',
     ts_epoch_s: 1790386325, ts_utc: '2026-09-25T21:32:05.600302+00:00', ...over,
   }
@@ -29,18 +29,26 @@ function entry(over: Partial<Entry>): Entry {
 const ENTRIES = [
   entry({ line_no: 1 }),
   entry({
-    line_no: 2, caller: 'serve_sealed', is_sealed: true, past_fence: true, reason: 'confirm rebal_v1',
+    line_no: 2, caller: 'serve_sealed', is_sealed: true, past_fence: true, reason: 'confirm rebal_v1', severity: 4, alert: true,
     start: '2021-10-01 00:00:00+00:00', end: '2026-09-01 00:00:00+00:00', start_epoch_s: 1633046400, end_epoch_s: 1788220800,
     ts_utc: '2026-09-26T11:00:00+00:00',
   }),
-  entry({ line_no: 3, caller: 'terminal', reason: 'terminal display: NQ.V.0 1m vendor 2019', ts_utc: '2026-09-27T09:00:00+00:00' }),
+  entry({ line_no: 3, caller: 'terminal', reason: 'terminal display: NQ.V.0 1m vendor 2019', ts_utc: '2026-09-27T09:00:00+00:00', severity: 1 }),
 ]
 
 function log(over: Partial<Schemas['OosLog']> = {}): Schemas['OosLog'] {
   return {
     counts_by_caller: { za_screen: 1, serve_sealed: 1, terminal: 7 }, entries: ENTRIES, fence_end: '2022-01-01',
     filters: { caller: null, since: null, limit: 5000, offset: 0 }, key_sets: { k4: 3 }, log_present: true, matched: 3,
-    parse_errors: [], partial_tail: false, returned: 3, sealed_reads: 1, terminal_reads: 7, total: 3, ...over,
+    parse_errors: [], partial_tail: false, returned: 3, sealed_reads: 1, terminal_reads: 7, total: 3,
+    severity_levels: [
+      { level: 1, meaning: 'terminal display read, inside the in-sample window' },
+      { level: 2, meaning: 'research read by another caller, inside the in-sample window' },
+      { level: 3, meaning: 'window past the fence, before the in-sample start, or unreadable: check it' },
+      { level: 4, meaning: 'sealed read (spent window)' },
+    ],
+    severity_counts: { '1': 1, '2': 1, '4': 1 },
+    ...over,
   }
 }
 
@@ -78,6 +86,21 @@ function mount() {
 
 beforeEach(() => stubLayout(600))
 afterEach(() => cleanup())
+
+describe('OOS: the R severity column (Phase 8)', () => {
+  it('draws each entry\'s severity as steps with its meaning for assistive technology, and the legend', async () => {
+    routes()
+    mount()
+    const grid = await screen.findByRole('grid', { name: OOS.gridLabel })
+    await waitFor(() => expect(within(grid).getAllByRole('row').length).toBeGreaterThan(3))
+    const rows = within(grid).getAllByRole('row').slice(1)
+    expect(rows[1]!.textContent).toContain('severity 4 of 4: sealed read (spent window)')
+    expect(rows[1]!.querySelectorAll('.oos-sev-step.on')).toHaveLength(4)
+    expect(rows[0]!.querySelectorAll('.oos-sev-step.on')).toHaveLength(1)
+    const legend = screen.getByRole('list', { name: OOS.severityLegendLabel })
+    expect(within(legend).getByText('4 sealed read (spent window): 1')).toBeTruthy()
+  })
+})
 
 describe('OOS screen', () => {
   it('draws the red bar with its numbered actions and title', async () => {

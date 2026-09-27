@@ -7,7 +7,7 @@
 // Both mnemonics are already in src/commands/registry.ts (RUNS: context none; RUN: context run).
 import type { MnemonicCode } from '../../commands/registry'
 import type { ContextKind } from '../../commands/types'
-import { RUN, RUNS } from './copy'
+import { RUN, RUNS } from '../../copy/runs'
 
 export { default as RunsScreen } from './RunsScreen'
 export { default as RunScreen } from './RunScreen'

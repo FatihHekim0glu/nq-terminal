@@ -2,16 +2,19 @@
 // amber hypothesis field, the numbered trapezoid tabs `1) Profile 2) Pass checks 3) Costs and blocks
 // 4) Linked runs`, then the registration line (cyan name, verdict, tag, spec hash with its checks, round),
 // the spec's hypothesis and frozen pass bar verbatim (two lines, More opens them), and the selected page.
-// Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
+// A registered risk overlay carries [OVERLAY] beside its verdict. `98) Report` saves the description as
+// Markdown. Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
 import { useId, useMemo, useRef, useState } from 'react'
 import { useHypothesis } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
+import { saveText } from '../../chrome/download'
+import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
 import TabStrip from '../../chrome/TabStrip'
 import type { PanelLink } from '../../state/linkGroups'
-import { DES } from '../../copy/des'
+import { DES, DES_REPORT } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import DesChecks from './DesChecks'
 import DesCosts from './DesCosts'
@@ -19,6 +22,7 @@ import DesLinks from './DesLinks'
 import { DesBar, LoadError, ShaChecks, Status, Tag, VerdictBadge, roving } from './DesParts'
 import DesProfile from './DesProfile'
 import { hypothesisText, passBarText, shortSha, type HypothesisDetail } from './desModel'
+import { desReport } from './desReport'
 import { DES_NUMBERS, DES_TABS, MAX_NUMBERED_RUNS, confirmationNumber, runNumber, type DesTab } from './desNumbers'
 
 export interface HypothesisDesProps {
@@ -49,6 +53,7 @@ function Head({ detail }: { readonly detail: HypothesisDetail }) {
       <div className="des-head" data-testid="des-head">
         <h3 className="des-name">{card.name}</h3>
         <VerdictBadge badge={card.verdict_badge} />
+        {card.tag === 'overlay' ? <Tag tag={DES.overlay} /> : null}
         <Tag tag={card.registered ? DES.preReg : DES.postHoc} />
         <span className="des-spec" title={card.spec_sha256}>{fillCopy(DES.specLine, { sha: shortSha(card.spec_sha256) })}</span>
         <ShaChecks ok={card.spec_sha_ok} rehash={card.spec_rehash_ok} />
@@ -87,6 +92,12 @@ function Page({ tab, detail, link, onTab }: { readonly tab: DesTab; readonly det
   return <DesProfile detail={detail} link={link} onTab={onTab} />
 }
 
+function report(detail: HypothesisDetail): void {
+  const file = fillCopy(DES_REPORT.fileName, { name: detail.card.name })
+  const saved = saveText(file, desReport(detail), 'text/markdown;charset=utf-8')
+  postMessage(saved ? fillCopy(DES_REPORT.done, { file }) : DES_REPORT.unavailable, saved ? 'info' : 'error')
+}
+
 export default function HypothesisDes({ name, link }: HypothesisDesProps) {
   const query = useHypothesis(name)
   const actions = usePanelActions()
@@ -98,7 +109,7 @@ export default function HypothesisDes({ name, link }: HypothesisDesProps) {
   const detail = query.data
   return (
     <div className="des" ref={ref} aria-label={fillCopy(DES.bodyLabel, { name })} role="group">
-      <DesBar title={DES.title} page={page} current={name} />
+      <DesBar title={DES.title} page={page} current={name} onReport={detail ? () => report(detail) : undefined} />
       {detail ? (
         <TabStrip
           panelId={actions.panelId}

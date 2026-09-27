@@ -3,7 +3,7 @@
 // with fixed decimals, badges in colour and text. Sharpe and max drawdown are the compare stats.
 import type { MonitorColumn } from '../../grids/MonitorGrid'
 import { fillCopy } from '../../copy/workspace'
-import { RUNS } from './copy'
+import { RUNS } from '../../copy/runs'
 import {
   balanceBadge,
   checkText,

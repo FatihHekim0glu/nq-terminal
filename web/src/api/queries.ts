@@ -118,6 +118,15 @@ export const useCatalog = () => useApiQuery('/api/data/catalog', {})
 export const useUniverse = (window?: number) => useApiQuery('/api/market/universe', { query: { window } })
 export const usePairCorr = (a: string, b: string, window?: number) =>
   useApiQuery('/api/market/pair-corr', { query: { a, b, window } }, { enabled: hasId(a, b) })
+/** GP's RV22 indicator pane (MV3): one universe symbol's rolling realised volatility to 2021-12-31. */
+export const useMarketRv = (symbol: string, window: number) =>
+  useApiQuery('/api/market/rv', { query: { symbol, window } }, { enabled: hasId(symbol) })
+/** MON's 2Day sparklines: ask only for the symbols on screen (each is one gated 1m read in the backend). */
+export const useTwoDay = (symbols: ReadonlyArray<string>) =>
+  useApiQuery('/api/market/two-day', { query: { symbols: symbols.join(',') } }, { enabled: symbols.length > 0 && hasId(...symbols) })
+/** The instrument DES tabs: contract, month codes, related dates, coverage and notes; no price is read. */
+export const useInstrument = (root: string) =>
+  useApiQuery('/api/instruments/{root}', { path: { root } }, { enabled: hasId(root) })
 export const useQaIndex = () => useApiQuery('/api/qa', {})
 export const useQaReport = (name: string) =>
   useApiQuery('/api/qa/{name}', { path: { name } }, { enabled: hasId(name) })
@@ -136,3 +145,5 @@ export const useLiveLog = (file: string, tail?: number) =>
   useApiQuery('/api/live/log', { query: { file, tail } }, { ...live, enabled: hasId(file) })
 export const useLivePerformance = (file?: string) =>
   useApiQuery('/api/live/performance', { query: { file } }, live)
+/** LIVE's Routes and Fills sections from the book journal's close rows (read only: there is no order path). */
+export const useLiveRoutes = (file?: string) => useApiQuery('/api/live/routes', { query: { file } }, live)

@@ -3,7 +3,7 @@
 // every registry row with its verdict badge, the round rail, sealed confirmations in their own block,
 // Enter or Number <GO> on a row opening DES, and GET requests only.
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { stubLayout } from '../../grids/testing'
@@ -46,11 +46,14 @@ describe('REG: registry board', () => {
     await ready()
     const counts = screen.getByRole('region', { name: 'Screening criteria' })
     const count = (label: string) => within(counts).getByRole('button', { name: new RegExp(`^\\d+\\) ${label} \\d+`) }).textContent
-    expect(count('Registered hypotheses')).toMatch(/18$/)
-    expect(count('Passed own bar')).toMatch(/2$/)
-    expect(count('Failed own bar')).toMatch(/16$/)
+    expect(count('Registered hypotheses')).toMatch(/21$/)
+    expect(count('Edge hypotheses')).toMatch(/20$/)
+    expect(count('Risk overlays \\(in the family, not edges\\)')).toMatch(/1$/)
+    expect(count('Passed own bar')).toMatch(/3$/)
+    expect(count('Edges that passed their bar')).toMatch(/2$/)
+    expect(count('Failed own bar')).toMatch(/18$/)
     expect(count('Check rows, no own bar')).toMatch(/1$/)
-    expect(count('BH q below 0.05')).toMatch(/2$/)
+    expect(count('BH q below 0.05')).toMatch(/3$/)
     expect(within(counts).getByText('Registry rows')).toBeTruthy()
     expect(within(counts).getByText('[PRE-REG]')).toBeTruthy()
   })
@@ -61,9 +64,10 @@ describe('REG: registry board', () => {
     const overnight = within(rowOf('overnight_v0')).getAllByRole('gridcell').map((c) => c.textContent)
     expect(overnight).toContain('[PASS]')
     expect(overnight).toContain('0.0027')
-    expect(overnight).toContain('0.0487')
-    expect(overnight).toContain('0.0460')
-    expect(overnight).toContain('0.0244')
+    expect(overnight).toContain('0.0568')
+    expect(overnight).toContain('0.0514')
+    expect(overnight).toContain('0.0189')
+    expect(overnight).toContain('edge')
     expect(overnight).toContain('a3d6..8b19')
     expect(overnight).toContain('2,825')
     const pass = within(rowOf('overnight_v0')).getByText('[PASS]')
@@ -72,7 +76,10 @@ describe('REG: registry board', () => {
     expect(within(rowOf('za_v0')).getByText('[FAIL]').closest('td')?.classList.contains('down')).toBe(true)
     const notes = screen.getByRole('list', { name: 'Verdict notes' })
     expect(within(notes).getByText('multi-asset universe: 27 CME futures, not NQ')).toBeTruthy()
-    expect(within(notes).getAllByRole('listitem')).toHaveLength(5)
+    // Eight rows carry a verdict note, and the overlay line says what [OVERLAY] means.
+    expect(within(notes).getAllByRole('listitem')).toHaveLength(9)
+    expect(within(rowOf('vt_har_v0')).getByText('[OVERLAY]')).toBeTruthy()
+    expect(within(rowOf('vt_har_v0')).getByText('2 ok')).toBeTruthy()
   })
 
   it('keeps sealed confirmations out of the family grid, in their own block with their own alpha', async () => {
@@ -128,7 +135,7 @@ describe('REG: registry board', () => {
     fireEvent.click(within(rail).getByRole('button', { name: /Round 1 \(4\)/ }))
     await waitFor(() => expect(bodyRows()).toHaveLength(4))
     expect(within(rail).getByRole('button', { name: /Round 1 \(4\)/ }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(within(rail).getByRole('button', { name: /All rounds \(19\)/ }))
+    fireEvent.click(within(rail).getByRole('button', { name: /All rounds \(22\)/ }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Filter hypotheses by name' }), { target: { value: 'fomc' } })
     await waitFor(() => expect(bodyRows()).toHaveLength(3))
   })
@@ -136,9 +143,9 @@ describe('REG: registry board', () => {
   it('filters by a criterion and clears it when pressed again', async () => {
     stubApi()
     await ready()
-    const passed = screen.getByRole('button', { name: /Passed own bar 2/ })
+    const passed = screen.getByRole('button', { name: /Passed own bar 3/ })
     fireEvent.click(passed)
-    await waitFor(() => expect(bodyRows()).toHaveLength(2))
+    await waitFor(() => expect(bodyRows()).toHaveLength(3))
     expect(passed.getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(passed)
     await waitFor(() => expect(bodyRows()).toHaveLength(REGISTRY.counts.rows))
@@ -166,6 +173,32 @@ describe('REG: registry board', () => {
     expect(within(rowOf('overnight_v0')).getByText('[PASS]')).toBeTruthy()
     expect(within(rowOf('dtsmom_v0')).getByText('[FAIL]')).toBeTruthy()
     expect(screen.getByText(/hypothesis cards could not be read \(stub 503 for \/api\/hypotheses\)/)).toBeTruthy()
+  })
+
+  it('lists the accepted amendments, each re-hashed now, all unchanged', async () => {
+    stubApi()
+    await ready()
+    const block = screen.getByRole('region', { name: 'Accepted amendments' })
+    expect(within(block).getByText(/Accepted 2026-09-27T03:20:09Z from results\/amendment_acceptances.md: 4 amendments, all unchanged\./)).toBeTruthy()
+    expect(within(block).getAllByRole('row')).toHaveLength(5)
+    expect(within(block).getByText('experiments/vt_har_v0_amend2.json')).toBeTruthy()
+  })
+
+  it('keeps the grid inside a narrow panel (a 682px HOME cell): the lower-priority columns drop, and it says so', async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { width: this.classList.contains('reg-main') ? 660 : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+    try {
+      stubApi()
+      await ready()
+      const heads = within(board()).getAllByRole('columnheader').map((h) => h.textContent)
+      expect(heads).not.toContain('Bonf')
+      expect(heads).not.toContain('Spec sha')
+      expect(heads).toEqual(expect.arrayContaining(['Name', 'Tag', 'Verdict', 'p', 'Holm', 'BH q', 'Hash ok', 'Amend']))
+      expect(screen.getByText(/Columns hidden here/)).toBeTruthy()
+    } finally {
+      rect.mockRestore()
+    }
   })
 
   it('puts the red function bar actions on 96, 97 and 98', async () => {

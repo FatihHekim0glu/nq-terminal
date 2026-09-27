@@ -13,7 +13,7 @@ import { GRID } from '../copy/grids'
 import { fillCopy } from '../copy/workspace'
 import { usePanelActions } from '../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../chrome/PanelChrome.numbers'
-import { ROVING_ATTR, ROVING_DEFAULT_ATTR } from '../chrome/WorkspaceFocus'
+import { ROVING_ATTR, ROVING_DEFAULT_ATTR, ROVING_SCROLL_ATTR } from '../chrome/WorkspaceFocus'
 import { HEADER_ROW, buildDisplayRows, columnWidth, moveActive, numberWidthEm, type DisplayRow, type GridPos } from './MonitorGrid.model'
 import { useGridWindow, type GridScroll } from './MonitorGrid.window'
 import { useSortedRows, type SortSpec } from './MonitorGrid.sort'
@@ -59,15 +59,18 @@ export interface MonitorGridProps<Row extends RowData> {
   readonly panelId?: string
   readonly emptyText?: string
   /**
-   * `own` (default): the grid scrolls in its own box and renders a window of its rows. `panel`: a
-   * bounded grid (MON, REG) renders every row and the panel body scrolls, so the one scroll box is the
-   * panel's own Tab stop (axe scrollable-region-focusable; a grid's box holds no Tab stop in a panel).
+   * `own` (default): the grid scrolls in its own box and renders a window of its rows; the grid then
+   * takes its panel's Tab stop (data-roving-scroll), so Tab reaches that box. `panel`: a bounded grid
+   * (MON, REG) renders every row and the panel body, the panel's usual Tab stop, scrolls (axe
+   * scrollable-region-focusable either way).
    */
   readonly scroll?: GridScroll
 }
 
 const MISSING = '--'
 const roving = { [ROVING_ATTR]: '', [ROVING_DEFAULT_ATTR]: '' }
+// A grid that scrolls in its own box holds the panel's Tab stop, so that box is reachable by Tab.
+const rovingOwnScroll = { ...roving, [ROVING_SCROLL_ATTR]: '' }
 
 export function signTone(value: number | null | undefined): CellTone | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return undefined
@@ -295,7 +298,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
           aria-activedescendant={current}
           tabIndex={0}
           onKeyDown={onKeyDown}
-          {...roving}
+          {...(props.scroll === 'panel' ? roving : rovingOwnScroll)}
         >
           <colgroup>
             {numbered ? <col style={{ width: `${numberWidthEm(maxNumber)}em` }} /> : null}

@@ -18,6 +18,12 @@ import {
 import { CONFIRMATION, OVERNIGHT, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
 
 describe('formatNumber and decimalsFor', () => {
+  it('born failing: rounds an exact decimal tie half away from zero, as the other screens do', () => {
+    expect(formatNumber(2.675, 2)).toBe('2.68')
+    expect(formatNumber(-2.675, 2, true)).toBe('-2.68')
+    expect(formatNumber(-0.001, 2)).toBe('0.00')
+  })
+
   it('prints fixed decimals with an explicit plus when signed, and -- for missing values', () => {
     expect(formatNumber(2.8669734513274343, 2)).toBe('2.87')
     expect(formatNumber(2.8669734513274343, 2, true)).toBe('+2.87')

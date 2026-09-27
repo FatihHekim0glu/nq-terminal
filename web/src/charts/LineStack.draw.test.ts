@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART_TOKENS, tagPolygon } from './theme'
-import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, sharedGutter, tagBlocksLabel } from './LineStack.draw'
+import { drawCallouts, drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, sharedGutter, tagBlocksLabel } from './LineStack.draw'
 import { fakePlot, type CtxCall } from './LineStack.testUtil'
 import { timeAxisLayout } from './LineStack.time'
 
@@ -167,5 +167,29 @@ describe('sharedGutter: one value-axis width for every pane of a stack', () => {
 
   it('never goes under the 57px gutter of the look spec', () => {
     expect(sharedGutter(() => {})(0, 20)).toBe(57)
+  })
+})
+
+describe('Hi and Low callouts (look spec 7.5 RR, GV style)', () => {
+  it('draws a white dot at each point and its label beside it, Hi above and Low below', () => {
+    const u = fakePlot({ xMin: 0, xMax: 10, yMin: 10, yMax: 40, pxRatio: 2 })
+    drawCallouts(u, [{ t: 5, value: 32, label: 'Hi: 32.00' }, { t: 9, value: 14.91, label: 'Low: 14.91' }], '#FFFFFF', DEFAULT_CHART_TOKENS.font)
+    const arcs = named(u.ctx.calls, 'arc')
+    expect(arcs).toHaveLength(2)
+    expect(arcs[0]!.slice(1, 3)).toEqual([u.valToPos(5, 'x', true), u.valToPos(32, 'y', true)])
+    const texts = named(u.ctx.calls, 'fillText')
+    expect(texts.map((c) => c[1])).toEqual(['Hi: 32.00', 'Low: 14.91'])
+    expect(texts[0]![3]).toBeLessThan(u.valToPos(32, 'y', true))
+    expect(texts[1]![3]).toBeGreaterThan(u.valToPos(14.91, 'y', true))
+    expect(u.ctx.calls).toContainEqual(['set:fillStyle', '#FFFFFF'])
+  })
+
+  it('puts a label near the right edge on the left of its dot, and skips a point outside the view', () => {
+    const u = fakePlot({ xMin: 0, xMax: 10, yMin: 10, yMax: 40 })
+    drawCallouts(u, [{ t: 10, value: 20, label: 'Hi: 20.00' }, { t: 12, value: 20, label: 'Low: 20.00' }], '#FFFFFF', DEFAULT_CHART_TOKENS.font)
+    const texts = named(u.ctx.calls, 'fillText')
+    expect(texts).toHaveLength(1)
+    expect(texts[0]![2]).toBeLessThan(u.valToPos(10, 'x', true))
+    expect(u.ctx.calls).toContainEqual(['set:textAlign', 'right'])
   })
 })

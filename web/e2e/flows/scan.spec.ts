@@ -1,0 +1,128 @@
+// Born-failing cases for the flow checks (TASKS 8.1; the nq-lab project rules, rule 5): each check in
+// e2e/flows/scan.ts must catch a planted bad case and pass the matching good one before the safety and
+// rule flows trust it. No browser: these run on plain data.
+import { expect, test } from '@playwright/test'
+import {
+  actionNames,
+  chunkName,
+  FENCE_SECONDS,
+  isActionName,
+  nonGetRequests,
+  openApiNames,
+  pointsPastFence,
+  ticketControls,
+  writeOperations,
+  type OpenApiDoc,
+} from './scan.ts'
+
+const ORIGIN = 'http://127.0.0.1:4273'
+
+test.describe('action-name scan (order|submit|cancel|modify)', () => {
+  test('catches each banned word in routes, files and component names, in every casing', () => {
+    const planted: Array<readonly [string, string]> = [
+      ['route', '/api/orders'],
+      ['route', '/api/live/orders'],
+      ['operation', 'submit_order_api_orders_post'],
+      ['schema', 'OrdersSummary'],
+      ['component', 'CancelButton'],
+      ['component', 'modifyPosition'],
+      ['chunk', 'OrderTicket'],
+      ['screen', 'order-entry'],
+      ['mnemonic', 'SUBMIT'],
+      ['screen', 'cancelled_orders'],
+    ]
+    expect(actionNames(planted)).toHaveLength(planted.length)
+  })
+
+  test('passes names that only contain the letters inside another word', () => {
+    const clean: Array<readonly [string, string]> = [
+      ['class', 'border-int'],
+      ['route', '/api/runs/{run_id}/fills'],
+      ['component', 'RecorderPane'],
+      ['schema', 'LiveRouteRow'],
+      ['chunk', 'LiveScreen'],
+      ['mnemonic', 'MRET'],
+    ]
+    expect(actionNames(clean)).toEqual([])
+  })
+
+  test('reads a built chunk without its hash, so the module name is what is checked', () => {
+    expect(chunkName('/assets/OrderTicket-Ab12Cd.js')).toBe('OrderTicket')
+    expect(isActionName(chunkName('/assets/OrderTicket-Ab12Cd.js'))).toBe(true)
+    expect(chunkName('/assets/LiveScreen-Xy9.js')).toBe('LiveScreen')
+  })
+
+  test('lists the routes, operations and schemas of an OpenAPI document, and every write method', () => {
+    const doc: OpenApiDoc = {
+      paths: {
+        '/api/runs': { get: { operationId: 'runs_api_runs_get' } },
+        '/api/orders': { post: { operationId: 'place_api_orders_post' }, delete: {} },
+      },
+      components: { schemas: { RunSummary: {}, CancelRequest: {} } },
+    }
+    expect(actionNames(openApiNames(doc))).toEqual([
+      'operation: place_api_orders_post',
+      'route: /api/orders',
+      'schema: CancelRequest',
+    ])
+    expect(writeOperations(doc)).toEqual(['POST /api/orders', 'DELETE /api/orders'])
+    expect(writeOperations({ paths: { '/api/runs': { get: {} } } })).toEqual([])
+  })
+})
+
+test.describe('GET-only check', () => {
+  test('flags a write method and a request to another origin; passes same-origin GETs', () => {
+    const requests = [
+      { method: 'GET', url: `${ORIGIN}/api/runs` },
+      { method: 'POST', url: `${ORIGIN}/api/runs` },
+      { method: 'DELETE', url: `${ORIGIN}/api/live/journal` },
+      { method: 'GET', url: 'http://127.0.0.1:8765/api/runs' },
+    ]
+    expect(nonGetRequests(requests, ORIGIN)).toEqual([
+      `POST ${ORIGIN}/api/runs`,
+      `DELETE ${ORIGIN}/api/live/journal`,
+      'GET http://127.0.0.1:8765/api/runs',
+    ])
+    expect(nonGetRequests(requests.slice(0, 1), ORIGIN)).toEqual([])
+  })
+})
+
+test.describe('fence scan of served price points', () => {
+  test('flags a bar time at or after 2022-01-01 00:00 UTC, in seconds or milliseconds', () => {
+    expect(pointsPastFence({ t: [FENCE_SECONDS - 60, FENCE_SECONDS] })).toHaveLength(1)
+    expect(pointsPastFence({ rows: [{ t: [(FENCE_SECONDS + 3600) * 1000] }] })).toHaveLength(1)
+  })
+
+  test('flags a session date after 2021-12-31 in any nested row', () => {
+    expect(pointsPastFence({ sessions: ['2021-12-31', '2022-01-03'] })).toHaveLength(1)
+    expect(pointsPastFence({ rows: [{ last_date: '2022-01-03' }] })).toHaveLength(1)
+    expect(pointsPastFence({ vol_extremes: [{ hi_date: '2022-02-01T00:00:00Z' }] })).toHaveLength(1)
+  })
+
+  test('passes points that stop at the fence and ignores the exclusive request bound', () => {
+    const body = {
+      start: '2021-11-01T00:00:00Z',
+      end: '2022-01-01T00:00:00Z',
+      t: [FENCE_SECONDS - 86_400],
+      sessions: ['2021-12-30', '2021-12-31'],
+      rows: [{ last_date: '2021-12-31', as_of: '2021-12-31' }],
+    }
+    expect(pointsPastFence(body)).toEqual([])
+  })
+})
+
+test.describe('order-ticket controls', () => {
+  test('flags ticket words, and cancel unless the control is the Esc key', () => {
+    const names = [
+      'Place order',
+      'Submit',
+      'Modify target',
+      'Buy 2 MNQ',
+      'Cancel all',
+      'CANCEL key, Esc: close the list, then clear the command line',
+      '98) Export',
+      'Routes',
+    ]
+    expect(ticketControls(names)).toEqual(['Place order', 'Submit', 'Modify target', 'Buy 2 MNQ', 'Cancel all'])
+  })
+})

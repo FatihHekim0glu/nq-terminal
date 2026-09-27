@@ -20,7 +20,7 @@ import {
   benchOwnPane,
 } from './model'
 import { COMPARE_STATS, RUNS } from './runs.fixtures'
-import { RUN_TAGS } from './copy'
+import { RUN_TAGS } from '../../copy/runs'
 
 const byId = (id: string) => {
   const run = RUNS.find((r) => r.run_id === id)

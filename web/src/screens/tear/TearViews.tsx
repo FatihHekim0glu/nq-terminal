@@ -3,17 +3,18 @@
 // then the top drawdowns. RET: the return histogram with its normal fit and VaR lines, beside the
 // statistics panel. RR: rolling Sharpe over rolling volatility. MRET: the year by month heat map,
 // then the yearly totals (a house addition, labelled so).
-import { Fragment, useId, useMemo, type JSX } from 'react'
+import { Fragment, useId, useMemo, type JSX, type ReactNode } from 'react'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Distribution } from '../../charts/echarts/Distribution'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import LineStack from '../../charts/LineStack'
+import { ROVING_ATTR, ROVING_SCROLL_ATTR } from '../../chrome/WorkspaceFocus'
 import { TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrEmpty, rrStack, statsNotes, statsSections, yearlyLadder,
+  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, yearlyLadder,
   type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
@@ -24,6 +25,21 @@ interface ViewProps {
   readonly data: Analytics
   readonly name: string
   readonly link: PanelLink
+}
+
+const scrollBox = { [ROVING_ATTR]: '', [ROVING_SCROLL_ATTR]: '' }
+
+/**
+ * A table box that scrolls on its own in a short panel (the RET statistics, the top drawdowns): a
+ * named region that holds the panel's Tab stop, so the keyboard reaches and scrolls it (WCAG 2.1.1;
+ * axe scrollable-region-focusable).
+ */
+function ScrollRegion({ className, label, children }: { readonly className: string; readonly label: string; readonly children: ReactNode }) {
+  return (
+    <div className={`${className} nqt-grid-scroll`} role="region" aria-label={label} tabIndex={0} {...scrollBox}>
+      {children}
+    </div>
+  )
 }
 
 function useChartId(prefix: string): string {
@@ -49,7 +65,8 @@ function Stack({ spec, link }: { readonly spec: StackSpec; readonly link: PanelL
 
 function EqView({ data, name, link }: ViewProps) {
   const spec = useMemo(() => eqStack(data, name), [data, name])
-  const note = data.equity.bench ? TEAR_EQ.diffMissing : TEAR_EQ.benchmarkNone
+  const { bench, perf_diff: diff, perf_diff_unit: diffUnit } = data.equity
+  const note = !bench ? TEAR_EQ.benchmarkNone : diff && diffUnit ? fillCopy(TEAR_EQ.diffUnit, { unit: diffUnit }) : TEAR_EQ.diffMissing
   return (
     <>
       <Basis data={data} unit={data.equity.unit} extra={note} />
@@ -63,10 +80,11 @@ function DrawdownTable({ data }: { readonly data: Analytics }) {
   const C = TEAR_DD.cols
   const heads = [C.rank, C.peak, C.trough, C.recovery, C.depth, C.toTrough, C.toRecovery, C.length]
   const unit = data.rolling.window_unit
+  const caption = `${TEAR_DD.tableCaption}. ${fillCopy(TEAR_DD.lengthUnit, { unit })}`
   return (
-    <div className="tear-table nqt-grid-scroll">
+    <ScrollRegion className="tear-table" label={caption}>
       <table className="nqt-grid">
-        <caption className="tear-caption">{`${TEAR_DD.tableCaption}. ${fillCopy(TEAR_DD.lengthUnit, { unit })}`}</caption>
+        <caption className="tear-caption">{caption}</caption>
         <thead>
           <tr>{heads.map((h, i) => <th key={h} scope="col" className={i === 0 || i >= 4 ? 'num' : undefined}>{h}</th>)}</tr>
         </thead>
@@ -86,7 +104,7 @@ function DrawdownTable({ data }: { readonly data: Analytics }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   )
 }
 
@@ -109,7 +127,7 @@ function DdView({ data, name, link }: ViewProps) {
 function StatsTable({ data }: { readonly data: Analytics }) {
   const sections = useMemo(() => statsSections(data), [data])
   return (
-    <div className="tear-stats nqt-grid-scroll">
+    <ScrollRegion className="tear-stats" label={TEAR_RET.statsLabel}>
       <table className="nqt-grid">
         <caption className="sr-only">{TEAR_RET.statsLabel}</caption>
         <colgroup>
@@ -132,7 +150,7 @@ function StatsTable({ data }: { readonly data: Analytics }) {
       {data.validity.psr.at_benchmark_note ? (
         <p className="tear-note">{fillCopy(TEAR_RET.psrBenchNote, { note: data.validity.psr.at_benchmark_note })}</p>
       ) : null}
-    </div>
+    </ScrollRegion>
   )
 }
 
@@ -143,6 +161,7 @@ function RetView({ data, name }: ViewProps) {
   return (
     <>
       <Basis data={data} unit={h.unit} extra={fillCopy(TEAR_RET.binRule, { rule: h.bin_rule })} />
+      {data.distribution.series.t.length > 0 ? <p className="tear-basis">{fillCopy(TEAR_RET.seriesNote, { unit: displayUnit(data.distribution.series.unit) })}</p> : null}
       <div className="tear-split">
         <div className="tear-chart">{input ? <Distribution data={input} chartId={chartId} /> : null}</div>
         <StatsTable data={data} />
@@ -177,6 +196,9 @@ function RrView({ data, name, link }: ViewProps) {
     <>
       <Basis data={data} unit={`${r.sharpe_unit}; ${displayUnit(r.vol_unit)}`} extra={empty.longNote ? `${full} ${empty.longNote}` : full} />
       {empty.panes.length > 0 ? <EmptyPanes title={spec.title} empty={empty} /> : <Stack spec={spec} link={link} />}
+      <ul className="tear-extremes" aria-label={TEAR_RR.extremesLabel}>
+        {rrExtremes(data).map((line) => <li key={line}>{line}</li>)}
+      </ul>
     </>
   )
 }

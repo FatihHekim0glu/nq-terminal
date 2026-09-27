@@ -65,7 +65,7 @@ describe('MT: multiple-testing view', () => {
     stubApi()
     await ready()
     const head = screen.getByRole('region', { name: 'Multiple-testing family' })
-    expect(within(head).getByText(/Family k 18, alpha 0.05/)).toBeTruthy()
+    expect(within(head).getByText(/Family k 21, alpha 0.05/)).toBeTruthy()
     expect(within(head).getByText(/Boundary lines match the API at every rank/)).toBeTruthy()
     expect(within(head).getByText('[PRE-REG]')).toBeTruthy()
     expect(within(head).getByText('[POST HOC]')).toBeTruthy()
@@ -75,9 +75,9 @@ describe('MT: multiple-testing view', () => {
     stubApi()
     await ready()
     const first = within(bodyRows()[0]!).getAllByRole('gridcell').map((c) => c.textContent)
-    expect(first).toEqual(['1)', '1', 'eomtsy_v0', '0.0010', '0.0028', '0.0028', '0.0028', '0.0174', '0.0174', '0.0174', 'Bonferroni, Holm, BH'])
+    expect(first).toEqual(['1)', '1', 'vt_har_v0', '[OVERLAY]', '0.0002', '0.0024', '0.0024', '0.0024', '0.0042', '0.0042', '0.0042', 'Bonferroni, Holm, BH'])
     const second = within(bodyRows()[1]!).getAllByRole('gridcell').map((c) => c.textContent)
-    expect(second).toEqual(['2)', '2', 'overnight_v0', '0.0027', '0.0028', '0.0029', '0.0056', '0.0487', '0.0460', '0.0244', 'Bonferroni, Holm, BH'])
+    expect(second).toEqual(['2)', '2', 'eomtsy_v0', 'edge', '0.0010', '0.0024', '0.0025', '0.0048', '0.0203', '0.0194', '0.0102', 'Bonferroni, Holm, BH'])
   })
 
   it('lists sealed confirmations apart, with their own alpha and the spent label', async () => {
@@ -107,7 +107,7 @@ describe('MT: multiple-testing view', () => {
       act(() => table().focus())
       fireEvent.keyDown(table(), { key: 'ArrowDown' })
       fireEvent.keyDown(table(), { key: 'Enter' })
-      expect(lines.at(-1)).toEqual({ line: 'overnight_v0 DES', newPanel: false })
+      expect(lines.at(-1)).toEqual({ line: 'eomtsy_v0 DES', newPanel: false })
     } finally {
       stop()
     }

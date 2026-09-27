@@ -9,6 +9,7 @@ import {
   matrixEntry,
   pairSeries,
   rootOf,
+  matrixCsv,
   sectorOrder,
 } from './model'
 
@@ -44,6 +45,21 @@ describe('corrHeatmapInput', () => {
     expect(input.rows.slice(0, 4)).toEqual(['ES', 'NQ', 'YM', 'ZT'])
     expect(input.rows.at(-1)).toBe('HE')
     expect(input.values[0]![1]).toBe(0.17036571349116403)
+  })
+
+  it('heads each sector run of columns in sector order (look spec 7.8), and none in the clustered order', () => {
+    const input = corrHeatmapInput(u, 'window', 'sector')
+    expect(input.columnGroups?.slice(0, 2)).toEqual([{ label: 'Equity', from: 0, to: 2 }, { label: 'Rates', from: 3, to: 6 }])
+    expect(input.columnGroups?.at(-1)).toEqual({ label: 'Livestock', from: 25, to: 26 })
+    expect(corrHeatmapInput(u, 'window', 'clustered').columnGroups).toBeUndefined()
+  })
+
+  it('saves the shown matrix as CSV in its order, every value as the API sent it', () => {
+    const input = corrHeatmapInput(u, 'window', 'sector')
+    const lines = matrixCsv(input).split('\r\n')
+    expect(lines[0]).toBe(['symbol', ...input.columns].join(','))
+    expect(lines).toHaveLength(28)
+    expect(lines[1]!.split(',')[2]).toBe(String(input.values[0]![1]))
   })
 
   it('refuses an order that is not a permutation of the symbols', () => {

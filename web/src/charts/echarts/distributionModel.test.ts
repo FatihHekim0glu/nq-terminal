@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { renderCustom, seriesOf, strayColours, tokenValues, uniqueTokens } from './echartsTestUtil'
-import { describeDistribution, distributionOption, distributionTable, histogramBars, type DistributionInput } from './distributionModel'
+import { describeDistribution, distributionOption, distributionTable, histogramBars, seriesTimeFormat, type DistributionInput } from './distributionModel'
 import { spreadLabels } from './shared'
 
 const T = uniqueTokens()
@@ -209,5 +209,14 @@ describe('spreadLabels (gutter label placement)', () => {
 
   it('pulls the run back up when it would pass the bottom of the pane', () => {
     expect(spreadLabels([290, 292], 14, 300)).toEqual([286, 300])
+  })
+})
+
+describe('seriesTimeFormat: the per-period series axis (look spec 7.5 RET)', () => {
+  const day = 86_400
+  it('labels years over a long series, month and year over months, day and month over weeks', () => {
+    expect(seriesTimeFormat([0, 12 * 365 * day])).toBe('{yyyy}')
+    expect(seriesTimeFormat([0, 200 * day])).toBe('{MMM} {yy}')
+    expect(seriesTimeFormat([0, 50 * day])).toBe('{dd} {MMM}')
   })
 })

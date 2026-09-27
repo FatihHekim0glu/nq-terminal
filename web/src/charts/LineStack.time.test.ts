@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { axisDecimals, formatAxisValue, linearTicks, logTicks, timeAxisLayout } from './LineStack.time'
+import { axisDecimals, formatAxisValue, isDailyAxis, linearTicks, logTicks, timeAxisLayout } from './LineStack.time'
 
 const utc = (y: number, m: number, d = 1, h = 0, min = 0) => Date.UTC(y, m - 1, d, h, min) / 1000
 const iso = (t: number) => new Date(t * 1000).toISOString()
@@ -37,12 +37,42 @@ describe('two-row time axis (look spec 6.1)', () => {
     }
   })
 
-  it('one month of daily data: every second day in row 1, month and year in row 2', () => {
+  it('one month of daily data: every second day as DD Mon in row 1, the year in row 2 (Phase 8 notes)', () => {
     const l = timeAxisLayout(utc(2019, 3, 1), utc(2019, 3, 29), 1200)
     expect(l.level).toBe('day')
-    expect(l.row1.slice(0, 3).map((x) => x.text)).toEqual(['1', '3', '5'])
+    expect(l.row1.slice(0, 3).map((x) => x.text)).toEqual(['01 Mar', '03 Mar', '05 Mar'])
     expect(l.row1[0]!.at).toBe(utc(2019, 3, 1) + 43_200)
-    expect(l.row2.map((x) => x.text)).toEqual(['Mar 2019'])
+    expect(l.row2.map((x) => x.text)).toEqual(['2019'])
+  })
+
+  it('a short daily range across a year end: DD Mon labels, a divider at the new year', () => {
+    const l = timeAxisLayout(utc(2020, 12, 14), utc(2021, 1, 15), 900)
+    expect(l.level).toBe('day')
+    expect(l.row1.every((x) => /^\d{2} (Dec|Jan)$/.test(x.text))).toBe(true)
+    expect(l.row2.map((x) => x.text)).toEqual(['2020', '2021'])
+    expect(l.dividers.map(iso)).toEqual(['2021-01-01T00:00:00.000Z'])
+  })
+
+  it('daily data over a few sessions: day labels, never clock times (born failing: hours read as intraday)', () => {
+    const min = utc(2026, 9, 28)
+    const max = utc(2026, 9, 30)
+    expect(timeAxisLayout(min, max, 1300).level).toBe('hour')
+    const daily = timeAxisLayout(min, max, 1300, undefined, true)
+    expect(daily.level).toBe('day')
+    // The last session sits at the view's end, where its label has no room (LineStack pads its view).
+    expect(daily.row1.map((x) => x.text)).toEqual(['28 Sep', '29 Sep'])
+  })
+
+  it('knows a daily axis: every time at 00:00 UTC', () => {
+    expect(isDailyAxis([utc(2026, 9, 28), utc(2026, 9, 29)])).toBe(true)
+    expect(isDailyAxis([utc(2026, 9, 28), utc(2026, 9, 28, 14, 30)])).toBe(false)
+    expect(isDailyAxis([])).toBe(false)
+  })
+
+  it('gives a DD Mon label room: a day step needs at least 56px', () => {
+    // 20 days over 600px is 30px a day: the 2-day step (60px) is the first that fits a DD Mon label.
+    const l = timeAxisLayout(utc(2019, 3, 1), utc(2019, 3, 21), 600)
+    expect(l.row1.slice(0, 2).map((x) => x.text)).toEqual(['01 Mar', '03 Mar'])
   })
 
   it('one session of intraday data: HH:MM at each tick, the date centred on the day', () => {

@@ -7,8 +7,9 @@ import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { CONFIRM, REG } from '../../copy/reg'
 import { fillCopy } from '../../copy/workspace'
+import type { Schemas } from '../../api/types'
 import {
-  badgeText, formatCount, formatPValue, shortSha, verdictTone,
+  acceptanceLine, acceptanceRows, badgeText, formatCount, formatPValue, shortSha, verdictTone,
   type ConfirmRow, type Criterion, type CriterionId, type RegRow, type RoundGroup, type RoundKey,
 } from './regModel'
 
@@ -91,9 +92,11 @@ export function CriteriaBlock({ panelId, items, selected, onToggle, tag }: Crite
 /** The verdict notes of the rows shown (`dtsmom_v0: multi-asset universe ...`), nothing when none has one. */
 export function VerdictNotes({ rows }: { readonly rows: readonly RegRow[] }) {
   const noted = rows.filter((r) => r.note !== null && r.note !== '')
-  if (noted.length === 0) return null
+  const overlay = rows.some((r) => r.tag === 'overlay')
+  if (noted.length === 0 && !overlay) return null
   return (
     <ul className="reg-notes" aria-label={REG.notesLabel}>
+      {overlay ? <li className="reg-muted">{REG.overlayNote}</li> : null}
       {noted.map((r) => (
         <li key={r.name}>
           <span className="name">{r.name}</span>{REG.noteSeparator}
@@ -101,6 +104,43 @@ export function VerdictNotes({ rows }: { readonly rows: readonly RegRow[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/** The accepted amendments (results/amendment_acceptances.md), each file re-hashed now (look spec 7.2 house block). */
+export function AcceptanceBlock({ acceptances }: { readonly acceptances: Schemas['AmendmentAcceptances'] | undefined }) {
+  if (!acceptances) return null
+  const rows = acceptanceRows(acceptances)
+  const A = REG.accept
+  const heads = [A.cols.file, A.cols.spec, A.cols.rows, A.cols.accepted, A.cols.now, A.cols.unchanged]
+  return (
+    <section className="reg-confirm" aria-label={A.label}>
+      <p className="reg-band">
+        <span className="reg-band-title">{A.heading}</span>{' '}
+        <span className={acceptances.all_unchanged || !acceptances.found ? 'reg-accept-line' : 'reg-accept-line down'}>{acceptanceLine(acceptances)}</span>
+      </p>
+      {rows.length > 0 ? (
+        <div className="nqt-grid-scroll reg-confirm-scroll">
+          <table className="nqt-grid reg-confirm-table">
+            <thead>
+              <tr>{heads.map((h) => <th key={h} scope="col">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.file}>
+                  <td className="name">{r.file}</td>
+                  <td>{r.spec}</td>
+                  <td>{r.rows}</td>
+                  <td>{r.accepted}</td>
+                  <td>{r.now}</td>
+                  <td className={r.unchanged ? 'up' : 'down'}>{r.unchanged ? A.yes : A.no}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
   )
 }
 

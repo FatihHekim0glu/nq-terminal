@@ -8,11 +8,13 @@ import type { Schemas } from '../../api/types'
 import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import type { LinkGroup } from '../../chrome/WorkspaceLayouts'
+import { csvFileName, toCsv } from '../../chrome/exportCsv'
+import { useExportSource, type ExportSource } from '../../chrome/exportSource'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import BalanceCheck from '../../tiles/BalanceCheck'
 import { panelDrawdown } from '../home/homeEquity.model'
-import { RUN, RUN_TAGS } from './copy'
+import { RUN, RUN_TAGS } from '../../copy/runs'
 import { benchOwnPane, formatCount, formatFraction, formatRatio, formatUsd, signTone, type Tone } from './model'
 import type { RunDetail } from './runModel'
 
@@ -65,8 +67,17 @@ function ChartNotes({ panel }: { readonly panel: Panel }) {
   )
 }
 
+const CHART_CSV_HEAD = ['date', 'equity', 'bench_equity', 'underwater', 'bench_underwater'] as const
+
+/** 98) Export of the chart tab: the plotted series as the API sends them (equity in its unit, drawdown a fraction). */
+export function chartExport(panel: Panel, run: string): ExportSource {
+  const rows = panel.date.map((d, i) => [d, panel.equity[i], panel.bench_equity?.[i], panel.underwater[i], panel.bench_underwater?.[i]])
+  return { fileName: csvFileName(run, 'chart'), csv: toCsv(CHART_CSV_HEAD, rows), rows: rows.length }
+}
+
 function Chart({ panel, run, link }: { readonly panel: Panel; readonly run: string; readonly link: LinkGroup }) {
   const panes = usePanes(panel, run)
+  useExportSource(useMemo(() => chartExport(panel, run), [panel, run]))
   return (
     <>
       <ChartNotes panel={panel} />

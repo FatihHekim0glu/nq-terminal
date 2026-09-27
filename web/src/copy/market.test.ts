@@ -1,9 +1,9 @@
 // The market screens' copy under the shared house rules (UI_SPEC section 10): no em or en dashes and no
-// US spellings. copyRules.test.ts checks src/copy/*.ts only, and this copy sits with the screens.
+// US spellings, with a planted dash to show the check fails, and one name per universe contract.
 import { describe, expect, it } from 'vitest'
-import { findCopyViolations } from '../../copy/copyRules'
-import * as corrCopy from '../corr/copy'
-import * as monCopy from './copy'
+import { findCopyViolations } from './copyRules'
+import * as corrCopy from './corr'
+import * as monCopy from './market'
 
 describe('MON and CORR copy', () => {
   it('has no em or en dashes and no US spellings', () => {

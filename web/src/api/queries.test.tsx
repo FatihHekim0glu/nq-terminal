@@ -12,9 +12,13 @@ import {
   useApiQuery,
   useHealth,
   useHypothesisSeries,
+  useInstrument,
+  useLiveRoutes,
   useLiveStatus,
+  useMarketRv,
   useRun,
   useRunLog,
+  useTwoDay,
 } from './queries'
 
 afterEach(cleanup)
@@ -68,6 +72,32 @@ describe('hooks', () => {
     const hyp = renderHook(() => useHypothesisSeries('za_v0', 1), { wrapper: wrapper() })
     await waitFor(() => expect(run.result.current.isSuccess && hyp.result.current.isSuccess).toBe(true))
     expect(urls(spy).sort()).toEqual(['/api/hypotheses/za_v0/series?cost=1', '/api/runs/nt_x/log/decisions?offset=500&limit=500'])
+  })
+
+  it('reads the Phase 8 routes with their parameters (instrument, RV line, two-day, live routes)', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({}))
+    const hooks = [
+      renderHook(() => useInstrument('ZN'), { wrapper: wrapper() }),
+      renderHook(() => useMarketRv('NQ.V.0', 22), { wrapper: wrapper() }),
+      renderHook(() => useTwoDay(['NQ.V.0']), { wrapper: wrapper() }),
+      renderHook(() => useLiveRoutes(), { wrapper: wrapper() }),
+    ]
+    await waitFor(() => expect(hooks.every((h) => h.result.current.isSuccess)).toBe(true))
+    expect(urls(spy).sort()).toEqual([
+      '/api/instruments/ZN',
+      '/api/live/routes',
+      '/api/market/rv?symbol=NQ.V.0&window=22',
+      '/api/market/two-day?symbols=NQ.V.0',
+    ])
+  })
+
+  it('asks for nothing while the instrument, RV symbol or two-day list is empty', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({}))
+    renderHook(() => useInstrument(''), { wrapper: wrapper() })
+    renderHook(() => useMarketRv('', 22), { wrapper: wrapper() })
+    renderHook(() => useTwoDay([]), { wrapper: wrapper() })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(spy).not.toHaveBeenCalled()
   })
 
   it('surfaces a 404 as an ApiError without retrying', async () => {

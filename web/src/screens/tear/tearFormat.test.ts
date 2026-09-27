@@ -56,6 +56,17 @@ describe('units the API sends (ANALYTICS_CATALOG C1, ARCHITECTURE section 4)', (
 })
 
 describe('number formatting (look spec 3.4)', () => {
+  // One rounding rule for money on every screen: the value's shortest decimal is rounded half away
+  // from zero, as Intl.NumberFormat does on RUNS, RUN and LEDG. toFixed rounds the binary value, so
+  // 7759147.975 (stored just below .975) would show .97 here and .98 there.
+  it('born failing: rounds an exact decimal tie the way RUNS, RUN and LEDG do', () => {
+    expect(formatNumber(7759147.975, 2, { thousands: true })).toBe('7,759,147.98')
+    expect(formatNumber(-7759147.975, 2, { thousands: true })).toBe('-7,759,147.98')
+    expect(formatNumber(9823847.975, 2, { thousands: true })).toBe('9,823,847.98')
+    expect(formatNumber(1.005, 2)).toBe('1.01')
+    expect(formatNumber(-0.001, 2)).toBe('0.00')
+  })
+
   it('uses fixed decimals, an ASCII minus, and -- for a missing value', () => {
     expect(formatNumber(-5.818080911225993, 2)).toBe('-5.82')
     expect(formatNumber(0.004, 2)).toBe('0.00')

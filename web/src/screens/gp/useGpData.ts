@@ -1,10 +1,11 @@
 // The GP and GIP reads: bars through the gate, the catalog (which variants exist), RV22 from the
-// universe on daily charts that end at the fence, and the fills of a linked run. Every read is a GET
+// universe on daily charts that end at the fence, the RV22 line for the indicator pane on daily charts
+// (/api/market/rv), and the fills of a linked run. Every read is a GET
 // through the shared query hooks. A window past the fence never becomes a query: the bars read is
 // disabled and the refusal text comes from the model instead.
 import { useMemo } from 'react'
 import type { ApiError } from '../../api/client'
-import { useApiQuery, useCatalog, useRunFills, useRuns } from '../../api/queries'
+import { useApiQuery, useCatalog, useMarketRv, useRunFills, useRuns } from '../../api/queries'
 import type { SuccessOf } from '../../api/types'
 import type { CandleFill } from '../../charts/CandleChart.model'
 import {
@@ -39,6 +40,9 @@ export interface GpData {
   readonly barsError: ApiError | null
   readonly barsLoading: boolean
   readonly universeRows: SuccessOf<'/api/market/universe'>['rows'] | undefined
+  /** The RV22 line for the indicator pane (daily charts only). */
+  readonly rv: SuccessOf<'/api/market/rv'> | undefined
+  readonly rvError: ApiError | null
   readonly runs: readonly string[]
   readonly fills: readonly CandleFill[]
   readonly fillsTotal: number
@@ -76,6 +80,8 @@ export function useGpData(req: GpRequest): GpData {
   const lastDate = bars.data && bars.data.t.length > 0 ? isoDate((bars.data.t[bars.data.t.length - 1] ?? 0) * 1000) : null
   const wantRv = enabled && req.tf === '1d' && req.window.endMs === FENCE_MS && lastDate !== null
   const universe = useApiQuery('/api/market/universe', { query: { window: RV_WINDOW } }, { enabled: wantRv })
+  const wantLine = enabled && req.tf === '1d'
+  const rv = useMarketRv(wantLine && req.symbol ? req.symbol : '', RV_WINDOW)
   const runs = useRuns()
   const runIds = useMemo(() => runs.data?.map((r) => r.run_id) ?? NO_RUNS, [runs.data])
   const fills = useFills(req.root, req.runId)
@@ -85,6 +91,8 @@ export function useGpData(req: GpRequest): GpData {
     barsError: enabled ? bars.error : null,
     barsLoading: enabled && bars.isPending,
     universeRows: wantRv ? universe.data?.rows : undefined,
+    rv: wantLine ? rv.data : undefined,
+    rvError: wantLine ? rv.error : null,
     runs: runIds,
     fills: fills.fills,
     fillsTotal: fills.total,

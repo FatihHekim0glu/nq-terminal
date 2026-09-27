@@ -20,6 +20,9 @@ Where the reference libraries legitimately differ from the catalogue (ANALYTICS_
   expression, and the dump also carries `sizing_stats.max_drawdown`. The libraries and Nautilus compound, so
   their CAGR, drawdown and Calmar are compared only on Basis B cases.
 - RK2, RL1, RL2 and best or worst session are daily items and are not referenced for a monthly book.
+- EQ's performance difference and RR's rolling volatility high and low (Phase 8) have no library equivalent: the
+  references are independent numpy (running sums or products over the sessions where the benchmark has a value;
+  the extremes of empyrical's rolling volatility).
 """
 from __future__ import annotations
 
@@ -232,9 +235,36 @@ def _rolling(case: Case) -> dict:
     return out
 
 
+def performance_difference(r: np.ndarray, bench: np.ndarray, basis: str) -> list[float]:
+    """Strategy minus benchmark cumulative return; the benchmark accumulates over its own present sessions."""
+    present = ~np.isnan(bench)
+    theirs = np.full(len(r), np.nan)
+    if basis == "A":
+        mine, theirs[present] = np.cumsum(r), np.cumsum(bench[present])
+    else:
+        mine, theirs[present] = np.cumprod(1.0 + r) - 1.0, np.cumprod(1.0 + bench[present]) - 1.0
+    return (mine - theirs).tolist()
+
+
+def _extras(case: Case) -> dict:
+    out = {}
+    if case.bench is not None:
+        out["perf_difference"] = Ref(performance_difference(case.r, case.bench, case.basis),
+                                     "independent numpy: cumulative r minus cumulative benchmark (present sessions)")
+    for w in ROLL_WINDOWS:
+        if case.periods != DAILY or len(case.r) < w:
+            continue
+        vol = np.asarray(ep.roll_annual_volatility(case.r, window=w, annualization=case.periods), dtype=float)
+        vol = vol[np.isfinite(vol)]
+        if len(vol):
+            out[f"rolling_vol_{w}_hi"] = Ref(float(vol.max()), "max of empyrical.roll_annual_volatility")
+            out[f"rolling_vol_{w}_lo"] = Ref(float(vol.min()), "min of empyrical.roll_annual_volatility")
+    return out
+
+
 def series_references(case: Case) -> dict:
     refs = {}
-    for part in (_core, _by_basis, _validity, _relative, _tails, _rolling):
+    for part in (_core, _by_basis, _validity, _relative, _tails, _rolling, _extras):
         refs.update(part(case))
     return refs
 

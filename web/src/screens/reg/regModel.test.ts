@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 import type { Schemas } from '../../api/types'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import {
+  acceptanceLine,
+  acceptanceRows,
+  amendmentText,
   buildRegRows,
   confirmationRows,
   criteria,
@@ -42,7 +45,7 @@ describe('buildRegRows: one row per registry row, in file order', () => {
     const dtsmom = byName('dtsmom_v0')
     expect(dtsmom.badge).toBe('FAIL')
     expect(dtsmom.note).toBe('multi-asset universe: 27 CME futures, not NQ')
-    expect(byName('carry_v0').round).toBeNull()
+    expect(byName('carry_v0').round).toBe(10)
     expect(byName('za_v0_C3_gao_momentum').badge).toBe('CHECK')
   })
 
@@ -58,7 +61,8 @@ describe('buildRegRows: one row per registry row, in file order', () => {
 
   it('falls back to the registry verdict when a row has no card (born failing: never a silent PASS)', () => {
     const lonely: Schemas['RegistryView'] = {
-      counts: { rows: 2, registered: 2, passed: 1, failed: 1, checks: 0 },
+      counts: { rows: 2, registered: 2, passed: 1, failed: 1, checks: 0, edges: 2, overlays: 0, passed_edges: 1 },
+      acceptances: REGISTRY.acceptances,
       rows: [
         { ...REGISTRY.rows[0]!, name: 'x_v0', verdict: 'PASS [note]' },
         { ...REGISTRY.rows[0]!, name: 'y_v0', verdict: 'FAIL' },
@@ -73,7 +77,8 @@ describe('buildRegRows: one row per registry row, in file order', () => {
 
   it('reads an unregistered row without a card as a check row', () => {
     const view: Schemas['RegistryView'] = {
-      counts: { rows: 1, registered: 0, passed: 0, failed: 0, checks: 1 },
+      counts: { rows: 1, registered: 0, passed: 0, failed: 0, checks: 1, edges: 0, overlays: 0, passed_edges: 0 },
+      acceptances: REGISTRY.acceptances,
       rows: [{ ...REGISTRY.rows[1]! }],
     }
     expect(buildRegRows(view, [])[0]!.badge).toBe('CHECK')
@@ -86,9 +91,10 @@ describe('roundGroups: the left rail', () => {
     expect(groups[0]).toMatchObject({ key: 'all', count: rows.length })
     const rest = groups.slice(1)
     expect(rest.reduce((s, g) => s + g.count, 0)).toBe(rows.length)
-    expect(rest.map((g) => g.key)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'none'])
+    expect(rest.map((g) => g.key)).toEqual(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'])
     expect(rest.find((g) => g.key === '1')?.count).toBe(4)
-    expect(rest.find((g) => g.key === 'none')?.count).toBe(2)
+    const lonely = roundGroups([...rows, { ...rows[0]!, name: 'x_v0', round: null }])
+    expect(lonely.at(-1)).toMatchObject({ key: 'none', count: 1 })
   })
 })
 
@@ -96,16 +102,19 @@ describe('criteria: the counts block', () => {
   it('shows the API counts as they are', () => {
     const c = criteria(REGISTRY.counts, rows, MULTIPLE_TESTING.alpha)
     const get = (id: string) => c.find((x) => x.id === id)?.count
-    expect(get('rows')).toBe(19)
-    expect(get('registered')).toBe(18)
-    expect(get('passed')).toBe(2)
-    expect(get('failed')).toBe(16)
+    expect(get('rows')).toBe(22)
+    expect(get('registered')).toBe(21)
+    expect(get('passed')).toBe(3)
+    expect(get('failed')).toBe(18)
     expect(get('checks')).toBe(1)
+    expect(get('edges')).toBe(20)
+    expect(get('overlays')).toBe(1)
+    expect(get('passedEdges')).toBe(2)
   })
 
   it('counts registered rows whose stored BH q is below alpha', () => {
     const c = criteria(REGISTRY.counts, rows, 0.05)
-    expect(c.find((x) => x.id === 'bh')?.count).toBe(2)
+    expect(c.find((x) => x.id === 'bh')?.count).toBe(3)
     expect(criteria(REGISTRY.counts, rows, null).find((x) => x.id === 'bh')?.count).toBeNull()
   })
 })
@@ -116,10 +125,13 @@ describe('filterRows', () => {
       'prefomc_v0', 'fomccycle_v0', 'fomctone_v0',
     ])
     expect(filterRows(rows, { text: '', round: '1', criterion: null })).toHaveLength(4)
-    expect(filterRows(rows, { text: '', round: 'all', criterion: 'passed' }).map((r) => r.name)).toEqual(['overnight_v0', 'eomtsy_v0'])
-    expect(filterRows(rows, { text: '', round: 'none', criterion: 'passed' }).map((r) => r.name)).toEqual(['eomtsy_v0'])
+    expect(filterRows(rows, { text: '', round: 'all', criterion: 'passed' }).map((r) => r.name)).toEqual(['overnight_v0', 'eomtsy_v0', 'vt_har_v0'])
+    expect(filterRows(rows, { text: '', round: '11', criterion: 'passed' }).map((r) => r.name)).toEqual(['eomtsy_v0'])
     expect(filterRows(rows, { text: '', round: 'all', criterion: 'checks' }).map((r) => r.name)).toEqual(['za_v0_C3_gao_momentum'])
-    expect(filterRows(rows, { text: '', round: 'all', criterion: 'bh', alpha: 0.05 })).toHaveLength(2)
+    expect(filterRows(rows, { text: '', round: 'all', criterion: 'bh', alpha: 0.05 })).toHaveLength(3)
+    expect(filterRows(rows, { text: '', round: 'all', criterion: 'overlays' }).map((r) => r.name)).toEqual(['vt_har_v0'])
+    expect(filterRows(rows, { text: '', round: 'all', criterion: 'passedEdges' }).map((r) => r.name)).toEqual(['overnight_v0', 'eomtsy_v0'])
+    expect(filterRows(rows, { text: '', round: 'all', criterion: 'edges' })).toHaveLength(20)
     expect(filterRows(rows, { text: '  ', round: 'all', criterion: null })).toHaveLength(rows.length)
   })
 })
@@ -177,12 +189,47 @@ describe('toCsv: the export', () => {
   it('writes the API values at full precision with a header row', () => {
     const csv = toCsv(rows.slice(0, 1))
     const [head, first] = csv.split('\r\n')
-    expect(head).toBe('name,registered,round,verdict,n,p,control_p,bonferroni_p,holm_p,bh_q,spec_sha256,spec_sha_ok,spec_rehash_ok')
-    expect(first).toBe(`za_v0,true,0,FAIL,2778,${String(REGISTRY.rows[0]!.p)},,1,1,${String(REGISTRY.rows[0]!.bh_q)},${REGISTRY.rows[0]!.spec_sha256},true,true`)
+    expect(head).toBe('name,registered,tag,round,verdict,n,p,control_p,bonferroni_p,holm_p,bh_q,spec_sha256,spec_sha_ok,spec_rehash_ok,amendments,amendments_ok')
+    expect(first).toBe(`za_v0,true,edge,0,FAIL,2778,${String(REGISTRY.rows[0]!.p)},,1,1,${String(REGISTRY.rows[0]!.bh_q)},${REGISTRY.rows[0]!.spec_sha256},true,true,0,true`)
   })
 
   it('quotes a field with a comma', () => {
     const odd = { ...rows[0]!, name: 'a,b' }
     expect(toCsv([odd]).split('\r\n')[1]!.startsWith('"a,b",')).toBe(true)
+  })
+})
+
+describe('tags and amendments (registry rounds 13 and 14; Phase 8)', () => {
+  it('carries each row\'s tag and amendments from the registry', () => {
+    expect(byName('vt_har_v0')).toMatchObject({ tag: 'overlay', amendments: 2, amendmentFiles: ['vt_har_v0_amend1.json', 'vt_har_v0_amend2.json'], amendmentsOk: true })
+    expect(byName('cskew_v0')).toMatchObject({ tag: 'edge', amendments: 1, amendmentsOk: true })
+    expect(byName('za_v0_C3_gao_momentum').tag).toBe('check')
+    expect(byName('overnight_v0')).toMatchObject({ tag: 'edge', amendments: 0 })
+  })
+
+  it('writes the amendments as a count with its binding check in words', () => {
+    expect(amendmentText({ amendments: 0, amendmentsOk: true })).toBe('0')
+    expect(amendmentText({ amendments: 2, amendmentsOk: true })).toBe('2 ok')
+    expect(amendmentText({ amendments: 1, amendmentsOk: false })).toBe('1 NO')
+    expect(amendmentText({ amendments: 1, amendmentsOk: null })).toBe('1')
+  })
+
+  it('lists the accepted amendments with their hashes then and now, and says whether all are unchanged', () => {
+    const rows = acceptanceRows(REGISTRY.acceptances)
+    expect(rows.map((r) => r.file)).toEqual([
+      'experiments/cskew_v0_amend1.json', 'experiments/vt_har_v0_amend1.json', 'experiments/vt_har_v0_amend2.json',
+      'experiments/repair_futures_v2_amendment_1.json',
+    ])
+    expect(rows[0]).toMatchObject({ spec: 'cskew_v0', rows: 'cskew_v0', accepted: '4d98..8eb9', now: '4d98..8eb9', unchanged: true })
+    expect(rows[3]!.rows).toBe('--')
+    expect(acceptanceLine(REGISTRY.acceptances)).toBe('Accepted 2026-09-27T03:20:09Z from results/amendment_acceptances.md: 4 amendments, all unchanged.')
+  })
+
+  it('born failing: a changed amendment file reads as CHANGED', () => {
+    const [first, ...rest] = REGISTRY.acceptances.amendments
+    const changed = { ...REGISTRY.acceptances, all_unchanged: false, amendments: [{ ...first!, sha256_now: 'ffff0000', unchanged: false }, ...rest] }
+    expect(acceptanceRows(changed)[0]!.unchanged).toBe(false)
+    expect(acceptanceLine(changed)).toBe('Accepted 2026-09-27T03:20:09Z from results/amendment_acceptances.md: 4 amendments, 1 CHANGED since acceptance.')
+    expect(acceptanceLine({ ...REGISTRY.acceptances, found: false })).toBe('No amendment acceptances recorded: results/amendment_acceptances.md')
   })
 })

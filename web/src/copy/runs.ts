@@ -1,7 +1,5 @@
 // Copy for RUNS and RUN (UI_SPEC sections 6, 7, 10; look spec 7.4). UK spelling, no em or en dashes,
 // sentence case; uppercase only where the data is uppercase. `{name}` slots are filled by fillCopy().
-// Kept beside the screens so this builder owns it; the merge step may move it into src/copy/runs.ts
-// (copy.test.ts runs the same copy rules over it meanwhile).
 
 /** The honesty tags of UI_SPEC section 6, verbatim. */
 export const RUN_TAGS = {

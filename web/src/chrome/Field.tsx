@@ -5,6 +5,7 @@
 // its label as amber text before it; elsewhere the label is the accessible name only.
 import { createContext, useContext, useId, useLayoutEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FIELD, fillCopy } from '../copy/workspace'
+import { usePanelActions } from './PanelChrome.actions'
 import { ROVING_ATTR } from './WorkspaceFocus'
 import './Field.css'
 
@@ -90,6 +91,9 @@ function useListDirection(open: boolean, field: HTMLElement | null, list: HTMLEl
 }
 
 export function DropdownField({ label, value, options, onChange, disabled = false }: DropdownFieldProps) {
+  // Inside a panel the roving tabindex decides the Tab stop (WorkspaceFocus picks a rendered tabindex 0
+  // first), so the field starts at -1 and a scrolling panel body keeps the stop; on its own it is 0.
+  const inPanel = usePanelActions().panelId !== ''
   const labelId = useId()
   const listId = useId()
   const inRow = useContext(ParamRowContext)
@@ -144,7 +148,7 @@ export function DropdownField({ label, value, options, onChange, disabled = fals
         <div
           ref={setField}
           role="combobox"
-          tabIndex={0}
+          tabIndex={inPanel ? -1 : 0}
           className="field field-dd"
           aria-haspopup="listbox"
           aria-expanded={open}

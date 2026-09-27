@@ -83,7 +83,8 @@ GATED_HYPOTHESES: Mapping[str, tuple[str, str]] = {"za_v0": (NQ_SYMBOL, "repaire
 DATA_START = "2010-09-28"  # the first NQ session every NQ screen served (za_v0 `sessions` 2836 from here)
 # Screens that record how many sessions they evaluated: the dotted path of that count in the screen JSON.
 RECORDED_COUNTS: Mapping[str, tuple[str, ...]] = {"za_v0": ("gated_days",), "mac5rev_v0": ("counts", "sessions"),
-                                                  "eurodrift_v0": ("counts", "candidates")}
+                                                  "eurodrift_v0": ("counts", "candidates"),
+                                                  "vt_har_v0": ("headline", "n"), "vrp_eq_v0": ("headline", "n")}
 INTRADAY = ("za_orb", "overnight")
 # (strategy, book) -> (benchmark strategy, benchmark book, label); a book missing from params is None.
 PAIRS: Mapping[tuple[str, str | None], tuple[str, str | None, str]] = {

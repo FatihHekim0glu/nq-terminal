@@ -1,7 +1,6 @@
 // Copy for the market screens MON and CORR (UI_SPEC sections 6, 7 and 10; look spec 7.7 and 7.8).
-// UK spelling, no em or en dashes, sentence case. `{name}` slots are filled by fillCopy(). Kept next to
-// the screens because this build step owns only src/screens/mon and src/screens/corr; copy.test.ts runs
-// the shared copy rules over it, and the merge step may move it to src/copy/market.ts unchanged.
+// UK spelling, no em or en dashes, sentence case. `{name}` slots are filled by fillCopy(). The CORR
+// strings of its own are in corr.ts.
 
 /** Sector titles for the section rows and grouped headers, keyed by the API's `sector`. */
 export const SECTOR_TITLES = {
@@ -79,6 +78,22 @@ export const MON = {
   showNormalised: 'Show vol-normalised returns (sd)',
   windowItem: 'Window: {n} sessions',
   colTicker: 'Ticker',
+  colTwoDay: '2Day',
+  twoDayText: '2Day {first} to {end}: last {last}, prior close {prior}, {direction}',
+  twoDayNone: '2Day: no close served',
+  twoDayLoading: '2Day: loading',
+  twoDayUp: 'up',
+  twoDayDown: 'down',
+  twoDayFlat: 'unchanged',
+  twoDayNote: '2Day: hourly closes of the last two sessions to {last}, back-adjusted, read through the gate for the rows on screen only; the prior session grey, the last white, the final segment up or down against the prior close [POST HOC].',
+  saveDefaults: 'Save defaults',
+  saveDefaultsDone: 'Monitor defaults saved in this browser: {view}, {heat}, {window} sessions.',
+  saveDefaultsFailed: 'This browser could not save the monitor defaults.',
+  resetDefaults: 'Reset saved defaults',
+  resetDefaultsDone: 'Saved monitor defaults removed.',
+  universeField: 'Universe',
+  heatOnWord: 'heat on',
+  heatOffWord: 'heat off',
   colName: 'Name',
   colLast: 'Last',
   colFlag: 'Flag',

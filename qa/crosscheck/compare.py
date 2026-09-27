@@ -17,10 +17,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump
+from crosscheck.market_reference import market_references
 from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
 from crosscheck.trade_reference import costs_references, trades_references
 
-BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references}
+BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "market": market_references}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9
@@ -129,7 +130,8 @@ def compare_registry(dump: RegistryDump) -> list[Row]:
 
 
 def compare_bundle(dump: Bundle) -> list[Row]:
-    """TA1 and TA3 (`trades`) or EX1 to EX4 (`costs`) of one run against the raw-row references."""
+    """TA1 and TA3 (`trades`) or EX1 to EX4 (`costs`) of one run, or a market view (`market`), against the
+    raw-input references."""
     rows = []
     for key, ref in BUNDLE_REFERENCES[dump.kind](dump.inputs).items():
         rows.extend(_rows_for(dump.name, key, ref, dump.values, dump.missing))

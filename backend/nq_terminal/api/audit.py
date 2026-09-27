@@ -27,6 +27,7 @@ from nq_terminal.models.audit import (
     Openings,
     Pinned,
     SealedLogDigest,
+    SeverityLevel,
     SpecHashes,
 )
 from nq_terminal.models.common import DEFAULT_LIMIT, MAX_LIMIT, error_responses
@@ -95,6 +96,8 @@ def oos_log(
         counts_by_caller=callers,
         terminal_reads=callers.get(audit.TERMINAL_CALLER, 0),
         sealed_reads=sum(1 for e in parsed.entries if e["is_sealed"]),
+        severity_levels=[SeverityLevel(level=level, meaning=text) for level, text in audit.SEVERITY_LEVELS],
+        severity_counts=audit.severity_counts(parsed.entries),
         fence_end=IS_END.date().isoformat(),
         filters=OosLogFilters(caller=caller, since=since, limit=limit, offset=offset),
         entries=[OosLogEntry.model_validate(dict(e)) for e in entries],

@@ -3,6 +3,7 @@
    11px is the floor for any text. No transitions on colour or background: state changes are hard cuts. */
 @import "tailwindcss";
 @import "./tokens.css";
+@import "./panelScroll.css";
 
 /* Bergoom, OFL-1.1 (src/assets/fonts/bergoom/LICENSE.md), shipped unmodified under its own name.
    Only the faces a page uses are fetched; Source Sans 3 (@fontsource, OFL) is the fallback. */

@@ -221,3 +221,28 @@ describe('describeHeatmap and heatmapTable', () => {
     expect(heatmapCells(corr)[0]!.fill).toBe(DEFAULT_CHART_TOKENS.color.corrDiag)
   })
 })
+
+describe('column groups (look spec 7.8, the CORR sector header row)', () => {
+  const corr: HeatmapInput = {
+    kind: 'corr', name: 'c', columns: ['ES', 'NQ', 'ZN'], rows: ['ES', 'NQ', 'ZN'],
+    values: [[1, 0.9, -0.3], [0.9, 1, -0.3], [-0.3, -0.3, 1]],
+    columnGroups: [{ label: 'Equity', from: 0, to: 1 }, { label: 'Rates', from: 2, to: 2 }],
+  }
+
+  it('makes room above the column labels and draws one white heading centred over each span', () => {
+    const option = heatmapOption(corr, T) as Record<string, any>
+    expect(option.grid.top).toBeGreaterThan((heatmapOption({ ...corr, columnGroups: undefined }, T) as Record<string, any>).grid.top)
+    const groups = seriesOf(option).find((s) => s.id === 'groups')!
+    const drawn = renderCustom(groups, 1)[0] as { children: Array<{ type: string; x?: number; style: Record<string, unknown> }> }
+    const texts = drawn.children.filter((c) => c.type === 'text')
+    expect(texts.map((t) => t.style.text)).toEqual(['Equity', 'Rates'])
+    // FAKE_PLOT is 400 wide: three columns of 133.33px; Equity spans the first two.
+    expect(texts[0]!.x).toBeCloseTo(133.33, 1)
+    expect(texts[1]!.x).toBeCloseTo(333.33, 1)
+    expect(texts[0]!.style.fill).toBe(T.color.white)
+  })
+
+  it('draws no group row without groups', () => {
+    expect(seriesOf(heatmapOption({ ...corr, columnGroups: undefined }, T)).some((s) => s.id === 'groups')).toBe(false)
+  })
+})

@@ -35,6 +35,13 @@ class OosLogEntry(ResponseModel):
     ts_epoch_s: int | None
     start_epoch_s: int | None
     end_epoch_s: int | None
+    severity: int = Field(ge=1, le=4, description="house severity, 1 to 4 (OosLog.severity_levels)")
+    alert: bool = Field(description="severity 3 or 4: a sealed read, or a window the gate would refuse")
+
+
+class SeverityLevel(ResponseModel):
+    level: int
+    meaning: str
 
 
 class LineProblem(ResponseModel):
@@ -63,6 +70,8 @@ class OosLog(ResponseModel):
     counts_by_caller: dict[str, int]
     terminal_reads: int = Field(ge=0)
     sealed_reads: int = Field(ge=0)
+    severity_levels: list[SeverityLevel] = Field(description="what each severity means (house semantics)")
+    severity_counts: dict[str, int] = Field(description="entries per severity level over the whole log")
     fence_end: str
     filters: OosLogFilters
     entries: list[OosLogEntry]

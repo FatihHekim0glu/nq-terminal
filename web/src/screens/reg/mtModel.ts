@@ -54,6 +54,7 @@ export function boundaryCheck(mt: Schemas['MultipleTesting']): BoundaryCheck {
 
 export interface MtRow {
   readonly name: string
+  readonly tag: Schemas['MultipleTestingRow']['tag']
   readonly rank: number
   readonly p: number
   readonly bonferroniLine: number
@@ -76,6 +77,7 @@ export function buildMtRows(mt: Schemas['MultipleTesting']): MtRow[] {
   }
   return mt.rows.map((r) => ({
     name: r.name,
+    tag: r.tag,
     rank: r.rank,
     p: r.p,
     bonferroniLine: r.bonferroni_line,

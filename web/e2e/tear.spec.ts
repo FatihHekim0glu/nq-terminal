@@ -9,6 +9,8 @@
 // - axe WCAG 2.2 AA clean, no console errors, every request a same-origin GET, no price request;
 // - screenshots at 1920x1080 and 1366x768.
 // The last test opens EQ from the command line in the workspace, once the screen is registered there.
+// A check row (a check inside another spec, no return series of its own) reaches an empty state that links
+// to its parent's tear sheet on every tab, never an endless load.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
 
@@ -289,5 +291,53 @@ test.describe('in the workspace', () => {
     await expect(panel.getByRole('list', { name: 'Tear sheet key figures' })).toBeVisible()
     await panel.getByRole('tab', { name: '3) Returns' }).click()
     await expect(page.locator(`[data-nqt-title="${RUN} RET"]`).getByRole('table', { name: 'Return statistics' })).toBeVisible()
+  })
+})
+
+// Real-data smoke run: EQ on the registry's check row za_v0_C3_gao_momentum stayed on "Loading the tear
+// sheet." for over 60 s. The fixture registry has no check row (its spec would have to be a fixture file
+// too), so the command index and that one card are served here in the real card's shape: a 200 with
+// tag check, spec za_v0 and no recorded series costs.
+test.describe('tear sheet of a check row', () => {
+  const CHECK = 'za_v0_C3_gao_momentum'
+  const PARENT = 'za_v0'
+
+  async function serveCheckRow(page: Page): Promise<void> {
+    const detail = await apiJson<{ card: Record<string, unknown> }>(page, `/api/hypotheses/${HYP}`)
+    const card = {
+      ...detail.card, name: CHECK, registered: false, tag: 'check', spec: PARENT, verdict: `check inside ${PARENT} (no own pass bar)`,
+      verdict_badge: 'CHECK', verdict_note: `check inside ${PARENT} (no own pass bar)`, series_kind: null, series_costs: [], nautilus_runs: [],
+    }
+    await page.route('**/api/commands', async (route) => {
+      const response = await route.fetch()
+      const index = (await response.json()) as { hypotheses: string[] }
+      await route.fulfill({ response, json: { ...index, hypotheses: [...index.hypotheses, PARENT, CHECK] } })
+    })
+    await page.route(`**/api/hypotheses/${CHECK}`, (route) => route.fulfill({ json: { ...detail, card } }))
+  }
+
+  test('every tab says there is no series within seconds and links to the parent tear sheet', async ({ page }) => {
+    const watch = await watchGallery(page)
+    await serveCheckRow(page)
+    await page.goto('/')
+    await expect(page.locator('[data-nqt-title]').first()).toBeVisible()
+    const line = page.getByRole('combobox', { name: 'Command line' })
+    for (const code of ['EQ', 'DD', 'RET', 'RR', 'MRET']) {
+      await page.keyboard.press('Control+k')
+      await line.fill(`${CHECK} ${code}`)
+      await line.press('Enter')
+      const panel = page.locator(`[data-nqt-title="${CHECK} ${code}"]`).filter({ visible: true })
+      const status = panel.getByRole('status').filter({ hasText: `No return series: this row is a check inside ${PARENT}.` })
+      await expect(status, code).toBeVisible({ timeout: 5_000 })
+      await expect(status).toContainText(`Open ${PARENT}'s tear sheet:`)
+      await expect(panel.locator('[aria-busy="true"]'), code).toHaveCount(0)
+      await expect(panel.getByRole('alert'), code).toHaveCount(0)
+      await expect(panel.getByRole('button', { name: `${PARENT} ${code} <GO>` })).toBeVisible()
+    }
+    expect(watch.requests.filter((r) => r.url().includes('/api/analytics/')).map((r) => r.url())).toEqual([])
+    await expectGalleryClean(page, watch)
+    const last = page.locator(`[data-nqt-title="${CHECK} MRET"]`).filter({ visible: true })
+    await last.getByRole('button', { name: `${PARENT} MRET <GO>` }).click()
+    await expect(page.locator(`[data-nqt-title="${PARENT} MRET"]`).filter({ visible: true })).toHaveCount(1)
   })
 })

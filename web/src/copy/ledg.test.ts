@@ -1,8 +1,8 @@
-// The copy rules of UI_SPEC section 10 over the LEDG copy, which lives beside the screen
-// (src/copy/copyRules.test.ts globs src/copy only).
+// The LEDG copy under the rules of UI_SPEC section 10 (copyRules.test.ts checks every copy module too),
+// plus the empty state the spec names.
 import { describe, expect, it } from 'vitest'
-import { findCopyViolations } from '../../copy/copyRules'
-import * as copy from './copy'
+import { findCopyViolations } from './copyRules'
+import * as copy from './ledg'
 
 describe('LEDG copy (UI_SPEC section 10)', () => {
   it('has no em or en dashes and no US spellings', () => {

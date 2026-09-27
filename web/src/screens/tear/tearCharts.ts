@@ -6,6 +6,7 @@
 import type { BarLadderInput } from '../../charts/echarts/barLadderModel'
 import type { DistributionInput } from '../../charts/echarts/distributionModel'
 import { mretRows, type HeatmapInput } from '../../charts/echarts/heatmapModel'
+import type { Callout } from '../../charts/LineStack.draw'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import { TEAR, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
@@ -33,8 +34,20 @@ function equityPane(data: Analytics, name: string, weight: number): LineStackPan
   return { id: 'equity', weight, series, decimals: decimalsForUnit(equity.unit), logAllowed: data.on_capital, ...(dd ? { summaryDrawdown: dd } : {}) }
 }
 
+/** EQ's lower pane (look spec 7.5): strategy minus benchmark as an area from 0, a white zero line. */
+function perfDiffPane(data: Analytics): LineStackPane | null {
+  const { perf_diff: diff, perf_diff_unit: unit } = data.equity
+  if (!diff || !unit) return null
+  return {
+    id: 'perfDiff', weight: 1, zero: 'white', unit: paneUnit(unit), decimals: 2, signed: true,
+    series: [{ name: TEAR_EQ.perfDiff, style: 'perfDiff', values: scaleSeries(diff, unit) }],
+  }
+}
+
 export function eqStack(data: Analytics, name: string): StackSpec {
-  return { title: fillCopy(TEAR_EQ.title, { name }), t: data.equity.t, panes: [equityPane(data, name, 1)] }
+  const diff = perfDiffPane(data)
+  const panes = diff ? [equityPane(data, name, 2), diff] : [equityPane(data, name, 1)]
+  return { title: fillCopy(TEAR_EQ.title, { name }), t: data.equity.t, panes }
 }
 
 export function ddStack(data: Analytics, name: string): StackSpec {
@@ -61,13 +74,40 @@ export function rrStack(data: Analytics, name: string): StackSpec {
     ],
   }
   const vol: LineStackPane = {
-    id: 'vol', decimals: 2, unit: paneUnit(r.vol_unit),
+    id: 'vol', decimals: 2, unit: paneUnit(r.vol_unit), callouts: volCallouts(data),
     series: [
       { name: fillCopy(TEAR_RR.vol, { n: short, unit }), style: 'rollVol', values: scaleSeries(r.vol_short, r.vol_unit) },
       { name: fillCopy(TEAR_RR.vol, { n: long, unit }), style: 'rollLong', values: scaleSeries(r.vol_long, r.vol_unit) },
     ],
   }
   return { title: fillCopy(TEAR_RR.title, { name }), t: r.t, panes: [sharpe, vol] }
+}
+
+type Extremes = Analytics['rolling']['vol_extremes'][number]
+
+/** GV-style callouts on the short-window volatility line: its highest and lowest value, in display units. */
+export function volCallouts(data: Analytics): Callout[] {
+  const e: Extremes | undefined = data.rolling.vol_extremes[0]
+  if (!e) return []
+  const out: Callout[] = []
+  const hi = toDisplay(e.hi, e.unit)
+  const lo = toDisplay(e.lo, e.unit)
+  if (hi !== null && e.hi_t !== null) out.push({ t: e.hi_t, value: hi, label: fillCopy(TEAR_RR.hi, { value: formatNumber(hi, 2) }) })
+  if (lo !== null && e.lo_t !== null) out.push({ t: e.lo_t, value: lo, label: fillCopy(TEAR_RR.lo, { value: formatNumber(lo, 2) }) })
+  return out
+}
+
+/** Each window's volatility extremes in words (the callouts' text equivalent). */
+export function rrExtremes(data: Analytics): string[] {
+  const unit = TEAR_RR.units[data.rolling.window_unit]
+  return data.rolling.vol_extremes.map((e) => {
+    if (e.hi === null || e.lo === null) return fillCopy(TEAR_RR.extremesNone, { window: e.window, unit })
+    return fillCopy(TEAR_RR.extremes, {
+      window: e.window, unit,
+      hi: formatValue(e.hi, e.unit, 2), hiDate: e.hi_date ?? '--',
+      lo: formatValue(e.lo, e.unit, 2), loDate: e.lo_date ?? '--',
+    })
+  })
 }
 
 export interface RrEmpty {
@@ -147,6 +187,7 @@ export function distributionInput(data: Analytics, name: string): DistributionIn
   if (edges.some((e) => e === null) || mean === null || sd === null) return null
   const risk = data.risk
   const riskValue = (v: number | null) => toDisplay(v, risk.unit)
+  const s = data.distribution.series
   return {
     name: fillCopy(TEAR_RET.histogramName, { name }),
     unit: paneUnit(h.unit),
@@ -157,6 +198,7 @@ export function distributionInput(data: Analytics, name: string): DistributionIn
     mean,
     sd,
     risk: { var95: riskValue(risk.var_95), cvar95: riskValue(risk.cvar_95), var99: riskValue(risk.var_99), cvar99: riskValue(risk.cvar_99) },
+    ...(s.t.length > 0 ? { series: { t: s.t, v: scaleSeries(s.r, s.unit) } } : {}),
   }
 }
 

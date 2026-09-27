@@ -1,6 +1,7 @@
 // RUNS (TASKS 6.3; UI_SPEC section 7 "RUNS and RUN"; look spec 7.4, model: the backtest strategy table):
 // the red function bar with an amber `<Enter filter>` field, `96) Actions` and `99) Help`; the sub-tab
-// strip `85) All 86) Ledgered 87) Anchors 88) Probes 89) Unusable`; a parameter row with the strategy
+// strip `85) All 86) Ledgered 87) Anchors 88) Probes 89) Unusable`; `98) Export` saves the shown rows as
+// CSV (the same columns, numbers at full precision); a parameter row with the strategy
 // filter and the counts; then every run from GET /api/runs in a MonitorGrid with its badges, and Sharpe
 // and max drawdown on Basis B from GET /api/runs/stats. Enter, a double click or Number <GO> on a
 // row opens RUN for it through the command line, so it lands in history like a typed command.
@@ -12,12 +13,14 @@ import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
+import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import MonitorGrid from '../../grids/MonitorGrid'
-import { HELP_LINES, RUNS } from './copy'
+import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import { gridCsv } from '../../grids/gridCsv'
+import { HELP_LINES, RUNS } from '../../copy/runs'
 import { RUNS_TABS, inRunsTab, matchesRunFilter, strategiesOf, type RunSummary, type RunsTab } from './model'
 import { runsColumns } from './runsColumns'
-import { useCompareStats } from './useCompareStats'
+import { useCompareStats, type CompareStatsResult } from './useCompareStats'
 import './runs.css'
 
 const EMPTY: readonly RunSummary[] = []
@@ -39,7 +42,13 @@ function Counts({ runs }: { readonly runs: readonly RunSummary[] }) {
   return <span className="runs-counts">{fillCopy(RUNS.counts, { n: runs.length, usable, ledgered })}</span>
 }
 
-function RunsBar({ filter, onFilter }: { readonly filter: string; readonly onFilter: (v: string) => void }) {
+interface RunsBarProps {
+  readonly filter: string
+  readonly onFilter: (v: string) => void
+  readonly onExport: () => void
+}
+
+function RunsBar({ filter, onFilter, onExport }: RunsBarProps) {
   const actions = usePanelActions()
   return (
     <FunctionBar
@@ -56,6 +65,7 @@ function RunsBar({ filter, onFilter }: { readonly filter: string; readonly onFil
             { label: PANEL.forward, onSelect: () => actions.forward() },
           ],
         },
+        { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, onRun: onExport },
         { n: FUNCTION_NUMBERS.help, label: FUNCTION_BAR.help, onRun: () => requestLine(HELP_LINES.runs) },
       ]}
     />
@@ -65,11 +75,12 @@ function RunsBar({ filter, onFilter }: { readonly filter: string; readonly onFil
 interface BodyProps {
   readonly runs: readonly RunSummary[]
   readonly shown: readonly RunSummary[]
+  readonly columns: readonly MonitorColumn<RunSummary>[]
+  readonly compare: CompareStatsResult
 }
 
-function RunsGrid({ runs, shown }: BodyProps) {
-  const { stats, error, pending } = useCompareStats(runs)
-  const columns = useMemo(() => runsColumns(stats), [stats])
+function RunsGrid({ runs, shown, columns, compare }: BodyProps) {
+  const { error, pending } = compare
   return (
     <>
       {error ? <p className="runs-msg" role="status">{fillCopy(RUNS.statsFailed, { detail: error.detail })}</p> : null}
@@ -99,9 +110,12 @@ export default function RunsScreen(_props: ScreenProps) {
   const runs = query.data ?? EMPTY
   const shown = useShownRuns(runs, tab, filter, strategy)
   const strategies = useMemo(() => [{ value: ALL, label: RUNS.strategyAll }, ...strategiesOf(runs).map((s) => ({ value: s, label: s }))], [runs])
+  const compare = useCompareStats(runs)
+  const columns = useMemo(() => runsColumns(compare.stats), [compare.stats])
+  const onExport = () => exportCsv(csvFileName('runs', tab), gridCsv(columns, shown), shown.length)
   return (
     <div className="runs-screen" data-screen="RUNS">
-      <RunsBar filter={filter} onFilter={setFilter} />
+      <RunsBar filter={filter} onFilter={setFilter} onExport={onExport} />
       <TabStrip
         panelId={actions.panelId}
         label={RUNS.tabsLabel}
@@ -123,7 +137,7 @@ export default function RunsScreen(_props: ScreenProps) {
         ) : query.isPending ? (
           <p className="runs-msg" role="status">{RUNS.loading}</p>
         ) : (
-          <RunsGrid runs={runs} shown={shown} />
+          <RunsGrid runs={runs} shown={shown} columns={columns} compare={compare} />
         )}
       </div>
     </div>

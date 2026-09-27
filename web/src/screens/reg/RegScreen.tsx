@@ -2,7 +2,8 @@
 // screening layout): red function bar with an amber filter field and 96) Actions, 97) Settings,
 // 98) Export; a round rail on the left; the selected screening criteria with their matches (counts
 // from GET /api/registry); the MonitorGrid of every registry row (name, round, verdict badge, n, p,
-// control p, Bonferroni, Holm, BH q, spec sha with the registry and re-hash status); and the sealed
+// control p, Bonferroni, Holm, BH q, spec sha with the registry and re-hash status, the tag (edge,
+// [OVERLAY], check) and the amendments); the accepted amendments re-hashed now; and the sealed
 // confirmations in their own block with their own alpha. Enter, a double click or Number <GO> on a
 // row opens DES for it. Read only: four GETs, no verdict computed here.
 import { useCallback, useMemo, useState } from 'react'
@@ -14,12 +15,14 @@ import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.act
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import { REG } from '../../copy/reg'
+import { SPEC } from '../../copy/tiles'
 import MonitorGrid from '../../grids/MonitorGrid'
+import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { saveText } from '../../chrome/download'
-import { REG_COLUMNS, regRowId } from './regColumns'
+import { REG_COLUMNS, REG_COMPACT_COLUMNS, regRowId } from './regColumns'
 import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
 import { openDes } from './open'
-import { ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
+import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
 import './reg.css'
 
 type FilterCriterion = Exclude<CriterionId, 'rows'>
@@ -107,7 +110,9 @@ export default function RegScreen(_props: ScreenProps) {
   const [f, setF] = useState<Filters>(NO_FILTER)
   const { shown, groups, crit } = useRegView(data, f)
   const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
-  const tag = <span className="reg-tag">[PRE-REG]</span>
+  const main = useElementWidth()
+  const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
+  const tag = <span className="reg-tag">{SPEC.preReg}</span>
   return (
     <div className="reg-screen" data-screen="REG">
       <RegBar
@@ -126,7 +131,7 @@ export default function RegScreen(_props: ScreenProps) {
       ) : (
         <div className="reg-body">
           <RoundRail panelId={actions.panelId} groups={groups} selected={f.round} onSelect={(round) => setF((x) => ({ ...x, round }))} />
-          <div className="reg-main">
+          <div className="reg-main" ref={main.ref}>
             <CriteriaBlock
               panelId={actions.panelId}
               items={crit}
@@ -136,9 +141,11 @@ export default function RegScreen(_props: ScreenProps) {
             />
             {cards.isError ? <p className="reg-msg down">{fillCopy(REG.cardsFailed, { detail: cards.error.detail })}</p> : null}
             <div className="reg-grid">
-              <MonitorGrid label={REG.gridLabel} rows={shown} columns={REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
+              <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
             </div>
+            {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
             <VerdictNotes rows={shown} />
+            <AcceptanceBlock acceptances={registry.data?.acceptances} />
             <ConfirmBlock
               panelId={actions.panelId}
               rows={confirmRows}

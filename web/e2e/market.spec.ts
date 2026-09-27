@@ -84,8 +84,10 @@ async function monCells(grid: Locator): Promise<Map<string, string[]>> {
   const rows = await grid.locator('tbody tr[role="row"]:not(.group-row)').evaluateAll((trs) =>
     trs.map((r) => Array.from(r.querySelectorAll('td')).map((td) => (td.textContent ?? '').trim())),
   )
-  // Cells: number, ticker, name, last, flag, six horizons, RV, rho, units.
-  return new Map(rows.map((cells) => [cells[1] ?? '', cells]))
+  // Cells: number, ticker, name, 2Day, last, flag, six horizons, RV, rho, units. The 2Day cell (a
+  // sparkline with its words for assistive technology, Phase 8) is left out here, so the indexes below
+  // are the value columns'.
+  return new Map(rows.map((cells) => [cells[1] ?? '', cells.filter((_, i) => i !== 3)]))
 }
 
 function tickerFor(rowRoot: string, sector: string): string {

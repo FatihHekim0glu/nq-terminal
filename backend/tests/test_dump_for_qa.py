@@ -18,6 +18,12 @@ synthetic Basis B series, and seven `served_*` cases built through the terminal'
 included, so a builder fault (the dtsmom month dating) shows up here. Read-only on `results/`; writes only into the
 dump folder.
 
+Phase 8 adds the tear sheet's new series to the series dumps (EQ's `perf_difference`, RR's `rolling_vol_<w>_hi`
+and `_lo`), the round 13 and 14 series as served (their stored anchors: vt_har_v0's portfolio MDD_port, vrp_eq_v0's
+Sharpe, alpha and beta), and one `market` dump for MV3 (GP's RV22 line): the daily universe returns of a synthetic
+1d frame (the test loader, no gate and no file) with the line `services.market` serves and the universe table's
+own realised volatility at the same window as a second terminal value.
+
 Trade and cost dumps (TA1, TA3, EX1 to EX4) carry one real Nautilus run each, read through the runs service:
 - `trades` (za_orb, overnight, volmanaged, dtsmom): the per-trade net P&L and entry times; `ours` from
   `analytics.trades`, `nautilus` from `calculate_from_realized_pnls` (ProfitFactor from returns), `stored` the
@@ -66,21 +72,22 @@ CATALOG_SHARPE = {"volmanaged_v0_m1": 0.9914875364356387, "volmanaged_v0_bh1": 0
                   "dtsmom_v0_ts1": 0.25493487321272734, "served_volmanaged_v0_c1": 0.9914875364356387,
                   "served_dtsmom_v0_c1": 0.25493487321272734}  # ANALYTICS_CATALOG section 14
 STORED_AS = {"served_volmanaged_v0_c1": "volmanaged_v0_m1", "served_dtsmom_v0_c1": "dtsmom_v0_ts1"}
-SERVED_HYPOTHESES = (("volmanaged_v0", 1), ("dtsmom_v0", 1), ("za_v0", 1))
+SERVED_HYPOTHESES = (("volmanaged_v0", 1), ("dtsmom_v0", 1), ("za_v0", 1), ("vt_har_v0", 1), ("vrp_eq_v0", 1))
 SERVED_RUNS = ("nt_volmanaged_v0_final_m1", "nt_dtsmom_v0_ts1", "nt_za_v0_repaired_a", "nt_overnight_v0_open_a")
 PROTECTED = (ROOT / "results", ROOT / "backtests" / "output", ROOT / "data", ROOT / "live")
+ROLL_EXTREMES = tuple(f"rolling_vol_{w}_{side}" for w in (63, 252) for side in ("hi", "lo"))
 DAILY_ONLY = frozenset({"best_day", "worst_day", "shortfall21_1pct", "shortfall21_5pct", "rolling_sharpe_63",
-                        "rolling_sharpe_252", "rolling_vol_63", "rolling_vol_252"})
+                        "rolling_sharpe_252", "rolling_vol_63", "rolling_vol_252", *ROLL_EXTREMES})
 BENCH_ONLY = frozenset({"alpha_annual_pct", "beta", "alpha_t_5", "alpha_t_21", "alpha_t_min", "information_ratio",
-                        "tracking_error", "psr_bench"})
+                        "tracking_error", "psr_bench", "perf_difference"})
 FAMILIES = {
     "perf": ("total_return", "cagr", "vol", "sharpe", "sortino", "calmar", "n", "years", "hit_rate", "best_day",
              "worst_day", "best_month", "worst_month", "pct_positive_months", "skew", "excess_kurtosis",
-             "sharpe_se@perf", "sharpe_ci_lo@perf", "sharpe_ci_hi@perf"),
+             "sharpe_se@perf", "sharpe_ci_lo@perf", "sharpe_ci_hi@perf", "perf_difference"),
     "drawdown": ("max_drawdown", "drawdown_series"),
     "distribution": ("monthly_returns",),
     "risk": ("var_95", "var_99", "cvar_95", "cvar_99", "shortfall21_1pct", "shortfall21_5pct"),
-    "rolling": ("rolling_sharpe_63", "rolling_sharpe_252", "rolling_vol_63", "rolling_vol_252"),
+    "rolling": ("rolling_sharpe_63", "rolling_sharpe_252", "rolling_vol_63", "rolling_vol_252", *ROLL_EXTREMES),
     "relative": ("alpha_annual_pct", "beta", "alpha_t_5", "alpha_t_21", "alpha_t_min", "information_ratio",
                  "tracking_error"),
     "validity": ("sharpe_se", "sharpe_ci_lo", "sharpe_ci_hi", "psr_0", "psr_bench", "mintrl_sessions"),
@@ -180,6 +187,8 @@ def _perf(mod, inp: Input) -> dict:
            "sharpe_ci_lo@perf": lo, "sharpe_ci_hi@perf": hi}
     out.update({k: table[k] for k in ("n", "years", "hit_rate", "best_day", "worst_day", "best_month",
                                       "worst_month", "pct_positive_months", "skew", "excess_kurtosis")})
+    if inp.bench is not None:
+        out["perf_difference"] = mod.performance_difference(r, inp.bench, basis).tolist()
     return out
 
 
@@ -204,8 +213,12 @@ def _risk(mod, inp: Input) -> dict:
 def _rolling(mod, inp: Input) -> dict:
     if inp.periods != DAILY:
         return {}
-    return {f"rolling_{kind}_{w}": fn(inp.r, w, inp.periods).tolist() for w in (63, 252)
-            for kind, fn in (("sharpe", mod.rolling_sharpe), ("vol", mod.rolling_volatility))}
+    out = {f"rolling_{kind}_{w}": fn(inp.r, w, inp.periods).tolist() for w in (63, 252)
+           for kind, fn in (("sharpe", mod.rolling_sharpe), ("vol", mod.rolling_volatility))}
+    for w in (63, 252):
+        found = mod.extremes(mod.rolling_volatility(inp.r, w, inp.periods))
+        out.update({f"rolling_vol_{w}_hi": found["hi"], f"rolling_vol_{w}_lo": found["lo"]})
+    return out
 
 
 def _relative(mod, inp: Input) -> dict:
@@ -327,6 +340,12 @@ def stored_values(inp: Input) -> dict:
         screen = _screen("dtsmom_v0")
         out.update(sharpe=screen["headline"]["sharpe"], alpha_annual_pct=screen["control"]["a_x12_pct"],
                    beta=screen["control"]["b"])
+    if name == "served_vt_har_v0_c1":  # the screen's P2 portfolio drawdown in sd units (MDD_port)
+        out["max_drawdown"] = _screen("vt_har_v0")["headline"]["mdd_port_vt"]
+    if name == "served_vrp_eq_v0_c1":
+        screen = _screen("vrp_eq_v0")
+        out.update(sharpe=screen["sharpe"]["1"]["VRP"], alpha_annual_pct=screen["headline"]["alpha_annual_pct"],
+                   beta=screen["headline"]["b"])
     return out
 
 
@@ -373,6 +392,31 @@ def registry_doc(loader=load_family) -> dict:
                    "p": reg["p"].astype(float).tolist(),
                    "values": {"ours": values, "stored": {c: reg[c].astype(float).tolist() for c in cols}},
                    "missing": missing})
+
+
+# ---------- MV3: GP's RV22 line on a synthetic daily frame ----------
+
+RV_SYMBOL, RV_WINDOW = "NQ.V.0", 22
+
+
+def market_doc() -> dict:
+    """The universe returns of a synthetic 1d frame and the RV line the terminal serves on them (no gate read)."""
+    from nq_lab.config import IS_END, IS_START
+    from nq_lab.dtsmom_panel import build_panel, master_days
+    from nq_lab.dtsmom_universe import TABLE
+    from nq_terminal.services import market
+
+    from fakes import synthetic_loader
+    frame = synthetic_loader(RV_SYMBOL, "1d")(IS_START, IS_END)
+    panel = build_panel({RV_SYMBOL: frame}, master_days(IS_START.date(), market.last_in_sample_day()))
+    line = market.realised_vol_series(frame, RV_SYMBOL, window=RV_WINDOW)
+    row = market.universe({RV_SYMBOL: frame}, window=RV_WINDOW, contracts=[c for c in TABLE if c.root == "NQ"]).rows[0]
+    last = next((v for v in reversed(line.rv) if v is not None), None)
+    return _clean({"schema": SCHEMA, "kind": "market", "case": "market_rv22_synthetic",
+                   "source": "synthetic 1d NQ frame (tests/fakes.py), universe returns r = dB / (N - dB)",
+                   "inputs": {"dates": list(line.days), "r": panel.r[:, 0].tolist(), "window": RV_WINDOW},
+                   "values": {"ours": {"rv": list(line.rv), "rv_last": last, "rv_last@universe": row.realised_vol}},
+                   "missing": {}})
 
 
 # ---------- trades and costs of real runs (TA1, TA3, EX1 to EX4) ----------
@@ -630,6 +674,21 @@ def test_a_protected_dump_folder_is_refused_before_any_write(monkeypatch, folder
     assert folder.exists() == existed
 
 
+def test_market_dump_rv_ends_at_the_universe_value():
+    doc = market_doc()
+    ours = doc["values"]["ours"]
+    assert ours["rv_last"] == pytest.approx(ours["rv_last@universe"], rel=1e-12)
+    assert len(ours["rv"]) == len(doc["inputs"]["r"]) and doc["inputs"]["window"] == RV_WINDOW
+
+
+def test_round_13_and_14_series_carry_their_stored_anchors(inputs):
+    by_name = {inp.name: inp for inp in inputs}
+    vt, vrp = by_name["served_vt_har_v0_c1"], by_name["served_vrp_eq_v0_c1"]
+    assert sizing_stats.max_drawdown(vt.r.to_numpy()) == pytest.approx(stored_values(vt)["max_drawdown"], rel=1e-12)
+    assert sizing_stats.sharpe(vrp.r.to_numpy(), MONTHLY) == pytest.approx(stored_values(vrp)["sharpe"], rel=1e-12)
+    assert len(vrp.r) == 120 and vrp.periods == MONTHLY
+
+
 def test_served_inputs_are_the_builders_series(inputs):
     by_name = {inp.name: inp for inp in inputs}
     assert {f"served_{run_id}" for run_id in SERVED_RUNS} <= set(by_name)
@@ -674,6 +733,9 @@ def test_a_missing_trades_or_exposure_module_is_recorded_as_a_reason(runs):
 
 
 def _check_bundle(back: dict) -> None:
+    if back["kind"] == "market":
+        assert len(back["inputs"]["r"]) == len(back["inputs"]["dates"]) == len(back["values"]["ours"]["rv"])
+        return
     if back["kind"] == "trades":
         assert len(back["inputs"]["pnl"]) == len(back["inputs"]["entry_ts"]) == back["values"]["stored"]["n"]
         assert set(back["values"]["ours"]) | set(back["missing"]) >= set(TRADE_METRICS)
@@ -690,9 +752,9 @@ def _check_bundle(back: dict) -> None:
 
 def test_dump_for_qa_writes_every_case(inputs, runs):
     docs = ([series_doc(inp) for inp in inputs] + [registry_doc()] + [trades_doc(runs, r) for r in TRADE_RUNS]
-            + [costs_doc(runs, r) for r in COST_RUNS])
+            + [costs_doc(runs, r) for r in COST_RUNS] + [market_doc()])
     paths = write_dumps(dump_dir(), docs)
-    assert len(paths) == len(inputs) + 1 + len(TRADE_RUNS) + len(COST_RUNS)
+    assert len(paths) == len(inputs) + 1 + len(TRADE_RUNS) + len(COST_RUNS) + 1
     for path, doc in zip(paths, docs):
         back = json.loads(path.read_text(encoding="utf-8"))
         assert back["schema"] == SCHEMA and back["case"] == doc["case"]
@@ -701,5 +763,5 @@ def test_dump_for_qa_writes_every_case(inputs, runs):
             assert set(back["values"]["ours"]) | set(back["missing"]) >= {
                 m for ms in FAMILIES.values() for m in ms if applicable(m, next(i for i in inputs
                                                                                  if i.name == back["case"]))}
-        elif back["kind"] in ("trades", "costs"):
+        elif back["kind"] in ("trades", "costs", "market"):
             _check_bundle(back)

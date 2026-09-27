@@ -345,6 +345,26 @@ test.describe('terminal shell', () => {
     expect(fit.prose).toBeLessThanOrEqual(fit.body)
   })
 
+  // The fixture backend counts gate reads over the whole E2E run, so the status line's `Gate reads N`
+  // (and the flags after it, which it moves), the GP footer's reads and the market gate line depend on
+  // the specs run before this one. They are masked; every other pixel is compared. A mask is drawn over
+  // an element's whole box, so a footer scrolled out of its panel (1366x768) is left unmasked: it is not
+  // painted, and a mask there would cover the panel below it.
+  const runCounters = async (page: Page) => {
+    const status = page.getByRole('contentinfo')
+    const painted = (sel: string) => page.locator(sel).evaluateAll((els) => els.map((el) => {
+      const r = el.getBoundingClientRect()
+      const body = el.closest('.nqt-panel-body')?.getBoundingClientRect()
+      return body === undefined || (r.top < body.bottom && r.bottom > body.top)
+    }))
+    const masks = [status.locator('.seg').filter({ hasText: 'Gate reads' }), status.locator('.seg.flag')]
+    for (const sel of ['.gp-footer', '.mkt-gate']) {
+      const shown = await painted(sel)
+      shown.forEach((on, i) => (on ? masks.push(page.locator(sel).nth(i)) : undefined))
+    }
+    return masks
+  }
+
   for (const size of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }]) {
     test(`screenshot baselines at ${size.width}x${size.height}`, async ({ page }) => {
       await page.clock.setFixedTime(FROZEN_NOW)
@@ -355,10 +375,19 @@ test.describe('terminal shell', () => {
       // (a stable frame) when the screenshot is taken, so wait for every screen and chart to settle.
       await expect(page.getByText('Loading this screen.')).toHaveCount(0)
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
-      await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`)
+      // MON's 2Day cells ask for their bars only once their row is in view (an observer callback a frame
+      // after the rows mount), so a busy check alone can pass before they start: wait until every cell
+      // in view has drawn its line (the fixture serves 1m bars for every universe symbol).
+      await expect.poll(() => page.locator('.mon-spark').evaluateAll((cells) => cells.filter((cell) => {
+        const r = cell.getBoundingClientRect()
+        const body = cell.closest('.nqt-panel-body')?.getBoundingClientRect()
+        return body !== undefined && r.bottom > body.top && r.top < body.bottom && cell.querySelector('svg') === null
+      }).length)).toBe(0)
+      await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
+      await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`, { mask: await runCounters(page) })
       await runCommand(page, 'HELP')
       await expect(page.getByRole('table', { name: 'Keyboard reference' })).toBeVisible()
-      await expect(page).toHaveScreenshot(`help-${size.width}x${size.height}.png`)
+      await expect(page).toHaveScreenshot(`help-${size.width}x${size.height}.png`, { mask: await runCounters(page) })
     })
   }
 })

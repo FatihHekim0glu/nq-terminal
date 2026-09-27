@@ -1,6 +1,66 @@
 {
   "components": {
     "schemas": {
+      "AcceptedAmendment": {
+        "description": "One amendment listed as accepted, re-hashed now against the hash it was accepted at.",
+        "properties": {
+          "file": {
+            "description": "path under the data root, as the acceptance file writes it",
+            "title": "File",
+            "type": "string"
+          },
+          "rows": {
+            "description": "registry rows that list this file among their amendments",
+            "items": {
+              "type": "string"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sha256_accepted": {
+            "title": "Sha256 Accepted",
+            "type": "string"
+          },
+          "sha256_now": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null when the file is missing or not under experiments/",
+            "title": "Sha256 Now"
+          },
+          "spec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the spec it amends (the file name before `_amend`), when it has one",
+            "title": "Spec"
+          },
+          "unchanged": {
+            "title": "Unchanged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "file",
+          "spec",
+          "sha256_accepted",
+          "sha256_now",
+          "unchanged",
+          "rows"
+        ],
+        "title": "AcceptedAmendment",
+        "type": "object"
+      },
       "AlphaFit": {
         "description": "BR1 fit, `sizing_stats.spanning_alpha`: r = a + b * r_b + e; t by Newey-West lag; t_min gates.",
         "properties": {
@@ -91,6 +151,50 @@
           "t_min"
         ],
         "title": "AlphaFit",
+        "type": "object"
+      },
+      "AmendmentAcceptances": {
+        "description": "`results/amendment_acceptances.md`: the record of accepted amendments (the amendment and result files\nstill say pending; this file is the acceptance).",
+        "properties": {
+          "accepted_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted Utc"
+          },
+          "all_unchanged": {
+            "title": "All Unchanged",
+            "type": "boolean"
+          },
+          "amendments": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedAmendment"
+            },
+            "title": "Amendments",
+            "type": "array"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "found",
+          "source",
+          "accepted_utc",
+          "all_unchanged",
+          "amendments"
+        ],
+        "title": "AmendmentAcceptances",
         "type": "object"
       },
       "Analytics": {
@@ -1091,6 +1195,67 @@
         "title": "Context",
         "type": "object"
       },
+      "ContractSpec": {
+        "properties": {
+          "cost_per_side_1tick_usd": {
+            "description": "one tick plus the frozen fee per side",
+            "title": "Cost Per Side 1Tick Usd",
+            "type": "number"
+          },
+          "point_value_usd": {
+            "description": "USD per 1.0 of the served price, one contract",
+            "title": "Point Value Usd",
+            "type": "number"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "tick": {
+            "title": "Tick",
+            "type": "number"
+          },
+          "tick_usd": {
+            "title": "Tick Usd",
+            "type": "number"
+          },
+          "units": {
+            "description": "the served price's units",
+            "title": "Units",
+            "type": "string"
+          },
+          "venue": {
+            "title": "Venue",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "symbol",
+          "sector",
+          "venue",
+          "units",
+          "tick",
+          "tick_usd",
+          "point_value_usd",
+          "cost_per_side_1tick_usd",
+          "source"
+        ],
+        "title": "ContractSpec",
+        "type": "object"
+      },
       "Correlation": {
         "properties": {
           "matrix": {
@@ -1290,6 +1455,136 @@
         "title": "CostWaterfall",
         "type": "object"
       },
+      "Coverage": {
+        "properties": {
+          "fence": {
+            "$ref": "#/components/schemas/Fence"
+          },
+          "gate_reads_logged": {
+            "description": "lines in the OOS log with caller terminal for this symbol",
+            "minimum": 0.0,
+            "title": "Gate Reads Logged",
+            "type": "integer"
+          },
+          "gate_reads_this_process": {
+            "minimum": 0.0,
+            "title": "Gate Reads This Process",
+            "type": "integer"
+          },
+          "in_sample_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the later of the fence start and the first bar on file",
+            "title": "In Sample From"
+          },
+          "in_sample_to": {
+            "description": "the last in-sample day",
+            "title": "In Sample To",
+            "type": "string"
+          },
+          "series": {
+            "description": "processed series of this root, from parquet footers only",
+            "items": {
+              "$ref": "#/components/schemas/CoverageSeries"
+            },
+            "title": "Series",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fence",
+          "in_sample_from",
+          "in_sample_to",
+          "series",
+          "gate_reads_logged",
+          "gate_reads_this_process"
+        ],
+        "title": "Coverage",
+        "type": "object"
+      },
+      "CoverageSeries": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "extends_past_fence": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the file holds rows after the fence (the gate refuses them)",
+            "title": "Extends Past Fence"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "first_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Ts"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "variant": {
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "timeframe",
+          "variant",
+          "file",
+          "rows",
+          "first_ts",
+          "extends_past_fence",
+          "error"
+        ],
+        "title": "CoverageSeries",
+        "type": "object"
+      },
       "DataCatalog": {
         "properties": {
           "series": {
@@ -1395,6 +1690,9 @@
           "qq": {
             "$ref": "#/components/schemas/QqView"
           },
+          "series": {
+            "$ref": "#/components/schemas/PeriodSeries"
+          },
           "stats": {
             "$ref": "#/components/schemas/StatsTable"
           }
@@ -1402,7 +1700,8 @@
         "required": [
           "histogram",
           "qq",
-          "stats"
+          "stats",
+          "series"
         ],
         "title": "DistributionView",
         "type": "object"
@@ -1881,7 +2180,7 @@
         "type": "object"
       },
       "EquityView": {
-        "description": "EQ: equity after each session, the benchmark on the same axis (null where it has no value).",
+        "description": "EQ: equity after each session, the benchmark on the same axis (null where it has no value), and the\nperformance difference (strategy minus benchmark cumulative return, `perf.performance_difference`; null where\nthe benchmark has no value, and the whole field null without a benchmark).",
         "properties": {
           "bench": {
             "anyOf": [
@@ -1925,6 +2224,38 @@
             "title": "Equity",
             "type": "array"
           },
+          "perf_diff": {
+            "anyOf": [
+              {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perf Diff"
+          },
+          "perf_diff_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perf Diff Unit"
+          },
           "t": {
             "items": {
               "type": "integer"
@@ -1942,7 +2273,9 @@
           "t",
           "date",
           "equity",
-          "bench"
+          "bench",
+          "perf_diff",
+          "perf_diff_unit"
         ],
         "title": "EquityView",
         "type": "object"
@@ -2843,6 +3176,24 @@
       },
       "HypothesisCard": {
         "properties": {
+          "amendment_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Amendment Files",
+            "type": "array"
+          },
+          "amendments_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amendments Ok"
+          },
           "bh_q": {
             "anyOf": [
               {
@@ -3078,6 +3429,15 @@
             ],
             "title": "T Stat"
           },
+          "tag": {
+            "enum": [
+              "edge",
+              "overlay",
+              "check"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
           "verdict": {
             "title": "Verdict",
             "type": "string"
@@ -3119,6 +3479,9 @@
           "spec_sha256",
           "spec_sha_ok",
           "spec_rehash_ok",
+          "tag",
+          "amendment_files",
+          "amendments_ok",
           "screen",
           "round",
           "pass_checks",
@@ -3366,6 +3729,118 @@
           "slippage"
         ],
         "title": "InstrumentCost",
+        "type": "object"
+      },
+      "InstrumentDes": {
+        "properties": {
+          "contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContractSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/Coverage"
+          },
+          "cycle_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Source"
+          },
+          "hours": {
+            "items": {
+              "$ref": "#/components/schemas/NamedValue"
+            },
+            "title": "Hours",
+            "type": "array"
+          },
+          "hours_note": {
+            "title": "Hours Note",
+            "type": "string"
+          },
+          "in_universe": {
+            "description": "one of the 27 futures of the frozen dtsmom table",
+            "title": "In Universe",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "month_codes": {
+            "items": {
+              "$ref": "#/components/schemas/MonthCode"
+            },
+            "title": "Month Codes",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/InstrumentNote"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "related": {
+            "$ref": "#/components/schemas/RelatedDates"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "symbol",
+          "in_universe",
+          "contract",
+          "month_codes",
+          "cycle_source",
+          "hours",
+          "hours_note",
+          "related",
+          "coverage",
+          "notes",
+          "label"
+        ],
+        "title": "InstrumentDes",
+        "type": "object"
+      },
+      "InstrumentNote": {
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "text",
+          "source"
+        ],
+        "title": "InstrumentNote",
         "type": "object"
       },
       "JournalInfo": {
@@ -4212,6 +4687,411 @@
         "title": "LiveEnv",
         "type": "object"
       },
+      "LiveFillRow": {
+        "properties": {
+          "banner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "line_no": {
+            "minimum": 1.0,
+            "title": "Line No",
+            "type": "integer"
+          },
+          "notional_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "qty x price x the MNQ point value; null for another contract",
+            "title": "Notional Usd"
+          },
+          "plumbing": {
+            "title": "Plumbing",
+            "type": "boolean"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "qty": {
+            "minimum": 1.0,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "BUY",
+              "SELL"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "t": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "T"
+          }
+        },
+        "required": [
+          "file",
+          "line_no",
+          "plumbing",
+          "banner",
+          "date",
+          "t",
+          "contract",
+          "side",
+          "qty",
+          "price",
+          "notional_usd"
+        ],
+        "title": "LiveFillRow",
+        "type": "object"
+      },
+      "LiveRouteRow": {
+        "description": "One close row as a route (`services.live_routes`): the decision's status and the row's own fills.",
+        "properties": {
+          "avg_fill_px": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Fill Px"
+          },
+          "banner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner"
+          },
+          "close_px": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close Px"
+          },
+          "contract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "decision_px": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the decision's sizing price `p`",
+            "title": "Decision Px"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "filled_qty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filled Qty"
+          },
+          "halted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Halted"
+          },
+          "line_no": {
+            "minimum": 1.0,
+            "title": "Line No",
+            "type": "integer"
+          },
+          "net_filled": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Filled"
+          },
+          "plumbing": {
+            "title": "Plumbing",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reconciled_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reconciled Ok"
+          },
+          "sent_target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent Target"
+          },
+          "side": {
+            "anyOf": [
+              {
+                "enum": [
+                  "BUY",
+                  "SELL"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "side of the net filled quantity",
+            "title": "Side"
+          },
+          "slippage_ticks": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slippage Ticks"
+          },
+          "status": {
+            "enum": [
+              "sent",
+              "blocked",
+              "refused",
+              "not sent",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "t": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "epoch seconds at 00:00 UTC of the session date",
+            "title": "T"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "file",
+          "line_no",
+          "plumbing",
+          "banner",
+          "date",
+          "t",
+          "contract",
+          "status",
+          "reason",
+          "target",
+          "sent_target",
+          "decision_px",
+          "close_px",
+          "side",
+          "filled_qty",
+          "net_filled",
+          "avg_fill_px",
+          "slippage_ticks",
+          "reconciled_ok",
+          "halted"
+        ],
+        "title": "LiveRouteRow",
+        "type": "object"
+      },
+      "LiveRoutes": {
+        "description": "LIVE's Routes and Fills from one journal, read only (there is no order path).",
+        "properties": {
+          "banner": {
+            "title": "Banner",
+            "type": "string"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "empty_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty State"
+          },
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/LiveFillRow"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "journal": {
+            "title": "Journal",
+            "type": "string"
+          },
+          "order_time_rule": {
+            "title": "Order Time Rule",
+            "type": "string"
+          },
+          "point_value_usd": {
+            "title": "Point Value Usd",
+            "type": "number"
+          },
+          "present": {
+            "title": "Present",
+            "type": "boolean"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/LiveRouteRow"
+            },
+            "title": "Routes",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RoutesSummary"
+          }
+        },
+        "required": [
+          "journal",
+          "present",
+          "empty_state",
+          "banner",
+          "basis",
+          "order_time_rule",
+          "point_value_usd",
+          "routes",
+          "fills",
+          "summary"
+        ],
+        "title": "LiveRoutes",
+        "type": "object"
+      },
       "LiveStatus": {
         "properties": {
           "banner": {
@@ -4587,6 +5467,44 @@
         "title": "Moments",
         "type": "object"
       },
+      "MonthCode": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "in the recorded listing cycle; null where nq-lab records none",
+            "title": "Active"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "month": {
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Month",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "name",
+          "code",
+          "active"
+        ],
+        "title": "MonthCode",
+        "type": "object"
+      },
       "MonthlyView": {
         "description": "RD2: one row per year, columns January to December (null where a month has no session).",
         "properties": {
@@ -4771,10 +5689,20 @@
           "rank": {
             "title": "Rank",
             "type": "integer"
+          },
+          "tag": {
+            "enum": [
+              "edge",
+              "overlay",
+              "check"
+            ],
+            "title": "Tag",
+            "type": "string"
           }
         },
         "required": [
           "name",
+          "tag",
           "rank",
           "p",
           "bonferroni_p",
@@ -4788,6 +5716,29 @@
           "bh_line"
         ],
         "title": "MultipleTestingRow",
+        "type": "object"
+      },
+      "NamedValue": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "source"
+        ],
+        "title": "NamedValue",
         "type": "object"
       },
       "NextTimes": {
@@ -4884,6 +5835,22 @@
             "title": "Sealed Reads",
             "type": "integer"
           },
+          "severity_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "entries per severity level over the whole log",
+            "title": "Severity Counts",
+            "type": "object"
+          },
+          "severity_levels": {
+            "description": "what each severity means (house semantics)",
+            "items": {
+              "$ref": "#/components/schemas/SeverityLevel"
+            },
+            "title": "Severity Levels",
+            "type": "array"
+          },
           "terminal_reads": {
             "minimum": 0.0,
             "title": "Terminal Reads",
@@ -4906,6 +5873,8 @@
           "counts_by_caller",
           "terminal_reads",
           "sealed_reads",
+          "severity_levels",
+          "severity_counts",
           "fence_end",
           "filters",
           "entries"
@@ -4916,6 +5885,11 @@
       "OosLogEntry": {
         "additionalProperties": true,
         "properties": {
+          "alert": {
+            "description": "severity 3 or 4: a sealed read, or a window the gate would refuse",
+            "title": "Alert",
+            "type": "boolean"
+          },
           "caller": {
             "title": "Caller",
             "type": "string"
@@ -4984,6 +5958,13 @@
               }
             ],
             "title": "Sealed"
+          },
+          "severity": {
+            "description": "house severity, 1 to 4 (OosLog.severity_levels)",
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Severity",
+            "type": "integer"
           },
           "spec_sha256": {
             "anyOf": [
@@ -5078,7 +6059,9 @@
           "past_fence",
           "ts_epoch_s",
           "start_epoch_s",
-          "end_epoch_s"
+          "end_epoch_s",
+          "severity",
+          "alert"
         ],
         "title": "OosLogEntry",
         "type": "object"
@@ -5704,6 +6687,51 @@
         "title": "Performance",
         "type": "object"
       },
+      "PeriodSeries": {
+        "description": "RET's time series beside the histogram: the returns the histogram bins, one per session (or month).",
+        "properties": {
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "r": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "R",
+            "type": "array"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "t",
+          "date",
+          "r"
+        ],
+        "title": "PeriodSeries",
+        "type": "object"
+      },
       "Pinned": {
         "properties": {
           "openings_sha256": {
@@ -5970,6 +6998,87 @@
         "title": "QqView",
         "type": "object"
       },
+      "RealisedVolSeries": {
+        "description": "MV3, the RV22 line of GP's indicator pane: one value per session to 2021-12-31 (null until two returns).",
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "rv": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Rv",
+            "type": "array"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "symbol",
+          "window",
+          "label",
+          "basis",
+          "unit",
+          "t",
+          "date",
+          "rv",
+          "last",
+          "gate"
+        ],
+        "title": "RealisedVolSeries",
+        "type": "object"
+      },
       "RegistryCounts": {
         "description": "Counted from the file at request time (PRD DL12); never a constant.",
         "properties": {
@@ -5978,14 +7087,32 @@
             "title": "Checks",
             "type": "integer"
           },
+          "edges": {
+            "description": "rows tagged edge",
+            "minimum": 0.0,
+            "title": "Edges",
+            "type": "integer"
+          },
           "failed": {
             "minimum": 0.0,
             "title": "Failed",
             "type": "integer"
           },
+          "overlays": {
+            "description": "rows tagged overlay",
+            "minimum": 0.0,
+            "title": "Overlays",
+            "type": "integer"
+          },
           "passed": {
             "minimum": 0.0,
             "title": "Passed",
+            "type": "integer"
+          },
+          "passed_edges": {
+            "description": "edge rows whose verdict is PASS (an overlay PASS is not counted)",
+            "minimum": 0.0,
+            "title": "Passed Edges",
             "type": "integer"
           },
           "registered": {
@@ -6004,7 +7131,10 @@
           "registered",
           "passed",
           "failed",
-          "checks"
+          "checks",
+          "edges",
+          "overlays",
+          "passed_edges"
         ],
         "title": "RegistryCounts",
         "type": "object"
@@ -6154,7 +7284,34 @@
         "type": "object"
       },
       "RegistryRow": {
+        "description": "One row of results/registry.csv. The tag and amendment columns are read when the file carries them; a\nregistry written before them reads as no overlay and no amendments.",
         "properties": {
+          "amendment_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Amendment Files",
+            "type": "array"
+          },
+          "amendments": {
+            "default": 0,
+            "description": "accepted amendment files of the spec, as the registry counts them",
+            "minimum": 0.0,
+            "title": "Amendments",
+            "type": "integer"
+          },
+          "amendments_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "every amendment binds to its spec and result (registry); null when the file has no such column",
+            "title": "Amendments Ok"
+          },
           "bh_q": {
             "anyOf": [
               {
@@ -6225,6 +7382,12 @@
             "title": "Name",
             "type": "string"
           },
+          "overlay": {
+            "default": false,
+            "description": "a registered risk overlay: in the family, but a PASS is not an edge",
+            "title": "Overlay",
+            "type": "boolean"
+          },
           "p": {
             "anyOf": [
               {
@@ -6252,6 +7415,17 @@
             "title": "Spec Sha Ok",
             "type": "boolean"
           },
+          "tag": {
+            "default": "edge",
+            "description": "overlay, else check when not registered, else edge",
+            "enum": [
+              "edge",
+              "overlay",
+              "check"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
           "verdict": {
             "title": "Verdict",
             "type": "string"
@@ -6270,13 +7444,21 @@
           "bh_q",
           "spec",
           "spec_sha256",
-          "spec_sha_ok"
+          "spec_sha_ok",
+          "overlay",
+          "tag",
+          "amendments",
+          "amendment_files",
+          "amendments_ok"
         ],
         "title": "RegistryRow",
         "type": "object"
       },
       "RegistryView": {
         "properties": {
+          "acceptances": {
+            "$ref": "#/components/schemas/AmendmentAcceptances"
+          },
           "counts": {
             "$ref": "#/components/schemas/RegistryCounts"
           },
@@ -6290,9 +7472,97 @@
         },
         "required": [
           "counts",
-          "rows"
+          "rows",
+          "acceptances"
         ],
         "title": "RegistryView",
+        "type": "object"
+      },
+      "RelatedDates": {
+        "properties": {
+          "as_of_et": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Et"
+          },
+          "first_notice_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Notice Rule"
+          },
+          "last_trading_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the rule id in nq_lab.carry_expiry.RULES",
+            "title": "Last Trading Rule"
+          },
+          "next_contract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Contract"
+          },
+          "next_roll": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Roll"
+          },
+          "roll_rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the paper book's MNQ roll rule (NQ and MNQ only)",
+            "title": "Roll Rule"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_trading_rule",
+          "first_notice_rule",
+          "roll_rule",
+          "next_contract",
+          "next_roll",
+          "as_of_et",
+          "source"
+        ],
+        "title": "RelatedDates",
         "type": "object"
       },
       "RelativeView": {
@@ -6591,6 +7861,14 @@
             "title": "T",
             "type": "array"
           },
+          "vol_extremes": {
+            "description": "one per window, in `windows` order",
+            "items": {
+              "$ref": "#/components/schemas/VolExtremes"
+            },
+            "title": "Vol Extremes",
+            "type": "array"
+          },
           "vol_long": {
             "items": {
               "anyOf": [
@@ -6651,9 +7929,92 @@
           "vol_short",
           "vol_long",
           "full_sharpe",
-          "full_vol"
+          "full_vol",
+          "vol_extremes"
         ],
         "title": "RollingView",
+        "type": "object"
+      },
+      "RoutesSummary": {
+        "description": "Totals over performance rows only; plumbing routes and fills are counted apart.",
+        "properties": {
+          "bad_fills": {
+            "description": "fill entries skipped because they were not [contract, sign, qty, price]",
+            "minimum": 0.0,
+            "title": "Bad Fills",
+            "type": "integer"
+          },
+          "blocked": {
+            "minimum": 0.0,
+            "title": "Blocked",
+            "type": "integer"
+          },
+          "errors": {
+            "minimum": 0.0,
+            "title": "Errors",
+            "type": "integer"
+          },
+          "filled_contracts": {
+            "minimum": 0.0,
+            "title": "Filled Contracts",
+            "type": "integer"
+          },
+          "fills": {
+            "minimum": 0.0,
+            "title": "Fills",
+            "type": "integer"
+          },
+          "notional_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notional Usd"
+          },
+          "plumbing_fills": {
+            "minimum": 0.0,
+            "title": "Plumbing Fills",
+            "type": "integer"
+          },
+          "plumbing_routes": {
+            "minimum": 0.0,
+            "title": "Plumbing Routes",
+            "type": "integer"
+          },
+          "refused": {
+            "minimum": 0.0,
+            "title": "Refused",
+            "type": "integer"
+          },
+          "routes": {
+            "minimum": 0.0,
+            "title": "Routes",
+            "type": "integer"
+          },
+          "sent": {
+            "minimum": 0.0,
+            "title": "Sent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "routes",
+          "sent",
+          "blocked",
+          "refused",
+          "errors",
+          "fills",
+          "filled_contracts",
+          "notional_usd",
+          "plumbing_routes",
+          "plumbing_fills",
+          "bad_fills"
+        ],
+        "title": "RoutesSummary",
         "type": "object"
       },
       "RunComparison": {
@@ -7523,6 +8884,24 @@
           "repaired"
         ],
         "title": "SessionFlags",
+        "type": "object"
+      },
+      "SeverityLevel": {
+        "properties": {
+          "level": {
+            "title": "Level",
+            "type": "integer"
+          },
+          "meaning": {
+            "title": "Meaning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "meaning"
+        ],
+        "title": "SeverityLevel",
         "type": "object"
       },
       "SharpeInterval": {
@@ -8838,6 +10217,132 @@
         "title": "TurnoverView",
         "type": "object"
       },
+      "TwoDay": {
+        "description": "MON's 2Day sparkline column: back-adjusted hourly closes of the last two in-sample sessions.",
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TwoDayRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sessions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "basis",
+          "bucket",
+          "sessions",
+          "rows",
+          "missing",
+          "gate"
+        ],
+        "title": "TwoDay",
+        "type": "object"
+      },
+      "TwoDayRow": {
+        "description": "One symbol's hourly closes over the last two sessions; `day` is 0 for the prior session, 1 for the last.",
+        "properties": {
+          "c": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "C",
+            "type": "array"
+          },
+          "day": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Day",
+            "type": "array"
+          },
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "prior_close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Close"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbol",
+          "root",
+          "t",
+          "c",
+          "day",
+          "prior_close",
+          "last"
+        ],
+        "title": "TwoDayRow",
+        "type": "object"
+      },
       "Universe": {
         "properties": {
           "as_of": {
@@ -9091,6 +10596,97 @@
           "sharpe_difference_tests"
         ],
         "title": "ValidityView",
+        "type": "object"
+      },
+      "VolExtremes": {
+        "description": "RR's Hi and Low callouts: the highest and lowest value of one rolling volatility line and the first session\neach falls on (null when the line has no value).",
+        "properties": {
+          "hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi"
+          },
+          "hi_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi Date"
+          },
+          "hi_t": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi T"
+          },
+          "lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lo"
+          },
+          "lo_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lo Date"
+          },
+          "lo_t": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lo T"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window",
+          "unit",
+          "hi",
+          "hi_t",
+          "hi_date",
+          "lo",
+          "lo_t",
+          "lo_date"
+        ],
+        "title": "VolExtremes",
         "type": "object"
       },
       "WaterfallStep": {
@@ -10489,6 +12085,71 @@
         ]
       }
     },
+    "/api/instruments/{root}": {
+      "get": {
+        "description": "Contract, month codes, related dates, data coverage and notes for one root; no price is read.",
+        "operationId": "instrument_api_instruments__root__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root",
+            "required": true,
+            "schema": {
+              "maxLength": 5,
+              "pattern": "^[A-Z0-9]{1,5}$",
+              "title": "Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstrumentDes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Instrument",
+        "tags": [
+          "instruments"
+        ]
+      }
+    },
     "/api/ledger": {
       "get": {
         "description": "results/ledger.csv rows, typed and joined to their runs, plus every anchor pair.",
@@ -10793,6 +12454,71 @@
         ]
       }
     },
+    "/api/live/routes": {
+      "get": {
+        "description": "Routes and fills from one journal's close rows, read only; plumbing rows labelled and out of the totals.",
+        "operationId": "routes_api_live_routes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "file",
+            "required": false,
+            "schema": {
+              "default": "volmanaged_paper_journal.jsonl",
+              "maxLength": 160,
+              "title": "File",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveRoutes"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the file is too large to show"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          }
+        },
+        "summary": "Routes",
+        "tags": [
+          "live"
+        ]
+      }
+    },
     "/api/live/status": {
       "get": {
         "description": "Journal counts, the kill switch, book exposure and last close; env; the next session's times and roll date.",
@@ -10952,6 +12678,199 @@
           }
         },
         "summary": "Market Pair Corr",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/rv": {
+      "get": {
+        "description": "GP's RV22 line (MV3) on the universe's return convention, to 2021-12-31; the last value equals the\nuniverse's realised volatility at the same window.",
+        "operationId": "market_rv_api_market_rv_get",
+        "parameters": [
+          {
+            "description": "a universe symbol, e.g. NQ.V.0",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "a universe symbol, e.g. NQ.V.0",
+              "pattern": "^[A-Z0-9]{1,5}\\.V\\.0$",
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "sessions per value",
+            "in": "query",
+            "name": "window",
+            "required": false,
+            "schema": {
+              "default": 22,
+              "description": "sessions per value",
+              "maximum": 2520,
+              "minimum": 2,
+              "title": "Window",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealisedVolSeries"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Rv",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/two-day": {
+      "get": {
+        "description": "MON's 2Day sparkline: hourly closes of the last two in-sample sessions for each asked universe symbol.",
+        "operationId": "market_two_day_api_market_two_day_get",
+        "parameters": [
+          {
+            "description": "comma list; default all 27",
+            "in": "query",
+            "name": "symbols",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 216,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma list; default all 27",
+              "title": "Symbols"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TwoDay"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Two Day",
         "tags": [
           "data"
         ]

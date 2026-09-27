@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
-import { ROVING_OVERLAY_ATTR, handleRovingKey, panelTabStops, syncRoving } from './WorkspaceFocus'
+import { ROVING_OVERLAY_ATTR, ROVING_SCROLL_ATTR, handleRovingKey, panelTabStops, syncRoving } from './WorkspaceFocus'
 
 function panel(html: string): HTMLElement {
   const el = document.createElement('section')
@@ -66,6 +66,32 @@ describe('syncRoving: one tab stop per panel', () => {
     expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
   })
 
+  // axe scrollable-region-focusable (WCAG 2.1.1): a box that scrolls on its own (a virtualised grid,
+  // a statistics table in a fixed column) must hold the panel's Tab stop, or no Tab reaches it.
+  it('born failing: a box that scrolls on its own takes the Tab stop from the panel body', () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div data-roving data-roving-default tabindex="0" id="body">
+        <div data-roving data-roving-default tabindex="0" id="chart">c</div>
+        <table data-roving data-roving-default ${ROVING_SCROLL_ATTR} tabindex="0" id="grid"></table>
+      </div>`)
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['grid'])
+  })
+
+  it('takes the Tab stop when it mounts after the first sync, and keeps one chosen by the user', () => {
+    const el = panel(`<button data-roving id="bar">b</button><div data-roving data-roving-default tabindex="0" id="body"></div>`)
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
+    const body = el.querySelector('#body') as HTMLElement
+    body.insertAdjacentHTML('beforeend', `<div data-roving ${ROVING_SCROLL_ATTR} tabindex="0" id="stats">s</div>`)
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['stats'])
+    syncRoving(el, el.querySelector('#bar') as HTMLElement)
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
+  })
+
   it('writes nothing when the tab stops are already right (so an observer cannot loop)', () => {
     const el = panel(`<button data-roving id="a">a</button><div data-roving data-roving-default id="b">b</div>`)
     syncRoving(el)
@@ -105,10 +131,43 @@ describe('handleRovingKey: arrows move inside the panel', () => {
     expect(handleRovingKey(el, event)).toBe(false)
   })
 
-  it('ignores Up and Down (they scroll) and keys typed into a text field', () => {
-    const el = panel(`<div data-roving id="a">a</div><input data-roving id="i" /><div data-roving id="b">b</div>`)
+  it('ignores Up and Down (they scroll) and arrows that move the caret inside a text field', () => {
+    const el = panel(`<div data-roving id="a">a</div><input data-roving id="i" value="2019-03-14" /><div data-roving id="b">b</div>`)
+    const input = el.querySelector('#i') as HTMLInputElement
     expect(handleRovingKey(el, key(el.querySelector('#a') as HTMLElement, 'ArrowDown'))).toBe(false)
-    expect(handleRovingKey(el, key(el.querySelector('#i') as HTMLElement, 'ArrowRight'))).toBe(false)
+    input.setSelectionRange(4, 4)
+    expect(handleRovingKey(el, key(input, 'ArrowRight'))).toBe(false)
+    expect(handleRovingKey(el, key(input, 'ArrowLeft'))).toBe(false)
+    input.setSelectionRange(0, 10)
+    expect(handleRovingKey(el, key(input, 'ArrowRight'))).toBe(false)
+  })
+
+  // A text field in the item row must not trap the arrows (WCAG 2.1.1): once the caret is at the
+  // end, Right moves on to the next item; at the start, Left moves back.
+  it('born failing: Right at the end of a text field and Left at its start move to the next item', () => {
+    const el = panel(`<div data-roving id="a">a</div><input data-roving id="i" value="2019-03-14" /><div data-roving id="b">b</div>`)
+    const input = el.querySelector('#i') as HTMLInputElement
+    input.focus()
+    input.setSelectionRange(10, 10)
+    expect(handleRovingKey(el, key(input, 'ArrowRight'))).toBe(true)
+    expect(document.activeElement?.id).toBe('b')
+    input.focus()
+    input.setSelectionRange(0, 0)
+    expect(handleRovingKey(el, key(input, 'ArrowLeft'))).toBe(true)
+    expect(document.activeElement?.id).toBe('a')
+  })
+
+  it('walks straight through an empty text field', () => {
+    const el = panel(`<div data-roving id="a">a</div><input data-roving id="i" /><div data-roving id="b">b</div>`)
+    const input = el.querySelector('#i') as HTMLInputElement
+    input.focus()
+    expect(handleRovingKey(el, key(input, 'ArrowRight'))).toBe(true)
+    expect(document.activeElement?.id).toBe('b')
+  })
+
+  it('leaves the arrows to a select and to editable content', () => {
+    const el = panel(`<div data-roving id="a">a</div><select data-roving id="s"><option>x</option></select><div data-roving id="b">b</div>`)
+    expect(handleRovingKey(el, key(el.querySelector('#s') as HTMLElement, 'ArrowRight'))).toBe(false)
   })
 })
 

@@ -142,11 +142,14 @@ test.describe('DES gallery (fixture backend)', () => {
     const watch = await watchGallery(page)
     const main = await openGallery(page, 'DesInstrument')
     await expect(main.getByRole('heading', { name: 'NQ1 Index', level: 3 })).toBeVisible()
-    await expect(main.getByRole('table', { name: /Processed price series of NQ1 Index/ })).toBeVisible()
+    // Phase 8: the page is four tabs from GET /api/instruments/NQ; the served series are on 2) Coverage.
+    await expect(main.getByRole('region', { name: 'Contract specifications' })).toBeVisible()
     await chartsReady(page)
     await expect(main.getByRole('img', { name: /^NQ1 Index/ })).toBeVisible()
     await expect(page.locator('.quote-line').first()).toContainText('NQ1 Index')
     await expectGalleryClean(page, watch)
+    await main.getByRole('tab', { name: '2) Coverage' }).click()
+    await expect(main.getByRole('table', { name: /Processed price series of NQ1 Index/ })).toBeVisible()
     // One read of daily vendor bars through the gate, ending at the fence: nothing after 2021-12-31.
     const bars = watch.requests.filter((r) => new URL(r.url()).pathname === '/api/bars').map((r) => new URL(r.url()))
     expect(bars.length).toBeGreaterThan(0)

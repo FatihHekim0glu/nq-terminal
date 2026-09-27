@@ -1,8 +1,10 @@
 // RUN tab 7) Config (look spec 7.4): the run's configuration, read only, in numbered sections on
 // table-header bars; values in grey boxes, never amber (amber is for real inputs only, 4.5).
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
+import { csvFileName, toCsv } from '../../chrome/exportCsv'
+import { useExportSource } from '../../chrome/exportSource'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
-import { RUN } from './copy'
+import { RUN } from '../../copy/runs'
 import { configSections, type ConfigSection, type RunDetail } from './runModel'
 
 // The section list scrolls on its own, so it is a roving item: the keyboard can reach and scroll it.
@@ -30,9 +32,17 @@ function Section({ section, n }: { readonly section: ConfigSection; readonly n: 
 }
 
 export default function RunConfig({ detail }: { readonly detail: RunDetail }) {
+  const sections = useMemo(() => configSections(detail), [detail])
+  const run = detail.summary.run_id
+  useExportSource(
+    useMemo(() => {
+      const rows = sections.flatMap((s) => s.pairs.map((p) => [s.title, p.label, p.value]))
+      return { fileName: csvFileName(run, 'config'), csv: toCsv(['section', 'key', 'value'], rows), rows: rows.length }
+    }, [sections, run]),
+  )
   return (
     <section className="run-config" aria-label={RUN.config.label} tabIndex={0} {...roving}>
-      {configSections(detail).map((s, i) => (
+      {sections.map((s, i) => (
         <Section key={s.id} section={s} n={i + 1} />
       ))}
     </section>

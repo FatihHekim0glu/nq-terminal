@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
+import { captureDownloads } from '../../chrome/download.testUtil'
 import { activateNumbered, registerNumbered, resetNumbered } from '../../chrome/NumberedActions'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { NumberingContext } from '../../chrome/PanelChrome.numbers'
@@ -67,6 +68,32 @@ function Panel({ children }: { readonly children: ReactNode }) {
 
 const urls = () => fetchSpy.mock.calls.map(([u]) => String(u))
 const renderCorr = () => render(<CorrScreen params={PARAMS} context={PARAMS.context} />, { wrapper: Panel })
+
+describe('CORR: Phase 8 (look spec 7.8 full template)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchSpy)
+    fetchSpy.mockClear()
+  })
+  afterEach(cleanup)
+
+  it('carries the [27F] field and 98) Export, which saves the shown matrix with no request', async () => {
+    renderCorr()
+    await screen.findByRole('img', { name: /27F correlation, last 252 sessions/ })
+    const bar = screen.getByRole('toolbar', { name: /Correlation matrix/ })
+    expect(bar.querySelector('.fn-universe')?.textContent).toBe('Universe 27F')
+    const before = fetchSpy.mock.calls.length
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(within(bar).getByRole('button', { name: /98\) Export/ }))
+      const lines = (await saved.text('corr_27F_252_clustered.csv')).split('\r\n')
+      expect(lines).toHaveLength(28)
+      expect(lines[0]!.startsWith('symbol,')).toBe(true)
+      expect(fetchSpy.mock.calls.length).toBe(before)
+    } finally {
+      saved.restore()
+    }
+  })
+})
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchSpy)

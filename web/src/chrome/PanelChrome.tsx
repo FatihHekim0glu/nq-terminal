@@ -177,7 +177,7 @@ export default function PanelChrome(props: PanelChromeProps) {
   const { panelId, number, code, title, subject, group, focused = false, overlay, landmark = true, children } = props
   const titleId = useId()
   const ref = useRef<HTMLElement>(null)
-  usePanelRoving(ref)
+  const onPanelKey = usePanelRoving(ref)
   const [quote, setQuote] = useState<HTMLElement | null>(null)
   const [bar, setBar] = useState<HTMLElement | null>(null)
   const [tabs, setTabs] = useState<HTMLElement | null>(null)
@@ -192,6 +192,7 @@ export default function PanelChrome(props: PanelChromeProps) {
       data-nqt-title={title}
       data-group={group}
       data-focused={String(focused)}
+      onKeyDown={onPanelKey}
       aria-labelledby={landmark ? titleId : undefined}
       role={landmark ? undefined : 'none'}
     >

@@ -79,3 +79,13 @@ def block_bars(blocks: Mapping, value_key: str, t_key: str | None = None) -> lis
     return [{"block": name, "n": body.get("n"), "value": body.get(value_key),
              "t": body.get(t_key) if t_key else None} for _, name, body in rows]
 
+
+
+def extremes(values: pd.Series) -> dict:
+    """The highest and lowest finite value of a rolling line and the first session each falls on (RR's Hi and Low
+    callouts); all None when the line has no finite value."""
+    finite = pd.Series(values, dtype=float)
+    finite = finite[finite.map(math.isfinite)]
+    if finite.empty:
+        return {"hi": None, "hi_at": None, "lo": None, "lo_at": None}
+    return {"hi": float(finite.max()), "hi_at": finite.idxmax(), "lo": float(finite.min()), "lo_at": finite.idxmin()}

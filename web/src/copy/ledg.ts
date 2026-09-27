@@ -1,6 +1,5 @@
 // Copy for LEDG (UI_SPEC sections 7 and 10; look spec 7.9). UK spelling, no em or en dashes, sentence
-// case. `{name}` slots are filled by fillCopy(). Kept beside the screen so this builder owns it; the
-// merge step may move it into src/copy/ledg.ts (copy.test.ts runs the copy rules over it meanwhile).
+// case. `{name}` slots are filled by fillCopy().
 
 export const LEDG = {
   title: 'Run ledger',
@@ -17,6 +16,7 @@ export const LEDG = {
   missing: 'No ledger yet: results/ledger.csv',
   empty: 'No ledger rows match. Clear the filter.',
   note: 'Rows as written by scripts/ledger_append.py (append only); read only here. Balance shows colour and text.',
+  compactNote: 'Columns hidden here (maximise the panel to see them): exp id, variant, window, fees. 98) Export saves every column.',
   weekdays: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
   cols: {
     date: 'Date (UTC)',

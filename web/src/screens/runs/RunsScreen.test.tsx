@@ -5,6 +5,8 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
+import { captureDownloads } from '../../chrome/download.testUtil'
+import { useMessage } from '../../chrome/MessageLine.store'
 import { activateNumbered, resetNumbered } from '../../chrome/NumberedActions'
 import { stubLayout } from '../../grids/testing'
 import RunsScreen from './RunsScreen'
@@ -150,6 +152,26 @@ describe('RUNS: the Nautilus runs table', () => {
     for (const r of compare) {
       const n = decodeURIComponent(r.url.split('ids=')[1] ?? '').split(',').length
       expect(n >= 2 && n <= 8).toBe(true)
+    }
+  })
+
+  it('98) Export saves the shown rows as CSV, Sharpe and max drawdown included, with no request', async () => {
+    const { seen } = await mountRuns()
+    const before = seen.length
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const text = await saved.text('runs_all.csv')
+      const lines = text.split('\r\n')
+      expect(lines[0]).toContain('Run id,Strategy')
+      expect(lines[0]).toContain('Sharpe (B)')
+      const probes = RUNS
+      expect(lines).toHaveLength(probes.length + 1)
+      expect(lines.slice(1).map((l) => l.split(',')[0])).toEqual(probes.map((r) => r.run_id))
+      expect(useMessage.getState().text).toBe(`Saved ${probes.length} ${probes.length === 1 ? 'row' : 'rows'} as runs_all.csv.`)
+      expect(seen.length).toBe(before)
+    } finally {
+      saved.restore()
     }
   })
 

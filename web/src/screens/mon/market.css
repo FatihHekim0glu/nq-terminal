@@ -69,6 +69,17 @@
 
 /* MON cells: the fence flag after Last, and the heat fills (black text, white on the dark red step). */
 .mon-flag { color: var(--warn); }
+
+/* 2Day (look spec 7.7): a #181818 box, the prior session #4D4D4D, the last white, the final segment
+   up or down. The words beside it are for assistive technology. */
+.mon-spark { display: inline-flex; align-items: center; height: 14px; padding: 1px 2px; background: var(--spark-bg); vertical-align: middle; }
+.mon-spark svg { display: block; overflow: visible; }
+.mon-spark polyline { fill: none; stroke-width: 1; }
+.mon-spark-prior { stroke: var(--spark-prior); }
+.mon-spark-current { stroke: var(--white); }
+.mon-spark-up { stroke: var(--c-up); }
+.mon-spark-down { stroke: var(--c-down); }
+.mon-spark-flat { stroke: var(--white); }
 .mon-flag-stale { font-weight: 700; }
 .mon-heat {
   display: block;

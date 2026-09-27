@@ -1,10 +1,10 @@
 // Copy for GP and GIP (UI_SPEC sections 7 and 10; look spec 7.6). UK spelling, no em or en dashes.
-// `{name}` slots are filled by fillCopy(). The merge step may move this module to src/copy/gp.ts; the
-// copy rules test in this folder checks it where it is.
+// `{name}` slots are filled by fillCopy(). copyRules.test.ts checks it with every other copy module.
 
 export const GP_COPY = {
   titleGp: 'Candle chart',
   titleGip: 'Intraday chart',
+  instrument: 'Instrument',
   loadingScreen: 'Loading the chart.',
   openGip: 'Intraday chart of the last session (GIP)',
   openGp: 'Daily chart (GP)',
@@ -63,8 +63,13 @@ export const GP_COPY = {
   basis: 'Prices: {label}; bars stamped at {convention}; not a registered test.',
   rvBasis: 'Change: back-adjusted points against the close before; % change and RV22 (22 sessions, annualised, per cent) from the 27F universe to {date} [POST HOC].',
   rvMissing: 'Change: back-adjusted points against the close before; % change and RV22 only on 1d charts that end on the universe date.',
+  rvPane: 'RV22 pane: {label}; {basis}; unit {unit}, shown in per cent.',
+  rvPaneMissing: 'No RV22 pane: {detail}',
   fillsNote: '{n} fills from {run}. Fill prices are contract prices; candles are back-adjusted.',
   fillsCapped: 'Showing the first {n} of {total} fills.',
   fillsNoneInRun: 'No fills from {run} for this instrument.',
   fillsError: 'Fills from {run} could not be loaded: {detail}',
+
+  /** nq_lab.oos_gate.check_window's refusal, word for word; the slots are pandas UTC timestamps. */
+  gateRule: 'window [{start}, {end}) leaves the in-sample window [{isStart}, {isEnd}); straddling windows are refused, not clipped',
 } as const

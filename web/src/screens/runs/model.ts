@@ -2,7 +2,7 @@
 // honesty tags, the sub-tab and text filters, the compare-request chunks and the number formats.
 // Nothing here computes a statistic: every number shown is an API value, formatted.
 import type { Schemas } from '../../api/types'
-import { BADGE, RUN_TAGS } from './copy'
+import { BADGE, RUN_TAGS } from '../../copy/runs'
 
 export type RunSummary = Schemas['RunSummary']
 export type CompareStats = Schemas['CompareStats']

@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AmberField, DropdownField, ParamRow, ReadOnlyValue } from './Field'
 import { GreyButton, ToggleGroup } from './Field.buttons'
+import { PanelActionsContext } from './PanelChrome.actions'
 
 afterEach(cleanup)
 
@@ -87,6 +88,23 @@ describe('DropdownField and its amber list', () => {
     expect(field.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(field)
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+})
+
+describe('DropdownField inside a panel (Phase 8: axe scrollable-region-focusable)', () => {
+  it('leaves the first Tab stop to the panel: tabindex -1 inside a panel, 0 on its own', () => {
+    const actions = { panelId: 'p1', related: () => false, back: () => false, forward: () => false, open: () => false }
+    const { unmount } = render(
+      <PanelActionsContext value={actions}>
+        <DropdownField label="File" value="a" options={[{ value: 'a', label: 'A' }]} onChange={() => {}} />
+      </PanelActionsContext>,
+    )
+    // The panel's roving tabindex (WorkspaceFocus) then picks its default item, so a scrolling panel
+    // body keeps the Tab stop and a dropdown in the red bar never takes it on load.
+    expect(screen.getByRole('combobox', { name: 'File' }).getAttribute('tabindex')).toBe('-1')
+    unmount()
+    render(<DropdownField label="File" value="a" options={[{ value: 'a', label: 'A' }]} onChange={() => {}} />)
+    expect(screen.getByRole('combobox', { name: 'File' }).getAttribute('tabindex')).toBe('0')
   })
 })
 

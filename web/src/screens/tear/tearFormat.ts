@@ -6,6 +6,7 @@
 import type { SummaryDrawdown } from '../../charts/ChartA11ySummary'
 import { TEAR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
+import { toDecimal } from '../../format/decimal'
 
 export const MISSING = '--'
 
@@ -70,7 +71,7 @@ function groupThousands(digits: string): string {
 /** Fixed decimals, ASCII minus, `--` when missing, no negative zero. */
 export function formatNumber(value: number | null | undefined, decimals: number, opts: NumberOptions = {}): string {
   if (!finite(value)) return MISSING
-  let text = Math.abs(value).toFixed(decimals)
+  let text = toDecimal(Math.abs(value), decimals)
   const zero = Number(text) === 0
   if (opts.thousands) {
     const [whole = '', frac] = text.split('.')

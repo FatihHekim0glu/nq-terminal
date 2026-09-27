@@ -5,13 +5,14 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import * as bus from '../../chrome/CommandLine.bus'
+import { captureDownloads } from '../../chrome/download.testUtil'
 import { NumberingContext, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import type { ResolvedContext } from '../../commands/types'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import DesScreen from './DesScreen'
-import { CONFIRMATION, HYPOTHESES, OVERNIGHT, PANEL, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
+import { CONFIRMATION, HYPOTHESES, INSTRUMENT_NQ, OVERNIGHT, PANEL, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
 
 vi.mock('../../charts/LineStack', () => ({
   default: (props: { title: string; t: readonly number[]; panes: ReadonlyArray<{ summaryDrawdown?: unknown; series: ReadonlyArray<{ name: string; values: readonly unknown[] }> }> }) => (
@@ -71,6 +72,7 @@ function route(url: URL): Response {
   if (path === '/api/commands') return json(COMMANDS)
   if (path === '/api/data/catalog') return json(CATALOG)
   if (path === '/api/health') return json(HEALTH)
+  if (path === '/api/instruments/NQ') return json(INSTRUMENT_NQ)
   const panel = /^\/api\/analytics\/hypothesis\/([^/]+)\/panel$/.exec(path)
   if (panel) return json(PANEL)
   const detail = /^\/api\/hypotheses\/([^/]+)$/.exec(path)
@@ -290,17 +292,68 @@ describe('DES, other contexts', () => {
     expect(screen.getByTestId('des-confirm-hypothesis').textContent).toBe(CONFIRMATION.hypothesis)
   })
 
-  it('describes an instrument from the command index and the catalog', async () => {
+  it('describes an instrument from GET /api/instruments/{root}: contract, hours and related dates on page 1', async () => {
     renderDes({ kind: 'instrument', value: 'NQ' })
     await screen.findByRole('heading', { name: 'NQ1 Index', level: 3 })
-    const coverage = await screen.findByRole('table', { name: /Processed price series of NQ1 Index/ })
-    expect(within(coverage).getAllByRole('row')).toHaveLength(2)
-    expect(within(coverage).getByText('NQ.V.0_1m_back_repaired.parquet')).toBeTruthy()
-    expect(await screen.findByText('2010-01-01 to 2022-01-01 (the fence)')).toBeTruthy()
+    const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
+    expect(tabs).toEqual(['1) Profile', '2) Coverage', '3) Notes', '4) Contracts (CT)'])
+    const contract = await screen.findByRole('region', { name: DES.instrument.contract })
+    expect(within(contract).getByText('0.25')).toBeTruthy()
+    expect(within(contract).getByText('20.00 USD')).toBeTruthy()
+    const related = screen.getByRole('region', { name: DES.instrument.related })
+    expect(within(related).getByText('2026-12-08')).toBeTruthy()
+    expect(within(related).getByText('MNQZ6')).toBeTruthy()
+    const hours = screen.getByRole('region', { name: DES.instrument.hours })
+    expect(within(hours).getByText('15:55:05 ET')).toBeTruthy()
+    expect(within(hours).getByText(INSTRUMENT_NQ.hours_note)).toBeTruthy()
     // The price card reads one year of daily vendor bars to the fence, as GP does (look spec 7.3).
     await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/bars'))).toBe(true))
     const bars = calls.filter((c) => c.url.startsWith('/api/bars')).map((c) => new URL(c.url, 'http://127.0.0.1').searchParams)
     expect(bars.every((q) => q.get('timeframe') === '1d' && q.get('variant') === 'vendor' && q.get('start') === '2021-01-01' && q.get('end') === null)).toBe(true)
+  })
+
+  it('shows coverage, notes and the month-code strip on their own tabs', async () => {
+    renderDes({ kind: 'instrument', value: 'NQ' })
+    await screen.findByRole('heading', { name: 'NQ1 Index', level: 3 })
+    fireEvent.click(screen.getByRole('tab', { name: '2) Coverage' }))
+    const coverage = await screen.findByRole('table', { name: /Processed price series of NQ1 Index/ })
+    expect(within(coverage).getAllByRole('row')).toHaveLength(INSTRUMENT_NQ.coverage.series.length + 1)
+    expect(within(coverage).getByText('NQ.V.0_1m_back_repaired.parquet')).toBeTruthy()
+    expect(screen.getByText('2010-01-01 to 2022-01-01 (the fence)')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: '3) Notes' }))
+    const notes = await screen.findByRole('list', { name: DES.instrument.notes })
+    expect(within(notes).getAllByRole('listitem')).toHaveLength(INSTRUMENT_NQ.notes.length)
+    expect(within(notes).getByText(/qa.day_gate rejects 498 in-sample sessions/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: '4) Contracts (CT)' }))
+    const strip = await screen.findByRole('list', { name: DES.instrument.monthStrip })
+    const items = within(strip).getAllByRole('listitem')
+    expect(items.map((i) => i.textContent?.replace(/\s+listed$/, ''))).toEqual(['Jan:F', 'Feb:G', 'Mar:H', 'Apr:J', 'May:K', 'Jun:M', 'Jul:N', 'Aug:Q', 'Sep:U', 'Oct:V', 'Nov:X', 'Dec:Z'])
+    expect(items.filter((i) => i.classList.contains('des-month-on')).map((i) => i.textContent?.slice(0, 5))).toEqual(['Mar:H', 'Jun:M', 'Sep:U', 'Dec:Z'])
+  })
+
+  it('98) Report saves the description as Markdown, with no request', async () => {
+    renderDes({ kind: 'instrument', value: 'NQ' })
+    await screen.findByRole('region', { name: DES.instrument.contract })
+    const before = calls.length
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Report/ }))
+      const text = await saved.text('NQ_DES.md')
+      expect(text.split('\n')[0]).toBe('# NQ1 Index: futures description')
+      expect(calls.length).toBe(before)
+    } finally {
+      saved.restore()
+    }
+    cleanup()
+    renderDes(hyp('volmanaged_v0'))
+    await screen.findByRole('heading', { name: 'volmanaged_v0', level: 3 })
+    const again = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Report/ }))
+      expect((await again.text('volmanaged_v0_DES.md')).startsWith('# volmanaged_v0: hypothesis description')).toBe(true)
+    } finally {
+      again.restore()
+    }
   })
 
   it('asks for a context when it has none', () => {

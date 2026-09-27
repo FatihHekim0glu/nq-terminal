@@ -45,6 +45,11 @@ export const TEAR = {
   unusableTag: 'UNUSABLE: BALANCE',
   unusable: 'The balance check failed, so this run is unusable and nothing is drawn (rule 4).',
   failed: 'The tear sheet could not be read: {detail}',
+  noSeries: 'No return series is recorded for {name}, so there is nothing to draw.',
+  checkRow: 'No return series: this row is a check inside {parent}.',
+  checkRowOpen: "Open {parent}'s tear sheet:",
+  /** A command link (`{<line> <GO>}`): the parent on the open tab. */
+  checkRowLink: '{{parent} {code} <GO>}',
 } as const
 
 export const TEAR_BAR = {
@@ -55,6 +60,7 @@ export const TEAR_BAR = {
   forward: 'Forward',
   openRun: 'Run inspector (RUN)',
   openDes: 'Hypothesis description (DES)',
+  export: 'Export',
 } as const
 
 export const TEAR_EQ = {
@@ -63,6 +69,8 @@ export const TEAR_EQ = {
   benchmark: 'Benchmark',
   benchmarkNone: 'No benchmark for this series.',
   diffMissing: 'Performance difference pane not shown: the API sends no strategy minus benchmark series.',
+  perfDiff: 'Performance difference (strategy minus benchmark)',
+  diffUnit: 'Lower pane: performance difference, {unit}, in percent (times 100).',
 } as const
 
 export const TEAR_DD = {
@@ -91,6 +99,11 @@ export const TEAR_RR = {
   needs: 'Needs {window} {unit}; this series has {n}.',
   longNeeds: 'The {window}-{one} lines need {window} {unit}; this series has {n}.',
   one: { sessions: 'session', months: 'month' },
+  hi: 'Hi: {value}',
+  lo: 'Low: {value}',
+  extremes: '{window} {unit}: Hi {hi} on {hiDate}, Low {lo} on {loDate}.',
+  extremesNone: '{window} {unit}: no rolling value.',
+  extremesLabel: 'Rolling volatility extremes',
 } as const
 
 export const TEAR_MRET = {
@@ -105,6 +118,7 @@ export const TEAR_MRET = {
 export const TEAR_RET = {
   histogramName: '{name} return distribution',
   binRule: 'Bins: {rule}.',
+  seriesNote: 'Left: each period\'s return ({unit}) on the same axis as the histogram.',
   statsLabel: 'Return statistics',
   summary: 'Summary',
   risk: 'Risk ({horizon}, positive values are losses)',
@@ -184,6 +198,10 @@ export const TEAR_BOOKS = {
   groupCi: '{ci}',
   groupUnit: 'Unit: {unit}, {timezone}.',
   slippageTitle: 'Fill slippage (real fills only)',
+  slippageQuote: 'Fill slippage, real fills of the za_orb quote-check sample (results/quote_check_v1.json), {unit}',
+  slippageLive: 'Fill slippage, real fills of the paper book close rows ({journal}, volmanaged on MNQ), {unit}',
+  slippageNone: 'No real-fill sample belongs to {strategy}: the quote check is a za_orb sample and the paper book trades volmanaged on MNQ, so neither is shown here. Backtest fills are modelled and have no slippage distribution.',
+  strategyUnknown: 'this run',
   slippageCols: { name: 'Group', n: 'n', mean: 'Mean', p5: 'P5', p50: 'P50', p95: 'P95', source: 'Source' },
   slippagePlumbing: '{n} plumbing rows left out of the live rows.',
   waterfallCaption: 'Cost waterfall (EX3), {unit}',

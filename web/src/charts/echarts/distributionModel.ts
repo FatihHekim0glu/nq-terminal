@@ -239,13 +239,21 @@ export function distributionOption(input: DistributionInput, tokens: ChartTokens
       { left: 8, right: SERIES_RIGHT, top: 8, bottom: 24 },
       { left: HIST_LEFT, right: LABEL_GUTTER, top: 8, bottom: 24 },
     ],
-    xAxis: [{ ...x, type: 'time', gridIndex: 0, axisLabel: { ...x.axisLabel, formatter: '{yyyy}' } }, countAxis(1)],
+    xAxis: [{ ...x, type: 'time', gridIndex: 0, axisLabel: { ...x.axisLabel, formatter: seriesTimeFormat(input.series!.t) } }, countAxis(1)],
     yAxis: [
       { ...y, type: 'value', gridIndex: 0, min, max, interval },
       { type: 'value', gridIndex: 1, min, max, interval, show: false },
     ],
     series: [returnsSeries(input, tokens), ...series],
   }
+}
+
+const DAY_S = 86_400
+/** The series' time labels by span: years over three years, month and year over three months, else day and month. */
+export function seriesTimeFormat(t: readonly number[]): string {
+  const span = t.length > 1 ? (t[t.length - 1]! - t[0]!) / DAY_S : 0
+  if (span > 3 * 365) return '{yyyy}'
+  return span > 90 ? '{MMM} {yy}' : '{dd} {MMM}'
 }
 
 function sum(values: readonly number[]): number {

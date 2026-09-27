@@ -3,10 +3,11 @@
 // functions only. The matrix is only reordered, never recomputed: the clustered order is the API's
 // average-linkage order, the sector order keeps the API's order inside each sector.
 import type { Schemas } from '../../api/types'
-import type { HeatmapInput } from '../../charts/echarts/heatmapModel'
+import type { HeatColumnGroup, HeatmapInput } from '../../charts/echarts/heatmapModel'
+import { toCsv } from '../../chrome/exportCsv'
 import { fillCopy } from '../../copy/workspace'
-import { sectorRank, type Universe, type UniverseRow } from '../mon/model'
-import { CORR } from './copy'
+import { sectorRank, sectorTitle, type Universe, type UniverseRow } from '../mon/model'
+import { CORR } from '../../copy/corr'
 
 export type Correlation = Schemas['Correlation']
 export type PairCorrelation = Schemas['PairCorrelationSeries']
@@ -52,6 +53,19 @@ function heatName(universe: Universe, block: Correlation, order: CorrOrder): str
   return fillCopy(CORR.heatName, { matrix, order: orderName })
 }
 
+/** The sector header row (look spec 7.8): each run of same-sector columns, left to right. */
+function sectorGroups(symbols: readonly string[], rows: readonly UniverseRow[]): HeatColumnGroup[] {
+  const sectorOf = new Map(rows.map((r) => [r.symbol, r.sector]))
+  const groups: HeatColumnGroup[] = []
+  symbols.forEach((symbol, i) => {
+    const label = sectorTitle(sectorOf.get(symbol) ?? '')
+    const last = groups.at(-1)
+    if (last && last.label === label && last.to === i - 1) groups[groups.length - 1] = { ...last, to: i }
+    else groups.push({ label, from: i, to: i })
+  })
+  return groups
+}
+
 /** The Heatmap input: labels are roots, values the served matrix in the chosen order. */
 export function corrHeatmapInput(universe: Universe, matrix: CorrMatrix, order: CorrOrder): HeatmapInput {
   const block = blockOf(universe, matrix)
@@ -60,7 +74,14 @@ export function corrHeatmapInput(universe: Universe, matrix: CorrMatrix, order: 
   checkPermutation(idx, n)
   const labels = idx.map((i) => rootOf(block.symbols[i] ?? ''))
   const values = idx.map((r) => idx.map((c) => block.matrix[r]?.[c] ?? null))
-  return { kind: 'corr', name: heatName(universe, block, order), columns: labels, rows: labels, values, decimals: CORR_DECIMALS }
+  const base: HeatmapInput = { kind: 'corr', name: heatName(universe, block, order), columns: labels, rows: labels, values, decimals: CORR_DECIMALS }
+  if (order === 'clustered') return base
+  return { ...base, columnGroups: sectorGroups(idx.map((i) => block.symbols[i] ?? ''), universe.rows) }
+}
+
+/** 98) Export: the matrix as shown (its order and labels), every value as the API sent it. */
+export function matrixCsv(input: HeatmapInput): string {
+  return toCsv(['symbol', ...input.columns], input.values.map((row, i) => [input.rows[i] ?? '', ...row]))
 }
 
 /** NQ against ZN when both are served, else the first two symbols. */

@@ -28,7 +28,12 @@ describe('JournalTable', () => {
     expect(screen.getByRole('grid', { name: 'Journal rows: volmanaged_paper_journal.jsonl' })).toBeTruthy()
     const rows = bodyRows()
     expect(rows).toHaveLength(3)
-    expect(within(rows[0]!).getAllByRole('gridcell').map((c) => c.textContent).slice(0, 4)).toEqual(['1)', '2021-11-11', '15:55:05', 'close'])
+    const cells = within(rows[0]!).getAllByRole('gridcell')
+    expect(cells.map((c) => c.textContent).slice(0, 3)).toEqual(['1)', '2021-11-11', 'close'])
+    // Look spec 7.11: the source code, then the time at the right edge, amber and right-aligned.
+    expect(cells.slice(-2).map((c) => c.textContent)).toEqual(['LIVE', '15:55:05'])
+    expect(cells.at(-1)!.classList.contains('num')).toBe(true)
+    expect(within(cells.at(-1)!).getByText('15:55:05').classList.contains('time')).toBe(true)
   })
 
   it('hatches the plumbing row and shows the exact banner text in it', () => {
@@ -52,7 +57,7 @@ describe('JournalTable', () => {
 
   it('keeps file order when asked for oldest first', () => {
     render(<JournalTable rows={ROWS} file="both" order="oldest" />)
-    expect(within(bodyRows()[0]!).getAllByRole('gridcell')[3]?.textContent).toBe('warmup')
+    expect(within(bodyRows()[0]!).getAllByRole('gridcell')[2]?.textContent).toBe('warmup')
   })
 
   it('opens the API row on Enter', () => {

@@ -44,6 +44,7 @@ from nq_terminal.models.analytics import (
     MinTrlView,
     Moments,
     MonthlyView,
+    PeriodSeries,
     PsrView,
     QqView,
     RegistryEntry,
@@ -56,6 +57,7 @@ from nq_terminal.models.analytics import (
     Tails,
     TrackRecord,
     ValidityView,
+    VolExtremes,
     YearValue,
 )
 from nq_terminal.models.research import RegistryRow
@@ -174,10 +176,21 @@ def info(s: SessionSeries, context: Context) -> dict[str, Any]:
                 dropped=list(s.dropped), bench_label=s.bench_label)
 
 
+def perf_diff_unit(s: SessionSeries) -> str:
+    """The unit of EQ's performance difference (`perf.performance_difference`)."""
+    if not s.on_capital:
+        return f"cumulative {s.unit}, strategy minus benchmark"
+    how = "summed" if s.basis == "A" else "compounded"
+    return f"fraction of K, strategy minus benchmark cumulative return ({how})"
+
+
 def equity_view(s: SessionSeries, u: Units) -> EquityView:
     t, dates = axis(s.r.index)
+    diff = perf.performance_difference(s.r, s.bench, "A" if not s.on_capital else s.basis) if s.bench is not None \
+        else None
     return EquityView(unit=u.equity, t=t, date=dates, equity=nums(equity(s.r, s)),
-                      bench=_bench_curve(s, lambda b: equity(b, s)))
+                      bench=_bench_curve(s, lambda b: equity(b, s)), perf_diff=None if diff is None else nums(diff),
+                      perf_diff_unit=None if diff is None else perf_diff_unit(s))
 
 
 def drawdown_view(s: SessionSeries, u: Units) -> DrawdownView:
@@ -205,7 +218,23 @@ def rolling_view(s: SessionSeries, u: Units) -> RollingView:
                        sharpe_short=nums(panel[f"sharpe_{short}"]), sharpe_long=nums(panel[f"sharpe_{long}"]),
                        vol_short=nums(panel[f"vol_{short}"]), vol_long=nums(panel[f"vol_{long}"]),
                        full_sharpe=num(perf.sharpe(s.r, s.periods)),
-                       full_vol=num(perf.annual_volatility(s.r, s.periods)))
+                       full_vol=num(perf.annual_volatility(s.r, s.periods)),
+                       vol_extremes=[vol_extremes(panel[f"vol_{w}"], w, u.vol) for w in (short, long)])
+
+
+def _day(stamp: Any) -> tuple[int | None, str | None]:
+    if stamp is None:
+        return None, None
+    day = pd.Timestamp(stamp)
+    return int(day.timestamp()), day.strftime("%Y-%m-%d")
+
+
+def vol_extremes(line: pd.Series, window: int, unit: str) -> VolExtremes:
+    """RR's Hi and Low callouts for one rolling volatility line (`rolling.extremes`)."""
+    found = rolling.extremes(line)
+    (hi_t, hi_date), (lo_t, lo_date) = _day(found["hi_at"]), _day(found["lo_at"])
+    return VolExtremes(window=window, unit=unit, hi=num(found["hi"]), hi_t=hi_t, hi_date=hi_date,
+                       lo=num(found["lo"]), lo_t=lo_t, lo_date=lo_date)
 
 
 def monthly_view(s: SessionSeries, u: Units) -> MonthlyView:
@@ -228,7 +257,8 @@ def distribution_view(s: SessionSeries, u: Units) -> DistributionView:
                                 sd=num(hist["sd"]), var_95=num(hist["var_95"]), var_99=num(hist["var_99"])),
         qq=QqView(label=QQ_LABEL, theoretical=nums(osm), ordered=nums(osr), slope=num(slope),
                   intercept=num(intercept), r=num(r)),
-        stats=StatsTable(unit=u.level, **{k: (v if k == "n" else num(v)) for k, v in table.items()}))
+        stats=StatsTable(unit=u.level, **{k: (v if k == "n" else num(v)) for k, v in table.items()}),
+        series=PeriodSeries(unit=u.level, t=axis(s.r.index)[0], date=axis(s.r.index)[1], r=nums(s.r)))
 
 
 def risk_view(s: SessionSeries, u: Units) -> RiskView:

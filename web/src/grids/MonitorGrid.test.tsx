@@ -160,6 +160,16 @@ describe('MonitorGrid keyboard (UI_SPEC 2.1.1, APG grid)', () => {
     expect(bodyRows()[1]?.getAttribute('aria-selected')).toBe('false')
   })
 
+  // A grid that scrolls in its own box holds the panel's Tab stop (axe scrollable-region-focusable);
+  // one whose rows the panel body scrolls leaves the stop to the body.
+  it('marks a grid that scrolls in its own box as the Tab stop of its panel, and a panel-scrolled one not', () => {
+    const { unmount } = render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} />)
+    expect(grid().hasAttribute('data-roving-scroll')).toBe(true)
+    unmount()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} scroll="panel" />)
+    expect(grid().hasAttribute('data-roving-scroll')).toBe(false)
+  })
+
   it('moves the active cell with the arrow keys and selects the active row', () => {
     render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} />)
     key('ArrowDown')

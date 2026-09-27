@@ -6,7 +6,9 @@
 import type { Schemas } from '../../api/types'
 import type { BarLadderInput } from '../../charts/echarts/barLadderModel'
 import { DES } from '../../copy/des'
+import { SPEC } from '../../copy/tiles'
 import { fillCopy } from '../../copy/workspace'
+import { toDecimal } from '../../format/decimal'
 
 export type HypothesisCard = Schemas['HypothesisCard']
 export type HypothesisDetail = Schemas['HypothesisDetail']
@@ -37,7 +39,7 @@ export function decimalsFor(values: ReadonlyArray<number | null | undefined>): n
 /** Fixed decimals, ASCII minus, `+` on signed positives, `--` when missing; never `-0.00`. */
 export function formatNumber(value: number | null | undefined, decimals: number, signed = false): string {
   if (!isNumber(value)) return MISSING
-  const text = value.toFixed(decimals)
+  const text = toDecimal(value, decimals)
   if (/^-0(\.0+)?$/.test(text)) return text.slice(1)
   return signed && value > 0 ? `+${text}` : text
 }
@@ -203,7 +205,7 @@ const TEST_FIGURES: ReadonlyArray<readonly [CardKey, string, string, number, key
 
 /** The KPI row: the headline, then n, t, p, control p, Bonferroni, Holm and BH q, all basis A. */
 export function registrationKpis(card: HypothesisCard): KpiSpec[] {
-  const tag = card.registered ? '[PRE-REG]' : '[POST HOC]'
+  const tag = card.registered ? SPEC.preReg : SPEC.postHoc
   const headline: KpiSpec = {
     kpi: {
       key: 'headline',

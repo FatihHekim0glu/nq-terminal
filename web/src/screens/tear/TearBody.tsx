@@ -1,17 +1,21 @@
 // The tear sheet body for one run or hypothesis: the amber parameter row (context, benchmark, range,
 // and Freq for a run or Cost for a hypothesis), then the API's state: loading, a refusal in the
-// panel (an unusable run reads [UNUSABLE: BALANCE] and draws nothing, rule 4), or the KPI row, the
+// panel (an unusable run reads [UNUSABLE: BALANCE] and draws nothing, rule 4), an empty state for a
+// hypothesis whose card records no series (a check row links to its parent's tear sheet), or the KPI row, the
 // open tab's view and, for a run, its trades, costs and exposure panels.
 import { useMemo, useState } from 'react'
 import type { ApiError } from '../../api/client'
+import { useExportSource } from '../../chrome/exportSource'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
 import { TEAR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import KpiTile, { KpiRow } from '../../tiles/KpiTile'
+import CommandLink from '../help/CommandLink'
 import RunBooks from './RunBooks'
 import type { TearCode } from './TearSheet'
 import { TearView } from './TearViews'
+import { tearExport } from './tearExport'
 import { formatNumber } from './tearFormat'
 import { kpiTiles, tearTags, type Analytics } from './tearKpis'
 import { defaultCost, useRecordedCosts, useTearAnalytics, type Freq, type TearTarget } from './tearQueries'
@@ -70,18 +74,33 @@ function Params({ target, data, freq, onFreq, costs, cost, onCost }: ParamsProps
   )
 }
 
+function Unusable({ detail }: { readonly detail: string | null }) {
+  return (
+    <div className="tear-refusal" role="alert">
+      <p className="tear-tag tear-tag-bad">{`[${TEAR.unusableTag}]`}</p>
+      <p>{TEAR.unusable}</p>
+      {detail ? <p className="tear-detail">{detail}</p> : null}
+    </div>
+  )
+}
+
 function Refusal({ error }: { readonly error: ApiError }) {
-  if (error.status === 422 && UNUSABLE.test(error.detail)) {
-    return (
-      <div className="tear-refusal" role="alert">
-        <p className="tear-tag tear-tag-bad">{`[${TEAR.unusableTag}]`}</p>
-        <p>{TEAR.unusable}</p>
-        <p className="tear-detail">{error.detail}</p>
-      </div>
-    )
-  }
+  if (error.status === 422 && UNUSABLE.test(error.detail)) return <Unusable detail={error.detail} />
   const template = error.kind === 'http' && error.status < 500 ? TEAR.refused : TEAR.failed
   return <p className="tear-refusal" role="alert">{fillCopy(template, { detail: error.detail })}</p>
+}
+
+/** A card with no recorded series: the analytics route is never asked, so this replaces the loading line. */
+function NoSeries({ name, parent, tab }: { readonly name: string; readonly parent: string | null; readonly tab: TearCode }) {
+  if (!parent) return <p className="tear-refusal" role="status">{fillCopy(TEAR.noSeries, { name })}</p>
+  return (
+    <div className="tear-refusal" role="status">
+      <p>{fillCopy(TEAR.checkRow, { parent })}</p>
+      <p>
+        {fillCopy(TEAR.checkRowOpen, { parent })} <CommandLink text={fillCopy(TEAR.checkRowLink, { parent, code: tab })} />
+      </p>
+    </div>
+  )
 }
 
 function Kpis({ data }: { readonly data: Analytics }) {
@@ -96,6 +115,7 @@ function Kpis({ data }: { readonly data: Analytics }) {
 }
 
 function Loaded({ target, tab, link, data }: TearBodyProps & { readonly data: Analytics }) {
+  useExportSource(useMemo(() => tearExport(tab, data, target.name), [tab, data, target.name]))
   return (
     <div className="tear-view">
       <Kpis data={data} />
@@ -116,15 +136,19 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
     <div className="tear-body">
       <div className="tear-screen">
         <Params target={target} data={query.data} freq={freq} onFreq={setFreq} costs={recorded.costs} cost={cost} onCost={setCost} />
-        {error ? (
+        {query.unusable ? (
+          <Unusable detail={null} />
+        ) : error ? (
           <Refusal error={error} />
         ) : query.data ? (
           <Loaded target={target} tab={tab} link={link} data={query.data} />
+        ) : recorded.noSeries && target.kind === 'hypothesis' ? (
+          <NoSeries name={target.name} parent={recorded.parent} tab={tab} />
         ) : (
           <p className="tear-note" role="status" aria-busy="true">{TEAR.loading}</p>
         )}
       </div>
-      {!error && query.data && target.kind === 'run' ? <RunBooks runId={target.name} link={link} /> : null}
+      {!query.unusable && !error && query.data && target.kind === 'run' ? <RunBooks runId={target.name} link={link} /> : null}
     </div>
   )
 }

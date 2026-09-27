@@ -6,6 +6,7 @@
 import type { Schemas } from '../../api/types'
 import type { FieldOption } from '../../chrome/Field'
 import { JRNL, LIVE } from '../../copy/live'
+import { SPEC } from '../../copy/tiles'
 import { fillCopy } from '../../copy/workspace'
 
 export type LiveStatus = Schemas['LiveStatus']
@@ -88,7 +89,7 @@ export function exposureKpis(s: LiveStatus): Kpi[] {
   const x = s.exposure_summary
   if (!x) return []
   const kpi = (key: string, label: string, value: number | null, unit: string): Kpi => ({
-    key, label, value, unit, basis: 'B', tag: '[POST HOC]', note: null,
+    key, label, value, unit, basis: 'B', tag: SPEC.postHoc, note: null,
   })
   return [
     kpi('mean_exposure', LIVE.kpiMeanExposure, x.mean_exposure, LIVE.unitX),

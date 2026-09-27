@@ -133,6 +133,8 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/bars", "/api/data/catalog", "/api/market/universe", "/api/market/pair-corr", "/api/qa", "/api/qa/{name}",
     "/api/audit/oos-log", "/api/audit/openings", "/api/audit/spec-hashes",
     "/api/live/status", "/api/live/journal", "/api/live/log", "/api/live/performance",
+    # Phase 8 (A1): the instrument DES, GP's RV22 line, MON's 2Day sparkline, LIVE's routes and fills
+    "/api/instruments/{root}", "/api/market/rv", "/api/market/two-day", "/api/live/routes",
 }
 PHASE_3_PREFIX = "/api/analytics/"  # section 4 routes a concurrent Phase 3 build adds; checked by the contract
 

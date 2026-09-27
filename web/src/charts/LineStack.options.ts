@@ -6,9 +6,9 @@
 import type uPlot from 'uplot'
 import { FENCE } from '../copy/lineStack'
 import { drawFence, fenceCanvasX, fenceStyle, pixelRatio } from './fence'
-import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, tagBlocksLabel, valueAxisSize, type SharedGutter, type Tag } from './LineStack.draw'
+import { drawCallouts, drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, tagBlocksLabel, valueAxisSize, type SharedGutter, type Tag } from './LineStack.draw'
 import { visibleIndexRange, yRange, yRangeClearOfLegend, type Values } from './LineStack.model'
-import { formatAxisValue, linearTicks, logTicks, timeAxisLayout, type TimeAxisLayout } from './LineStack.time'
+import { MIN_LABEL_PX, formatAxisValue, isDailyAxis, linearTicks, logTicks, timeAxisLayout, type TimeAxisLayout } from './LineStack.time'
 import type { LineStackPane, LineStackSeries } from './LineStack.types'
 import { lineStackSeries, makeUplotTheme, type ChartTokens } from './theme'
 
@@ -178,12 +178,13 @@ function paneDecor(b: PaneBuild, theme: ReturnType<typeof makeUplotTheme>, logOn
     tags = lastValueTags(u, b.t, tagSeries, b.pane.decimals ?? 2, unit, b.pane.signed === true, b.tokens, b.pxRatio)
     return tags
   }
-  // Time labels stop at the view's end: none in the padding past the fence.
+  // Time labels stop at the view's end: none in the padding past the fence. Daily data never shows clock times.
+  const daily = isDailyAxis(b.t)
   const layoutOf = (u: uPlot) => {
     const min = u.scales.x?.min ?? 0
     const max = u.scales.x?.max ?? 0
     const end = Math.min(max, b.view()[1])
-    return timeAxisLayout(min, end, (u.bbox.width / b.pxRatio) * ((end - min) / (max - min || 1)))
+    return timeAxisLayout(min, end, (u.bbox.width / b.pxRatio) * ((end - min) / (max - min || 1)), MIN_LABEL_PX, daily)
   }
   const yAxis: uPlot.Axis = {
     ...(structuredClone(theme.axes[1]) as uPlot.Axis),
@@ -208,6 +209,7 @@ function paneDecor(b: PaneBuild, theme: ReturnType<typeof makeUplotTheme>, logOn
     drawMinorYTicks(u, splitsY, c.chartAxis)
     if (b.isBottom) drawTimeAxis(u, layoutOf(u), { axis: c.chartAxis, divider: c.chartYearDiv, font: b.tokens.font })
     drawTags(u, computeTags(u), b.tokens.font)
+    if (b.pane.callouts) drawCallouts(u, b.pane.callouts, styles.primary.stroke, b.tokens.font)
     b.onDraw?.(u, { fenceX: fenceX === null ? null : (fenceX - u.bbox.left) / pixelRatio(u) })
   }
   return { yAxis, layoutOf, draw }

@@ -125,6 +125,52 @@ describe('PanelChrome title bar (look spec 4.3)', () => {
     expect((document.activeElement as HTMLElement).closest('.ptitle')).not.toBeNull()
   })
 
+  // A grid or a chart handles Left and Right in its own React handler. The panel must see the key
+  // after that handler, so a key the item used never also moves the panel's focus.
+  it('born failing: leaves Left and Right to an item that handled them, so focus stays on the item', () => {
+    const handled = vi.fn()
+    render(
+      <PanelChrome panelId="p1" number={1} code="REG" title="REG" group="-">
+        <button type="button" data-roving="">before</button>
+        <div
+          role="grid"
+          aria-label="Board"
+          tabIndex={-1}
+          data-roving=""
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              e.preventDefault()
+              handled(e.key)
+            }
+          }}
+        >
+          cells
+        </div>
+        <button type="button" data-roving="">after</button>
+      </PanelChrome>,
+    )
+    const grid = screen.getByRole('grid', { name: 'Board' })
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(grid)
+    fireEvent.keyDown(grid, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(grid)
+    expect(handled.mock.calls).toEqual([['ArrowLeft'], ['ArrowRight']])
+  })
+
+  it('still moves on a Left or Right that the item left unhandled', () => {
+    render(
+      <PanelChrome panelId="p1" number={1} code="REG" title="REG" group="-">
+        <button type="button" data-roving="">before</button>
+        <div role="grid" aria-label="Board" tabIndex={-1} data-roving="" onKeyDown={() => undefined}>cells</div>
+      </PanelChrome>,
+    )
+    const grid = screen.getByRole('grid', { name: 'Board' })
+    grid.focus()
+    fireEvent.keyDown(grid, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'before' }))
+  })
+
   it('places a FunctionBar rendered by the screen above the scrolling body, not inside it', () => {
     render(
       <PanelChrome panelId="p1" number={2} code="REG" title="REG" group="-">

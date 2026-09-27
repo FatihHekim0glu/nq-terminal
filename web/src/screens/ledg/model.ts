@@ -1,7 +1,7 @@
 // Pure helpers for LEDG (look spec 7.9): the weekday-prefixed date, the anchor pair of each run, the
 // counts line and the filters. The ledger is shown as the API reads it; nothing is recomputed.
 import type { Schemas } from '../../api/types'
-import { LEDG } from './copy'
+import { LEDG } from '../../copy/ledg'
 
 export type LedgerRow = Schemas['LedgerRow']
 export type AnchorPair = Schemas['AnchorComparison']

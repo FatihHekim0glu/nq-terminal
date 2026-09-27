@@ -2,7 +2,7 @@
 // shown as it came (TASKS 7.1 and 7.2 honesty rule), in amber; any other failure names the API detail.
 import { ApiError } from '../../api/client'
 import { fillCopy } from '../../copy/workspace'
-import { MARKET } from './copy'
+import { MARKET } from '../../copy/market'
 
 const FORBIDDEN = 403
 
@@ -30,6 +30,7 @@ export default function QueryStatus({ loading, error, loadingText = MARKET.loadi
       </p>
     )
   }
-  if (loading) return <p className="mkt-status" role="status">{loadingText}</p>
+  // Busy while loading, so readers and screenshots wait for the screen, not this line.
+  if (loading) return <p className="mkt-status" role="status" aria-busy="true">{loadingText}</p>
   return null
 }

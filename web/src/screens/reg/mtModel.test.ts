@@ -56,21 +56,24 @@ describe('buildMtRows', () => {
   it('keeps the API order and values and says which rules each p passes', () => {
     const rows = buildMtRows(MULTIPLE_TESTING)
     expect(rows).toHaveLength(MULTIPLE_TESTING.k)
-    expect(rows[0]).toMatchObject({ name: 'eomtsy_v0', rank: 1, p: MULTIPLE_TESTING.rows[0]!.p })
+    expect(rows[0]).toMatchObject({ name: 'vt_har_v0', rank: 1, p: MULTIPLE_TESTING.rows[0]!.p, tag: 'overlay' })
     expect(passesText(rows[0]!.passes)).toBe('Bonferroni, Holm, BH')
-    // overnight_v0 at rank 2: p 0.00271 sits under Bonferroni 0.05/18 = 0.00278, as its stored
-    // Bonferroni p 0.0487 < 0.05 says; preholiday_v0 at rank 3 (p 0.0226) passes none.
-    expect(rows[1]!.name).toBe('overnight_v0')
+    // With the family at 21: eomtsy_v0 (rank 2, p 0.00097) sits under Bonferroni 0.05/21 = 0.00238;
+    // overnight_v0 (rank 3, p 0.00271) is over Bonferroni and Holm 0.05/19 = 0.00263 but under BH
+    // 3 x 0.05/21 = 0.00714, as its stored adjusted values say; preholiday_v0 (rank 4) passes none.
+    expect(rows[1]).toMatchObject({ name: 'eomtsy_v0', tag: 'edge' })
     expect(passesText(rows[1]!.passes)).toBe('Bonferroni, Holm, BH')
-    expect(passesText(rows[2]!.passes)).toBe('none')
-    expect(rows.filter((r) => r.passes.bh)).toHaveLength(2)
+    expect(rows[2]!.name).toBe('overnight_v0')
+    expect(passesText(rows[2]!.passes)).toBe('BH')
+    expect(passesText(rows[3]!.passes)).toBe('none')
+    expect(rows.filter((r) => r.passes.bh)).toHaveLength(3)
   })
 })
 
 describe('familyLine', () => {
   it('names k, alpha and whether the stored adjusted values match the recomputation', () => {
-    expect(familyLine(MULTIPLE_TESTING)).toBe('Family k 18, alpha 0.05. Stored adjusted values match the recomputation (max abs diff 0.0e+0).')
+    expect(familyLine(MULTIPLE_TESTING)).toBe('Family k 21, alpha 0.05. Stored adjusted values match the recomputation (max abs diff 0.0e+0).')
     const off = { ...MULTIPLE_TESTING, matches_registry: false, max_abs_diff: 0.0123 }
-    expect(familyLine(off)).toBe('Family k 18, alpha 0.05. Stored adjusted values DIFFER from the recomputation (max abs diff 1.2e-2).')
+    expect(familyLine(off)).toBe('Family k 21, alpha 0.05. Stored adjusted values DIFFER from the recomputation (max abs diff 1.2e-2).')
   })
 })

@@ -4,12 +4,16 @@ import { OOS, OPENINGS } from '../../copy/oos'
 import {
   callerOptions,
   dayBandLines,
+  alertText,
   entriesCsv,
   entryResult,
   entryTime,
   newestFirst,
   openingsCard,
   resultText,
+  severityLegend,
+  severitySteps,
+  severityText,
   sinceValid,
   swimlaneData,
   windowText,
@@ -19,6 +23,7 @@ type Entry = Schemas['OosLogEntry']
 
 function entry(over: Partial<Entry> = {}): Entry {
   return {
+    alert: false,
     caller: 'za_screen',
     end: '2022-01-01 00:00:00+00:00',
     end_epoch_s: 1640995200,
@@ -29,6 +34,7 @@ function entry(over: Partial<Entry> = {}): Entry {
     reason: 'pre-registered za_v0 screen',
     rows: 3129157,
     sealed: null,
+    severity: 2,
     spec_sha256: null,
     start: '2010-09-28 00:00:00+00:00',
     start_epoch_s: 1285632000,
@@ -187,12 +193,45 @@ describe('CSV export', () => {
   it('writes one quoted row per entry with the shown columns', () => {
     const csv = entriesCsv([entry({ reason: 'say "hi", then go' })])
     const [head, row] = csv.split('\r\n')
-    expect(head).toBe('ts_utc,caller,reason,symbol,timeframe,variant,start,end,rows,result')
-    expect(row).toBe('"2026-09-25T21:32:05.600302+00:00","za_screen","say ""hi"", then go","NQ.V.0","1m","repaired","2010-09-28 00:00:00+00:00","2022-01-01 00:00:00+00:00","3129157","served"')
+    expect(head).toBe('ts_utc,caller,reason,symbol,timeframe,variant,start,end,rows,result,severity,alert')
+    expect(row).toBe('"2026-09-25T21:32:05.600302+00:00","za_screen","say ""hi"", then go","NQ.V.0","1m","repaired","2010-09-28 00:00:00+00:00","2022-01-01 00:00:00+00:00","3129157","served","2","false"')
   })
 
   it('neutralises a cell that a spreadsheet would read as a formula', () => {
     const csv = entriesCsv([entry({ reason: '=HYPERLINK("x")' })])
     expect(csv).toContain('"\'=HYPERLINK(""x"")"')
+  })
+})
+
+const LEVELS: Schemas['SeverityLevel'][] = [
+  { level: 1, meaning: 'terminal display read, inside the in-sample window' },
+  { level: 2, meaning: 'research read by another caller, inside the in-sample window' },
+  { level: 3, meaning: 'window past the fence, before the in-sample start, or unreadable: check it' },
+  { level: 4, meaning: 'sealed read (spent window)' },
+]
+
+describe('the R severity column and the A alert (look spec 7.10, house semantics from the API)', () => {
+  it('draws the API severity as 1 to 4 steps, and says it in words with its meaning', () => {
+    expect(severitySteps(entry({ severity: 3 }))).toBe(3)
+    expect(severitySteps(entry({ severity: 9 }))).toBe(4)
+    expect(severitySteps(entry({ severity: 0 }))).toBe(1)
+    expect(severityText(entry({ severity: 4 }), LEVELS)).toBe('severity 4 of 4: sealed read (spent window)')
+    expect(severityText(entry({ severity: 2 }), [])).toBe('severity 2 of 4')
+  })
+
+  it('flags the alert the API sets, naming why', () => {
+    expect(alertText(entry({ alert: false }))).toBeNull()
+    expect(alertText(entry({ alert: true, is_sealed: true }))).toBe(OOS.alertSealed)
+    expect(alertText(entry({ alert: true, past_fence: true }))).toBe(OOS.alertPast)
+    expect(alertText(entry({ alert: true }))).toBe(OOS.alertCheck)
+  })
+
+  it('lists each level with its meaning and its count over the whole log, highest first', () => {
+    expect(severityLegend(LEVELS, { '1': 2, '2': 12, '4': 2 })).toEqual([
+      { level: 4, text: '4 sealed read (spent window): 2' },
+      { level: 3, text: '3 window past the fence, before the in-sample start, or unreadable: check it: 0' },
+      { level: 2, text: '2 research read by another caller, inside the in-sample window: 12' },
+      { level: 1, text: '1 terminal display read, inside the in-sample window: 2' },
+    ])
   })
 })

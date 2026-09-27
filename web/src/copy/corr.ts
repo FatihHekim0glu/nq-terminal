@@ -1,9 +1,9 @@
 // Copy for CORR (look spec 7.8, UI_SPEC 7). UK spelling, no em or en dashes, sentence case. Shared
-// market strings (loading, gate, basis) are in ../mon/copy.ts. The merge step may move this file to
-// src/copy/ unchanged; ../mon/copy.test.ts runs the shared copy rules over it meanwhile.
+// market strings (loading, gate, basis) are in market.ts.
 
 export const CORR = {
   title: 'Correlation matrix',
+  universeField: 'Universe',
   paramLabel: 'Correlation settings',
   matrix: 'Matrix',
   matrixWindow: '{n} sessions',

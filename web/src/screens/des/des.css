@@ -234,3 +234,22 @@
   .des-cols,
   .des-ladders { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Instrument DES (look spec 7.3): the month-code strip `Jan:F ... Dec:Z`, listed months in white and the
+   rest muted (the word "listed" is there for assistive technology), and the notes list. */
+.des-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  padding: 2px 5px;
+  list-style: none;
+  font-family: var(--font-mono);
+  line-height: var(--row-h);
+}
+.des-month { color: var(--muted); }
+.des-month-on { color: var(--white); font-weight: var(--fw-bold); }
+.des-notes { margin: 0; padding: 2px 5px; list-style: none; line-height: var(--row-h); color: var(--data); }
+.des-notes li + li { margin-top: 2px; }
+.des-notes-title { color: var(--white); font-weight: var(--fw-bold); }
+.des-notes-source { color: var(--muted); }

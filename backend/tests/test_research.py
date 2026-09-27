@@ -247,14 +247,22 @@ def test_multiple_testing_flags_a_tampered_stored_column(tmp_path):
 def test_series_sources_name_real_columns_and_no_price_column():
     for name, source in constants.SERIES_SOURCES.items():
         header = (REAL_SCREENS / source.file).read_text(encoding="utf-8").splitlines()[0].split(",")
-        columns = [source.time_column, *source.values.values(), *source.bench.values()]
-        assert set(columns) <= set(header), name
-        assert not any(re.search(PRICE_PATTERN, c) for c in columns[1:]), name
+        columns = [source.time_column, *(source.columns(header, cost) for cost in source.values)]
+        flat = [columns[0], *(c for group in columns[1:] for c in group)]
+        assert set(flat) <= set(header), name
+        assert all(columns[1:]), name  # every cost reads at least one column
+        assert not any(re.search(PRICE_PATTERN, c) for c in flat[1:]), name
+        if source.void_column:
+            assert source.void_column in header, name
 
 
 def test_every_registered_row_has_a_series_source(real):
+    """A newly registered row fails here until it has a series: the message says what to add."""
     registered = {c.name for c in real.cards() if c.registered}
-    assert registered <= set(constants.SERIES_SOURCES)
+    lacking = sorted(registered - set(constants.SERIES_SOURCES))
+    assert not lacking, (f"registered rows without a series source: {', '.join(lacking)}; add a SeriesSource for "
+                         "each to SERIES_SOURCES in nq_terminal/constants.py (its CSV under results/screens, the time "
+                         "column and the value column per cost)")
 
 
 def test_volmanaged_series_at_each_cost(real):

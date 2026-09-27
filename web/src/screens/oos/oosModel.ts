@@ -44,6 +44,45 @@ export function entryResult(e: OosEntry): ReadResult {
   return e.past_fence ? 'past' : 'served'
 }
 
+/** Steps of the R bar: the API's house severity (OosLog.severity_levels), held to 1..4. */
+export const SEVERITY_MAX = 4
+
+export function severitySteps(e: OosEntry): number {
+  const level = Number.isFinite(e.severity) ? Math.round(e.severity) : 1
+  return Math.min(SEVERITY_MAX, Math.max(1, level))
+}
+
+/** The severity in words, with the API's own meaning of the level when it sent one. */
+export function severityText(e: OosEntry, levels: readonly Schemas['SeverityLevel'][]): string {
+  const level = severitySteps(e)
+  const meaning = levels.find((l) => l.level === level)?.meaning
+  return meaning
+    ? fillCopy(OOS.severityMeaning, { level, max: SEVERITY_MAX, meaning })
+    : fillCopy(OOS.severityText, { level, max: SEVERITY_MAX })
+}
+
+/** Why the API flagged the entry (a sealed read, or a window the gate would refuse); null when it did not. */
+export function alertText(e: OosEntry): string | null {
+  if (!e.alert) return null
+  if (e.is_sealed) return OOS.alertSealed
+  return e.past_fence ? OOS.alertPast : OOS.alertCheck
+}
+
+export interface SeverityLegendItem {
+  readonly level: number
+  readonly text: string
+}
+
+/** Every level the API defines, highest first, with its count over the whole log (0 when absent). */
+export function severityLegend(
+  levels: readonly Schemas['SeverityLevel'][],
+  counts: Readonly<Record<string, number>>,
+): SeverityLegendItem[] {
+  return [...levels]
+    .sort((a, b) => b.level - a.level)
+    .map((l) => ({ level: l.level, text: fillCopy(OOS.severityLegendItem, { level: l.level, meaning: l.meaning, n: counts[String(l.level)] ?? 0 }) }))
+}
+
 export function resultText(result: ReadResult): string {
   if (result === 'sealed') return OOS.resultSealed
   return result === 'past' ? OOS.resultPast : OOS.resultServed
@@ -175,7 +214,7 @@ export function openingsCard(o: Openings): OpeningsCard {
 
 // ------------------------------------------------------------------ CSV export
 
-const CSV_COLUMNS = ['ts_utc', 'caller', 'reason', 'symbol', 'timeframe', 'variant', 'start', 'end', 'rows', 'result'] as const
+const CSV_COLUMNS = ['ts_utc', 'caller', 'reason', 'symbol', 'timeframe', 'variant', 'start', 'end', 'rows', 'result', 'severity', 'alert'] as const
 const FORMULA_START = /^[=+\-@\t\r]/
 
 function csvCell(value: unknown): string {
@@ -187,7 +226,7 @@ function csvCell(value: unknown): string {
 /** The entries as CSV (the shown columns, the log's own values), for 98) Export. */
 export function entriesCsv(entries: readonly OosEntry[]): string {
   const rows = entries.map((e) =>
-    [e.ts_utc, e.caller, e.reason, e.symbol, e.timeframe, e.variant, e.start, e.end, e.rows, entryResult(e)].map(csvCell).join(','),
+    [e.ts_utc, e.caller, e.reason, e.symbol, e.timeframe, e.variant, e.start, e.end, e.rows, entryResult(e), e.severity, e.alert].map(csvCell).join(','),
   )
   return [CSV_COLUMNS.join(','), ...rows].join('\r\n')
 }

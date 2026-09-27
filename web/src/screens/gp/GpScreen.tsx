@@ -1,8 +1,9 @@
 // GP and GIP (TASKS 7.1; UI_SPEC section 7 "GP / GIP"; look spec 7.6). One screen in two modes:
 // GP is the candle chart over a range (bar sizes 1m 5m 1h 1d), GIP one session intraday (1m 5m 1h).
-// Top to bottom: the two-line quote header, the red function bar (96 Actions, 97 Settings), the
-// parameter row (range or date, variant, the run whose fills are drawn), the range row, the session
-// flags, the chart (or the gate's refusal, amber and centred) and the basis footer.
+// Top to bottom: the two-line quote header, the red function bar (the amber instrument field, 96 Actions,
+// 97 Settings), the parameter row (range or date, variant, the run whose fills are drawn), the range row,
+// the session flags, the chart with its RV22 pane on daily bars (or the gate's refusal, amber and
+// centred) and the basis footer.
 // Honesty rules: every price is the served value (decimals follow the data); a window past the fence
 // is refused before any request; fills are drawn only from a run the user linked or picked.
 import { useId, useState } from 'react'
@@ -15,8 +16,8 @@ import { displayInstrument } from '../../commands/sectors'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import { useLinkGroups } from '../../state/linkGroups'
 import '../../charts/theme/chart.css'
-import { GP_COPY as C } from './copy'
-import { GpParams, GpRangeRow, spanReason } from './GpControls'
+import { GP_COPY as C } from '../../copy/gp'
+import { GpParams, GpRangeRow, InstrumentField, spanReason } from './GpControls'
 import { ChartMessage, GpFooter, SessionLine } from './GpStatus'
 import { ET_ZONE, GIP_TIMEFRAMES, GP_TIMEFRAMES, RANGES, rangeAllowed, sessionBadges, symbolFor, type GpTimeframe, type Variant } from './model'
 import { useChartView } from './useChartView'
@@ -39,6 +40,7 @@ function useFillsRun(group: ScreenProps['params']['group']): readonly [string | 
 
 interface BarProps {
   readonly mode: GpMode
+  readonly root: string
   readonly panelId: string
   readonly grid: boolean
   readonly onGrid: () => void
@@ -46,12 +48,13 @@ interface BarProps {
   readonly onRolls: () => void
 }
 
-function GpFunctionBar({ mode, panelId, grid, onGrid, rolls, onRolls }: BarProps) {
+function GpFunctionBar({ mode, root, panelId, grid, onGrid, rolls, onRolls }: BarProps) {
   const actions = usePanelActions()
   return (
     <FunctionBar
       panelId={panelId}
       title={mode === 'GP' ? C.titleGp : C.titleGip}
+      field={<InstrumentField root={root} mode={mode} />}
       items={[
         {
           n: FUNCTION_NUMBERS.actions,
@@ -78,8 +81,15 @@ function GpFunctionBar({ mode, panelId, grid, onGrid, rolls, onRolls }: BarProps
   )
 }
 
+function rvNote(data: GpData, tf: GpTimeframe): string | null {
+  if (tf !== '1d') return null
+  if (data.rv) return fillCopy(C.rvPane, { label: data.rv.label, basis: data.rv.basis, unit: data.rv.unit })
+  return data.rvError ? fillCopy(C.rvPaneMissing, { detail: data.rvError.detail }) : null
+}
+
 function footerNotes(data: GpData, chosen: Variant, tf: GpTimeframe, ticker: string, run: string | null): string[] {
-  const notes: string[] = []
+  const rv = rvNote(data, tf)
+  const notes: string[] = rv ? [rv] : []
   if (data.variant !== chosen) notes.push(fillCopy(C.variantMissing, { variant: chosen, tf, ticker }))
   if (!run) return notes
   if (data.fillsError) return [...notes, fillCopy(C.fillsError, { run, detail: data.fillsError.detail })]
@@ -119,7 +129,7 @@ function GpBody({ mode, root, symbol, group, args, panelId }: BodyProps) {
   return (
     <div className="gp-screen" data-screen={mode}>
       <QuoteHeader quote={view.quote} />
-      <GpFunctionBar mode={mode} panelId={panelId} grid={grid} onGrid={() => setGrid(!grid)} rolls={showRolls} onRolls={() => setShowRolls(!showRolls)} />
+      <GpFunctionBar mode={mode} root={root} panelId={panelId} grid={grid} onGrid={() => setGrid(!grid)} rolls={showRolls} onRolls={() => setShowRolls(!showRolls)} />
       <GpParams
         mode={mode} draftStart={win.draftStart} draftEnd={win.draftEnd} onDraftStart={win.setDraftStart} onDraftEnd={win.setDraftEnd}
         onSubmit={win.submit} variant={data.variant} variants={data.variants} onVariant={setVariant}
@@ -141,10 +151,11 @@ function GpBody({ mode, root, symbol, group, args, panelId }: BodyProps) {
         {showChart ? (
           <CandleChart
             name={ticker} bars={bars} fills={data.fills} rolls={view.rolls} link={group} timeZone={ET_ZONE}
+            {...(view.indicator ? { indicator: view.indicator } : {})}
             precision={view.precision} minMove={10 ** -view.precision} grid={grid}
           />
         ) : (
-          <ChartMessage refusal={data.refusal} error={data.barsError} text={messageText(data, win, tf, ticker)} />
+          <ChartMessage refusal={data.refusal} error={data.barsError} text={messageText(data, win, tf, ticker)} busy={data.spanOk && data.barsLoading} />
         )}
       </div>
       <GpFooter bars={bars} tf={tf} rvDate={view.rvDate} notes={footerNotes(data, variant, tf, ticker, run)} />

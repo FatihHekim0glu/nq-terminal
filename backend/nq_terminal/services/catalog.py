@@ -6,9 +6,12 @@ recognised by name, and each file is described by `pyarrow.parquet.read_metadata
 Arrow schema, and the `ts` column statistics for the first bar and whether the file runs past the fence).
 Prices are read only through `nq_lab.data.serve` (see `services/bars.py`).
 
-The folder is listed on every call rather than hard-coded, because other workflows add series while the
-terminal runs; metadata is cached per file on `(mtime_ns, size)`. A file that cannot be described (for example
-one being written) is reported with an `error` and no columns, never raised.
+The folder is listed live rather than hard-coded, because other workflows add series while the terminal runs.
+The listing is cached on the folder's own `mtime_ns` (an add, remove or rename in the folder moves it), so a
+multi-symbol request pays one `stat` per lookup instead of a fresh scan; a file rewritten in place keeps its
+listing and changes its own `(mtime_ns, size)`, which `version` reads from the file. Footer metadata is cached per
+file on `(mtime_ns, size)`. A file that cannot be described (for example one being written) is reported with an
+`error` and no columns, never raised.
 
 It also lists the QA and repair reports in the results folder by an allowlisted name pattern
 (`qa_report*.json`, `repair_report.json`); their content is read through `services/files.FileCache`.
@@ -169,10 +172,26 @@ class Catalog:
     def __init__(self, folder: Path | None = None):
         self.folder = Path(folder) if folder is not None else processed_dir()
         self._meta: dict[Path, tuple[tuple[int, int], SeriesMeta]] = {}
+        self._listing: tuple[int | None, Listing] | None = None
         self._lock = threading.Lock()
 
+    def _folder_key(self) -> int | None:
+        try:
+            return self.folder.stat().st_mtime_ns
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+
     def listing(self) -> Listing:
-        return list_folder(self.folder)
+        """The folder's series, listed again only when the folder's own mtime has moved."""
+        key = self._folder_key()
+        with self._lock:
+            cached = self._listing
+        if cached is not None and cached[0] == key and key is not None:
+            return cached[1]
+        listing = list_folder(self.folder)
+        with self._lock:
+            self._listing = (key, listing)
+        return listing
 
     def has(self, symbol: str, timeframe: str, variant: str) -> bool:
         return SeriesId(symbol, timeframe, variant) in self.listing().series

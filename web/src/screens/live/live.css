@@ -18,12 +18,6 @@
   min-height: 0;
 }
 .live-top > * { flex: 0 0 auto; }
-/* A short panel (the 1366x768 split) shows the chart before the KPI tiles, so more of it is in view,
-   and gives the block the height a whole chart needs; the body scrolls to the rest. */
-@container live (max-height: 320px) {
-  .live-top { height: max(100cqh, 600px); }
-  .live-top > .kpi-row { order: 1; }
-}
 .jrnl-screen { height: 100%; min-height: 0; }
 
 .live-strip {
@@ -67,6 +61,21 @@
   .live-recon { flex: 0 0 auto; }
 }
 .live-journals { flex: 0 0 auto; padding-top: 2px; }
+
+/* Routes and Fills (look spec 7.11): section heads on --th-bg with the READ ONLY tag, then the footer
+   strip of totals on #191919. */
+.live-routes { flex: 0 0 auto; padding-top: 2px; }
+.live-section {
+  margin: 0;
+  padding: 0 6px;
+  background: var(--th-bg);
+  color: var(--white);
+  font-size: inherit;
+  font-weight: 700;
+  line-height: var(--row-h);
+}
+.live-readonly { color: var(--warn); }
+.live-foot { background: var(--chrome); }
 .nqt-grid.live-table { table-layout: fixed; }
 
 .nqt-grid .live-plumbing-tag { color: var(--warn); font-weight: 700; }
@@ -76,3 +85,14 @@
 .jrnl-body > .nqt-grid-wrap { flex: 1 1 auto; }
 .jrnl-tag { color: var(--warn); font-weight: 700; }
 .jrnl-status { margin-left: auto; padding-right: 6px; color: var(--text); white-space: nowrap; }
+
+/* A short panel (the 1366x768 split, about 275px) shows the whole target-against-actual chart at
+   rest, sized to the panel, rather than the top of it: the chart block comes first, and the strips,
+   countdown, tiles, reconciliation, routes and journals follow in the body's scroll (TASKS Phase 8).
+   Last in the file, so it wins over the rules above. */
+@container live (max-height: 320px) {
+  .live-top { display: contents; }
+  .live-top > .live-perf { order: -1; flex: 0 0 auto; min-height: 0; }
+  .live-perf > .live-perf-row { flex: 0 0 auto; }
+  .live-chart { flex: 0 0 auto; height: calc(100cqh - var(--row-h)); }
+}

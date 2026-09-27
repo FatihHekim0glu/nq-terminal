@@ -109,6 +109,8 @@
   text-overflow: ellipsis;
 }
 .reg-band-title { color: var(--white); font-weight: var(--fw-bold); }
+/* The accepted-amendments line stays in a short panel (unlike the confirmations note): it is the state. */
+.reg-accept-line { color: var(--muted); }
 .reg-confirm-scroll { max-height: calc(var(--row-h) * 5); }
 .reg-confirm-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reg-link {

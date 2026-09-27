@@ -3,7 +3,7 @@ import { RANGE_TOOLBAR } from '../../charts/theme/geometry'
 import {
   FENCE_MS, IS_START_MS, RANGES, availableVariants, barsQuery, customWindow, fenceRefusal, fillsFor, gateRuleText,
   dayReturnPercent, gipWindow, instrumentMatches, isoDate, parseIsoDate, priceDecimals, quoteFromBars, rangeAllowed, rangeWindow,
-  rollsFrom, rv22Percent, sessionBadges, sourceTimeframe, symbolFor, type BarsLike,
+  rollsFrom, rv22Percent, rvIndicator, sessionBadges, sourceTimeframe, symbolFor, type BarsLike,
 } from './model'
 
 const DAY = 86_400_000
@@ -269,5 +269,24 @@ describe('rolls and RV22', () => {
     expect(dayReturnPercent(rows, 'NQ', '2021-12-31')).toBeCloseTo(0.52, 10)
     expect(dayReturnPercent(rows, 'NQ', '2021-12-30')).toBeNull()
     expect(dayReturnPercent([{ root: 'NQ', returns: {}, last_date: '2021-12-31' }], 'NQ', '2021-12-31')).toBeNull()
+  })
+})
+
+describe('rvIndicator: the RV22 pane of GP (look spec 7.6, MV3)', () => {
+  const day = (d: string) => Date.parse(`${d}T00:00:00Z`) / 1000
+  // Daily bars open at 22:00 UTC the evening before their session (the Globex open).
+  const bars = { t: [day('2021-12-29') - 7200, day('2021-12-30') - 7200, day('2021-12-31') - 7200], o: [], h: [], l: [], c: [], v: [] }
+  const rv = { date: ['2021-12-28', '2021-12-29', '2021-12-31'], rv: [0.2, null, 0.3057044013941762], window: 22, unit: 'fraction per year, annualised (0.18 is 18%)' }
+
+  it("puts the API's value at each bar's session date, in percent, with a gap where there is none", () => {
+    const ind = rvIndicator(bars, rv)!
+    expect(ind.values).toEqual([null, null, 30.57044013941762])
+    expect(ind.unit).toBe('%')
+    expect(ind.digits).toBe(1)
+    expect(ind.name).toBe('RV22')
+  })
+
+  it('is null when no bar has a value (nothing to draw)', () => {
+    expect(rvIndicator(bars, { ...rv, rv: [null, null, null] })).toBeNull()
   })
 })

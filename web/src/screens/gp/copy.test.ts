@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { findCopyViolations } from '../../copy/copyRules'
-import { GP_COPY } from './copy'
+import { GP_COPY } from '../../copy/gp'
 import { GP_SCREEN_META } from './index'
 
 // The app tsconfig carries browser types only, so the one Node built-in used here is typed by hand.

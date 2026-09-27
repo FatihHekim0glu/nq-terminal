@@ -2,17 +2,24 @@
 // tabindex inside. Items that take part carry `data-roving`; the one that should get focus first
 // carries `data-roving-default`. Every other focusable element inside a panel is taken out of the
 // Tab order, so Tab and Shift+Tab move between panels. Left and Right move between the items of
-// the focused panel unless the item (a chart, a grid) already handled the key; on a tab they stay in
+// the focused panel unless the item (a chart, a grid) already handled the key, so the panel reads the
+// key after the item's own React handler (usePanelRoving returns a React onKeyDown for the panel
+// element, never a native listener, which would run before React's). In a text field they move the
+// caret, and only Right at the end or Left at the start moves on. On a tab they stay in
 // its tablist and wrap, Home and End go to the first and last tab (the ARIA tabs pattern) and Down
 // goes into the panel's content. Up and
 // Down, and Home and End on any other item, are left to the item, because they scroll. While a panel shows an overlay marked
 // `data-roving-overlay` (the related functions menu), the Tab stop is taken from that overlay's items,
 // so Tab from the command line lands in the open menu and its scroll region stays keyboard reachable.
-import { useEffect, type RefObject } from 'react'
+// A box that scrolls on its own inside the body (a virtualised grid, a statistics table in a fixed
+// column) carries `data-roving-scroll`: it takes the Tab stop from the body when both render as stops,
+// since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
+import { useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react'
 
 export const ROVING_ATTR = 'data-roving'
 export const ROVING_DEFAULT_ATTR = 'data-roving-default'
 export const ROVING_OVERLAY_ATTR = 'data-roving-overlay'
+export const ROVING_SCROLL_ATTR = 'data-roving-scroll'
 
 const FOCUSABLE = [
   'a[href]', 'area[href]', 'button', 'input', 'select', 'textarea', 'iframe', 'summary',
@@ -29,6 +36,19 @@ function isDisabled(el: HTMLElement): boolean {
 
 function isTextField(el: HTMLElement): boolean {
   return el.isContentEditable || el.matches('input, textarea, select')
+}
+
+/**
+ * True when a Left or Right in this text field has no caret left to move: Right with the caret at
+ * the end, Left with it at the start, and no selection. Selects, text areas and editable content
+ * keep the arrows.
+ */
+function caretAtEdge(el: HTMLElement, key: string): boolean {
+  if (!(el instanceof HTMLInputElement)) return false
+  const start = el.selectionStart
+  const end = el.selectionEnd
+  if (start === null || end === null || start !== end) return false
+  return key === NEXT_KEY ? end === el.value.length : start === 0
 }
 
 function setTabIndex(el: HTMLElement, value: number): void {
@@ -49,12 +69,20 @@ export function panelTabStops(root: HTMLElement): HTMLElement[] {
   )
 }
 
+/**
+ * The Tab stop: `prefer` when it is an item; else the one stop already chosen (one item at tabindex
+ * 0); else, among several rendered stops (or none), a box that scrolls on its own, then the default
+ * item, then the first.
+ */
 function pickCurrent(items: readonly HTMLElement[], prefer?: HTMLElement): HTMLElement | undefined {
   if (prefer && items.includes(prefer)) return prefer
+  const stops = items.filter((el) => el.getAttribute('tabindex') === '0')
+  if (stops.length === 1) return stops[0]
+  const pool = stops.length > 1 ? stops : items
   return (
-    items.find((el) => el.getAttribute('tabindex') === '0') ??
-    items.find((el) => el.hasAttribute(ROVING_DEFAULT_ATTR)) ??
-    items[0]
+    pool.find((el) => el.hasAttribute(ROVING_SCROLL_ATTR)) ??
+    pool.find((el) => el.hasAttribute(ROVING_DEFAULT_ATTR)) ??
+    pool[0]
   )
 }
 
@@ -110,7 +138,8 @@ function handleTabKey(panel: HTMLElement, target: HTMLElement, event: KeyboardEv
 export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false
   const target = event.target as HTMLElement | null
-  if (!target || isTextField(target)) return false
+  if (!target) return false
+  if (isTextField(target) && !caretAtEdge(target, event.key)) return false
   const tab = handleTabKey(panel, target, event)
   if (tab !== null) return tab
   if (event.key !== NEXT_KEY && event.key !== PREV_KEY) return false
@@ -123,25 +152,33 @@ export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boole
   return moveTo(panel, event, next)
 }
 
-/** Keeps a panel element's roving tabindex in step with its content as screens render. */
-export function usePanelRoving(ref: RefObject<HTMLElement | null>): void {
+/**
+ * Keeps a panel element's roving tabindex in step with its content as screens render, and returns
+ * the panel's keydown handler. It is a React handler on purpose: React dispatches from its root, so a
+ * native listener on the panel would see a key before the grid or chart that handles it.
+ */
+export function usePanelRoving(ref: RefObject<HTMLElement | null>): (event: ReactKeyboardEvent<HTMLElement>) => void {
   useEffect(() => {
     const panel = ref.current
     if (!panel) return undefined
     syncRoving(panel)
     const observer = new MutationObserver(() => syncRoving(panel))
-    observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['tabindex', ROVING_ATTR, ROVING_OVERLAY_ATTR, 'disabled', 'href'] })
-    const onKey = (event: KeyboardEvent) => handleRovingKey(panel, event)
+    observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['tabindex', ROVING_ATTR, ROVING_OVERLAY_ATTR, ROVING_SCROLL_ATTR, 'disabled', 'href'] })
     const onFocus = (event: FocusEvent) => {
       const target = event.target as HTMLElement | null
       if (target?.hasAttribute(ROVING_ATTR)) syncRoving(panel, target)
     }
-    panel.addEventListener('keydown', onKey)
     panel.addEventListener('focusin', onFocus)
     return () => {
       observer.disconnect()
-      panel.removeEventListener('keydown', onKey)
       panel.removeEventListener('focusin', onFocus)
     }
   }, [ref])
+  return useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      const panel = ref.current
+      if (panel && panel.contains(event.target as Node)) handleRovingKey(panel, event.nativeEvent)
+    },
+    [ref],
+  )
 }

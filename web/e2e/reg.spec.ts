@@ -32,6 +32,8 @@ interface RegistryRow {
   readonly bh_q: number | null
   readonly spec_sha256: string
   readonly verdict: string
+  readonly tag: 'edge' | 'overlay' | 'check'
+  readonly amendments: number
 }
 
 interface Registry {
@@ -41,6 +43,7 @@ interface Registry {
 
 interface MtRow {
   readonly name: string
+  readonly tag: 'edge' | 'overlay' | 'check'
   readonly rank: number
   readonly p: number
   readonly bonferroni_line: number
@@ -105,16 +108,26 @@ test.describe('REG and MT', () => {
     await expect(criteria.getByRole('button', { name: /Registered hypotheses/ })).toContainText(String(registry.counts.registered))
     await expect(criteria.getByRole('button', { name: /Passed own bar/ })).toContainText(String(registry.counts.passed))
     await expect(criteria.getByRole('button', { name: /Failed own bar/ })).toContainText(String(registry.counts.failed))
-    const rows = await gridRows(reg.getByRole('grid', { name: /Registry board/ }))
+    const grid = reg.getByRole('grid', { name: /Registry board/ })
+    const rows = await gridRows(grid)
     expect(rows).toHaveLength(registry.counts.rows)
+    // A half-width panel drops round, control p, Bonferroni and the spec sha (Phase 8, no sideways
+    // scroll) and says so; every column it shows still equals the API.
+    const heads = (await grid.locator('thead th').allTextContents()).map((h) => h.trim())
+    const at = (h: string) => heads.indexOf(h)
+    const TAGS = { edge: 'edge', overlay: '[OVERLAY]', check: 'check' } as const
     for (const src of registry.rows) {
-      const row = rows.find((cells) => cells[1] === src.name)
+      const row = rows.find((cells) => cells[at('Name')] === src.name)
       expect(row, src.name).toBeDefined()
-      const want = [count(src.n), p4(src.p), p4(src.control_p), p4(src.bonferroni_p), p4(src.holm_p), p4(src.bh_q), sha(src.spec_sha256)]
-      expect(row?.slice(4, 11), src.name).toEqual(want)
+      const want: Array<readonly [string, string]> = [
+        ['n', count(src.n)], ['p', p4(src.p)], ['Holm', p4(src.holm_p)], ['BH q', p4(src.bh_q)], ['Tag', TAGS[src.tag]],
+        ['Amend', String(src.amendments)], ['Ctrl p', p4(src.control_p)], ['Bonf', p4(src.bonferroni_p)], ['Spec sha', sha(src.spec_sha256)],
+      ]
+      for (const [head, value] of want) if (at(head) >= 0) expect(row?.[at(head)], `${src.name} ${head}`).toBe(value)
     }
-    const overnight = rows.find((cells) => cells[1] === 'overnight_v0')
-    expect(overnight?.[3]).toBe('[PASS]')
+    if (at('Bonf') < 0) await expect(reg.getByText(/Columns hidden here/)).toBeVisible()
+    const overnight = rows.find((cells) => cells[at('Name')] === 'overnight_v0')
+    expect(overnight?.[at('Verdict')]).toBe('[PASS]')
     const confirm = reg.getByRole('region', { name: /Sealed confirmations/ })
     await expect(confirm).toContainText('[SPENT]')
     await expectGalleryAxeClean(page)
@@ -132,9 +145,9 @@ test.describe('REG and MT', () => {
     const rows = await gridRows(view.getByRole('grid', { name: /Adjusted p-values/ }))
     expect(rows).toHaveLength(mt.k)
     mt.rows.forEach((src, i) => {
-      expect(rows[i]?.slice(1, 10)).toEqual([
-        String(src.rank), src.name, p4(src.p), p4(src.bonferroni_line), p4(src.holm_line), p4(src.bh_line),
-        p4(src.bonferroni_p), p4(src.holm_p), p4(src.bh_q),
+      expect(rows[i]?.slice(1, 11)).toEqual([
+        String(src.rank), src.name, src.tag === 'overlay' ? '[OVERLAY]' : src.tag, p4(src.p), p4(src.bonferroni_line), p4(src.holm_line),
+        p4(src.bh_line), p4(src.bonferroni_p), p4(src.holm_p), p4(src.bh_q),
       ])
       // The lines themselves: Bonferroni alpha/k, Holm alpha/(k-i+1), BH i alpha/k.
       expect(src.bonferroni_line).toBeCloseTo(mt.alpha / mt.k, 12)

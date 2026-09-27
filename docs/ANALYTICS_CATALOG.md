@@ -138,7 +138,7 @@ Line charts with a zero line and the full-sample value dashed (DL8).
 | ID | Pri | Item | Definition | Inputs | QA reference |
 |---|---|---|---|---|---|
 | MV1 | P0 | Candles with volume (1m, 5m, 1h, 1d), fills overlaid, roll markers, fence | OHLCV bucket aggregation from the served frame (first o, max h, min l, last c, sum v) | `/api/bars`, `fills` | daily resample of 1m against the vendor 1d file on sampled days |
-| MV2 | P0 | Roll-gap markers and table | at each `instrument_id` change: `gap = offset_t - offset_{t-1}` in points and % of `c_none` | 1d `offset`, `instrument_id` | `results/qa_report_universe.json` roll counts |
+| MV2 | P0 | Roll-gap markers and table | at each `instrument_id` change: `gap_pts = offset_t - offset_{t-1}` in points, and `gap_pct = 100 * gap_pts /` the raw close of the bar before the roll (`c_none` in 1d files, `raw_c` in 1m files) | 1d `offset`, `instrument_id` | `results/qa_report_universe.json` roll counts |
 | MV3 | P0 | Realised volatility | close to close `sd(log r, 22)·√252`; intraday `√(Σ r_1m²)·√252` per session | served bars | numpy |
 | MV4 | P0 | 27-future return heatmap (1D, 1W, 1M, 3M, YTD, 12M; and vol-normalised) | `r_t = ΔB_t / (N_t - ΔB_t)`, B = `c_back`, N = `c_none` (the project's convention) [verified `dtsmom_panel.py`]. Never percent change of the back-adjusted series | 1d served frames | reuse the `dtsmom_panel` builder and compare |
 | MV5 | P0 | Correlation matrix (252 sessions and full sample; average-linkage order on 1-ρ) | Pearson on MV4 returns, pairwise complete | MV4 | pandas `.corr` against `numpy.corrcoef`; `scipy.cluster.hierarchy` |

@@ -3,7 +3,9 @@
 // ends at 2021-12-31. The screen computes nothing: it prints the API values at fixed precision with
 // their units, keeps the API's post hoc label and basis verbatim, and names the gate's bookkeeping.
 //
-// Layout: red bar (96 Actions, 97 Settings), then the parameter row, the grid and the notes. In a short
+// Layout: red bar (the [27F] universe field, 95 Save defaults, 96 Actions, 97 Settings), then the parameter
+// row, the grid (with the 2Day sparkline of each row on screen) and the notes. Save defaults keeps the
+// view, heat cells and window in this browser only (safeStorage), validated when read back. In a short
 // panel (the 2x2 HOME) the parameter row folds away (its settings stay in 97 Settings) and the grid takes
 // the whole body, so the row budget of look spec 7 holds; the notes sit under the grid, reached by
 // scrolling the body. Enter on a row opens that symbol's functions (GP, GIP, DES, CORR).
@@ -11,6 +13,8 @@ import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'reac
 import { useUniverse } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
+import { postMessage } from '../../chrome/MessageLine.store'
+import { isPlainObject, readJson, safeLocalStorage, writeJson } from '../../state/safeStorage'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
@@ -18,10 +22,11 @@ import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/work
 import MonitorGrid from '../../grids/MonitorGrid'
 import CheckField from './CheckField'
 import { monColumns } from './columns'
-import { MARKET, MON } from './copy'
+import { MARKET, MON } from '../../copy/market'
 import FunctionsMenu from './FunctionsMenu'
 import { DEFAULT_WINDOW, WINDOW_OPTIONS, buildMonRows, gateText, type MonRow, type MonView, type Universe } from './model'
 import QueryStatus from './QueryStatus'
+import UniverseField from './UniverseField'
 import './market.css'
 
 const rowId = (r: MonRow) => r.symbol
@@ -52,6 +57,48 @@ interface Settings {
   readonly heat: boolean
   readonly window: number
 }
+
+/** Browser storage key of the saved monitor defaults (per viewer, never shared). */
+export const MON_DEFAULTS_KEY = 'nqt.mon.defaults'
+const FACTORY: Settings = { view: 'returns', heat: false, window: DEFAULT_WINDOW }
+
+function isSettings(value: unknown): value is Settings {
+  return (
+    isPlainObject(value) &&
+    (value.view === 'returns' || value.view === 'normalised') &&
+    typeof value.heat === 'boolean' &&
+    (WINDOW_OPTIONS as readonly unknown[]).includes(value.window)
+  )
+}
+
+function savedSettings(): Settings {
+  const saved = readJson(safeLocalStorage, MON_DEFAULTS_KEY, isSettings)
+  return saved ? { view: saved.view, heat: saved.heat, window: saved.window } : FACTORY
+}
+
+function saveItem(s: Settings): FunctionBarItem {
+  return {
+    n: FUNCTION_NUMBERS.compare,
+    label: MON.saveDefaults,
+    menu: [
+      {
+        label: MON.saveDefaults,
+        onSelect: () => {
+          const ok = writeJson(safeLocalStorage, MON_DEFAULTS_KEY, { view: s.view, heat: s.heat, window: s.window })
+          postMessage(
+            ok
+              ? fillCopy(MON.saveDefaultsDone, { view: s.view === 'returns' ? MON.viewReturns : MON.viewNormalised, heat: s.heat ? MON.heatOnWord : MON.heatOffWord, window: s.window })
+              : MON.saveDefaultsFailed,
+            ok ? 'info' : 'error',
+          )
+        },
+      },
+      { label: MON.resetDefaults, onSelect: () => postMessage(safeLocalStorage.remove(MON_DEFAULTS_KEY) ? MON.resetDefaultsDone : MON.saveDefaultsFailed) },
+    ],
+  }
+}
+
+
 
 function actionsItem(actions: PanelActions): FunctionBarItem {
   return {
@@ -109,6 +156,7 @@ function Notes({ universe, s, wide }: { readonly universe: Universe; readonly s:
       <p>{fillCopy(MON.unitsRisk, { window: universe.window })}</p>
       <p>{fillCopy(MON.horizons, { list: sessions })}</p>
       {s.heat ? <p>{MON.heatNote}</p> : null}
+      <p>{fillCopy(MON.twoDayNote, { last: universe.as_of })}</p>
       <p className="mkt-gate">{gateText(universe.gate)}</p>
       {universe.missing.length > 0 ? <p className="mkt-warn-text">{fillCopy(MARKET.missing, { symbols: universe.missing.join(', ') })}</p> : null}
     </div>
@@ -117,7 +165,7 @@ function Notes({ universe, s, wide }: { readonly universe: Universe; readonly s:
 
 export default function MonScreen(_props: ScreenProps) {
   const actions = usePanelActions()
-  const [s, set] = useState<Settings>({ view: 'returns', heat: false, window: DEFAULT_WINDOW })
+  const [s, set] = useState<Settings>(savedSettings)
   const [drill, setDrill] = useState<MonRow | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const wide = useWide(root)
@@ -136,7 +184,7 @@ export default function MonScreen(_props: ScreenProps) {
   }
   return (
     <div ref={root} className="mkt mon" data-screen="MON">
-      <FunctionBar panelId={actions.panelId} title={MON.title} items={[actionsItem(actions), settingsItem(s, set)]} />
+      <FunctionBar panelId={actions.panelId} title={MON.title} field={<UniverseField label={MON.universeField} />} items={[saveItem(s), actionsItem(actions), settingsItem(s, set)]} />
       {universe ? (
         <>
           <Params s={s} set={set} asOf={universe.as_of} />

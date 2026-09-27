@@ -116,6 +116,20 @@
   line-height: var(--row-h);
 }
 
+/* RR: the volatility Hi and Low of each window in words (the callouts' text equivalent). */
+.tear-extremes {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  margin: 0;
+  padding: 0 5px;
+  list-style: none;
+  color: var(--text);
+  font-size: var(--fs-nav);
+  line-height: var(--row-h);
+}
+
 .tear-note {
   margin: 0;
   padding: 0 5px;
@@ -193,3 +207,18 @@
   min-width: 0;
 }
 .tear-card-body .btn-toggles { align-self: flex-start; margin: 0 5px; }
+
+/* A row with no return series: the command link to its parent's tear sheet (as HOME's links). */
+.tear-refusal .cmd-link-wrap { color: var(--link); }
+.tear-refusal .cmd-link {
+  min-height: 24px;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}

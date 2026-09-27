@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import { formatRatio } from '../runs/model'
-import { LEDG } from './copy'
+import { LEDG } from '../../copy/ledg'
 import type { AnchorPair } from './model'
 
 const P = LEDG.pairs

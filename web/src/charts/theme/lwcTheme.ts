@@ -47,7 +47,8 @@ export interface LwcChartOptions {
     readonly panes: { readonly separatorColor: string; readonly separatorHoverColor: string; readonly enableResize: boolean }
   }
   readonly grid: { readonly vertLines: LwcGridLines; readonly horzLines: LwcGridLines }
-  readonly rightPriceScale: { readonly visible: boolean; readonly borderVisible: boolean; readonly borderColor: string; readonly ticksVisible: boolean }
+  /** entireTextOnly: a top or bottom corner label is drawn only when it fits whole (TASKS Phase 8: the GIP top price label was half hidden under the Table row at one zoom). */
+  readonly rightPriceScale: { readonly visible: boolean; readonly borderVisible: boolean; readonly borderColor: string; readonly ticksVisible: boolean; readonly entireTextOnly: boolean }
   readonly leftPriceScale: { readonly visible: boolean }
   readonly timeScale: { readonly borderVisible: boolean; readonly borderColor: string; readonly rightOffset: number }
   readonly crosshair: { readonly vertLine: LwcCrosshairLine; readonly horzLine: LwcCrosshairLine }
@@ -115,7 +116,7 @@ export function makeLwcTheme(tokens: ChartTokens = DEFAULT_CHART_TOKENS): LwcThe
         panes: { separatorColor: c.chartSplitInner, separatorHoverColor: c.chartSplitHover, enableResize: false },
       },
       grid: { vertLines: gridLines(), horzLines: gridLines() },
-      rightPriceScale: { visible: true, borderVisible: true, borderColor: c.chartAxis, ticksVisible: true },
+      rightPriceScale: { visible: true, borderVisible: true, borderColor: c.chartAxis, ticksVisible: true, entireTextOnly: true },
       leftPriceScale: { visible: false },
       timeScale: { borderVisible: true, borderColor: c.chartAxis, rightOffset: RIGHT_OFFSET_BARS },
       crosshair: { vertLine: cross(), horzLine: cross() },

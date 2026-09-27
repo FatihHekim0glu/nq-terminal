@@ -13,7 +13,7 @@ import {
 import type { Schemas } from '../../api/types'
 import { displayInstrument } from '../../commands/sectors'
 import { fillCopy } from '../../copy/workspace'
-import { CONTRACT_NAMES, MARKET, SECTOR_TITLES } from './copy'
+import { CONTRACT_NAMES, MARKET, SECTOR_TITLES } from '../../copy/market'
 
 export type Universe = Schemas['Universe']
 export type UniverseRow = Schemas['UniverseRow']
@@ -52,6 +52,8 @@ export interface MonRow {
   readonly ticker: string
   readonly name: string
   readonly units: string
+  /** The contract tick as the API serves it (prices print to it). */
+  readonly tick: number | null
   readonly lastValue: number | null
   readonly last: string
   readonly flag: RowFlag
@@ -157,6 +159,7 @@ export function toMonRow(row: UniverseRow, horizons: readonly string[], view: Mo
     ticker: tickerOf(row.root),
     name: contractName(row.root),
     units: row.units,
+    tick: finite(row.tick) ? row.tick : null,
     lastValue: finite(row.last_close) ? row.last_close : null,
     last: formatLast(row.root, row.last_close, row.tick),
     flag: row.stale_last ? 'stale' : 'served',

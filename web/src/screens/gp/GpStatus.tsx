@@ -3,7 +3,7 @@
 // the footer with the basis, the gate's bookkeeping, the bucket, RV22's basis and the fills note.
 import type { ApiError } from '../../api/client'
 import { fillCopy } from '../../copy/workspace'
-import { GP_COPY as C } from './copy'
+import { GP_COPY as C } from '../../copy/gp'
 import type { SessionBadges } from './model'
 import type { BarsData } from './useGpData'
 
@@ -64,10 +64,12 @@ export interface ChartMessageProps {
   readonly refusal: string | null
   readonly error: ApiError | null
   readonly text: string | null
+  /** The bars are still on their way: the message is marked busy, so readers wait for the chart. */
+  readonly busy?: boolean
 }
 
 /** Shown in the plot area instead of a chart: amber and centred (look spec 7.6). */
-export function ChartMessage({ refusal, error, text }: ChartMessageProps) {
+export function ChartMessage({ refusal, error, text, busy = false }: ChartMessageProps) {
   if (refusal) {
     return (
       <div className="gp-message" role="status">
@@ -87,7 +89,7 @@ export function ChartMessage({ refusal, error, text }: ChartMessageProps) {
     )
   }
   return (
-    <div className="gp-message" role="status">
+    <div className="gp-message" role="status" aria-busy={busy ? true : undefined}>
       <p>{text}</p>
     </div>
   )

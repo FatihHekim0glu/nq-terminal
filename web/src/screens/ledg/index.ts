@@ -4,7 +4,7 @@
 // The mnemonic is already in src/commands/registry.ts (context none) and on the key toolbar.
 import type { MnemonicCode } from '../../commands/registry'
 import type { ContextKind } from '../../commands/types'
-import { LEDG } from './copy'
+import { LEDG } from '../../copy/ledg'
 
 export { default as LedgScreen } from './LedgScreen'
 

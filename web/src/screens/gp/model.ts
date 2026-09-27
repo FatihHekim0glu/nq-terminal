@@ -7,8 +7,10 @@
 // request past 2021-12-31 ever leaves the page. A 403 from the server is still shown verbatim.
 import type { BarsQuery } from '../../api/queries'
 import type { Schemas } from '../../api/types'
-import type { CandleBars, CandleFill, CandleRoll } from '../../charts/CandleChart.model'
+import type { CandleBars, CandleFill, CandleIndicator, CandleRoll } from '../../charts/CandleChart.model'
 import type { QuoteData } from '../../chrome/QuoteHeader'
+import { GP_COPY } from '../../copy/gp'
+import { fillCopy } from '../../copy/workspace'
 
 export const IS_START_MS = Date.UTC(2010, 0, 1)
 /** The fence: the exclusive end of the in-sample window. */
@@ -128,10 +130,12 @@ function pandasStamp(ms: number): string {
 
 /** The OOS gate's refusal text for a window (nq_lab.oos_gate.check_window, word for word). */
 export function gateRuleText(w: DateWindow): string {
-  return (
-    `window [${pandasStamp(w.startMs)}, ${pandasStamp(w.endMs)}) leaves the in-sample window ` +
-    `[${pandasStamp(IS_START_MS)}, ${pandasStamp(FENCE_MS)}); straddling windows are refused, not clipped`
-  )
+  return fillCopy(GP_COPY.gateRule, {
+    start: pandasStamp(w.startMs),
+    end: pandasStamp(w.endMs),
+    isStart: pandasStamp(IS_START_MS),
+    isEnd: pandasStamp(FENCE_MS),
+  })
 }
 
 /** The gate's refusal text when the window leaves [2010-01-01, 2022-01-01), else null. */
@@ -310,6 +314,31 @@ export function dayReturnPercent(
   // A malformed row without `returns` shows `--`, never breaks the header.
   const r = rowOn(rows, root, lastDate)?.returns?.['1D']
   return isNum(r) ? r * 100 : null
+}
+
+/** The part of GET /api/market/rv the RV pane uses (RealisedVolSeries). */
+export interface RvLine {
+  readonly date: readonly string[]
+  readonly rv: readonly (number | null)[]
+  readonly window: number
+}
+
+const RV_DIGITS = 1
+
+/**
+ * GP's RV22 pane (look spec 7.6; ANALYTICS MV3): the API's rolling realised volatility at each daily bar's
+ * session date (the bar opens at 22:00 UTC the evening before), in percent; a bar with no value on that
+ * date is a gap. Null when no bar has a value, so no empty pane is drawn. Nothing is computed here.
+ */
+export function rvIndicator(bars: BarsLike, line: RvLine): CandleIndicator | null {
+  const byDate = new Map<string, number>()
+  line.date.forEach((d, i) => {
+    const v = line.rv[i]
+    if (isNum(v)) byDate.set(d, v * 100)
+  })
+  const values = bars.t.map((t) => byDate.get(isoDate((t + SESSION_SHIFT_S) * 1000)) ?? null)
+  if (!values.some((v) => v !== null)) return null
+  return { name: `RV${line.window}`, values, unit: '%', digits: RV_DIGITS }
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -37,9 +37,11 @@ export interface DesBarProps {
   readonly page: PanelPage | null
   /** The hypothesis or confirmation shown, for the amber field; none on the instrument view. */
   readonly current?: string
+  /** 98) Report: saves the description on screen as Markdown; the button shows once there is one. */
+  readonly onReport?: () => void
 }
 
-export function DesBar({ title, page, current }: DesBarProps) {
+export function DesBar({ title, page, current, onReport }: DesBarProps) {
   const actions = usePanelActions()
   return (
     <FunctionBar
@@ -57,7 +59,8 @@ export function DesBar({ title, page, current }: DesBarProps) {
             { label: PANEL.forward, onSelect: () => actions.forward() },
           ],
         },
-        { n: FUNCTION_NUMBERS.help, label: FUNCTION_BAR.help, onRun: () => requestLine('DES HELP') },
+        ...(onReport ? [{ n: FUNCTION_NUMBERS.export, label: DES.report, onRun: onReport }] : []),
+        { n: FUNCTION_NUMBERS.help, label: FUNCTION_BAR.help, onRun: () => requestLine(DES.helpLine) },
       ]}
     />
   )

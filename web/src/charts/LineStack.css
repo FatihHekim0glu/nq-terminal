@@ -53,6 +53,15 @@
 
 .linestack-legend .chart-legend-name { white-space: nowrap; }
 
+/* A shorter pane still (the HOME grid at 1366x768, the CORR pair pane) sets its legend on one line,
+   series side by side, so a two-series legend neither runs past the pane's foot into the splitter nor
+   takes so much height that the range cannot keep the curve's high clear of it. */
+@container (max-height: 120px) {
+  .linestack-legend { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: auto; }
+  .linestack-legend .chart-legend-swatch + .chart-legend-name { margin-left: 0; }
+  .linestack-legend .chart-legend-value { padding-right: 8px; }
+}
+
 /* Crosshair (look spec 9.2, a house choice): solid 1px lines, not uPlot's dashed grey. */
 .linestack .u-cursor-x { border-right: 1px solid var(--crosshair); }
 .linestack .u-cursor-y { border-bottom: 1px solid var(--crosshair); }

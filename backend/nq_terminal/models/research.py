@@ -13,9 +13,13 @@ from pydantic import Field
 from nq_terminal.models.common import ResponseModel
 
 VerdictBadge = Literal["PASS", "FAIL", "CHECK"]
+RegistryTag = Literal["edge", "overlay", "check"]
 
 
 class RegistryRow(ResponseModel):
+    """One row of results/registry.csv. The tag and amendment columns are read when the file carries them; a
+    registry written before them reads as no overlay and no amendments."""
+
     name: str
     registered: bool
     n: int | None
@@ -29,6 +33,12 @@ class RegistryRow(ResponseModel):
     spec: str
     spec_sha256: str
     spec_sha_ok: bool
+    overlay: bool = Field(False, description="a registered risk overlay: in the family, but a PASS is not an edge")
+    tag: RegistryTag = Field("edge", description="overlay, else check when not registered, else edge")
+    amendments: int = Field(0, ge=0, description="accepted amendment files of the spec, as the registry counts them")
+    amendment_files: list[str] = Field(default_factory=list)
+    amendments_ok: bool | None = Field(None, description="every amendment binds to its spec and result (registry); "
+                                                         "null when the file has no such column")
 
 
 class RegistryCounts(ResponseModel):
@@ -39,11 +49,37 @@ class RegistryCounts(ResponseModel):
     passed: int = Field(ge=0)
     failed: int = Field(ge=0)
     checks: int = Field(ge=0)
+    edges: int = Field(ge=0, description="rows tagged edge")
+    overlays: int = Field(ge=0, description="rows tagged overlay")
+    passed_edges: int = Field(ge=0, description="edge rows whose verdict is PASS (an overlay PASS is not counted)")
+
+
+class AcceptedAmendment(ResponseModel):
+    """One amendment listed as accepted, re-hashed now against the hash it was accepted at."""
+
+    file: str = Field(description="path under the data root, as the acceptance file writes it")
+    spec: str | None = Field(description="the spec it amends (the file name before `_amend`), when it has one")
+    sha256_accepted: str
+    sha256_now: str | None = Field(description="null when the file is missing or not under experiments/")
+    unchanged: bool
+    rows: list[str] = Field(description="registry rows that list this file among their amendments")
+
+
+class AmendmentAcceptances(ResponseModel):
+    """`results/amendment_acceptances.md`: the record of accepted amendments (the amendment and result files
+    still say pending; this file is the acceptance)."""
+
+    found: bool
+    source: str
+    accepted_utc: str | None
+    all_unchanged: bool
+    amendments: list[AcceptedAmendment]
 
 
 class RegistryView(ResponseModel):
     counts: RegistryCounts
     rows: list[RegistryRow]
+    acceptances: AmendmentAcceptances
 
 
 class PassCheck(ResponseModel):
@@ -81,6 +117,9 @@ class HypothesisCard(ResponseModel):
     spec_sha256: str
     spec_sha_ok: bool
     spec_rehash_ok: bool
+    tag: RegistryTag
+    amendment_files: list[str]
+    amendments_ok: bool | None
     screen: str | None
     round: int | None
     pass_checks: list[PassCheck]
@@ -148,6 +187,7 @@ class HypothesisSeries(ResponseModel):
 
 class MultipleTestingRow(ResponseModel):
     name: str
+    tag: RegistryTag
     rank: int
     p: float
     bonferroni_p: float | None

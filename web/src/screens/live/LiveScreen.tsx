@@ -7,6 +7,7 @@
 //   countdown    Decision 15:55:05 ET in ..  Order 15:59:30 ET in ..  Roll 2026-12-08 (MNQZ6) in .. days
 //   tiles        mean exposure, sessions, plumbing rows dropped (Basis B, [POST HOC])
 //   chart | recon  target against actual (performance rows only) | reconciliation table
+//   routes       READ ONLY Routes (one per close row) and Fills, footer strip of totals (/api/live/routes)
 //   journals     the journals under live/logs, expected files that are not written yet named
 import { useMemo } from 'react'
 import { useLiveStatus } from '../../api/queries'
@@ -21,6 +22,7 @@ import KpiTile, { KpiRow } from '../../tiles/KpiTile'
 import JournalsGrid from './JournalsGrid'
 import { bookItems, exposureKpis, guardItems, type LiveStatus } from './liveModel'
 import PerformancePanel from './PerformancePanel'
+import RoutesPanel from './RoutesPanel'
 import StateStrip from './StateStrip'
 import './live.css'
 
@@ -58,6 +60,7 @@ function Book({ status }: { readonly status: LiveStatus }) {
         <Tiles status={status} />
         <PerformancePanel />
       </div>
+      <RoutesPanel />
       <div className="live-journals">
         <JournalsGrid status={status} />
       </div>

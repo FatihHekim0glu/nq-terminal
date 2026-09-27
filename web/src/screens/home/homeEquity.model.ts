@@ -136,7 +136,11 @@ export function panelDrawdown(p: HomePanel): SummaryDrawdown | undefined {
   return summaryDrawdown(p.max_drawdown, drawdownUnit(p), p.basis)
 }
 
-/** The three panes: equity against the benchmark, underwater, rolling Sharpe over the long window. */
+/**
+ * The three panes: equity against the benchmark, underwater, rolling Sharpe over the long window. A
+ * rolling pane with no value (a series shorter than the window) is left out, so the other two get its
+ * room; homeNotes says why it is missing.
+ */
 export function homeStack(p: HomePanel): HomeStack {
   const dd = panelDrawdown(p)
   const name = p.context.name
@@ -160,15 +164,17 @@ export function homeStack(p: HomePanel): HomeStack {
       decimals: p.on_capital ? PERCENT_DECIMALS : MONEY_DECIMALS,
       unit: p.on_capital ? '%' : '',
     },
-    {
+  ]
+  if (p.rolling_sharpe.some((v) => v !== null)) {
+    panes.push({
       id: 'rolling',
       series: series(fillCopy(s.rolling, { window: p.rolling_window, one: one(p) }), 'rollLong', p.rolling_sharpe),
       weight: 1.5,
       zero: 'grey',
       decimals: RATIO_DECIMALS,
       signed: true,
-    },
-  ]
+    })
+  }
   return { title: fillCopy(HOME_EQ.chartTitle, { name }), t: p.t, panes }
 }
 

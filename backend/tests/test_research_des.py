@@ -58,12 +58,53 @@ def test_the_c3_card_shows_its_own_block_and_no_parent_pass_checks(cards):
 
 
 def test_every_registered_card_has_headline_unit_and_t(cards):
+    """A newly registered row fails here until it has a shape; a screen with no t statistic (a bootstrap gate)
+    declares that in its shape, and the card's t label says why the value is empty."""
     for card in cards.values():
         if not card.registered:
             continue
-        assert card.headline_value is not None and math.isfinite(card.headline_value), card.name
-        assert card.headline_unit and card.headline_display, card.name
-        assert card.t_stat is not None and card.t_label, card.name
+        hint = f"{card.name}: add a Shape for it to SHAPES in nq_terminal/des_shapes.py"
+        assert card.name in des_shapes.SHAPES, hint
+        assert card.headline_value is not None and math.isfinite(card.headline_value), hint
+        assert card.headline_unit and card.headline_display and card.t_label, hint
+        if des_shapes.SHAPES[card.name].t is None:
+            assert card.t_stat is None and "no t statistic" in card.t_label, card.name
+        else:
+            assert card.t_stat is not None and math.isfinite(card.t_stat), hint
+
+
+def test_round_13_and_14_headlines_come_from_their_screens(cards):
+    vt, vrp = cards["vt_har_v0"], cards["vrp_eq_v0"]
+    assert vt.headline_label == "headline.rho_bar"
+    assert vt.headline_value == _screen("vt_har_v0")["headline"]["rho_bar"]
+    assert vt.t_stat is None and "bootstrap" in vt.t_label
+    head = _screen("vrp_eq_v0")["headline"]
+    assert vrp.headline_label == "headline.alpha_annual_pct" and vrp.headline_value == head["alpha_annual_pct"]
+    assert vrp.t_stat == head["t_a"] == min(head["t_nw"].values())
+    assert vrp.headline_unit == "% per year"
+
+
+def test_round_13_and_14_blocks_and_ladders_match_the_json(real):
+    vt = real.detail("vt_har_v0").des
+    screen = _screen("vt_har_v0")
+    blocks = screen["secondaries"]["S6_blocks"]
+    assert [(b.label, b.value) for b in vt.blocks] == [(k, v["rho_bar"]) for k, v in blocks.items()]
+    assert [(p.ticks_per_side, p.value) for p in vt.cost_ladder] == [
+        (1, screen["headline"]["rho_bar"]), (2, screen["P4_two_ticks"]["rho_bar"])]
+    vrp = real.detail("vrp_eq_v0").des
+    screen = _screen("vrp_eq_v0")
+    assert [(b.label, b.value) for b in vrp.blocks] == [
+        (k, v["alpha_annual_pct"]) for k, v in screen["P2_blocks"].items()]
+    assert [(p.ticks_per_side, p.value) for p in vrp.cost_ladder] == [
+        (1, screen["headline"]["alpha_annual_pct"]), (2, screen["P3_2tick"]["alpha_annual_pct"])]
+
+
+def test_new_rounds_find_their_summary_by_title_without_a_table_entry(cards, real):
+    """Rounds 13 and 14 are not in constants.ROUNDS: the summary whose title names the row gives the round."""
+    from nq_terminal import constants
+    assert "vt_har_v0" not in constants.ROUNDS and "vrp_eq_v0" not in constants.ROUNDS
+    assert cards["vt_har_v0"].round == 13 and cards["vrp_eq_v0"].round == 14
+    assert real.detail("vrp_eq_v0").summary_name == "round14_summary.md"
 
 
 def test_every_shape_path_resolves_to_a_number_on_the_real_screens():

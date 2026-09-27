@@ -10,6 +10,8 @@ Schema `nqt-qa-dump/1`. Two kinds:
 - `trades` and `costs` (a `Bundle`): one Nautilus run's raw rows in `inputs` (per-trade net P&L and entry
   times; or the cost model, trade and fill money as decimal strings and the snapshot grid) with the values
   each implementation computed for TA1 and TA3, or EX1 to EX4.
+- `market` (a `Bundle`): a market view's inputs (MV3: the session dates, the daily universe returns and the window)
+  with the line the terminal serves.
 
 This module only reads. It never imports the backend (ARCHITECTURE section 11).
 """
@@ -27,7 +29,8 @@ SCHEMA = "nqt-qa-dump/1"
 SIDES = ("ours", "nq_lab", "nautilus", "stored")
 BASES = ("A", "B")
 BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
-                 "costs": ("instruments", "ticks", "trade_pnl", "trade_commission", "fills", "snapshots")}
+                 "costs": ("instruments", "ticks", "trade_pnl", "trade_commission", "fills", "snapshots"),
+                 "market": ("dates", "r", "window")}
 
 
 class DumpError(ValueError):
@@ -142,6 +145,9 @@ def parse_bundle(doc: dict) -> Bundle:
     if kind == "trades" and (len(inputs["pnl"]) != len(inputs["entry_ts"]) or not len(inputs["pnl"])):
         raise DumpError(f"trades dump {doc.get('case')!r}: {len(inputs['pnl'])} P&Ls for "
                         f"{len(inputs['entry_ts'])} entry times (need equal and >= 1)")
+    if kind == "market" and (len(inputs["dates"]) != len(inputs["r"]) or int(inputs["window"]) < 2):
+        raise DumpError(f"market dump {doc.get('case')!r}: {len(inputs['dates'])} dates for {len(inputs['r'])} "
+                        "returns, or a window below 2")
     if kind == "trades" and not np.all(np.isfinite(_floats(inputs["pnl"], "pnl"))):
         raise DumpError(f"trades dump {doc.get('case')!r}: pnl holds NaN or infinite values")
     return Bundle(name=str(_require(doc, "case")), kind=kind, source=str(doc.get("source", "")), inputs=dict(inputs),
