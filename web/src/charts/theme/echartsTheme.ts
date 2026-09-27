@@ -20,14 +20,14 @@ export interface EchartsTheme {
   readonly textStyle: { readonly fontFamily: string; readonly fontSize: number; readonly color: string }
   readonly yAxis: {
     readonly position: 'right'
-    readonly axisLine: { readonly show: boolean; readonly lineStyle: LineStyle }
+    readonly axisLine: { readonly show: boolean; readonly onZero: false; readonly lineStyle: LineStyle }
     readonly axisTick: { readonly show: boolean; readonly length: number; readonly lineStyle: LineStyle }
     readonly minorTick: { readonly show: boolean; readonly splitNumber: number; readonly length: number; readonly lineStyle: LineStyle }
     readonly splitLine: SplitLine
     readonly axisLabel: { readonly color: string; readonly margin: number }
   }
   readonly xAxis: {
-    readonly axisLine: { readonly show: boolean; readonly lineStyle: LineStyle }
+    readonly axisLine: { readonly show: boolean; readonly onZero: false; readonly lineStyle: LineStyle }
     readonly axisTick: { readonly show: boolean; readonly lineStyle: LineStyle }
     readonly splitLine: SplitLine
     readonly axisLabel: { readonly color: string }
@@ -49,14 +49,18 @@ export function makeEchartsTheme(tokens: ChartTokens = DEFAULT_CHART_TOKENS): Ec
     textStyle: { fontFamily: tokens.font.family, fontSize: tokens.font.size, color: c.chartAxis },
     yAxis: {
       position: 'right',
-      axisLine: { show: true, lineStyle: { ...axis } },
+      // onZero off: against a value x axis (PScatter) ECharts would move the line to x = 0, the left edge.
+      axisLine: { show: true, onZero: false, lineStyle: { ...axis } },
       axisTick: { show: true, length: G.majorTick, lineStyle: { ...axis } },
       minorTick: { show: true, splitNumber: MINOR_SPLIT, length: G.minorTick, lineStyle: { ...axis } },
       splitLine: splitLine(),
-      axisLabel: { color: c.chartAxis, margin: G.labelGap },
+      // ECharts measures the margin from the axis line, not the tick end: tick plus gap (look spec 6).
+      axisLabel: { color: c.chartAxis, margin: G.majorTick + G.labelGap },
     },
     xAxis: {
-      axisLine: { show: true, lineStyle: { ...axis } },
+      // onZero off: against a value y axis (Distribution, BarLadder) ECharts would draw the baseline at
+      // y = 0, mid-pane; it stays at the pane bottom (look spec 6.1). Zero lines are markLines.
+      axisLine: { show: true, onZero: false, lineStyle: { ...axis } },
       axisTick: { show: true, lineStyle: { ...axis } },
       splitLine: splitLine(),
       axisLabel: { color: c.chartAxis },

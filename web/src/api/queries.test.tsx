@@ -95,6 +95,31 @@ describe('hooks', () => {
       vi.useRealTimers()
     }
   })
+
+  it('keeps the same arrays across a live poll whose values did not change, so a chart is not rebuilt', async () => {
+    // CandleChart and LineStack rebuild when their arrays change identity; structural sharing (on by
+    // default, and no `select` here) must hand back the previous objects when a poll brings equal data.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let poll = 0
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        poll += 1
+        return jsonResponse({ journals: [{ name: 'a', t: [1, 2, 3] }], poll: poll > 2 ? 'changed' : 'same' })
+      })
+      const { result } = renderHook(() => useLiveStatus(), { wrapper: wrapper() })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      const first = result.current.data as unknown as { journals: unknown[] }
+      await vi.advanceTimersByTimeAsync(LIVE_POLL_MS + 50)
+      await waitFor(() => expect(poll).toBeGreaterThanOrEqual(2))
+      expect(result.current.data).toBe(first)
+      await vi.advanceTimersByTimeAsync(LIVE_POLL_MS + 50)
+      await waitFor(() => expect((result.current.data as unknown as { poll: string }).poll).toBe('changed'))
+      // A change elsewhere in the body leaves the unchanged array itself as it was.
+      expect((result.current.data as unknown as { journals: unknown[] }).journals).toBe(first.journals)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 describe('retry policy', () => {

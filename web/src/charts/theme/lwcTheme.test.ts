@@ -46,16 +46,26 @@ describe('lwcTheme (look spec 6.3, CandleChart)', () => {
       borderVisible: false,
       wickUpColor: C.candleUp,
       wickDownColor: C.candleDn,
-      priceLineVisible: true,
+      // The line runs from the last bar to the axis only (look spec 6.2), so CandleChart draws it.
+      priceLineVisible: false,
       priceLineColor: C.lastLine,
       priceLineStyle: LWC_LINE_STYLE.Solid,
       priceLineWidth: 1,
-      lastValueVisible: true,
+      // The pentagon primitive is the tag (look spec 6.1); the library label picks its own text colour.
+      lastValueVisible: false,
     })
   })
 
+  it('turns every library last-value label off by default, so no consumer shows one (WCAG 1.4.3)', () => {
+    // The library chooses white or black text by its own threshold: white on the orange last line
+    // is 2.41:1 and white on the volume blue about 3.6:1. Charts draw the pentagon tag instead.
+    expect(lwcTheme.candle.lastValueVisible).toBe(false)
+    expect(lwcTheme.volume.lastValueVisible).toBe(false)
+    expect(lwcTheme.volumeMa.lastValueVisible).toBe(false)
+  })
+
   it('puts volume in pane 1 at a quarter of the height, with a white moving-average line', () => {
-    expect(lwcTheme.volume).toEqual({ color: C.chartVol, priceFormat: { type: 'volume' }, lastValueVisible: true, priceLineVisible: false })
+    expect(lwcTheme.volume).toEqual({ color: C.chartVol, priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false })
     expect(lwcTheme.volumePane).toEqual({ index: 1, heightRatio: 0.25 })
     expect(lwcTheme.volumeMa).toEqual({ color: C.chartS1, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   })
@@ -68,6 +78,11 @@ describe('lwcTheme (look spec 6.3, CandleChart)', () => {
   it('marks rolls yellow with black text and the fence amber dashed', () => {
     expect(lwcTheme.rollMarker).toEqual({ color: C.marker, textColor: C.bg })
     expect(lwcTheme.fence).toEqual({ color: C.fence, width: 1, dash: [4, 3] })
+  })
+
+  it('separates intraday sessions with a grey 1px dashed line (7.6 GIP), unlike the fence dash', () => {
+    expect(lwcTheme.daySeparator).toEqual({ color: C.chartYearDiv, width: 1, dash: [3, 3] })
+    expect(lwcTheme.daySeparator.dash).not.toEqual(lwcTheme.fence.dash)
   })
 
   it('draws Bollinger bands as three unfilled lines: magenta, white, green (6.2)', () => {

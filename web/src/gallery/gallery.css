@@ -1,0 +1,78 @@
+/* The component gallery page (gallery builds only). The entry fills the viewport on black with an
+   8px inset, so a screenshot shows the component as a panel body would, at 1920x1080 or 1366x768. */
+.nqt-gallery {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  padding: 8px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fs-data) / 1.25 var(--font-sans);
+}
+
+.nqt-gallery-index {
+  overflow: auto;
+}
+
+.nqt-gallery h1:not(.sr-only) {
+  margin: 0 0 8px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  color: var(--white);
+}
+
+.nqt-gallery ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nqt-gallery li {
+  min-height: 24px;
+  line-height: 24px;
+}
+
+.nqt-gallery a {
+  color: var(--link);
+}
+
+.nqt-gallery a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.gallery-error {
+  color: var(--c-down);
+}
+
+/* ChartLibraries entry: a 2x2 grid of panels, each a heading over a chart that fills the rest. */
+.gallery-grid {
+  display: grid;
+  grid-template: 1fr 1fr / 1fr 1fr;
+  gap: 8px;
+  height: 100%;
+}
+
+.gallery-grid > section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.gallery-grid h2 {
+  margin: 0 0 4px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  color: var(--data);
+}
+
+.gallery-grid .chart-a11y {
+  flex: 1 1 auto;
+}
+
+.gallery-chart {
+  position: absolute;
+  inset: 0;
+}

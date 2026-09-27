@@ -1,0 +1,28 @@
+import { describe, expect, it } from 'vitest'
+import { fixed, formatP, isoDate, signed } from './format'
+
+describe('number formats for the ECharts set', () => {
+  it('prints signed values with an explicit sign and no negative zero', () => {
+    expect(signed(1.454, 2)).toBe('+1.45')
+    expect(signed(-6.8249, 2)).toBe('-6.82')
+    expect(signed(0, 2)).toBe('0.00')
+    expect(signed(-0.001, 2)).toBe('0.00')
+    expect(signed(0.004, 2)).toBe('0.00')
+  })
+
+  it('prints fixed values without negative zero', () => {
+    expect(fixed(-0.0004, 3)).toBe('0.000')
+    expect(fixed(2.5, 1)).toBe('2.5')
+    expect(fixed(-2.5, 1)).toBe('-2.5')
+  })
+
+  it('prints p-values to four decimals with a floor', () => {
+    expect(formatP(0.04567)).toBe('0.0457')
+    expect(formatP(0.00003)).toBe('<0.0001')
+    expect(formatP(1)).toBe('1.0000')
+  })
+
+  it('prints epoch seconds as an ISO date', () => {
+    expect(isoDate(Date.UTC(2021, 11, 31) / 1000)).toBe('2021-12-31')
+  })
+})

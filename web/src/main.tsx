@@ -18,8 +18,25 @@ import App from './App'
 const root = document.getElementById('root')
 if (!root) throw new Error('index.html is missing the #root element')
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+function renderApp(el: HTMLElement): void {
+  createRoot(el).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  )
+}
+
+// The component gallery (/__gallery/<name>) exists only in gallery builds (`vite build --mode
+// gallery`, used by the E2E run). Vite replaces import.meta.env.MODE with a string literal, so in a
+// production build this condition is constant false and the gallery chunk is never emitted.
+if (import.meta.env.MODE === 'gallery') {
+  import('./gallery/boot').then(
+    (gallery) => gallery.bootGallery(root, () => renderApp(root)),
+    (err: unknown) => {
+      renderApp(root)
+      throw err
+    },
+  )
+} else {
+  renderApp(root)
+}

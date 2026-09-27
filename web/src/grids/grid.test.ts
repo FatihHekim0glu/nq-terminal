@@ -118,3 +118,76 @@ describe('grid.css (look spec 4.8)', () => {
     expect(rule('.nqt-grid-warn')).toMatch(/color:\s*var\(--warn\)/)
   })
 })
+
+// Added with MonitorGrid and JournalTable (TASKS 5.4).
+const ROW_TEXT: Readonly<Record<string, string>> = {
+  text: '#D7D7D7',
+  data: '#FFA028',
+  muted: '#A5A5A5',
+  white: '#FFFFFF',
+  warn: '#FFE100',
+  'c-up': '#51EE6C',
+  'c-down-hover': '#FF8A94',
+}
+const BAND = '#2D2D2D'
+const C_DOWN = '#FF2C4A'
+
+describe('grid.css: the active cell of a focused grid (MonitorGrid, aria-activedescendant)', () => {
+  it('draws the 2px --focus ring and the hovered-cell fill on the active cell, not on the table', () => {
+    const cell = rule('.nqt-grid[role="grid"]:focus-visible .is-active')
+    expect(cell).toMatch(/outline:\s*2px solid var\(--focus\)/)
+    expect(cell).toMatch(/outline-offset:\s*-2px/)
+    expect(cell).toMatch(/background:\s*var\(--hover-cell\)/)
+    expect(tokenOverride(cell, 'muted')).toBe('var(--muted-hover)')
+    expect(tokenOverride(cell, 'c-down')).toBe('var(--c-down-hover)')
+    expect(rule('.nqt-grid[role="grid"]:focus-visible')).toMatch(/outline:\s*none/)
+  })
+})
+
+describe('grid.css: hatched plumbing rows (UI_SPEC section 6, look spec 7.11)', () => {
+  it('hatches plumbing rows in --band stripes over black, with the banner in --warn bold', () => {
+    const row = rule('.nqt-grid tbody tr.plumbing-row td')
+    expect(row).toMatch(/repeating-linear-gradient\(-45deg, var\(--band\) 0 6px, var\(--bg\) 6px 12px\)/)
+    const banner = rule('.nqt-grid .plumbing-banner')
+    expect(banner).toMatch(/color:\s*var\(--warn\)/)
+    expect(banner).toMatch(/font-weight:\s*700/)
+  })
+
+  it('lifts down text to --c-down-hover inside plumbing rows', () => {
+    expect(tokenOverride(rule('.nqt-grid tr.plumbing-row'), 'c-down')).toBe('var(--c-down-hover)')
+  })
+
+  it.each(Object.entries(ROW_TEXT))('keeps %s text at 4.5:1 on the lighter hatch stripe', (_name, hex) => {
+    expect(contrastRatio(hex, BAND)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('born failing: the plain down red fails on the hatch stripe, which is why it is lifted', () => {
+    expect(contrastRatio(C_DOWN, BAND)).toBeLessThan(4.5)
+  })
+
+  it('draws journal source codes in --tape-src', () => {
+    expect(rule('.nqt-grid .src')).toMatch(/color:\s*var\(--tape-src\)/)
+  })
+})
+
+describe('grid.css: journal source codes stay readable in every row state', () => {
+  const TAPE_SRC = '#EA5D08'
+  const TAPE_FG = '#FB9600'
+
+  it('born failing: --tape-src fails on the selection navy, the hatch stripe and the hovered cell', () => {
+    for (const bg of [SPEC['sel-bg'], BAND, SPEC['hover-cell']]) expect(contrastRatio(TAPE_SRC, bg)).toBeLessThan(4.5)
+  })
+
+  it('lifts --tape-src to --tape-fg on selected, plumbing, hovered and active cells, which passes on each', () => {
+    const rules = [
+      '.nqt-grid tr[aria-selected="true"]',
+      '.nqt-grid tr.plumbing-row',
+      '.nqt-grid tbody tr td:hover',
+      '.nqt-grid td:focus-visible',
+      '.nqt-grid[role="grid"]:focus-visible .is-active',
+    ]
+    for (const sel of rules) expect(tokenOverride(rule(sel), 'tape-src'), sel).toBe('var(--tape-fg)')
+    for (const bg of [SPEC['sel-bg'], BAND, SPEC['hover-cell'], '#000000', '#191919']) expect(contrastRatio(TAPE_FG, bg)).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(TAPE_SRC, '#191919')).toBeGreaterThanOrEqual(4.5)
+  })
+})

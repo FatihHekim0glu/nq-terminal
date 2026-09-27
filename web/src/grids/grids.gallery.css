@@ -1,0 +1,17 @@
+/* Layout of the grid gallery entries (gallery builds only): a heading, the grid filling the rest of
+   the viewport, and the drill-down readout under it. Tokens only. */
+.grid-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-height: 0;
+}
+.grid-gallery h2 {
+  margin: 0;
+  color: var(--data);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+.grid-gallery-body { flex: 1 1 auto; min-height: 0; }
+.grid-gallery-readout { color: var(--text); line-height: var(--row-h); }

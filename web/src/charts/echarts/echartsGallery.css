@@ -1,0 +1,28 @@
+/* Layout for the ECharts gallery entries (gallery builds only): one or more panels, each an amber
+   heading over a chart that fills the rest of the panel. Tokens only. */
+.echarts-gallery {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+  height: 100%;
+}
+
+.echarts-gallery-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.echarts-gallery-panel h2 {
+  margin: 0 0 4px;
+  color: var(--data);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.echarts-gallery-panel .chart-a11y {
+  flex: 1 1 auto;
+  height: auto;
+}

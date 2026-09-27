@@ -1,0 +1,26 @@
+/* Layout of the tile gallery entries (gallery builds only). Tokens only. */
+.tile-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow: auto;
+}
+.tile-gallery h2 {
+  margin: 0 0 4px;
+  color: var(--data);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+.tile-gallery h3.tile-gallery-sub {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: var(--fs-nav);
+  font-weight: 400;
+}
+.tile-gallery-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 8px;
+  align-items: start;
+}

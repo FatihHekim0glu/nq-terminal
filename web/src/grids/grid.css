@@ -89,14 +89,28 @@
 .nqt-grid.ruled td { border-left: 1px solid var(--th-rule); }
 .nqt-grid.ruled td:first-child { border-left: 0; }
 
+/* Plumbing rows (UI_SPEC section 6, look spec 7.11): hatched in --band stripes over black, the banner
+   in --warn bold. Down red fails on the lighter stripe, so it is lifted to --c-down-hover (5.9:1).
+   These come before the states so hover and selection still win. */
+.nqt-grid tr.plumbing-row { --c-down: var(--c-down-hover); --tape-src: var(--tape-fg); }
+.nqt-grid tbody tr.plumbing-row td {
+  background: repeating-linear-gradient(-45deg, var(--band) 0 6px, var(--bg) 6px 12px);
+}
+.nqt-grid .plumbing-banner { color: var(--warn); font-weight: 700; }
+
+/* Journal source codes (LIVE, PLMB) in the tape's source colour (look spec 4.9 and 7.11). It fails on
+   the selection, the hatch and a hovered cell, so those states lift it to --tape-fg. */
+.nqt-grid .src { color: var(--tape-src); }
+
 /* States (4.12): row hover, cell hover, selection, keyboard focus. Inside a hovered cell the muted
    grey and the down red fail on the hovered-cell grey, so both are lifted there (5.32 and 4.89). */
 .nqt-grid tbody tr:hover td { background: var(--hover-row); }
-.nqt-grid tr[aria-selected="true"] { --c-down: var(--c-down-raised); }
+.nqt-grid tr[aria-selected="true"] { --c-down: var(--c-down-raised); --tape-src: var(--tape-fg); }
 .nqt-grid tbody tr[aria-selected="true"] td { background: var(--sel-bg); }
 .nqt-grid tbody tr td:hover {
   --muted: var(--muted-hover);
   --c-down: var(--c-down-hover);
+  --tape-src: var(--tape-fg);
   background: var(--hover-cell);
 }
 .nqt-grid tr:focus-visible,
@@ -104,10 +118,36 @@
 .nqt-grid th:focus-visible {
   --muted: var(--muted-hover);
   --c-down: var(--c-down-hover);
+  --tape-src: var(--tape-fg);
   outline: 2px solid var(--focus);
   outline-offset: -2px;
   background: var(--hover-cell);
 }
+
+/* MonitorGrid keeps DOM focus on the table and marks the active cell (aria-activedescendant): the
+   ring moves to that cell, so the table itself draws none. */
+.nqt-grid[role="grid"]:focus-visible { outline: none; }
+.nqt-grid[role="grid"]:focus-visible .is-active {
+  --muted: var(--muted-hover);
+  --c-down: var(--c-down-hover);
+  --tape-src: var(--tape-fg);
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  background: var(--hover-cell);
+}
+
+/* MonitorGrid frame: the scroll box fills the panel body; spacer rows stand in for rows out of view;
+   headers sort on a click, and the sort direction is also a glyph (aria-sort carries it too). */
+.nqt-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.nqt-grid-wrap > .nqt-grid-scroll { flex: 1 1 auto; }
+.nqt-grid tr.nqt-grid-spacer td { padding: 0; background: var(--bg); }
+.nqt-grid thead th:not(.hot) { cursor: pointer; }
+.nqt-grid .sort-mark { color: var(--th-fg); }
 
 /* Tree expanders ⊞ / ⊟ (round > hypothesis > run). */
 .nqt-grid .expander { display: inline-block; width: 1.2em; color: var(--text); }

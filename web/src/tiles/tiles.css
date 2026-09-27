@@ -1,0 +1,176 @@
+/* Tiles (TASKS 5.4): KPI tiles (look spec 7.1: --raised cards, 8px black gutters, white value at
+   --fs-kpi, muted label), DES-style cards for SpecCard and BalanceCheck (7.3: 20px --raised title band
+   in white bold, 1px --box-border edges, amber labels, --text values right-aligned) and the
+   Countdown strip (7.11). Tokens only, square corners, every state a hard cut. */
+
+/* ---------- KPI tiles ---------- */
+.kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--bg);
+}
+.kpi { position: relative; }
+
+.kpi-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 96px;
+  min-height: 24px;
+  padding: 3px 8px 4px;
+  border: 0;
+  border-radius: 0;
+  background: var(--raised);
+  color: var(--white);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.kpi-tile:hover { background: var(--hover-menu); }
+.kpi-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.kpi-label { color: var(--muted); font-size: var(--fs-nav); line-height: 16px; white-space: nowrap; }
+.kpi-line { display: flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.kpi-value {
+  color: var(--white);
+  font-size: var(--fs-kpi);
+  line-height: 26px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.kpi-unit,
+.kpi-ci { color: var(--muted); font-size: var(--fs-nav); font-variant-numeric: tabular-nums lining-nums; }
+.kpi-tag { color: var(--muted); font-size: var(--fs-small); line-height: 14px; }
+
+/* The details popover: a list-style box under the tile (4.5 dropdown list colours). */
+.kpi-pop {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  width: max-content;
+  max-width: 360px;
+  margin-top: 2px;
+  padding: 4px 8px;
+  background: var(--list-bg);
+  border: 1px solid var(--list-border);
+  color: var(--text);
+  font-size: var(--fs-nav);
+  line-height: 18px;
+}
+.kpi-pop-title { color: var(--white); font-weight: 700; }
+.kpi-pop-basis { color: var(--data); }
+
+/* ---------- DES-style cards ---------- */
+.nqt-card {
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--box-border);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.nqt-card-title {
+  height: var(--row-h);
+  margin: 0;
+  padding: 0 5px;
+  overflow: hidden;
+  background: var(--raised);
+  color: var(--white);
+  font-size: var(--fs-data);
+  font-weight: 700;
+  line-height: var(--row-h);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nqt-card-summary {
+  margin: 0;
+  padding: 1px 5px;
+  color: var(--text);
+  line-height: var(--row-h);
+  border-bottom: 1px solid var(--box-border);
+}
+.nqt-card-summary .sep { color: var(--chrome-div); }
+.nqt-card-rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  margin: 0;
+  padding: 2px 5px;
+}
+.nqt-card-pair { display: contents; }
+.nqt-card-rows dt { color: var(--data); line-height: var(--row-h); white-space: nowrap; }
+.nqt-card-rows dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  line-height: var(--row-h);
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.nqt-card-prose {
+  margin: 0;
+  padding: 2px 5px;
+  border-top: 1px solid var(--box-border);
+  color: var(--data);
+  line-height: var(--row-h);
+  white-space: pre-wrap;
+}
+.nqt-card-prose[data-clamped="true"] {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.nqt-card-foot { display: flex; justify-content: flex-end; padding: 2px 5px 4px; }
+.nqt-card-btn {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  background: var(--btn-grey);
+  color: var(--text);
+  font: var(--fs-nav) / 22px var(--font-sans);
+  cursor: pointer;
+}
+.nqt-card-btn:hover { background: var(--toggle-hover); }
+.nqt-card-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.nqt-card-alert {
+  margin: 0;
+  padding: 2px 5px;
+  border-top: 1px solid var(--box-border);
+  color: var(--c-down);
+  line-height: var(--row-h);
+}
+.nqt-card-alert .tag { font-weight: 700; }
+
+/* Status tones: always bracketed text as well, so colour is never the only cue (UI_SPEC 1.4.1). */
+.tone-up { color: var(--c-up); }
+.tone-down { color: var(--c-down); }
+.tone-warn { color: var(--warn); }
+.tone-muted { color: var(--muted); }
+
+/* ---------- Countdown strip ---------- */
+.countdown {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 22px;
+  background: var(--bg);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: 22px;
+}
+.cd-seg { padding: 0 10px; border-right: 1px solid var(--chrome-div); white-space: nowrap; }
+.cd-seg:first-child { padding-left: 5px; }
+.cd-seg:last-child { border-right: 0; }
+.cd-label { color: var(--data); }
+.cd-time { color: var(--white); }
+.cd-left { color: var(--text); font-variant-numeric: tabular-nums lining-nums; }
+.cd-passed { color: var(--muted); }

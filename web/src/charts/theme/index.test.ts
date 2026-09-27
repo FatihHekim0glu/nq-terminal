@@ -37,11 +37,18 @@ describe('charts theme module (look spec 12, task 4)', () => {
     }
   })
 
-  it('imports no chart library and adds none to package.json', () => {
+  it('imports no chart library at run time (type-only imports are erased)', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThanOrEqual(6)
-    for (const [file, text] of Object.entries(SOURCES)) expect(CHART_LIBS.test(text), file).toBe(false)
+    for (const [file, text] of Object.entries(SOURCES)) {
+      const runtime = text.replace(/^import type .*$/gm, '')
+      expect(CHART_LIBS.test(runtime), file).toBe(false)
+    }
+  })
+
+  it('pins the three chart libraries exactly (Phase 5 stage A)', () => {
     const deps = { ...packageJson.dependencies, ...packageJson.devDependencies }
-    expect(Object.keys(deps).filter((d) => /uplot|lightweight-charts|echarts/.test(d))).toEqual([])
+    const charts = Object.fromEntries(Object.entries(deps).filter(([d]) => /^(uplot|lightweight-charts|echarts)$/.test(d)))
+    expect(charts).toEqual({ echarts: '6.1.0', 'lightweight-charts': '5.2.1', uplot: '1.6.32' })
   })
 
   it('writes hex colours only in the token reader', () => {

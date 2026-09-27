@@ -1,0 +1,71 @@
+/* CandleChart layout (look spec 6.1, 7.6). Colours are tokens only; the legend, year strip, data tip
+   and splitter styles come from theme/chart.css. No transitions. */
+
+/* Fills ChartA11y's figure: the plot (canvas host plus overlays) over the second axis row. */
+.candle-chart {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.candle-plot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.candle-host {
+  position: absolute;
+  inset: 0;
+}
+
+/* Legend rows sit in the three columns of .chart-legend: swatch, name, value. */
+.candle-legend-row { display: contents; }
+/* In a narrow pane the legend stays inside the clipped plot: the name gives way with an ellipsis,
+   the value stays whole (WCAG 1.4.10; the table view has every value in full). */
+.candle-plot .chart-legend { max-width: calc(100% - 16px); grid-template-columns: 13px minmax(0, max-content) auto; }
+.candle-legend-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The second time-axis row: labels centred in each year, month or day span. */
+.candle-strip { flex: 0 0 16px; overflow: hidden; }
+.candle-strip-label {
+  position: absolute;
+  top: 0;
+  overflow: hidden;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Roll date tags in the second row: square (look spec 8.5 d), yellow with black text (6.2). */
+.candle-roll-tag {
+  position: absolute;
+  top: 0;
+  height: 16px;
+  background: var(--marker);
+  color: var(--marker-fg);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* The 5px pane splitter (chart.css) laid over the library's 1px separator; above the canvas,
+   below the legends. */
+.candle-splitter { position: absolute; left: 0; right: 0; z-index: 1; pointer-events: none; }
+
+/* The datatip is placed by the pointer; keep it inside the plot's stacking context. */
+.candle-plot .chart-datatip { transform: translateY(-50%); }
+
+/* Readout under the chart: T O H L C V, indicator, events, zoom state. */
+.candle-readout {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  padding: 0 5px;
+  min-height: 16px;
+}
+.candle-readout-key { color: var(--data); }
+
+.candle-status { margin: 0; color: var(--muted); font: var(--fs-chart)/16px var(--font-sans); }
+.candle-error { color: var(--c-down); }

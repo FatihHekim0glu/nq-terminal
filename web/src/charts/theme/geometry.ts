@@ -29,6 +29,8 @@ export const CHART_GEOMETRY = {
   gridDash: [2, 2],
   /** House choice: a longer dash so the fence never reads as grid. */
   fenceDash: [4, 3],
+  /** House choice (the spec names no dash): intraday day separators, 7.6 GIP; unlike the fence and grid. */
+  dayDash: [3, 3],
   /** Event-marker data tip: offset right of the pointer tip, and delay after the pointer rests. */
   datatipOffset: 15,
   datatipDelayMs: 200,

@@ -18,21 +18,34 @@ describe('echartsTheme (look spec 6.3: heatmaps, distribution, ladders, scatter,
   it('puts the value axis on the right: white line, 6px major and 3px minor ticks, labels 2px out', () => {
     expect(echartsTheme.yAxis).toEqual({
       position: 'right',
-      axisLine: { show: true, lineStyle: { color: C.chartAxis } },
+      // Never moved to the other axis's zero: a value x axis (PScatter) would pull it to the left edge.
+      axisLine: { show: true, onZero: false, lineStyle: { color: C.chartAxis } },
       axisTick: { show: true, length: 6, lineStyle: { color: C.chartAxis } },
       minorTick: { show: true, splitNumber: 2, length: 3, lineStyle: { color: C.chartAxis } },
       splitLine: { show: false, lineStyle: { color: C.chartGrid, width: 1, type: [2, 2] } },
-      axisLabel: { color: C.chartAxis, margin: 2 },
+      // ECharts measures the margin from the axis line, so it is the tick plus the 2px gap.
+      axisLabel: { color: C.chartAxis, margin: 8 },
     })
+  })
+
+  it('starts the value labels 2px after the end of the major tick, so no tick crosses a minus sign', () => {
+    const y = echartsTheme.yAxis
+    expect(y.axisLabel.margin).toBe(y.axisTick.length + 2)
   })
 
   it('draws the category or time axis with a white baseline and no grid', () => {
     expect(echartsTheme.xAxis).toEqual({
-      axisLine: { show: true, lineStyle: { color: C.chartAxis } },
+      // Never moved to the value axis's zero: the baseline stays at the pane bottom (look spec 6.1).
+      axisLine: { show: true, onZero: false, lineStyle: { color: C.chartAxis } },
       axisTick: { show: true, lineStyle: { color: C.chartAxis } },
       splitLine: { show: false, lineStyle: { color: C.chartGrid, width: 1, type: [2, 2] } },
       axisLabel: { color: C.chartAxis },
     })
+  })
+
+  it('keeps both axis lines off the other axis zero, so no baseline floats mid-pane', () => {
+    expect(echartsTheme.xAxis.axisLine.onZero).toBe(false)
+    expect(echartsTheme.yAxis.axisLine.onZero).toBe(false)
   })
 
   it('switches the dotted grid on and off without touching the input', () => {

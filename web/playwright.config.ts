@@ -2,7 +2,8 @@
 // and never reused, so a run cannot touch the user's real backend on 8765 or the real audit log:
 //   1. the backend in FIXTURE mode: backend/tests/fixture_app.py (fake serve, temporary audit log),
 //      with NQT_FIXTURE_DIR pointing at backend/tests/fixtures;
-//   2. `vite build` then `vite preview`, proxying /api to that backend (e2e/vite.preview.config.ts).
+//   2. `vite build --mode gallery` then `vite preview`, proxying /api to that backend
+//      (e2e/vite.preview.config.ts); the gallery build adds /__gallery/<name> (e2e/gallery.ts).
 // Ports: NQT_E2E_API_PORT (default 8795) and NQT_E2E_WEB_PORT (default 4273).
 import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
@@ -75,7 +76,9 @@ export default defineConfig({
     },
     {
       name: 'vite preview',
-      command: `pnpm exec vite build && pnpm exec vite preview --config e2e/vite.preview.config.ts --port ${WEB_PORT} --strictPort`,
+      // The gallery build (dist-gallery): the production app plus /__gallery/<name> for the
+      // component screenshots. It never writes dist, which start.ps1 serves.
+      command: `pnpm exec vite build --mode gallery && pnpm exec vite preview --mode gallery --config e2e/vite.preview.config.ts --port ${WEB_PORT} --strictPort`,
       cwd: WEB_DIR,
       url: `${WEB_ORIGIN}/`,
       env: { ...(process.env as Record<string, string>), NQT_E2E_API_ORIGIN: API_ORIGIN },

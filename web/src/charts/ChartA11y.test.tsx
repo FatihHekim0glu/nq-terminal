@@ -47,6 +47,22 @@ describe('ChartA11y (UI_SPEC section 9: axe cannot see into canvas)', () => {
     expect(screen.getByRole('img', { name: LABEL })).toBeTruthy()
   })
 
+  it('puts the chart toolbar in the Table row, before the toggle, outside the figure', () => {
+    renderChart({ toolbar: <button type="button">Max</button> })
+    const toggle = screen.getByRole('button', { name: CHART.tableToggle })
+    const tool = screen.getByRole('button', { name: 'Max' })
+    expect(tool.parentElement).toBe(toggle.parentElement)
+    expect(tool.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('img', { name: LABEL }).contains(tool)).toBe(false)
+  })
+
+  it('makes the chart and its scrolling table Tab stops on their own (a panel narrows them to one)', () => {
+    renderChart()
+    expect(screen.getByRole('img', { name: LABEL }).tabIndex).toBe(0)
+    fireEvent.click(screen.getByRole('button', { name: CHART.tableToggle }))
+    expect(screen.getByRole('region').tabIndex).toBe(0)
+  })
+
   it('toggles with T only while the chart has focus', () => {
     renderChart()
     const img = screen.getByRole('img', { name: LABEL })

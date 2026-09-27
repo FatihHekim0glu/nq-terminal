@@ -1,0 +1,51 @@
+/* LineStack (TASKS 5.1; look spec 6, 6.1 and 6.4). Tokens only; square corners (the legend's 3px
+   corner comes from chart.css); every state change is a hard cut with no transition. */
+
+.linestack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+.linestack > .chart-a11y { flex: 1 1 auto; min-height: 0; }
+
+/* Range row 2 (6.4) sits on the left of the chart's Table row: 1D to Max, then Log. It is part of
+   that row (ChartA11y's toolbar slot) and wraps below 1D to Max plus Log, so at the 320px reflow
+   width no button runs off the pane or covers the Table toggle or the chart (WCAG 1.4.10). */
+.linestack-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin-right: auto;
+  min-width: 0;
+}
+.linestack-toolbar .chart-range { flex-wrap: wrap; height: auto; }
+
+.linestack-log:disabled { color: var(--muted); cursor: default; }
+.linestack-log:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* The panes fill the figure; the 5px splitter (chart.css) separates them. */
+.linestack-panes {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.linestack-pane {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.linestack-legend .chart-legend-name { white-space: nowrap; }
+
+/* Crosshair (look spec 9.2, a house choice): solid 1px lines, not uPlot's dashed grey. */
+.linestack .u-cursor-x { border-right: 1px solid var(--crosshair); }
+.linestack .u-cursor-y { border-bottom: 1px solid var(--crosshair); }
+.linestack .uplot { font-family: var(--font-sans); }

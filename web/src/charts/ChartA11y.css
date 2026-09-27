@@ -2,7 +2,7 @@
    4.8 and 6.1. Tokens only; square corners; state changes are hard cuts with no transition. */
 .chart-a11y { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--bg); }
 
-.chart-a11y-bar { display: flex; justify-content: flex-end; }
+.chart-a11y-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; }
 
 /* The Table toggle is a range-row toggle button (4.5): gradient at rest, toggle blue and bold when on. */
 .chart-a11y-toggle {
@@ -22,10 +22,23 @@
 .chart-a11y-figure,
 .chart-a11y-tablewrap { flex: 1 1 auto; min-height: 0; position: relative; }
 .chart-a11y-tablewrap { overflow: auto; }
+.chart-a11y-figure { isolation: isolate; }
 
 .chart-a11y-toggle:focus-visible,
-.chart-a11y-figure:focus-visible,
 .chart-a11y-tablewrap:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* Every chart fills the figure with an opaque, absolutely positioned layer that would paint over the
+   figure's own outline, so the 2px ring sits on an overlay above the chart (UI_SPEC 9, WCAG 2.4.7). */
+.chart-a11y-figure:focus-visible { outline: 0; }
+.chart-a11y-figure:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
 
 /* Classic scrollbars, always visible (4.8). */
 .chart-a11y-tablewrap::-webkit-scrollbar { width: 15px; height: 15px; }

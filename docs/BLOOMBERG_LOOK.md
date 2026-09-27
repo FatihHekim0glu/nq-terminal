@@ -227,6 +227,9 @@ Recorded after the 2026-09-26 accessibility and visual reviews. Each is the smal
 - **Reserved F-keys (5.2).** If a browser keeps F1, F10 or F11 for itself, HELP says what to type instead: `HELP`, `INDEX`, `CURNCY`. `[house]`
 - **Related Functions menu (4.7).** Marked `aria-modal="false"`, since the chrome stays usable while it is open; focus moving into another panel closes it, focus on the chrome does not (Number `<GO>` still reaches its rows). `[house]`
 - **Text spacing (1.4.12).** Under 1.5 line height, 0.12em letter spacing and 0.16em word spacing, no chrome or panel text is clipped: 20px rows grow with their text, and the yellow help square's height is a minimum. Checked in `e2e/shell.spec.ts`. `[house]`
+- **Chart focus ring (2.4.7, 2.4.11).** Every chart fills its `role="img"` figure with an opaque layer, so the 2px `--focus` ring is drawn on an overlay above the chart, not as the figure's own outline. The chart and its table view are Tab stops of their own; inside a panel the roving focus still leaves one Tab stop. Checked on screen pixels in `e2e/gallery-focus.spec.ts`. `[house]`
+- **Chart controls and legends at narrow widths (1.4.10).** The range row (6.4) and the chart's `Table` toggle share one row that wraps below the buttons' full width instead of overlapping; a CandleChart legend name ends in an ellipsis rather than running off the plot, and its value stays whole. At 1366x768 and wider nothing changes. Checked at 320 CSS px in `e2e/gallery-reflow.spec.ts`. `[house]`
+- **Held arrow keys on a chart.** The crosshair moves on every key repeat, but the polite readout announces only where a held key stops (300 ms after the last repeat), as it already did for the pointer. `[house]`
 
 ---
 

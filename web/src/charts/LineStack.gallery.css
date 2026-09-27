@@ -1,0 +1,44 @@
+/* LineStack gallery entries (gallery builds only). Tokens only, square corners, no transitions. */
+.linestack-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-height: 0;
+}
+
+.linestack-gallery-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.linestack-gallery-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.linestack-gallery-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.linestack-gallery-cell > .linestack { flex: 1 1 auto; height: auto; }
+
+.linestack-gallery-cell h2 {
+  margin: 0 0 4px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  color: var(--data);
+}
+
+.linestack-gallery-status {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+}

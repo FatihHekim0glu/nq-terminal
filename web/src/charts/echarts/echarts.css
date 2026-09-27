@@ -1,0 +1,73 @@
+/* ECharts set (TASKS 5.3; look spec 6, 7.5, 7.8). Tokens only; square corners; no transitions.
+   The figure fills the ChartA11y box: the canvas takes the space left above the optional legend. */
+.echarts-frame {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.echarts-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.echarts-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.echarts-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 0;
+  color: var(--text);
+  font: var(--fs-chart)/16px var(--font-sans);
+}
+
+.echarts-error {
+  color: var(--c-down);
+}
+
+/* Heat-scale legend under the grid (7.5 MRET scale bar, 7.8 CORR legend, MON steps). */
+.echarts-scale {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  color: var(--white);
+  font: var(--fs-chart)/16px var(--font-sans);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.echarts-scale-steps {
+  display: flex;
+}
+
+/* A 1px control-grey edge keeps the black neutral step visible on the black page. */
+.echarts-scale-step {
+  width: 36px;
+  height: 13px;
+  box-shadow: inset 0 0 0 1px var(--border-int);
+}
+
+.echarts-scale-named {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.echarts-scale-named .echarts-scale-step {
+  width: 13px;
+}
+
+.echarts-scale-ramp {
+  width: 240px;
+  height: 13px;
+}

@@ -5,7 +5,9 @@
 // own handler first; Left and Right that the chart leaves unhandled move to the panel's next item.
 // The crosshair readout (Left, Right, Home, End) sits outside role="img", whose children are
 // presentational, in a polite live region; callers throttle what they pass. The toggle keeps one
-// visible label ("Table") and carries its state in aria-pressed (WCAG 2.5.3).
+// visible label ("Table") and carries its state in aria-pressed (WCAG 2.5.3). The chart and its
+// scrolling table are Tab stops on their own (WCAG 2.1.1; axe scrollable-region-focusable); inside a
+// panel, the roving focus (chrome/WorkspaceFocus) leaves one Tab stop per panel.
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { CHART } from '../copy/workspace'
 import { ROVING_ATTR, ROVING_DEFAULT_ATTR } from '../chrome/WorkspaceFocus'
@@ -36,6 +38,11 @@ export interface ChartA11yProps {
   readonly onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void
   /** The crosshair readout (T O H L C V and the like); announced politely, so pass a throttled value. */
   readonly readout?: ReactNode
+  /**
+   * The chart's own controls (LineStack's range row), placed left of the Table toggle in one row
+   * that wraps at narrow widths (WCAG 1.4.10), so no control covers another or the chart.
+   */
+  readonly toolbar?: ReactNode
   readonly children: ReactNode
 }
 
@@ -94,17 +101,18 @@ export default function ChartA11y(props: ChartA11yProps) {
   return (
     <div className="chart-a11y">
       <div className="chart-a11y-bar">
+        {props.toolbar}
         <button type="button" className="chart-a11y-toggle" aria-pressed={tableView} onClick={() => setTableView(!tableView)} {...roving}>
           {CHART.tableToggle}
         </button>
         <span id={hintId} className="sr-only">{CHART.keysHint}</span>
       </div>
       {tableView ? (
-        <div className="chart-a11y-tablewrap" role="region" aria-label={props.table.caption} aria-describedby={hintId} tabIndex={-1} onKeyDown={onKeyDown} {...rovingDefault}>
+        <div className="chart-a11y-tablewrap" role="region" aria-label={props.table.caption} aria-describedby={hintId} tabIndex={0} onKeyDown={onKeyDown} {...rovingDefault}>
           <DataTable table={props.table} />
         </div>
       ) : (
-        <div className="chart-a11y-figure" role="img" aria-label={props.label} aria-describedby={hintId} tabIndex={-1} onKeyDown={onKeyDown} {...rovingDefault}>
+        <div className="chart-a11y-figure" role="img" aria-label={props.label} aria-describedby={hintId} tabIndex={0} onKeyDown={onKeyDown} {...rovingDefault}>
           {props.children}
         </div>
       )}
