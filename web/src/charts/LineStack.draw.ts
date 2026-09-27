@@ -160,17 +160,85 @@ export function lastValueTags(
     const i = lastIndex(s.values, visible[0], visible[1])
     if (i === -1) continue
     const text = formatValue(s.values[i], decimals, unit, signed)
-    const width = Math.min(ctx.measureText(text).width + 2 * TAG_PAD * pr, (G.axisGutter - G.tagArrow) * pr)
+    // Never clamped: the value axis widens to the widest tag (valueAxisSize), so no digit is cut.
+    const width = ctx.measureText(text).width + 2 * TAG_PAD * pr
     tags.push({ y: u.valToPos(s.values[i]!, 'y', true), width, text, fill: s.colour, textColour: textOn(s.colour, tokens) })
   }
   ctx.restore()
-  const order = tags.map((_, k) => k).sort((a, b) => tags[a]!.y - tags[b]!.y)
-  const ys = tags.map((tag) => tag.y)
+  const ys = stackTags(tags.map((tag) => tag.y), G.tagHeight * pr, u.height * pr)
+  return tags.map((tag, k) => ({ ...tag, y: ys[k]! }))
+}
+
+/**
+ * Tag centres pushed apart by one tag height, then kept inside the canvas: a tag that would cross the
+ * bottom (the splitter under a pane with no time axis) moves up and pushes the ones above it, so the
+ * pair keeps its order and every tag stays whole.
+ */
+function stackTags(y0: readonly number[], step: number, height: number): number[] {
+  const order = y0.map((_, k) => k).sort((a, b) => y0[a]! - y0[b]!)
+  const ys = [...y0]
   for (let k = 1; k < order.length; k += 1) {
     const prev = ys[order[k - 1]!]!
-    if (ys[order[k]!]! - prev < G.tagHeight * pr) ys[order[k]!] = prev + G.tagHeight * pr
+    if (ys[order[k]!]! - prev < step) ys[order[k]!] = prev + step
   }
-  return tags.map((tag, k) => ({ ...tag, y: ys[k]! }))
+  let limit = height - step / 2
+  for (let k = order.length - 1; k >= 0; k -= 1) {
+    const i = order[k]!
+    if (ys[i]! > limit) ys[i] = limit
+    limit = ys[i]! - step
+  }
+  let floor = step / 2
+  for (const i of order) {
+    if (ys[i]! < floor) ys[i] = floor
+    floor = ys[i]! + step
+  }
+  return ys
+}
+
+/**
+ * The value axis width in CSS pixels: the theme's gutter, widened when a label or a last-value tag
+ * would not fit (a 7-digit USD equity), so the axis never cuts a digit off the value it shows.
+ */
+export function valueAxisSize(
+  u: DrawPlot,
+  labels: readonly (string | null | undefined)[],
+  tags: readonly Tag[],
+  font: ChartTokens['font'],
+  pr: number,
+): number {
+  const { ctx } = u
+  ctx.save()
+  ctx.font = canvasFontOf(font, pr)
+  let widest = 0
+  for (const label of labels) {
+    if (label) widest = Math.max(widest, ctx.measureText(label).width / pr + G.majorTick + G.labelGap)
+  }
+  ctx.restore()
+  for (const tag of tags) widest = Math.max(widest, tag.width / pr + G.tagArrow)
+  return Math.max(G.axisGutter, Math.ceil(widest + 1))
+}
+
+/** Reports one pane's value-axis need and returns the width every pane of the stack should take. */
+export type SharedGutter = (pane: number, need: number) => number
+
+/**
+ * One value-axis width for a whole stack: the widest pane's need, never under the theme's gutter.
+ * The panes share one time axis, so their plots must keep one right edge; when the width changes,
+ * `onChange` hears the new width and the pane that changed it, and redraws the other panes.
+ */
+export function sharedGutter(onChange: (width: number, from: number) => void): SharedGutter {
+  const needs = new Map<number, number>()
+  let width: number = G.axisGutter
+  return (pane, need) => {
+    needs.set(pane, need)
+    let next: number = G.axisGutter
+    for (const n of needs.values()) next = Math.max(next, n)
+    if (next !== width) {
+      width = next
+      onChange(width, pane)
+    }
+    return width
+  }
 }
 
 /** Draws each tag: the theme's pentagon pointing at the axis line, then its text. */

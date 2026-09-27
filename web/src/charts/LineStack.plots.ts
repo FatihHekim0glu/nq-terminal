@@ -9,7 +9,8 @@ import { pixelRatio } from './fence'
 import type { UplotConstructor } from './lazy'
 import { createLegend, type LegendHandle, type LegendStats } from './LineStack.legend'
 import { isIntraday, paneFormat, seriesStats, timeLabel, visibleIndexRange, type Values } from './LineStack.model'
-import { paneOptions, type PaneDrawInfo, type PaneSync } from './LineStack.options'
+import { sharedGutter, type SharedGutter } from './LineStack.draw'
+import { paneOptions, paneUplotData, type PaneDrawInfo, type PaneSync } from './LineStack.options'
 import type { LineStackPane } from './LineStack.types'
 import { uplotCrosshairSync } from './sync'
 import { lineStackSeries, readChartTokens, type ChartTokens } from './theme'
@@ -70,6 +71,7 @@ interface PaneContext {
   readonly el: HTMLDivElement
   readonly tokens: ChartTokens
   readonly onFirstDraw: () => void
+  readonly gutter: SharedGutter
 }
 
 interface PaneLegend {
@@ -105,7 +107,7 @@ function paneLegend(el: HTMLElement, pane: LineStackPane, values: readonly Value
 }
 
 function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legend: LegendHandle } {
-  const { a, i, el, tokens } = c
+  const { a, i, el, tokens, gutter } = c
   const pane = a.panes[i]!
   const values = a.data[i]!
   const legend = paneLegend(el, pane, values, a.t, tokens)
@@ -123,6 +125,11 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
     sync: paneSync(a.link, `${a.uid}-${i}`, `nqt-stack-${a.uid}`),
     fence: a.fence,
     pxRatio: Ctor.pxRatio > 0 ? Ctor.pxRatio : 1,
+    gutter: { shared: gutter, index: i },
+    legendBox: () => {
+      const box = legend.handle.element
+      return { left: box.offsetLeft, top: box.offsetTop, width: box.offsetWidth, height: box.offsetHeight }
+    },
     onDraw: (u, info) => {
       writeAttrs(el, u, info)
       legend.onScale(u)
@@ -133,7 +140,7 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
       if (i === 0) a.onPointer(cursorIndex(u))
     },
   })
-  const plot = new Ctor(opts, [a.t, ...values] as unknown as uPlot.AlignedData, el)
+  const plot = new Ctor(opts, paneUplotData<readonly (number | null)[]>(a.t, pane, values) as unknown as uPlot.AlignedData, el)
   return { plot, legend: legend.handle }
 }
 
@@ -153,6 +160,11 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
     const start = performance.now()
     const waiting = new Set(panes.map((_, i) => i))
     setDrawn(false)
+    // When one pane needs a wider value axis (a 7-digit tag), the others follow on the next tick so
+    // every plot keeps the same right edge under the shared time axis.
+    const gutter = sharedGutter((_width, from) => {
+      queueMicrotask(() => plots.current.forEach((u, k) => k !== from && u.redraw(false, true)))
+    })
     const built = panes.map((_, i) => {
       const el = cur.paneEls.current[i]
       if (!el) throw new Error(`LineStack pane ${i} has no element`)
@@ -161,7 +173,7 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
         cur.onRender?.(performance.now() - start + cur.takeExtraMs())
         setDrawn(true)
       }
-      return buildPane(lib, { a: cur, i, el, tokens, onFirstDraw })
+      return buildPane(lib, { a: cur, i, el, tokens, onFirstDraw, gutter })
     })
     plots.current = built.map((b) => b.plot)
     return () => {

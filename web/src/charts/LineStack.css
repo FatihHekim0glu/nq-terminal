@@ -41,6 +41,14 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  /* Its height comes from the flex weight, never its content, so size containment is safe. */
+  container-type: size;
+}
+
+/* A short pane (a thin exposure pane, a small HOME panel) keeps only the series row of a single-series
+   legend: the High on, Average and Low on rows would run over the time axis and its labels. */
+@container (max-height: 150px) {
+  .linestack-legend-stat { display: none; }
 }
 
 .linestack-legend .chart-legend-name { white-space: nowrap; }

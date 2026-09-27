@@ -1,7 +1,7 @@
 import type uPlot from 'uplot'
 import { describe, expect, it } from 'vitest'
 import { FENCE_TIME } from './fence'
-import { paneOptions, type PaneBuild } from './LineStack.options'
+import { paneOptions, paneUplotData, type PaneBuild } from './LineStack.options'
 import { fakePlot } from './LineStack.testUtil'
 import { DEFAULT_CHART_TOKENS, canvasFont, makeUplotTheme } from './theme'
 import type { LineStackPane } from './LineStack.types'
@@ -57,7 +57,7 @@ describe('pane options from the charts theme (look spec 6.3)', () => {
     const o = build()
     expect(o.padding).toEqual([...theme.padding])
     const [x, y] = o.axes!
-    expect(y).toMatchObject({ side: 1, size: 57, gap: 2, stroke: '#FFFFFF', font: canvasFont(DEFAULT_CHART_TOKENS) })
+    expect(y).toMatchObject({ side: 1, gap: 2, stroke: '#FFFFFF', font: canvasFont(DEFAULT_CHART_TOKENS) })
     expect(y!.border).toEqual({ show: true, stroke: '#FFFFFF', width: 1 })
     expect(y!.ticks).toMatchObject({ show: true, size: 6 })
     expect(x).toMatchObject({ side: 2, size: 45, show: true })
@@ -70,13 +70,55 @@ describe('pane options from the charts theme (look spec 6.3)', () => {
 
   it('styles every series from lineStackSeries and never spans a gap', () => {
     const eq = build().series
-    expect(eq[1]).toMatchObject({ label: 'Strategy', stroke: '#FFFFFF', width: 1.5, fill: '#031D38', spanGaps: false })
+    expect(eq[1]).toMatchObject({ label: 'Strategy', width: 0, fill: '#031D38', spanGaps: false })
     expect(eq[2]).toMatchObject({ label: 'Benchmark', stroke: '#F06000', width: 1.5, spanGaps: false })
     expect(eq[2]!.fill).toBeUndefined()
+    expect(eq[3]).toMatchObject({ label: 'Strategy', stroke: '#FFFFFF', width: 1.5, spanGaps: false })
+    expect(eq[3]!.fill).toBeUndefined()
     const dd = build({ pane: DD }).series[1]!
     expect(dd).toMatchObject({ stroke: '#FFFFFF', width: 1, fill: '#6A1020', fillTo: 0, spanGaps: false })
     const rr = build({ pane: RR }).series
     expect(rr.slice(1).map((s) => s.stroke)).toEqual(['#FFFFFF', '#F06000', '#00B5F7'])
+  })
+
+  it('born failing: draws the primary line last, over the benchmark, with its area fill under every line', () => {
+    // uPlot draws series in index order: the area first, the benchmark, then the strategy line on top.
+    const eq = build().series.slice(1)
+    expect(eq.map((s) => [s.label, s.stroke === undefined ? null : s.width, s.fill === undefined ? 'line' : 'area'])).toEqual([
+      ['Strategy', 0, 'area'],
+      ['Benchmark', 1.5, 'line'],
+      ['Strategy', 1.5, 'line'],
+    ])
+    const strategy = [1, 2]
+    const bench = [3, 4]
+    expect(paneUplotData([10, 20], EQ, [strategy, bench])).toEqual([[10, 20], strategy, bench, strategy])
+    // A drawdown pane with a benchmark underwater curve draws the white underwater line last too.
+    const ddPair: LineStackPane = { ...DD, series: [DD.series[0]!, { name: 'Benchmark underwater', style: 'benchmark', values: [] }] }
+    const dd = build({ pane: ddPair, data: [t.map(() => -1), t.map(() => -2)] }).series.slice(1)
+    expect(dd.map((s) => [s.label, s.width, s.fill === undefined ? 'line' : 'area'])).toEqual([
+      ['Underwater', 0, 'area'],
+      ['Benchmark underwater', 1.5, 'line'],
+      ['Underwater', 1, 'line'],
+    ])
+    expect(dd[0]!.fillTo).toBe(0)
+    // A pane with no lead line keeps its own order.
+    expect(build({ pane: RR }).series.slice(1).map((s) => s.label)).toEqual(['63', '252', 'Vol'])
+    expect(paneUplotData([10], RR, [[1], [2], [3]])).toEqual([[10], [1], [2], [3]])
+  })
+
+  it('born failing: raises the value range so the curve under the legend is never hidden by it', () => {
+    // The legend covers the top-left 200 x 40 CSS px of an 800 x 400 plot; the curve peaks at 2 at the start.
+    const data = [t.map((_, i) => (i === 0 ? 2 : 1)), t.map(() => 1)]
+    const o = build({ data, legendBox: () => ({ left: 8, top: 8, width: 200, height: 40 }) })
+    const u = { ...fakePlot({ xMin: t[0]!, xMax: FENCE_TIME }), bbox: { left: 8, top: 8, width: 800, height: 400 } }
+    const range = o.scales!.y!.range as (u: unknown, lo: number, hi: number) => [number, number]
+    const [lo, hi] = range(u, 1, 2)
+    const peakPx = ((hi - 2) / (hi - lo)) * 400
+    expect(peakPx).toBeGreaterThanOrEqual(40)
+    // With the peak on the right, away from the legend, the range is the plain padded one.
+    const late = [t.map((_, i) => (i === t.length - 1 ? 2 : 1)), t.map(() => 1)]
+    const o2 = build({ data: late, legendBox: () => ({ left: 8, top: 8, width: 200, height: 40 }) })
+    expect((o2.scales!.y!.range as typeof range)(u, 1, 2)).toEqual([0.95, 2.05])
   })
 
   it('fills the primary area down to the pane bottom and the difference area from zero', () => {
@@ -148,6 +190,28 @@ describe('pane options from the charts theme (look spec 6.3)', () => {
     const values = o.axes![1]!.values as (u: unknown, splits: number[]) => (string | null)[]
     // 0.95 is about 9px from the tag at 1: the label would touch it.
     expect(values(u, [0, 0.95, 1.9])).toEqual(['0.00', null, '1.90'])
+  })
+
+  it('keeps the 57px gutter for short values', () => {
+    const o = build({ data: [t.map(() => 1), t.map(() => 1.5)] })
+    const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME, yMin: 0, yMax: 2 })
+    const y = o.axes![1]!
+    const labels = (y.values as (u: unknown, splits: number[]) => (string | null)[])(u, [0, 0.5, 1, 1.5, 2])
+    expect((y.size as (u: unknown, v: unknown) => number)(u, labels)).toBe(57)
+  })
+
+  it('born failing: widens the value axis so a 7-digit last-value tag is never cut (5778540.28)', () => {
+    const big = 5778540.28
+    const o = build({ data: [t.map(() => big)] , pane: { id: 'eq', series: [{ name: 'Equity', style: 'primary', values: t.map(() => big) }] } })
+    const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME, yMin: 5_000_000, yMax: 6_000_000 })
+    const y = o.axes![1]!
+    const labels = (y.values as (u: unknown, splits: number[]) => (string | null)[])(u, [5_000_000, 5_500_000, 6_000_000])
+    const size = (y.size as (u: unknown, v: unknown) => number)(u, labels)
+    // The fake context measures 0.55em per character; the tag is its text plus 3px padding each side
+    // plus the 5px arrow, so the gutter must hold all of '5778540.28' at 12px.
+    const text = '5778540.28'
+    const font = DEFAULT_CHART_TOKENS.font.size
+    expect(size).toBeGreaterThanOrEqual(Math.ceil(text.length * font * 0.55 + 6 + 5))
   })
 
   it('blanks a value-axis label that a last-value tag covers', () => {

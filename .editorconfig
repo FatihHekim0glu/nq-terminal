@@ -1,0 +1,9 @@
+# One line ending for every text file: the repository stores bytes as they are (.gitattributes), so a
+# CRLF save shows up as a whole-file change. Tests enforce it (web/scripts/lineEndings.test.ts and
+# backend/tests/test_line_endings.py).
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+insert_final_newline = true

@@ -138,9 +138,21 @@ describe('describeSeries: the aria-label summary', () => {
     expect(describeSeries({ name: 'Long', t, v })).toBe(`Long: ${n} points from 0 to ${n - 1}; first 0, last 2, low -5, high 9.`)
   })
 
-  it('adds the maximum drawdown when asked (UI_SPEC section 9)', () => {
-    const text = describeSeries({ name: 'Equity', t: ['a', 'b', 'c', 'd', 'e'], v: [1, 1.2, 0.9, 1.1, 0.95], drawdown: true })
-    expect(text).toBe('Equity: 5 points from a to e; first 1, last 0.95, low 0.9, high 1.2; max drawdown -25.0%.')
+  it('states the drawdown the screen passes, with its basis, and never derives one (UI_SPEC section 9)', () => {
+    // A Basis A curve (1 + cumulative sum) falls 13.5% from its peak as a ratio while the API's drawdown
+    // in units of K is -22.64%: the name carries the API's figure, not a ratio of the plotted values.
+    const text = describeSeries({
+      name: 'Equity',
+      t: ['a', 'b', 'c', 'd', 'e'],
+      v: [1, 1.2, 0.9, 1.1, 0.95],
+      drawdown: { value: '-22.64%', basis: 'Basis A' },
+    })
+    expect(text).toBe('Equity: 5 points from a to e; first 1, last 0.95, low 0.9, high 1.2; max drawdown -22.64% (Basis A).')
+  })
+
+  it('born failing: states no drawdown unless one is passed', () => {
+    const text = describeSeries({ name: 'Gross exposure', t: ['a', 'b', 'c'], v: [0.02, 0.01, 0] })
+    expect(text).not.toMatch(/drawdown/)
   })
 
   it('says so when there is no data', () => {

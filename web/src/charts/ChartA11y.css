@@ -2,7 +2,10 @@
    4.8 and 6.1. Tokens only; square corners; state changes are hard cuts with no transition. */
 .chart-a11y { display: flex; flex-direction: column; min-height: 0; height: 100%; background: var(--bg); }
 
-.chart-a11y-bar { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.chart-a11y-bar { position: relative; display: flex; flex-wrap: wrap; justify-content: flex-end; }
+/* The keys hint is hidden text: pinned to the bar's left corner, since at the flex end its 1px box would
+   stand 1px past the panel's right edge and give the panel body a horizontal scrollbar. */
+.chart-a11y-bar > .sr-only { top: 0; left: 0; }
 
 /* The Table toggle is a range-row toggle button (4.5): gradient at rest, toggle blue and bold when on. */
 .chart-a11y-toggle {
@@ -86,7 +89,12 @@
 
 /* Crosshair readout under the chart: kept only as the table-view fallback (6.1). */
 .chart-a11y-readout {
-  font: var(--fs-chart)/16px var(--font-sans);
+  /* Never squeezed by the figure above it: a shrunk line loses its descenders at the panel edge. */
+  flex: 0 0 auto;
+  min-height: 18px;
+  /* The table cells' inset: the text never touches the 1px focused-panel line. */
+  padding: 0 5px;
+  font: var(--fs-chart)/18px var(--font-sans);
   color: var(--text);
   font-variant-numeric: tabular-nums lining-nums;
 }

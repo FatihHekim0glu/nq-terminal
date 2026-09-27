@@ -39,7 +39,9 @@ export function formatKpi(value: number | null, unit: string, decimals: number, 
   if (value === null || !Number.isFinite(value)) return MISSING
   const text = fixed(value, decimals)
   const plus = signed && Number(text) > 0 ? '+' : ''
-  return `${plus}${text}${unit === '%' ? '%' : ''}`
+  const [whole = '', frac] = text.split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return `${plus}${frac === undefined ? grouped : `${grouped}.${frac}`}${unit === '%' ? '%' : ''}`
 }
 
 function Popover({ id, kpi, description }: { readonly id: string; readonly kpi: Kpi; readonly description?: string }) {

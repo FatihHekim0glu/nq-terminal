@@ -1,0 +1,61 @@
+/* HOME (look spec 7.1): the launchpad's equity panel and the launchpad index. Tokens only, square
+   corners, no transitions. The equity panel fills its panel body: a one-line tag strip, the KPI row,
+   the chart (it takes the rest), then the notes in the small size. */
+.home-eq {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+  min-height: 0;
+  padding: 4px 6px 2px;
+  container: home-eq / size;
+}
+.home-eq-tag { flex: 0 0 auto; margin: 0; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
+.home-eq-tag .tag { color: var(--data); }
+.home-eq .kpi-row { flex: 0 0 auto; }
+.home-eq-chart { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 160px; min-width: 0; }
+.home-eq-chart > * { flex: 1 1 auto; min-height: 0; }
+.home-eq-notes {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--data);
+  font-size: var(--fs-small);
+  line-height: 14px;
+}
+/* A short panel (the 2x2 grid at 1366x768): one-line tiles (the tag strip above names the tag for
+   every tile), and the chart keeps a legible height while the notes move below the fold, where
+   PgDn reaches them. */
+@container home-eq (max-height: 400px) {
+  .home-eq .kpi-tile { flex-direction: row; align-items: baseline; gap: 6px; min-height: 24px; padding: 2px 6px; }
+  .home-eq .kpi-value { font-size: var(--fs-data); line-height: 20px; }
+  .home-eq .kpi-tag { display: none; }
+  .home-eq-chart { flex: 0 0 auto; height: 220px; }
+}
+.home-eq-note { margin: 0; padding: 4px 6px; color: var(--data); }
+.home-eq-note .cmd-link,
+.home-launch .cmd-link {
+  min-height: 24px;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.home-eq-note .cmd-link-wrap,
+.home-launch .cmd-link-wrap { color: var(--link); }
+
+/* The launchpad index (a HOME panel on its own): an intro line over a numbered grid. */
+.home-launch { padding: 0; }
+.home-launch-intro { margin: 0; padding: 4px 6px; color: var(--data); max-width: 100ch; }
+.home-launch .ix { width: 2.6em; text-align: right; }
+.home-launch .hot { display: inline-block; color: var(--muted); transform: scaleX(.63); transform-origin: right center; }
+.home-launch .group-row td { color: var(--white); font-weight: 700; }

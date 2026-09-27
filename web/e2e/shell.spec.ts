@@ -1,7 +1,7 @@
 // Shell E2E (TASKS 4.4, updated for the look spec): the app loads; Esc and Ctrl+K focus the command
 // line; Tab visits every panel with a visible focus ring; every HELP mnemonic resolves (unbuilt screens
-// show a labelled placeholder); axe is clean with the WCAG 2.2 AA tags; every request is a same-origin
-// GET carrying the client header; no console errors and no CSP violations under the backend's policy;
+// show a labelled placeholder, the P0 screens show themselves); axe is clean with the WCAG 2.2 AA tags;
+// every request is a same-origin GET carrying the client header; no console errors and no CSP violations under the backend's policy;
 // layouts reflow at 400% zoom; screenshot baselines at 1920x1080 and 1366x768 with a frozen clock.
 // Runs against the fixture-mode backend.
 //
@@ -34,6 +34,11 @@ const CONTEXT_FOR_RULE: Readonly<Record<string, string>> = {
   'run or hypothesis': 'nt_volmanaged_v0_fixture_m1',
 }
 const ARGUMENT_FOR: Readonly<Record<string, string>> = { GIP: '2019-03-14' }
+// Every P0 screen is built after Phases 6 and 7 (src/chrome/WorkspaceScreens.tsx BUILT_SCREENS).
+const BUILT: ReadonlySet<string> = new Set([
+  'HOME', 'GP', 'GIP', 'MON', 'CORR', 'OOS', 'LIVE', 'JRNL', 'DES', 'REG', 'MT', 'RUNS', 'RUN', 'LEDG',
+  'EQ', 'DD', 'RET', 'RR', 'MRET', 'HELP',
+])
 const MULTI_PANEL_SCREENS: Readonly<Record<string, readonly string[]>> = {
   HOME: HOME_TITLES,
   REG: ['REG', 'MT'],
@@ -230,7 +235,11 @@ test.describe('terminal shell', () => {
       const panel = panelBody(page, line)
       await expect(panel, line).toBeVisible()
       if (code === 'HELP') await expect(panel.getByRole('table').first()).toBeVisible()
-      else await expect(panel.locator(`[data-placeholder="${code}"]`), line).toContainText('Not built yet.')
+      else if (BUILT.has(code ?? '')) {
+        // Phases 6 and 7 built every P0 screen: the panel shows the screen, never the placeholder.
+        await expect(panel.locator('[data-placeholder]'), line).toHaveCount(0)
+        await expect(panel.locator('p.ws-empty'), line).toHaveCount(0, { timeout: 15_000 })
+      } else await expect(panel.locator(`[data-placeholder="${code}"]`), line).toContainText('Not built yet.')
     }
     await expectSameOriginGets(watched, baseURL ?? '')
     expect(watched.errors).toEqual([])
@@ -342,6 +351,10 @@ test.describe('terminal shell', () => {
       await page.setViewportSize(size)
       await openApp(page)
       await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
+      // The HOME screens load lazily; on a slow machine a panel can still read "Loading this screen."
+      // (a stable frame) when the screenshot is taken, so wait for every screen and chart to settle.
+      await expect(page.getByText('Loading this screen.')).toHaveCount(0)
+      await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
       await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`)
       await runCommand(page, 'HELP')
       await expect(page.getByRole('table', { name: 'Keyboard reference' })).toBeVisible()

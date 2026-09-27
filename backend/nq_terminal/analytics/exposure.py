@@ -88,6 +88,12 @@ class ExposureError(ValueError):
     """Snapshots or fills cannot be put on one position grid."""
 
 
+# A venue cost that changes by era is recorded as text, e.g. eomtsy_v0's ZT: "from 2010-01-01: 1 x 15.625 + 2.5 =
+# 18.125; from 2019-01-14: 1 x 7.8125 + 2.5 = 10.3125" (ZT's tick was 1/128 until 2019-01-14). One cost per side per
+# instrument cannot describe it, so such a run is refused by name rather than decomposed with the wrong tick value.
+ERA_COST_PREFIX = "from "
+
+
 @dataclass(frozen=True)
 class Instrument:
     name: str
@@ -163,6 +169,9 @@ def _book_instruments(data: Mapping[str, Any], venue: Mapping[str, Any],
     by_name = {}
     for row in venue["instruments"]:
         name = str(row.get("instrument"))
+        if str(row.get("cost_per_side", "")).lstrip().startswith(ERA_COST_PREFIX):
+            raise CostError(f"{name}: the cost per side changes by era ({row.get('cost_per_side')}); the cost model "
+                            "holds one cost per side per instrument, so this run's costs are not decomposed")
         by_name[name] = _checked(Instrument(name, _dec(row.get("multiplier"), f"{name} multiplier"),
                                             _dec(row.get("price_increment"), f"{name} price increment"),
                                             _dec(row.get("cost_per_side"), f"{name} cost per side"), ticks))

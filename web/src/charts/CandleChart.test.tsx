@@ -120,7 +120,7 @@ describe('CandleChart', () => {
     await renderChart()
     expect(screen.getByText('NQ1 Index - Last price').nextSibling?.textContent).toBe('129.00')
     expect(screen.getByText('High on 2021-12-30').nextSibling?.textContent).toBe('130.00')
-    expect(screen.getByText('Average').nextSibling?.textContent).toBe('114.5000')
+    expect(screen.getByText('Average').nextSibling?.textContent).toBe('114.50')
     expect(screen.getByText('Low on 2021-12-01').nextSibling?.textContent).toBe('99.00')
     expect(screen.getByText('NQ1 Index - Volume').nextSibling?.textContent).toBe('1,290')
     const legend = (text: string) => [...document.querySelectorAll('.chart-legend span')].find((s) => s.textContent === text)

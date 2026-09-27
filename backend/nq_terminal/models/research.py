@@ -175,6 +175,8 @@ class Confirmation(ResponseModel):
     opening_closed: bool
     label: str
     parent: str | None = Field(description="the in-sample hypothesis this confirmation tested")
+    pass_bar: Any = Field(None, description="the confirmation spec's own pass bar, verbatim (text or JSON)")
+    hypothesis: Any = Field(None, description="the confirmation spec's hypothesis, verbatim")
 
 
 class MultipleTesting(ResponseModel):

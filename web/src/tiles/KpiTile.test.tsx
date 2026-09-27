@@ -22,6 +22,10 @@ describe('formatKpi', () => {
     expect(formatKpi(3.52, '%/yr', 1, true)).toBe('+3.5')
     expect(formatKpi(null, 'ratio', 2, false)).toBe('--')
     expect(formatKpi(-0.001, 'ratio', 2, true)).toBe('0.00')
+    // Counts and money group thousands, as every grid and text line does (2,686 sessions).
+    expect(formatKpi(2686, 'sessions', 0, false)).toBe('2,686')
+    expect(formatKpi(-1600685.861, 'USD', 2, true)).toBe('-1,600,685.86')
+    expect(formatKpi(723.38, 'sessions', 0, false)).toBe('723')
   })
 })
 

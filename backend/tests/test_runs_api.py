@@ -112,7 +112,7 @@ def test_detail_ledger_command(api):
 def test_runs_routes_are_get_only(api):
     paths = api.app.openapi()["paths"]
     runs = {p: ops for p, ops in paths.items() if p.startswith(("/api/runs", "/api/ledger"))}
-    assert len(runs) == 9
+    assert len(runs) == 10  # /api/runs/stats (RUNS' Sharpe and drawdown) is the tenth
     assert all(set(ops) == {"get"} for ops in runs.values())
 
 

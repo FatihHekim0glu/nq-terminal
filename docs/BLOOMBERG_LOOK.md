@@ -230,6 +230,11 @@ Recorded after the 2026-09-26 accessibility and visual reviews. Each is the smal
 - **Chart focus ring (2.4.7, 2.4.11).** Every chart fills its `role="img"` figure with an opaque layer, so the 2px `--focus` ring is drawn on an overlay above the chart, not as the figure's own outline. The chart and its table view are Tab stops of their own; inside a panel the roving focus still leaves one Tab stop. Checked on screen pixels in `e2e/gallery-focus.spec.ts`. `[house]`
 - **Chart controls and legends at narrow widths (1.4.10).** The range row (6.4) and the chart's `Table` toggle share one row that wraps below the buttons' full width instead of overlapping; a CandleChart legend name ends in an ellipsis rather than running off the plot, and its value stays whole. At 1366x768 and wider nothing changes. Checked at 320 CSS px in `e2e/gallery-reflow.spec.ts`. `[house]`
 - **Held arrow keys on a chart.** The crosshair moves on every key repeat, but the polite readout announces only where a held key stops (300 ms after the last repeat), as it already did for the pointer. `[house]`
+- **Tab strips (4.1.2).** A `role="tab"` keeps the ARIA tabs keyboard contract. Left and Right stay in its tablist and wrap at the ends; Home goes to the first tab and End to the last; Enter or Space selects. Because Tab moves between panels (UI_SPEC section 5), Down on a tab moves into the panel's content, and Left from the first content item returns to the tabs. Every tab strip names the `role="tabpanel"` it controls. `[house]`
+- **Chart summaries and drawdown (1.1.1).** A chart's accessible name states a maximum drawdown only when the screen passes the API's figure with its basis (for example `max drawdown -22.64% (Basis A)`); the chart never derives one from the plotted curve, and other panes (exposure, contracts, rolling figures) state none. `[house]`
+- **Short panels (round 3 visual review, 2026-09-27).** A panel body under 480px tall (a HOME 2x2 cell) folds the MON parameter row away, so the grid keeps its 19-row budget; a full-screen MON (556px at 1366x768) keeps it. A GP body under 300px (the HOME cell at 1366x768) folds its parameter row, range row and session line away so the price pane stays readable; the full GP panel keeps them, and the basis footer follows in the body's scroll. LIVE shows its chart before the KPI tiles in a body under 320px. RR draws no scale when the series is shorter than the rolling window: each pane states the window and the series length instead. `[house]`
+- **Numbers are never cut (4.8).** A grid column is never narrower than its header, and a numeric column never narrower than its widest value; only name and text columns end in an ellipsis. A grid wider than its panel scrolls. `[house]`
+- **Gate read counter (4.1.3).** The status line's `Gate reads N` sits outside its polite live region on purpose: it rises with every price read a screen makes (GP, HOME), so announcing it would talk over the screen. The kill switch and TWS segments, which change rarely and matter at once, stay in the live region. `[house]`
 
 ---
 
@@ -653,6 +658,13 @@ legend: { show: false },   // DOM overlay, as above
 
 The workspace is 1920 × 917 (tape off) between the command zone and the status line. Wireframes are about 100 columns wide, one character about 19px. Every panel has the chrome from 4.3; wireframes abbreviate the title bar as `==title==`.
 
+**Reduced templates (recorded after the Phase 6 and 7 visual review, 2026-09-27).** Where a template below asks for something the terminal does not yet have, the screen shows less rather than a value the API does not send. Each item is either a house choice or waits for an API field (Phase 8 notes in `TASKS.md`):
+- LEDG has no white Totals row: a sum over rows is not an API value (rule 2). `[house]`
+- Numbered actions not built yet: `98) Report` on DES; `98) Export` on RUNS, RUN, LEDG, EQ to MRET and CORR; `95) Compare` and the context field on GP and GIP; `95) Save defaults` and the `[27F]` field on MON; `95) Create new` on CORR. REG and OOS carry `98) Export`. `[house]`
+- API gaps: the instrument DES tabs `3) Notes` and `4) Contracts (CT)`, month-code strip, trading hours and roll dates (needs `GET /api/instruments/{root}`); the EQ performance-difference pane and the RET per-period series (need the series in `/api/analytics`); the RR volatility `Hi:` and `Low:` callouts; the MON 2Day sparkline column; the OOS `R` severity column; the CORR sector header row; the LIVE Routes and Fills sections and footer strip; the GP RV22 indicator pane of 7.6 (the MV3 series is not in `/api/bars`; the quote header's RV22 comes from `/api/market/universe`, and HELP describes GP as candles and volume with roll markers).
+- The RUN chart puts the benchmark in a pane of its own when a shared axis would give the strategy's line less than a fifth of its height (for example a fixture run against NQ buy and hold); the values are unchanged. `[house]`
+- The RUN side panel shows one Total column, without the 7.4 `Statistics | Settings` side tabs and Long and Short columns (the run's summary has no split by side). `[house]`
+
 **Row budget** for a 2x2 grid panel (tape off): (917 - 2) / 2 = 457px; minus title 18, red bar 21, header 20 = 398px, so 19 rows at 20px (18 with a parameter row). With the tape on: 18 rows (17 with a parameter row). This replaces the draft's "22 rows", which assumed a thinner stack than the evidence supports.
 
 ### 7.1 HOME: Launchpad view, 2x2 (4 panels, about 19 rows each)
@@ -870,7 +882,7 @@ Model: the Help Page (left table of contents, breadcrumb, amber prose), plus the
 |[<Search help>        ] 96)Actions                                      Page 1/3  Help            |
 | Getting started > Help for GP        (italic breadcrumb, #53B2F5)                              |
 | Mnemonics        (29) |  GP                                               (white, 2x size)     |
-|  1) HOME              |  Candles, volume plus an indicator pane for one instrument. (amber)       |
+|  1) HOME              |  Candles and volume for one instrument, with roll markers. (amber)       |
 |  2) GP  (sel #0C2B4A) |  41) Examples: {NQ1 Index GP <GO>}  {ZN COMDTY GP 1h <GO>} (blue links) |
 | Keys             (14) |  Keys: <End> back  <PgDn> page  <F10> Index ...                        |
 | Link groups       (3) |                                                                         |

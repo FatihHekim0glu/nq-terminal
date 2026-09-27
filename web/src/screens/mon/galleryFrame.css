@@ -1,0 +1,10 @@
+/* Gallery frame for MON and CORR (gallery builds only): one panel at the size the workspace gives it at
+   1920x1080. Tokens only. */
+.mkt-gallery {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.mkt-gallery-home { width: 959px; height: 457px; }
+.mkt-gallery-full { width: 100%; max-width: 1920px; height: 917px; }
+.mkt-gallery > .nqt-panel { flex: 1 1 auto; min-height: 0; }

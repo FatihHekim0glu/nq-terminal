@@ -16,7 +16,7 @@ export const SCREEN_TITLE_OVERRIDES = {
  */
 export const MNEMONIC_SCREENS = {
   HOME: SCREEN_TITLE_OVERRIDES.HOME,
-  GP: 'Candles with volume and an indicator pane',
+  GP: 'Candles with volume and roll markers',
   GIP: 'Intraday candles for one date',
   DES: 'Hypothesis tear sheet or instrument description',
   REG: 'Registry board',

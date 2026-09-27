@@ -1,0 +1,102 @@
+/* GP and GIP (look spec 7.6). Tokens only, square corners, no transitions: every state change is a
+   hard cut. The chart fills what the rows above and below leave. */
+.gp-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  container-type: size;
+  container-name: gp;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.gp-screen .param-row { flex: 0 0 auto; flex-wrap: wrap; }
+.gp-sep { color: var(--data); padding: 0 2px; }
+
+/* Range row (6.4): contiguous toggle groups separated by a black gap; wraps at narrow widths. */
+.gp-rangerow {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 2px 0;
+  background: var(--bg);
+}
+.gp-rangerow .chart-range { height: 24px; }
+.gp-btn { height: 24px; line-height: 24px; }
+.gp-btn[aria-disabled="true"] { background: var(--bg); color: var(--muted); cursor: default; font-weight: 400; }
+
+.gp-field-msg { margin: 0; padding: 0 5px; color: var(--warn); line-height: var(--row-h); }
+
+.gp-sessions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  padding: 0 5px;
+  line-height: var(--row-h);
+  color: var(--text);
+}
+.gp-flag { color: var(--text); }
+.gp-tag { color: var(--data); font-weight: 700; }
+.gp-muted { color: var(--muted); }
+
+.gp-chart {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+}
+.gp-chart > .chart-a11y { flex: 1 1 auto; min-height: 0; }
+
+/* The refusal or error in the plot area: amber, centred (7.6). */
+.gp-message {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  color: var(--data);
+  overflow-wrap: anywhere;
+}
+.gp-message p { margin: 2px 0; max-width: 90ch; }
+.gp-message .gp-muted { color: var(--muted); }
+.gp-message-head { font-weight: 700; }
+
+.gp-footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 5px;
+  color: var(--muted);
+  font-size: var(--fs-small);
+  line-height: 16px;
+}
+.gp-footer { overflow-wrap: anywhere; }
+
+/* The instrument DES price card (look spec 7.3): a fixed-height daily chart inside the card. */
+.gp-mini {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 340px;
+  min-height: 0;
+}
+.gp-mini > .chart-a11y { flex: 1 1 auto; min-height: 0; }
+
+/* A short panel (HOME at 1366x768, body about 208px): the chart takes the whole body so the price pane
+   stays readable; the parameter row, range row and session line fold away (as the MON parameter row
+   does; the full GP panel, 96) Actions, keeps them) and the basis footer follows in the body's scroll. */
+@container gp (max-height: 300px) {
+  .gp-screen > .param-row,
+  .gp-screen > .gp-rangerow,
+  .gp-screen > .gp-sessions,
+  .gp-screen > .gp-field-msg { display: none; }
+  .gp-screen > * { flex-shrink: 0; }
+  .gp-screen > .gp-chart { flex: 0 0 auto; height: 100cqh; min-height: 0; }
+}

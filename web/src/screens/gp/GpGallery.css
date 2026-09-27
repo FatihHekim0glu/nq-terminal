@@ -1,0 +1,2 @@
+/* The gallery frame: one panel filling the gallery page (gallery builds only). Tokens only. */
+.gp-gallery { height: 100%; min-height: 0; background: var(--bg); }

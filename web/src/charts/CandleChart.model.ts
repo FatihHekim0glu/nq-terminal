@@ -202,11 +202,19 @@ export function formatTime(t: number, intraday: boolean, timeZone: string): stri
 }
 
 /** The time-axis tick label (TickMarkType: 0 year, 1 month, 2 day, 3 and 4 time). */
+/** lightweight-charts TickMarkType: 0 year, 1 month, 2 day of month, 3 time, 4 time with seconds. */
+const TICK_MONTH = 1
+const TICK_TIME = 3
+
+/**
+ * The chart's own axis row: month names on a daily chart, HH:MM on an intraday one. Day ticks (and
+ * month ticks intraday) get no label, because the second axis row already names the dates; a stray
+ * day number in the month row reads as a month.
+ */
 export function tickLabel(t: number, tickType: number, intraday: boolean, timeZone: string): string {
   const p = partsOf(t, intraday ? timeZone : 'UTC')
-  if (tickType <= 1) return CANDLE.months[p.m] ?? ''
-  if (tickType === 2) return String(p.d)
-  return hhmm(p)
+  if (intraday) return tickType >= TICK_TIME ? hhmm(p) : ''
+  return tickType <= TICK_MONTH ? (CANDLE.months[p.m] ?? '') : ''
 }
 
 export function formatPrice(v: number | null | undefined, precision: number): string {

@@ -73,6 +73,9 @@ _ROUND_FILES = (
     (7, "round7_summary.md", ("fomctone_v0",)),
     (8, "round8_summary.md", ("dtsmom_v0",)),
     (9, "round9_summary.md", ("mim_v0",)),
+    (10, "round10_summary.md", ("carry_v0",)),
+    (11, "round11_summary.md", ("eomtsy_v0",)),
+    (12, "round12_summary.md", ("cskew_v0",)),
 )
 ROUNDS: Mapping[str, tuple[int, str | None]] = MappingProxyType(
     {name: (number, summary) for number, summary, names in _ROUND_FILES for name in names})
@@ -141,6 +144,15 @@ SERIES_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
     "dtsmom_v0": SeriesSource("dtsmom_v0_monthly.csv", "label", _per_cost("r_ts_{k}"), "return on capital per month",
                               "monthly", _per_cost("r_lo_{k}"), "long-only equal-risk book",
                               time_rule=MONTH_END_SESSION, guard_column="end"),
+    "carry_v0": SeriesSource("carry_v0_monthly.csv", "label", _per_cost("r_carry_{k}"), "return on capital per month",
+                             "monthly", _per_cost("r_loac_{k}"), "equal-risk long-only book in the same classes",
+                             time_rule=MONTH_END_SESSION, guard_column="end"),
+    "eomtsy_v0": SeriesSource("eomtsy_v0_monthly.csv", "month", _per_cost("r{k}"), "return on capital per month",
+                              "monthly", _per_cost("lo{k}"), "held-contract all-month long-only book",
+                              time_rule=MONTH_END_SESSION, guard_column="L"),
+    "cskew_v0": SeriesSource("cskew_v0_monthly.csv", "label", _per_cost("r_cskew_{k}"), "return on capital per month",
+                             "monthly", _per_cost("r_lo_{k}"), "equal-risk long-only commodity book",
+                             time_rule=MONTH_END_SESSION, guard_column="end"),
     "mim_v0": SeriesSource("mim_v0_daily.csv", "date", MappingProxyType({0: "R_gross", 1: "R_net_1tick"}),
                            "return on capital per session", "daily", MappingProxyType({0: "R_lo_gross"}),
                            "long-only book, gross"),
@@ -150,7 +162,7 @@ SERIES_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
 # Command line mnemonics (UI_SPEC s5; a test compares this table with the doc): (code, screen, priority, context).
 MNEMONICS: tuple[tuple[str, str, str, str], ...] = (
     ("HOME", "Launchpad", "P0", "none"),
-    ("GP", "Candles with volume and an indicator pane", "P0", "instrument"),
+    ("GP", "Candles with volume and roll markers", "P0", "instrument"),
     ("GIP", "Intraday candles for one date", "P0", "instrument"),
     ("DES", "Hypothesis tear sheet or instrument description", "P0", "hypothesis or instrument"),
     ("REG", "Registry board", "P0", "none"),

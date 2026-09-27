@@ -950,6 +950,10 @@
             ],
             "title": "Alpha"
           },
+          "hypothesis": {
+            "description": "the confirmation spec's hypothesis, verbatim",
+            "title": "Hypothesis"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -996,6 +1000,10 @@
             "description": "the in-sample hypothesis this confirmation tested",
             "title": "Parent"
           },
+          "pass_bar": {
+            "description": "the confirmation spec's own pass bar, verbatim (text or JSON)",
+            "title": "Pass Bar"
+          },
           "spec": {
             "title": "Spec",
             "type": "string"
@@ -1031,7 +1039,9 @@
           "spec_sha_ok",
           "opening_closed",
           "label",
-          "parent"
+          "parent",
+          "pass_bar",
+          "hypothesis"
         ],
         "title": "Confirmation",
         "type": "object"
@@ -1746,6 +1756,12 @@
                         "type": "integer"
                       },
                       "type": "array"
+                    },
+                    {
+                      "additionalProperties": {
+                        "type": "integer"
+                      },
+                      "type": "object"
                     }
                   ]
                 },
@@ -2126,6 +2142,14 @@
             "title": "Run Id",
             "type": "string"
           },
+          "t": {
+            "description": "epoch seconds at 00:00 UTC of each session date (the tear sheet's axis)",
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
           "unit": {
             "title": "Unit",
             "type": "string"
@@ -2137,6 +2161,7 @@
           "unit",
           "label",
           "price_basis",
+          "t",
           "date",
           "gross",
           "net",
@@ -2513,6 +2538,14 @@
       "HomePanel": {
         "description": "HOME [B]: equity against the benchmark, with the underwater curve and the rolling Sharpe over the long\nwindow (252 sessions, or 36 months for a monthly series).",
         "properties": {
+          "alpha": {
+            "description": "the tear sheet's two alpha tiles, alpha_annual then alpha_t, unchanged",
+            "items": {
+              "$ref": "#/components/schemas/Kpi"
+            },
+            "title": "Alpha",
+            "type": "array"
+          },
           "basis": {
             "enum": [
               "A",
@@ -2621,6 +2654,11 @@
             "title": "Date",
             "type": "array"
           },
+          "drawdown_unit": {
+            "description": "unit of the underwater series (the tear sheet's drawdown unit)",
+            "title": "Drawdown Unit",
+            "type": "string"
+          },
           "dropped": {
             "items": {
               "type": "string"
@@ -2707,6 +2745,11 @@
             "title": "Rolling Unit",
             "type": "string"
           },
+          "rolling_unit_label": {
+            "description": "unit of the rolling Sharpe values (the tear sheet's ratio unit)",
+            "title": "Rolling Unit Label",
+            "type": "string"
+          },
           "rolling_window": {
             "title": "Rolling Window",
             "type": "integer"
@@ -2787,10 +2830,13 @@
           "rolling_sharpe",
           "rolling_window",
           "rolling_unit",
+          "rolling_unit_label",
+          "drawdown_unit",
           "sharpe",
           "bench_sharpe",
           "max_drawdown",
-          "bench_max_drawdown"
+          "bench_max_drawdown",
+          "alpha"
         ],
         "title": "HomePanel",
         "type": "object"
@@ -5530,6 +5576,14 @@
             "title": "Journal",
             "type": "string"
           },
+          "line_no": {
+            "description": "the journal line of each close row, to match it to /api/live/journal",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Line No",
+            "type": "array"
+          },
           "plumbing_rows_skipped": {
             "minimum": 0.0,
             "title": "Plumbing Rows Skipped",
@@ -5595,6 +5649,21 @@
             "title": "Slippage Ticks",
             "type": "array"
           },
+          "t": {
+            "description": "epoch seconds at 00:00 UTC of each row's session date (chart axis)",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "T",
+            "type": "array"
+          },
           "target": {
             "items": {
               "anyOf": [
@@ -5617,6 +5686,8 @@
           "basis",
           "banner",
           "plumbing_rows_skipped",
+          "t",
+          "line_no",
           "date",
           "contract",
           "target",
@@ -8737,6 +8808,14 @@
             "title": "Source",
             "type": "string"
           },
+          "t": {
+            "description": "epoch seconds at 00:00 UTC of each session date (the tear sheet's axis)",
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
           "unit": {
             "title": "Unit",
             "type": "string"
@@ -8750,6 +8829,7 @@
           "source",
           "price_basis",
           "periods",
+          "t",
           "date",
           "daily",
           "mean_daily",
@@ -8914,6 +8994,14 @@
             "title": "Symbol",
             "type": "string"
           },
+          "tick": {
+            "title": "Tick",
+            "type": "number"
+          },
+          "tick_usd": {
+            "title": "Tick Usd",
+            "type": "number"
+          },
           "units": {
             "title": "Units",
             "type": "string"
@@ -8938,6 +9026,8 @@
           "root",
           "sector",
           "units",
+          "tick",
+          "tick_usd",
           "last_date",
           "last_close",
           "last_close_back",
@@ -11350,6 +11440,74 @@
           }
         },
         "summary": "Compare Runs",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/runs/stats": {
+      "get": {
+        "description": "Headline numbers of one or more runs, in the order asked (Basis B, the tear sheet's own series): the RUNS\ntable's Sharpe and max drawdown without the equity curves that /runs/compare carries.",
+        "operationId": "run_stats_api_runs_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "title": "Ids",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CompareStats"
+                  },
+                  "title": "Response Run Stats Api Runs Stats Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Stats",
         "tags": [
           "runs"
         ]

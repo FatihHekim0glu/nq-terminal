@@ -1,0 +1,81 @@
+/* MON and CORR (look spec 7.7 and 7.8). Tokens only, square corners, hard cuts (no transitions).
+   The screen root is a size container: in a short panel (the 2x2 HOME, body about 408px) the parameter
+   row folds away and the grid starts at the top of the body, so 19 grid rows show (look spec 7 row
+   budget); the rest of the grid and the notes follow below and the panel body scrolls to them. */
+
+.mkt {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  container-type: size;
+  container-name: mkt;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.mkt-params { flex: 0 0 auto; }
+/* Only a HOME-sized panel (body about 408px at 1920x1080, 250px at 1366x768) folds the parameter row
+   away; a full-screen MON (556px at 1366x768) keeps its controls (look spec 2.4). */
+@container mkt (max-height: 480px) {
+  .mon-params { display: none; }
+}
+
+/* The grid: all 27 rows and their sector rows at full height; the panel body scrolls it (MonitorGrid
+   scroll="panel"), so the body, the panel's Tab stop, is the one scroll box. With the parameter row
+   folded away the header and 19 rows fill a HOME panel. */
+.mkt-grid {
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.mkt-notes {
+  flex: 0 0 auto;
+  padding: 4px 6px 6px;
+  color: var(--text);
+  line-height: var(--row-h);
+}
+.mkt-notes p { margin: 0; }
+.mkt-tag { color: var(--data); }
+.mkt-warn { color: var(--warn); }
+.mkt-warn-text { color: var(--warn); }
+
+.mkt-status { margin: 0; padding: 8px 6px; color: var(--muted); }
+.mkt-error { color: var(--c-down); }
+/* The gate's own refusal, amber (look spec 7.6). */
+.mkt-refused { color: var(--data); }
+
+.mkt-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--data);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mkt-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--sel-toggle);
+  cursor: pointer;
+}
+.mkt-check input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* MON cells: the fence flag after Last, and the heat fills (black text, white on the dark red step). */
+.mon-flag { color: var(--warn); }
+.mon-flag-stale { font-weight: 700; }
+.mon-heat {
+  display: block;
+  margin: 0 -5px;
+  padding: 0 5px;
+}
+.mon-heat-up2 { background: var(--heat-up-2); color: var(--bg); }
+.mon-heat-up1 { background: var(--heat-up-1); color: var(--bg); }
+.mon-heat-dn1 { background: var(--heat-dn-1); color: var(--white); }
+.mon-heat-dn2 { background: var(--heat-dn-2); color: var(--bg); }

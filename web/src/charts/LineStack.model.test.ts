@@ -13,6 +13,7 @@ import {
   timeLabel,
   visibleIndexRange,
   yRange,
+  yRangeClearOfLegend,
   zoomView,
 } from './LineStack.model'
 import type { LineStackPane } from './LineStack.types'
@@ -39,6 +40,13 @@ describe('series values', () => {
     expect(formatValue(0.5, 2, '', true)).toBe('+0.50')
     expect(formatValue(-0.0001, 2, '')).toBe('0.00')
     expect(formatValue(null, 2, '%')).toBe('--')
+  })
+
+  it('groups thousands in legend, tag and table text, as the side panels and KPI tiles do', () => {
+    expect(formatValue(5778540.28, 2, '')).toBe('5,778,540.28')
+    expect(formatValue(-1001053.1234, 2, '', true)).toBe('-1,001,053.12')
+    expect(formatValue(14411.9895, 2, '')).toBe('14,411.99')
+    expect(formatValue(999.5, 1, '%', true)).toBe('+999.5%')
   })
 
   it('labels daily times as dates and intraday times with the minute', () => {
@@ -90,6 +98,24 @@ describe('visible window', () => {
     expect(lo).toBeCloseTo(1 / 1.05, 12)
     expect(hi).toBeCloseTo(4 * 1.05, 12)
   })
+
+  it('raises the top of the range so the highest value under the legend sits below it', () => {
+    // The legend covers the top 20% of the plot; the peak 10 under it must land at 20% or lower.
+    const [lo, hi] = yRangeClearOfLegend([-0.5, 10.5], 10, 0.2, false)
+    expect(lo).toBe(-0.5)
+    expect((hi - 10) / (hi - lo)).toBeCloseTo(0.2, 12)
+    // A peak already clear of the legend, no legend, or a legend too tall to clear leaves the range alone.
+    expect(yRangeClearOfLegend([-0.5, 10.5], 5, 0.2, false)).toEqual([-0.5, 10.5])
+    expect(yRangeClearOfLegend([-0.5, 10.5], null, 0.2, false)).toEqual([-0.5, 10.5])
+    expect(yRangeClearOfLegend([-0.5, 10.5], 10, 0, false)).toEqual([-0.5, 10.5])
+    expect(yRangeClearOfLegend([-0.5, 10.5], 10, 0.6, false)).toEqual([-0.5, 10.5])
+  })
+
+  it('clears the legend in log space on a log scale', () => {
+    const [lo, hi] = yRangeClearOfLegend([1, 100], 100, 0.25, true)
+    expect(lo).toBe(1)
+    expect((Math.log10(hi) - 2) / (Math.log10(hi) - 0)).toBeCloseTo(0.25, 12)
+  })
 })
 
 describe('keyboard crosshair (UI_SPEC section 5: Left and Right step one bar, Home and End jump to the ends)', () => {
@@ -134,6 +160,7 @@ const t5 = [utc(2019, 1, 1), utc(2019, 1, 2), utc(2019, 1, 3), utc(2019, 1, 4), 
 const PANES: LineStackPane[] = [
   {
     id: 'eq',
+    summaryDrawdown: { value: '-12.00%', basis: 'Basis A' },
     series: [
       { name: 'Strategy', style: 'primary', values: [1, 1.1, 0.99, null, 1.2] },
       { name: 'Benchmark', style: 'benchmark', values: [1, 1.01, 1.02, 1.03, 1.04] },
@@ -143,10 +170,17 @@ const PANES: LineStackPane[] = [
 ]
 
 describe('accessible summary, readout and table view (UI_SPEC section 9)', () => {
-  it('summarises the first series of every pane, with the maximum drawdown of the equity line', () => {
+  it('born failing: states no drawdown for a primary series whose pane passes none (exposure, contract counts)', () => {
+    const exposure: LineStackPane[] = [{ id: 'x', series: [{ name: 'Gross exposure', style: 'primary', values: [0.02, 0.01, 0, 0, 0] }] }]
+    expect(stackSummary(t5, exposure)).not.toMatch(/drawdown/)
+    const target: LineStackPane[] = [{ id: 'x', series: [{ name: 'Target (ct)', style: 'primary', values: [1, 1, 1, 1, 1] }] }]
+    expect(stackSummary(t5, target)).not.toMatch(/drawdown/)
+  })
+
+  it('summarises the first series of every pane, with the drawdown the equity pane passes and its basis', () => {
     const label = stackSummary(t5, PANES)
     expect(label).toBe(
-      'Strategy: 4 points from 2019-01-01 to 2019-01-07; first 1.00, last 1.20, low 0.99, high 1.20; max drawdown -10.0%. ' +
+      'Strategy: 4 points from 2019-01-01 to 2019-01-07; first 1.00, last 1.20, low 0.99, high 1.20; max drawdown -12.00% (Basis A). ' +
         'Underwater: 4 points from 2019-01-01 to 2019-01-07; first 0.0%, last 0.0%, low -10.0%, high 0.0%.',
     )
   })

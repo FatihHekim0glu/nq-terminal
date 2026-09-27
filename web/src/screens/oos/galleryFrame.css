@@ -1,0 +1,17 @@
+/* Gallery layout for the Phase 7.3 screens (gallery builds only): panels stacked with the workspace's
+   2px black gutter, filling the page. Tokens only. */
+.screen-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+.screen-gallery-cell {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.screen-gallery-cell > .nqt-panel { flex: 1 1 auto; min-height: 0; }

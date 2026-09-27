@@ -48,7 +48,7 @@ def contract_differences(saved: dict, current: dict) -> list[str]:
 
 def _write(schema: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render(schema), encoding="utf-8")
+    path.write_text(render(schema), encoding="utf-8", newline="\n")
 
 
 def test_contract_matches_the_app():

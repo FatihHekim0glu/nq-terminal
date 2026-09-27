@@ -1,0 +1,12 @@
+/* Gallery frame for RUNS, RUN and LEDG (gallery builds only): one panel the size of the whole workspace
+   at 1920x1080. Tokens only. */
+.runs-gallery {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1920px;
+  height: 917px;
+  background: var(--bg);
+}
+
+.runs-gallery > .nqt-panel { flex: 1 1 auto; min-height: 0; }

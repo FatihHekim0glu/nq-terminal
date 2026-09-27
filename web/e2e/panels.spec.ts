@@ -1,5 +1,5 @@
 // Panels and tables E2E (look spec section 12, task 3 acceptance): the 2x2 HOME at 1920x1080
-// meets the 8.5 (c) row budget on the placeholder grids; the tab slant and square corners hold in
+// meets the 8.5 (c) row budget on the MON and REG grids; the tab slant and square corners hold in
 // computed style; the related functions menu dims only its own panel while the command line stays
 // usable; hovered cells keep their text at 4.5:1; Tab visits every panel with a 2px white ring;
 // back and forward walk a panel's history; axe is clean with every panel menu open.
@@ -77,15 +77,23 @@ test.describe('panels and tables', () => {
     await page.setViewportSize({ width: 1920, height: 1080 })
     await openHome(page)
     for (const title of GRID_PANELS) {
+      // The grid rows arrive with their API reads after the layout: wait for the first two.
+      await expect(panel(page, title).locator('tbody tr').nth(1)).toBeAttached()
       const counts = await panel(page, title).evaluate((el) => {
         const body = el.querySelector('.nqt-panel-body') as HTMLElement
         const box = body.getBoundingClientRect()
         const head = body.querySelector('thead')?.getBoundingClientRect()
         const top = head ? head.bottom : box.top
         const rows = Array.from(body.querySelectorAll('tbody tr')).map((r) => r.getBoundingClientRect())
+        const pitch = rows[1] && rows[0] ? rows[1].top - rows[0].top : (rows[0]?.height ?? 0)
         return {
-          whole: rows.filter((r) => r.top >= top - 0.5 && r.bottom <= box.bottom + 0.5).length,
-          pitch: rows[1] && rows[0] ? rows[1].top - rows[0].top : 0,
+          // Rows the panel shows whole under the header: counted when the grid fills the body, else the
+          // room the layout gives it (the fixture registry has only 2 rows, the real one 20).
+          whole: Math.max(
+            rows.filter((r) => r.top >= top - 0.5 && r.bottom <= box.bottom + 0.5).length,
+            pitch > 0 && rows[0] && rows[0].top >= top - 0.5 ? Math.floor((box.bottom - rows[0].top + 0.5) / pitch) : 0,
+          ),
+          pitch,
           panel: Math.round(el.getBoundingClientRect().height),
           body: Math.round(box.height),
           header: head ? Math.round(head.height) : 0,
@@ -128,9 +136,13 @@ test.describe('panels and tables', () => {
     const radii = await page.locator('[data-nqt-panel], .fn-btn, .ptitle-btn, .tab').evaluateAll((els) => [...new Set(els.map((e) => getComputedStyle(e).borderRadius))])
     expect(radii).toEqual(['0px'])
 
-    const tabs = panel(page, 'volmanaged_v0 EQ').getByRole('tab')
+    // HOME panel 3 is the light equity panel (no tabs); the tear sheet with its tabs opens with DD.
+    await commandLine(page).click()
+    await commandLine(page).fill('volmanaged_v0 DD')
+    await commandLine(page).press('Enter')
+    const tabs = panel(page, 'volmanaged_v0 DD').getByRole('tab')
     await expect(tabs).toHaveText(['1) Equity', '2) Drawdown', '3) Returns', '4) Rolling', '5) Monthly'])
-    const tab = await tabs.first().evaluate((el) => ({ clip: getComputedStyle(el).clipPath, bg: getComputedStyle(el).backgroundColor, h: el.getBoundingClientRect().height }))
+    const tab = await panel(page, 'volmanaged_v0 DD').getByRole('tab', { selected: true }).evaluate((el) => ({ clip: getComputedStyle(el).clipPath, bg: getComputedStyle(el).backgroundColor, h: el.getBoundingClientRect().height }))
     expect(tab.clip).toContain('calc(100% - 5px)')
     expect(tab.bg).toBe('rgb(158, 158, 158)')
     expect(tab.h).toBeGreaterThanOrEqual(24)
@@ -185,13 +197,23 @@ test.describe('panels and tables', () => {
     await expect(page.locator('[data-nqt-title]').first()).toHaveAttribute('data-nqt-title', 'NQ GIP')
   })
 
-  test('a hovered cell keeps muted text at 4.5:1 or more (4.12)', async ({ page }) => {
+  // The placeholder grids had muted cells; the built screens on HOME have none in fixture mode, so a MON
+  // cell in down red is hovered, then given the muted class in place, and both tones are measured.
+  test('a hovered cell keeps down and muted text at 4.5:1 or more (4.12)', async ({ page }) => {
     await openHome(page)
-    const cell = panel(page, 'REG').locator('tbody td.muted').nth(3)
-    await cell.hover()
-    const colours = await cell.evaluate((el) => ({ fg: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }))
-    expect(colours.bg).toBe('rgb(60, 60, 60)')
-    expect(contrast(colours.fg, colours.bg)).toBeGreaterThanOrEqual(4.5)
+    const found = panel(page, '27F MON').locator('tbody td.down').first()
+    await found.hover()
+    // A handle, not the locator: once its class changes, `td.down` would name another cell.
+    const cell = await found.elementHandle()
+    if (!cell) throw new Error('no down cell in MON')
+    const colours = () => cell.evaluate((el) => ({ fg: getComputedStyle(el).color, bg: getComputedStyle(el).backgroundColor }))
+    const down = await colours()
+    expect(down.bg).toBe('rgb(60, 60, 60)')
+    expect(contrast(down.fg, down.bg)).toBeGreaterThanOrEqual(4.5)
+    await cell.evaluate((el) => el.classList.replace('down', 'muted'))
+    const muted = await colours()
+    expect(muted.bg).toBe('rgb(60, 60, 60)')
+    expect(contrast(muted.fg, muted.bg)).toBeGreaterThanOrEqual(4.5)
   })
 
   test('Tab visits every panel once with a 2px white ring; the focused panel carries the blue line', async ({ page }) => {

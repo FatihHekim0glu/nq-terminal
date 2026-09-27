@@ -1,0 +1,35 @@
+/* CORR (look spec 7.8). Tokens only, square corners, hard cuts. The matrix takes most of the body (27
+   rows at about 19px plus its axis row and scale legend), the rolling pair panel the rest; both keep a
+   floor so a short panel scrolls rather than squeezing the cells. */
+
+.corr-matrix {
+  display: flex;
+  flex-direction: column;
+  flex: 3 1 0;
+  min-height: 540px;
+}
+.corr-matrix > * { flex: 1 1 auto; min-height: 0; }
+
+.corr-pair {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 190px;
+  border-top: 1px solid var(--th-rule);
+}
+.corr-pair-heading {
+  margin: 0;
+  padding: 0 6px;
+  color: var(--cyan-chart);
+  font-size: var(--fs-data);
+  font-weight: 400;
+  line-height: var(--row-h);
+}
+.corr-pair-chart {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 110px;
+}
+.corr-pair-chart > * { flex: 1 1 auto; min-height: 0; }
+.corr-pair-note { margin: 0; padding: 0 6px; line-height: var(--row-h); color: var(--text); }

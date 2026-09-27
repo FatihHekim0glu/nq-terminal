@@ -115,6 +115,7 @@ const PANES: LineStackPane[] = [
     id: 'eq',
     weight: 2,
     logAllowed: true,
+    summaryDrawdown: { value: '-1.00%', basis: 'Basis B' },
     series: [
       { name: 'Strategy', style: 'primary', values: [1, 1.01, 1.02, Number.NaN, 1.04, 1.03, 1.05, 1.06, 1.07, 1.08] },
       { name: 'Benchmark', style: 'benchmark', values: [1, 1, 1.01, 1.01, 1.02, 1.02, 1.03, 1.03, 1.04, 1.04] },
@@ -143,7 +144,7 @@ describe('LineStack (TASKS 5.1)', () => {
   it('is one role="img" named by a data summary, busy until every pane has drawn', async () => {
     renderStack()
     const img = screen.getByRole('img')
-    expect(img.getAttribute('aria-label')).toMatch(/^Strategy: 9 points from 2021-12-20 to 2021-12-31; .*max drawdown -1\.0%\. Underwater: 9 points/)
+    expect(img.getAttribute('aria-label')).toMatch(/^Strategy: 9 points from 2021-12-20 to 2021-12-31; .*max drawdown -1\.00% \(Basis B\)\. Underwater: 9 points/)
     expect(img.querySelector('[aria-busy="true"]')).not.toBeNull()
     await ready()
     expect(FakeUplot.instances).toHaveLength(2)

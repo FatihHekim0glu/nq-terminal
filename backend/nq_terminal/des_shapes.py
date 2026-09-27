@@ -28,6 +28,7 @@ FALLBACK_KEYS = ("mean_r", "mean", "diff_pct", "sharpe", "sharpe_m", "sharpe_a")
 
 _PTS = "points per trade (NQ), net at 1 tick per side"
 _SIZING_BLOCK = "alpha, % per year, 1 tick per side"
+_MONTHLY = "% per month, return on capital"
 
 
 @dataclass(frozen=True)
@@ -62,6 +63,14 @@ def _points(t_label: str = "t (1 tick per side)") -> Shape:
                  ladder=_ladder("headline.cost_ladder.nq_{k}.mean"), ladder_unit=_PTS)
 
 
+def _monthly_book(ladder: str) -> Shape:
+    """Rounds 10 to 12 (carry_v0, eomtsy_v0, cskew_v0): a monthly book on $100M, headline the net mean monthly
+    return in % with its Newey-West t (the registry's p is that t's one-sided p), blocks by period."""
+    return Shape("headline.mean_pct", "Net mean monthly return, 1 tick", _MONTHLY, "headline.t_nw", "Newey-West t",
+                 blocks="blocks", block_key="mean_pct", blocks_unit=f"{_MONTHLY}, 1 tick", ladder=_ladder(ladder),
+                 ladder_unit=_MONTHLY)
+
+
 SHAPES: Mapping[str, Shape] = MappingProxyType({
     "za_v0": Shape("v0.mean_r", "Net mean R per trade, 1 tick", "R per trade", "v0.t", "t (1 tick per side)",
                    blocks="blocks", block_key="mean_r", blocks_unit="R per trade, 1 tick",
@@ -71,7 +80,10 @@ SHAPES: Mapping[str, Shape] = MappingProxyType({
     "tom_v0": _points(), "preholiday_v0": _points(), "prefomc_v0": _points(), "overnight_v0": _points(),
     "macroday_v0": _points(), "mac5rev_v0": _points(), "rebal_v0": _points(),
     "halloween_v0": Shape("headline.mean", "Net mean per winter session, 1 tick", "points per session (NQ)",
-                          "headline.t_min", "t (smallest of plain and Newey-West)"),
+                          "headline.t_min", "t (smallest of plain and Newey-West)", blocks="winter_book.blocks",
+                          block_key="mean", blocks_unit="points per winter session (NQ), 1 tick",
+                          ladder=MappingProxyType({1: "headline.mean", 2: "winter_book.per_day_2tick.mean"}),
+                          ladder_unit="points per winter session (NQ)"),
     "fomccycle_v0": Shape("headline.mean", "Net mean per even-week session, 1 tick", "points per session (NQ)",
                           "headline.t_min", "t (smallest of plain and Newey-West)", blocks="even_block_means",
                           blocks_unit="points per session (NQ), 1 tick",
@@ -98,6 +110,9 @@ SHAPES: Mapping[str, Shape] = MappingProxyType({
                        "headline.t_nw", "Newey-West t", blocks="blocks.tsmom", block_key="sharpe",
                        blocks_unit="Sharpe ratio, 1 tick", ladder=_ladder("cost_stress.tsmom.sharpe.{k}"),
                        ladder_unit="Sharpe ratio"),
+    "carry_v0": _monthly_book("cost_stress.mean_pct_by_ticks.{k}"),
+    "eomtsy_v0": _monthly_book("cost_ladder_mean_pct.{k}_tick"),
+    "cskew_v0": _monthly_book("cost_stress.mean_pct_by_ticks.{k}"),
     "mim_v0": Shape("headline.mean", "Net mean per session, 1 tick plus fees", "return on capital per session",
                     "headline.t_nw", "Newey-West t", blocks="blocks", block_key="mean",
                     blocks_unit="return on capital per session, 1 tick",
@@ -154,8 +169,11 @@ def fallback_headline(screen: Mapping[str, Any]) -> tuple[str | None, float | No
 
 
 def blocks(screen: Mapping[str, Any], shape: Shape) -> list[tuple[str, float | None]]:
+    """The block ladder at `shape.blocks`; none for a shape without one (never the screen's own top-level keys)."""
+    if not shape.blocks:
+        return []
     node: Any = screen
-    for step in (shape.blocks or "").split(".") if shape.blocks else ():
+    for step in shape.blocks.split("."):
         node = node.get(step) if isinstance(node, Mapping) else None
     if not isinstance(node, Mapping):
         return []

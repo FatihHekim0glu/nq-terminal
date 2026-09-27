@@ -124,7 +124,8 @@ def test_no_interactive_docs(no_dist):
 
 EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pins the shapes
     "/api/health", "/api/commands",
-    "/api/runs", "/api/runs/compare", "/api/runs/{run_id}", "/api/runs/{run_id}/equity", "/api/runs/{run_id}/fills",
+    "/api/runs", "/api/runs/compare", "/api/runs/stats", "/api/runs/{run_id}", "/api/runs/{run_id}/equity",
+    "/api/runs/{run_id}/fills",
     "/api/runs/{run_id}/log/{section}", "/api/runs/{run_id}/sidecar/{name}", "/api/runs/{run_id}/trades",
     "/api/ledger",
     "/api/registry", "/api/hypotheses", "/api/hypotheses/{name}", "/api/hypotheses/{name}/series",

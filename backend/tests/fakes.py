@@ -11,9 +11,10 @@ so any split of a window gives the same rows; nothing is read from disk. Convent
   `*_none` columns are unadjusted; back-adjusted prices add `offset`, which is constant per `instrument_id` and 0 for
   the contract live at the anchor (1m: 2026-09-24, like the processed 1m files; 1d: 2021-12-31, where the daily pull
   stops). The loaders serve any window, 2022+ included: refusing it is the gate's job, and the tests prove it is.
-- The series that exist mirror the processed files as listed (names only) on 2026-09-26 16:50: 1m (vendor) for the
-  28 roots in `MINUTE_ROOTS` (all 27 dtsmom roots plus RTY), 1m repaired for the roots in `REPAIRED_ROOTS`, and 1d
-  (vendor) for the 27 dtsmom roots (RTY has no processed 1d file). Anything else raises FileNotFoundError before the
+- The series that exist mirror the processed files as listed (names only) on 2026-09-27 02:30: 1m (vendor) for the
+  29 roots in `MINUTE_ROOTS` (all 27 dtsmom roots plus RTY and MNQ, the micro the paper book trades, pulled from
+  2019-05), 1m repaired for the roots in `REPAIRED_ROOTS`, and 1d (vendor) for the 27 dtsmom roots (RTY and MNQ have
+  no processed 1d file). Anything else raises FileNotFoundError before the
   gate, as the real serve does. `repaired` has the vendor prices and its own volume, so a test can tell which
   variant was served. The catalog drift test (`test_catalog_drift.py`) compares these sets with the real listing:
   vendor 1m and 1d exactly; repaired files generically (the futures repair workflow adds
@@ -60,18 +61,20 @@ EPOCH_WEEKDAY = 5
 ANCHORS = {"1m": pd.Timestamp("2026-09-24", tz="UTC"), "1d": pd.Timestamp("2021-12-31", tz="UTC")}
 OCTAVES = ((20 * DAY_MINUTES, 0.10), (DAY_MINUTES, 0.02), (60, 0.004), (1, 0.0006))  # (scale in minutes, log amp)
 BASIS_SHARE = 0.003  # roll gaps up to about this share of the 2010 price level
-MINUTE_ROOTS = ("6A", "6B", "6C", "6E", "6J", "6S", "CL", "ES", "GC", "HE", "HG", "HO", "LE", "NG", "NQ", "RB", "RTY",
-                "SI", "YM", "ZB", "ZC", "ZF", "ZL", "ZM", "ZN", "ZS", "ZT", "ZW")
+MINUTE_ROOTS = ("6A", "6B", "6C", "6E", "6J", "6S", "CL", "ES", "GC", "HE", "HG", "HO", "LE", "MNQ", "NG", "NQ", "RB",
+                "RTY", "SI", "YM", "ZB", "ZC", "ZF", "ZL", "ZM", "ZN", "ZS", "ZT", "ZW")
 REPAIRED_ROOTS = ("NQ",)
 MINUTE_SERIES = frozenset({(f"{root}.V.0", "vendor") for root in MINUTE_ROOTS}
                           | {(f"{root}.V.0", "repaired") for root in REPAIRED_ROOTS})
 RTY_TICK = 0.10  # E-mini Russell 2000 (not in the dtsmom table: its 1d series starts 2017, so the rule dropped it)
+MNQ_TICK = 0.25  # Micro E-mini Nasdaq-100 (the paper book's contract; its 1m file starts 2019-05)
 LEVELS = {  # served price level in 2010 and at the end of 2021, in each root's served units
     "ES": (1100, 4700), "NQ": (2000, 16000), "YM": (10500, 36000), "ZT": (109, 109.5), "ZF": (117, 121),
     "ZN": (121, 130), "ZB": (124, 160), "6E": (1.35, 1.14), "6J": (0.0111, 0.0087), "6B": (1.55, 1.35),
     "6A": (0.9, 0.73), "6C": (0.97, 0.79), "6S": (0.95, 1.09), "CL": (80, 75), "NG": (4.5, 3.8), "HO": (2.2, 2.3),
     "RB": (2.1, 2.3), "GC": (1100, 1800), "SI": (17, 23), "HG": (3.3, 4.4), "ZC": (400, 590), "ZS": (1000, 1340),
     "ZW": (500, 770), "ZL": (40, 65), "ZM": (300, 400), "LE": (95, 140), "HE": (70, 80), "RTY": (650, 2250),
+    "MNQ": (7700, 16000),
 }
 
 
@@ -86,6 +89,7 @@ class Spec:
 
 SPECS = {c.root: Spec(c.root, c.tick, *LEVELS[c.root], salt=1000 * (i + 1)) for i, c in enumerate(TABLE)}
 SPECS["RTY"] = Spec("RTY", RTY_TICK, *LEVELS["RTY"], salt=1000 * (len(TABLE) + 1))
+SPECS["MNQ"] = Spec("MNQ", MNQ_TICK, *LEVELS["MNQ"], salt=1000 * (len(TABLE) + 2))
 DAILY_ROOTS = frozenset(c.root for c in TABLE)
 
 

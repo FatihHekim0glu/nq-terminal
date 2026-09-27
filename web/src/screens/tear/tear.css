@@ -1,0 +1,195 @@
+/* Analytics tear sheet (TASKS 6.4; look spec 7.5). Tokens only, square corners, no transitions.
+   The sheet is a size container the height of the panel body, so the tab view (KPI row, basis line,
+   charts) fills exactly one screen of the panel and a run's trades, costs and exposure cards follow
+   below it in the body's own scroll. */
+
+.tear {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  container-type: size;
+  container-name: tear;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.tear-main,
+.tear-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+/* The parameter row and the tab view fill exactly one screen of the panel body (the row may wrap, so
+   the view takes what is left rather than a fixed sum); never so short that a chart has no room. The
+   run books follow below in the body's scroll. */
+.tear-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  height: max(390px, 100cqh);
+  min-width: 0;
+}
+
+.tear-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  gap: 4px;
+  min-height: 0;
+  min-width: 0;
+  padding: 4px 0 0;
+}
+
+.tear-view > .kpi-row { flex: 0 0 auto; }
+
+.tear-chart {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 160px;
+  min-width: 0;
+}
+
+.tear-chart-heat { flex: 2 1 auto; min-height: 128px; }
+
+/* RR with a series shorter than its rolling window: each pane states why it is empty, centred, with no
+   value axis (a scale with no data behind it would be made up), split by the 5px pane splitter. */
+.tear-empty-stack {
+  display: flex;
+  flex-direction: column;
+}
+.tear-empty-stack > .chart-splitter { flex: 0 0 auto; }
+.tear-empty-pane {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  background: var(--bg);
+}
+.tear-empty-title {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  margin: 0;
+  color: var(--white);
+  font-size: var(--fs-chart);
+  font-weight: 400;
+}
+.tear-empty-text { margin: 0; padding: 0 8px; color: var(--data); text-align: center; }
+/* The yearly bars: 220px, less in a short panel so the heat map above keeps its room. */
+.tear-chart-short { flex: 0 0 auto; height: clamp(140px, 30cqh, 220px); min-height: 0; }
+
+.tear-split {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+}
+.tear-split > .tear-chart { flex: 1 1 auto; }
+
+.tear-stats {
+  flex: 0 0 360px;
+  max-width: 100%;
+  overflow: auto;
+}
+
+/* The top drawdowns keep room for their caption, header and 5 rows (the rest scroll in the table);
+   the chart above takes what is left. */
+.tear-table {
+  flex: 0 0 auto;
+  max-height: calc(7 * var(--row-h));
+  overflow: auto;
+}
+
+.tear-basis {
+  margin: 0;
+  padding: 0 5px;
+  color: var(--data);
+  font-size: var(--fs-nav);
+  line-height: var(--row-h);
+}
+
+.tear-note {
+  margin: 0;
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: var(--fs-nav);
+  line-height: var(--row-h);
+}
+
+.tear-caption {
+  height: var(--row-h);
+  padding: 0 5px;
+  color: var(--white);
+  font-weight: 700;
+  font-size: var(--fs-nav);
+  line-height: var(--row-h);
+  text-align: left;
+}
+
+.tear-rowhead { font-weight: 400; text-align: left; }
+.tear-value { color: var(--white); }
+.tear-band { color: var(--white); font-weight: 700; text-align: left; }
+/* RET stats (7.5): section bands on the stats band fill; labels on one line (nothing wraps in grids),
+   the value column narrow enough that the longest label ("21 period tail, 5% mean shortfall") fits. */
+.tear-stats .tear-band { background: var(--stats-band); }
+.tear-stats .tear-rowhead { white-space: nowrap; }
+.tear-col-value { width: 96px; }
+.tear-kv { width: 100%; }
+
+.tear-tag {
+  margin-left: 8px;
+  color: var(--white);
+  font-size: var(--fs-nav);
+  white-space: nowrap;
+}
+.tear-tag-bad { margin: 0; color: var(--c-down); font-weight: 700; }
+
+.tear-refusal {
+  margin: 0;
+  padding: 8px 5px;
+  color: var(--text);
+}
+.tear-refusal p { margin: 0 0 4px; }
+.tear-detail { color: var(--muted); font-size: var(--fs-nav); }
+
+/* Run books: DES-style cards in a grid that falls to one column in a narrow panel (1.4.10). */
+.tear-books {
+  flex: 0 0 auto;
+  padding: 8px 0;
+}
+
+.tear-books-heading {
+  margin: 0 0 4px;
+  padding: 0 5px;
+  color: var(--white);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: var(--row-h);
+}
+
+.tear-books-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 8px;
+  align-items: start;
+}
+
+.tear-card { min-width: 0; }
+.tear-card-title { display: flex; justify-content: space-between; gap: 8px; }
+.tear-card-tag { color: var(--muted); font-weight: 400; font-size: var(--fs-nav); }
+.tear-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0;
+  min-width: 0;
+}
+.tear-card-body .btn-toggles { align-self: flex-start; margin: 0 5px; }

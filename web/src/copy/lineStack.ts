@@ -39,6 +39,7 @@ export const LINE_STACK_GALLERY = {
   strategy: 'Strategy',
   benchmark: 'Same-exposure BH',
   underwater: 'Underwater',
+  basis: 'fixture, compounded',
   sharpe63: 'Sharpe 63',
   sharpe252: 'Sharpe 252',
   perfName: 'Speed check: {count} one-minute points per pane, two panes',

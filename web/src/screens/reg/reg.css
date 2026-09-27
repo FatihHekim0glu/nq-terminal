@@ -1,0 +1,163 @@
+/* REG and MT (look spec 7.2, 4.4, 4.7, 4.8). Tokens only, square corners, every state a hard cut.
+   The screen is a size container: in a short panel the round rail folds away, the criteria collapse to
+   one line and the confirmations block loses its notes; in the 2x2 HOME the criteria fold away too, so
+   the grid keeps its 19 rows. */
+
+.reg-screen {
+  container: reg / size;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  line-height: var(--row-h);
+}
+
+.reg-body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.reg-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+/* Every registry row at full height (MonitorGrid scroll="panel"): the panel body, the panel's Tab stop,
+   scrolls the grid, the notes and the confirmations as one. */
+.reg-grid { flex: 0 0 auto; min-height: 0; }
+
+.reg-msg { margin: 0; padding: 0 5px; }
+.reg-muted { color: var(--muted); }
+.reg-ok { color: var(--text); }
+.reg-warn { color: var(--warn); }
+.reg-tag { color: var(--white); font-weight: var(--fw-bold); white-space: nowrap; }
+.reg-screen .down { color: var(--c-down); }
+.reg-screen .up { color: var(--c-up); }
+.reg-screen .muted { color: var(--muted); }
+.reg-screen .name { color: var(--data); }
+
+/* Left rail on the raised grey, numbered rows, the selected round in list blue with white text (4.7). */
+.reg-rail {
+  flex: 0 0 160px;
+  min-height: 0;
+  overflow: auto;
+  background: var(--raised);
+}
+.reg-rail ul, .reg-crit-list { margin: 0; padding: 0; list-style: none; }
+.reg-rail-head {
+  margin: 0;
+  padding: 0 5px;
+  background: var(--band);
+  color: var(--white);
+  font-weight: var(--fw-bold);
+}
+
+.reg-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: var(--row-h);
+  margin: 0;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--data);
+  font: inherit;
+  line-height: var(--row-h);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.reg-item:hover { background: var(--hover-menu); }
+.reg-item[aria-pressed="true"] { background: var(--sel-list); color: var(--white); }
+.reg-item[aria-pressed="true"] .reg-n { color: var(--white); }
+.reg-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.reg-n { color: var(--muted); }
+
+/* Screening criteria: a band title with the Matches heading at the right, the universe count row in
+   the count blue, then one numbered row per criterion with its count right-aligned. */
+.reg-criteria { flex: 0 0 auto; }
+.reg-crit-head {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  padding: 0 5px;
+  background: var(--band);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.reg-crit-title { color: var(--white); font-weight: var(--fw-bold); }
+.reg-crit-matches { margin-left: auto; color: var(--white); }
+.reg-crit-row { display: flex; gap: 4px; margin: 0; padding: 0 5px; }
+.reg-crit-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.reg-crit-count { flex: 0 0 auto; color: var(--text); font-variant-numeric: tabular-nums lining-nums; }
+.reg-item[aria-pressed="true"] .reg-crit-count { color: var(--white); }
+.reg-universe { color: var(--band-count); }
+.reg-universe .reg-crit-count { color: var(--band-count); }
+
+/* Verdict notes: the bracket text of a registry verdict, one line per row that has one. */
+.reg-notes { flex: 0 0 auto; margin: 0; padding: 0 5px; list-style: none; }
+.reg-notes li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Sealed confirmations: a band, then a compact table (grid.css) of each with its own alpha. */
+.reg-confirm { flex: 0 0 auto; min-height: 0; }
+.reg-band {
+  margin: 0;
+  padding: 0 5px;
+  background: var(--band);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reg-band-title { color: var(--white); font-weight: var(--fw-bold); }
+.reg-confirm-scroll { max-height: calc(var(--row-h) * 5); }
+.reg-confirm-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reg-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--data);
+  font: inherit;
+  line-height: var(--row-h);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.reg-link:hover { color: var(--white); }
+.reg-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+
+/* MT: family lines, the scatter (at least eight rows tall), the adjusted table and the confirmations. */
+.mt-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.mt-head { flex: 0 0 auto; padding: 0 5px; }
+.mt-line { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-chart { position: relative; flex: 1 1 50%; min-height: calc(var(--row-h) * 8); }
+.mt-grid { flex: 1 1 40%; min-height: calc(var(--row-h) * 4); }
+.mt-confirm-list { margin: 0; padding: 0 5px; list-style: none; }
+.mt-confirm-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A narrow panel: the rail folds away; the rounds stay reachable through the filter field. */
+@container reg (max-width: 720px) {
+  .reg-rail { display: none; }
+}
+
+/* A short panel: criteria on one wrapping line, no notes. */
+@container reg (max-height: 560px) {
+  .reg-crit-head, .reg-universe, .reg-notes { display: none; }
+  .reg-crit-list { display: flex; flex-wrap: wrap; column-gap: 12px; }
+  .reg-crit-list .reg-item { width: auto; }
+  .reg-band .reg-muted, .reg-confirm-table thead { display: none; }
+  .reg-confirm-scroll { max-height: calc(var(--row-h) * 2); }
+  .mt-head .mt-line + .mt-line { display: none; }
+  .mt-chart { min-height: calc(var(--row-h) * 6); }
+}
+
+/* The 2x2 HOME panel (about 409px under the red bar at 1080p): the grid starts at the top so its header
+   and 19 rows fill the body (look spec 8.5 c); the criteria filters stay on the full REG screen, and the
+   confirmations follow the grid, reached by scrolling the body. */
+@container reg (max-height: 460px) {
+  .reg-criteria { display: none; }
+}
+
+/* Narrow viewports (1.4.10): text wraps rather than clipping. */
+@media (max-width: 700px) {
+  .reg-crit-head, .reg-band, .mt-line, .mt-confirm-list li { white-space: normal; }
+}

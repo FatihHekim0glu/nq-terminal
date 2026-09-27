@@ -1,0 +1,57 @@
+// Copy for LEDG (UI_SPEC sections 7 and 10; look spec 7.9). UK spelling, no em or en dashes, sentence
+// case. `{name}` slots are filled by fillCopy(). Kept beside the screen so this builder owns it; the
+// merge step may move it into src/copy/ledg.ts (copy.test.ts runs the copy rules over it meanwhile).
+
+export const LEDG = {
+  title: 'Run ledger',
+  gridLabel: 'Run ledger, {n} rows shown',
+  filterLabel: 'Filter ledger',
+  filterPlaceholder: '<Enter filter>',
+  paramsLabel: 'Ledger filters',
+  strategyLabel: 'Strategy',
+  balanceLabel: 'Balance',
+  all: 'All',
+  counts: 'Rows {rows}  Balanced {balanced}  Match result.json {matching}',
+  loading: 'Reading the ledger.',
+  failed: 'The ledger could not be read: {detail}',
+  missing: 'No ledger yet: results/ledger.csv',
+  empty: 'No ledger rows match. Clear the filter.',
+  note: 'Rows as written by scripts/ledger_append.py (append only); read only here. Balance shows colour and text.',
+  weekdays: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+  cols: {
+    date: 'Date (UTC)',
+    runId: 'Run id',
+    expId: 'Exp id',
+    strategy: 'Strategy',
+    variant: 'Variant',
+    window: 'Window',
+    trades: 'Trades',
+    pnl: 'Net P&L (USD)',
+    fees: 'Fees (USD)',
+    hitRate: 'Hit rate',
+    tNetR: 't (net R)',
+    balance: 'Balance',
+    matches: 'Matches result.json',
+    anchor: 'Anchor pair',
+  },
+  window: '{start} to {end}',
+  yes: 'yes',
+  no: 'NO',
+  runMissing: 'run folder missing',
+  pairs: {
+    caption: 'Anchor pairs ({n})',
+    none: 'No anchor pairs in the ledger.',
+    anchor: 'Anchor',
+    base: 'Base',
+    source: 'Base from',
+    trades: 'Trades equal',
+    pnl: 'P&L equal',
+    fees: 'Fees equal',
+    sharpeAnchor: 'Sharpe (anchor)',
+    sharpeBase: 'Sharpe (base)',
+    verdict: 'Verdict',
+    note: 'An anchor is a fresh re-run matched exactly on trades, P&L, fees and Sharpe (rule 3). Sharpe on Basis B.',
+  },
+} as const
+
+export const LEDG_HELP_LINE = 'LEDG HELP'

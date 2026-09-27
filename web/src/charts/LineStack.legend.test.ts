@@ -41,6 +41,8 @@ describe('HTML legend overlay (look spec 6.1)', () => {
     ])
     legend.update(['--'], null)
     expect(cells(legend.element).slice(3)).toEqual(['', '', '', '', '', '', '', '', ''])
+    // Every cell of the three stat rows carries the class a short pane hides (LineStack.css).
+    expect(legend.element.querySelectorAll('.linestack-legend-stat')).toHaveLength(9)
   })
 
   it('writes the same text only once and removes itself on destroy', () => {

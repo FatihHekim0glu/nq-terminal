@@ -176,6 +176,7 @@ class ExposureView(ResponseModel):
     unit: str
     label: str
     price_basis: str
+    t: list[int] = Field(description="epoch seconds at 00:00 UTC of each session date (the tear sheet's axis)")
     date: list[str]
     gross: list[Num]
     net: list[Num]
@@ -195,6 +196,7 @@ class TurnoverView(ResponseModel):
     source: str
     price_basis: str
     periods: int
+    t: list[int] = Field(description="epoch seconds at 00:00 UTC of each session date (the tear sheet's axis)")
     date: list[str]
     daily: list[Num]
     mean_daily: Num

@@ -55,6 +55,17 @@ describe('distributionOption (look spec 7.5 RET)', () => {
     expect(y).toMatchObject({ type: 'value', position: 'right', min: -3, max: 2 })
   })
 
+  it('labels the return axis with its unit, in both layouts (a percent axis reads 1.5%, never 1.5)', () => {
+    for (const input of [base, withSeries]) {
+      const option = distributionOption(input, T) as Record<string, any>
+      const y = [option.yAxis].flat()[0]
+      expect(y.axisLabel.formatter(1.5)).toBe('1.5%')
+      expect(y.axisLabel.formatter(-2)).toBe('-2%')
+    }
+    const plain = distributionOption({ ...base, unit: undefined }, T) as Record<string, any>
+    expect([plain.yAxis].flat()[0].axisLabel.formatter(0.5)).toBe('0.5')
+  })
+
   it('draws each bar as a rectangle from zero to its count, in the sign colour', () => {
     const option = distributionOption(base, T)
     const drawn = renderCustom(byId(option, 'hist'), 5) as { type: string; shape: Record<string, number>; style: { fill: string } }[]
@@ -113,6 +124,18 @@ describe('distributionOption (look spec 7.5 RET)', () => {
     for (const t of group!.children) expect(t.x).toBeGreaterThan(400)
     expect(group!.children[0]!.style.fill).toBe(T.color.distCurve)
     expect(group!.children[3]!.style.fill).toBe(T.color.data)
+  })
+
+  it('born failing: without a series, the labels also sit in a gutter (past the value axis), spread apart', () => {
+    // A tiny sd puts the mean and both sigma lines within a pixel: labels inside the pane overprint.
+    const tight = { ...base, sd: 1e-6 }
+    const option = distributionOption(tight, T) as Record<string, any>
+    const lines = byId(option, 'lines')
+    expect((lines.markLine.data as { label: { show: boolean } }[]).every((d) => d.label.show === false)).toBe(true)
+    const [group] = renderCustom(byId(option, 'lineLabels'), 1) as { children: { x: number; y: number }[] }[]
+    for (const t of group!.children) expect(t.x).toBeGreaterThan(400 + 57)
+    const ys = group!.children.map((t) => t.y).sort((a, b) => a - b)
+    for (let i = 1; i < ys.length; i++) expect(ys[i]! - ys[i - 1]!).toBeGreaterThanOrEqual(T.font.size + 1)
   })
 
   it('spreads gutter labels whose lines are closer than a text line, so none overlap at any size', () => {

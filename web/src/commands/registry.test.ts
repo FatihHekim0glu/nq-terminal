@@ -75,7 +75,7 @@ describe('mnemonic registry (UI_SPEC section 5)', () => {
 
 describe('born-failing case (rule 5): the drift check sees a changed backend table', () => {
   it('reports a mismatch when one priority differs', () => {
-    const source = constantsPy.replace('("GP", "Candles with volume and an indicator pane", "P0"', '("GP", "Candles with volume and an indicator pane", "P1"')
+    const source = constantsPy.replace('("GP", "Candles with volume and roll markers", "P0"', '("GP", "Candles with volume and roll markers", "P1"')
     const backend = shownBackend(source)
     expect(MNEMONICS.map((m) => [m.code, m.screen, m.priority, m.context])).not.toEqual(backend)
   })

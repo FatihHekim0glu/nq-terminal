@@ -93,6 +93,8 @@ class UniverseRow(ResponseModel):
     root: str
     sector: str
     units: str
+    tick: float  # the contract's minimum price step, in `units` (nq_lab.dtsmom_universe.TABLE)
+    tick_usd: float  # USD value of one tick on one contract
     last_date: str
     last_close: float | None
     last_close_back: float | None

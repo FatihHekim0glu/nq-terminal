@@ -173,7 +173,7 @@ export function barLadderOption(input: BarLadderInput, tokens: ChartTokens = DEF
     },
     yAxis: {
       ...y,
-      axisLabel: { ...y.axisLabel, ...textFont(tokens) },
+      axisLabel: { ...y.axisLabel, ...textFont(tokens), formatter: (value: number) => withUnit(String(value), input.unit) },
       type: 'value',
       // ECharts rounds its own range to nice ticks; a reference line outside the data widens it.
       ...(ref === undefined ? {} : {

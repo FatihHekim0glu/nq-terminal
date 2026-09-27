@@ -151,6 +151,8 @@ class Performance(ResponseModel):
     basis: str
     banner: str
     plumbing_rows_skipped: int = Field(ge=0)
+    t: list[int | None] = Field(description="epoch seconds at 00:00 UTC of each row's session date (chart axis)")
+    line_no: list[int] = Field(description="the journal line of each close row, to match it to /api/live/journal")
     date: list[str | None]
     contract: list[str | None]
     target: list[float | None]

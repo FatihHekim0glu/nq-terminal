@@ -133,7 +133,9 @@ def hypothesis_panel(request: Request, name: str = _name(), cost: int = _cost())
     with _http_errors():
         src = _sources(request)
         s = _hypothesis(src, name, cost)
-        return tearsheet.home_panel(s, Context(kind="hypothesis", name=name, cost=cost, freq="D"))
+        screen = src.research.detail(name).screen
+        return tearsheet.home_panel(s, Context(kind="hypothesis", name=name, cost=cost, freq="D"),
+                                    stored=stored_alpha.stored_fit(name, cost, screen))
 
 
 @router.get("/run/{run_id}", response_model=Analytics)

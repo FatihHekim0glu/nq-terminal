@@ -607,6 +607,12 @@ class RunService:
         stats = [self._compare_stats(c) for c in curves]
         return RunComparison(t=[_date_epoch(d) for d in days], date=days, series=series, stats=stats)
 
+    def stats(self, run_ids: Sequence[str]) -> list[CompareStats]:
+        """The compare view's headline numbers for any number of runs (RUNS), without their curves."""
+        for run_id in run_ids:
+            self.index.get(run_id)  # refuse an unknown id before reading anything
+        return [self._compare_stats(self.equity(run_id)) for run_id in run_ids]
+
     def _rebased(self, curve: EquitySeries, days: Sequence[str]) -> CompareSeries:
         """Equity over the starting balance K (C1), with 1.0 on the day before the first session, so the
         line ends at 1 + total_return and shares its baseline with the Sharpe and drawdown stats."""

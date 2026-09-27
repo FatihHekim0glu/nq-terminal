@@ -54,12 +54,22 @@ export function seriesStats(v: Values, i0: number, i1: number): SeriesStats | nu
   return { last: at(last), high: at(hi), low: at(lo), mean: sum / count }
 }
 
-/** Fixed decimals, ASCII minus, never "-0", an optional explicit plus, then the unit; -- for a gap. */
+/** `1234567.5` as `1,234,567.5`: thousands grouped in the whole part only. */
+export function groupThousands(text: string): string {
+  const [whole = '', frac] = text.split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return frac === undefined ? grouped : `${grouped}.${frac}`
+}
+
+/**
+ * Fixed decimals, thousands grouped, ASCII minus, never "-0", an optional explicit plus, then the unit;
+ * -- for a gap. The value axis keeps its own compact labels (formatAxisValue).
+ */
 export function formatValue(v: number | null | undefined, decimals: number, unit: string, signed = false): string {
   if (typeof v !== 'number' || !Number.isFinite(v)) return LINE_STACK.missing
   const text = v.toFixed(decimals)
   if (Number(text) === 0) return `${(0).toFixed(decimals)}${unit}`
-  return `${signed && v > 0 ? '+' : ''}${text}${unit}`
+  return `${signed && v > 0 ? '+' : ''}${groupThousands(text)}${unit}`
 }
 
 /** True when any time is not at 00:00 UTC (intraday bars). */
@@ -127,6 +137,27 @@ export function yRange(min: number | null | undefined, max: number | null | unde
   }
   const pad = (max - min) * PAD
   return [min - pad, max + pad]
+}
+
+/** The legend may cover at most this share of the plot's height before the range stops making room. */
+const MAX_LEGEND_SHARE = 0.45
+
+/**
+ * Raises the top of `range` so `peak` (the highest value under the legend overlay) sits at least
+ * `share` of the plot height below the top edge, where the legend ends (look spec 6.1: the legend
+ * never hides the curve). Works in log space on a log scale. A missing peak, no legend or a legend
+ * taller than MAX_LEGEND_SHARE leaves the range as it is.
+ */
+export function yRangeClearOfLegend(range: [number, number], peak: number | null, share: number, log: boolean): [number, number] {
+  if (peak === null || !Number.isFinite(peak) || !(share > 0) || share > MAX_LEGEND_SHARE) return range
+  if (log && (range[0] <= 0 || peak <= 0)) return range
+  const f = log ? Math.log10 : (v: number) => v
+  const lo = f(range[0])
+  const hi = f(range[1])
+  const p = f(peak)
+  if (hi - p >= share * (hi - lo)) return range
+  const top = (p - share * lo) / (1 - share)
+  return [range[0], log ? 10 ** top : top]
 }
 
 export interface CrosshairStep {
@@ -288,7 +319,7 @@ function endLabels(t: readonly number[], v: Values, intraday: boolean): string[]
   return labels
 }
 
-/** The accessible name: the first series of every pane, with the equity line's maximum drawdown. */
+/** The accessible name: the first series of every pane, with the drawdown an equity pane passes. */
 export function stackSummary(t: readonly number[], panes: readonly LineStackPane[]): string {
   const intraday = isIntraday(t)
   return panes
@@ -302,7 +333,7 @@ export function stackSummary(t: readonly number[], panes: readonly LineStackPane
         t: endLabels(t, v, intraday),
         v,
         format: (x) => format(x),
-        drawdown: s.style === 'primary' && (p.unit ?? '') !== '%',
+        drawdown: p.summaryDrawdown,
       })
     })
     .join(LINE_STACK.summaryJoin)

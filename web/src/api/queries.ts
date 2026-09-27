@@ -107,6 +107,8 @@ export const useRunsCompare = (runIds: ReadonlyArray<string>) =>
     { query: { ids: runIds.join(',') } },
     { enabled: runIds.length > 0 && hasId(...runIds) },
   )
+export const useRunStats = (runIds: ReadonlyArray<string>) =>
+  useApiQuery('/api/runs/stats', { query: { ids: runIds.join(',') } }, { enabled: runIds.length > 0 && hasId(...runIds) })
 export const useLedger = () => useApiQuery('/api/ledger', {})
 
 // Market data (every price read goes through the backend's gate)

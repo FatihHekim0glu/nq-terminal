@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from nq_terminal.models.common import DEFAULT_LIMIT, MAX_LIMIT, Page, error_responses
 from nq_terminal.models.runs import (
+    CompareStats,
     EquitySeries,
     FillRow,
     LedgerView,
@@ -94,6 +95,17 @@ def compare_runs(service: Service, ids: Annotated[str, Query(max_length=MAX_IDS_
     parsed = _parse_ids(ids)
     with _http_errors():
         return service.compare(parsed)
+
+
+@router.get("/runs/stats", response_model=list[CompareStats])
+def run_stats(service: Service, ids: Annotated[str, Query(max_length=MAX_IDS_TEXT)]) -> list[CompareStats]:
+    """Headline numbers of one or more runs, in the order asked (Basis B, the tear sheet's own series): the RUNS
+    table's Sharpe and max drawdown without the equity curves that /runs/compare carries."""
+    parsed = [part.strip() for part in ids.split(",") if part.strip()]
+    if not parsed or len(set(parsed)) != len(parsed):
+        raise HTTPException(status_code=422, detail="ids must name one or more distinct runs")
+    with _http_errors():
+        return service.stats(parsed)
 
 
 @router.get("/runs/{run_id}", response_model=RunDetail)

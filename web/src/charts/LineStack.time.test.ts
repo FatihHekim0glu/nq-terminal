@@ -118,4 +118,12 @@ describe('value axis ticks', () => {
     expect(formatAxisValue(-0.0000001, 0.1, '')).toBe('0.0')
     expect(formatAxisValue(1.25, 0.25, '')).toBe('1.25')
   })
+
+  it('groups thousands on the axis as the tags and legend do (look spec 3.4)', () => {
+    expect(formatAxisValue(1000800, 200, '')).toBe('1,000,800')
+    expect(formatAxisValue(4000000, 2000000, '')).toBe('4,000,000')
+    expect(formatAxisValue(-12500.5, 0.5, '')).toBe('-12,500.5')
+    expect(formatAxisValue(1.015, 0.005, '')).toBe('1.015')
+    expect(formatAxisValue(999, 1, '%')).toBe('999%')
+  })
 })

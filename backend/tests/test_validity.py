@@ -320,12 +320,16 @@ def test_bh_step_up_rejects_below_the_largest_passing_rank() -> None:
     assert table["reject_bh"].tolist() == [True, True, True]
 
 
-def test_boundaries_on_the_registry_reject_only_overnight(registry_frame: pd.DataFrame) -> None:
+def test_boundaries_on_the_registry_reject_what_the_stored_columns_reject(registry_frame: pd.DataFrame) -> None:
+    """The recomputed rejections equal the registry's own adjusted columns at alpha 0.05. With round 11 in the
+    family, Holm rejects eomtsy_v0 and overnight_v0, and Bonferroni eomtsy_v0 only (overnight's 0.051)."""
     reg = _registered(registry_frame).reset_index(drop=True)
     table = mt_boundaries(reg["p"].to_numpy(dtype=float), alpha=0.05)
     rejected = {reg["name"][i] for i in table.loc[table["reject_holm"], "input_position"]}
-    assert rejected == {"overnight_v0"}
-    assert set(reg["name"][table.loc[table["reject_bonferroni"], "input_position"]]) == {"overnight_v0"}
+    assert rejected == set(reg.loc[reg["holm_p"] < 0.05, "name"])
+    assert "overnight_v0" in rejected
+    bonferroni = set(reg["name"][table.loc[table["reject_bonferroni"], "input_position"]])
+    assert bonferroni == set(reg.loc[reg["bonferroni_p"] < 0.05, "name"])
 
 
 def test_boundaries_reject_a_bad_alpha() -> None:

@@ -159,8 +159,12 @@ describe('formatting', () => {
   it('labels ticks: months for daily data (the year goes in the strip), times for intraday', () => {
     expect(tickLabel(d('2021-03-01'), 1, false, 'UTC')).toBe('Mar')
     expect(tickLabel(d('2021-01-01'), 0, false, 'UTC')).toBe('Jan')
-    expect(tickLabel(d('2021-03-10'), 2, false, 'UTC')).toBe('10')
+    // Born failing: a day-of-month tick printed '20' in the daily month row and '13' in the intraday
+    // HH:MM row; the dates live in the second axis row, so these ticks carry no label.
+    expect(tickLabel(d('2021-03-10'), 2, false, 'UTC')).toBe('')
     expect(tickLabel(Date.parse('2021-03-10T14:35:00Z') / 1000, 3, true, 'America/New_York')).toBe('09:35')
+    expect(tickLabel(Date.parse('2021-03-10T05:00:00Z') / 1000, 2, true, 'America/New_York')).toBe('')
+    expect(tickLabel(Date.parse('2021-03-01T05:00:00Z') / 1000, 1, true, 'America/New_York')).toBe('')
   })
 })
 

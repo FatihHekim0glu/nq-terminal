@@ -1,0 +1,29 @@
+/* LEDG (look spec 7.9). Tokens only, square corners, no transitions. The ledger grid takes the
+   height left after the anchor pairs, which keep their natural height below it. */
+
+.ledg-grid {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The weekday prefix in muted grey (look spec 7.9). Inside a hovered cell --muted is overridden. */
+.ledg-weekday { color: var(--muted); }
+
+.ledg-pairs {
+  flex: 0 0 auto;
+  max-height: 40%;
+  overflow: auto;
+}
+
+.ledg-pairs-table { width: 100%; }
+
+.ledg-pairs-caption {
+  padding: 0 5px;
+  background: var(--raised);
+  color: var(--white);
+  font-weight: var(--fw-bold);
+  line-height: var(--row-h);
+  text-align: left;
+}

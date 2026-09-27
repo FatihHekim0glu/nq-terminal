@@ -14,8 +14,8 @@ import { fillCopy } from '../copy/workspace'
 import { usePanelActions } from '../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../chrome/PanelChrome.numbers'
 import { ROVING_ATTR, ROVING_DEFAULT_ATTR } from '../chrome/WorkspaceFocus'
-import { HEADER_ROW, buildDisplayRows, moveActive, numberWidthEm, type DisplayRow, type GridPos } from './MonitorGrid.model'
-import { useGridWindow } from './MonitorGrid.window'
+import { HEADER_ROW, buildDisplayRows, columnWidth, moveActive, numberWidthEm, type DisplayRow, type GridPos } from './MonitorGrid.model'
+import { useGridWindow, type GridScroll } from './MonitorGrid.window'
 import { useSortedRows, type SortSpec } from './MonitorGrid.sort'
 import './grid.css'
 
@@ -58,6 +58,12 @@ export interface MonitorGridProps<Row extends RowData> {
   /** Panel whose Number <GO> the rows answer; defaults to the enclosing panel. */
   readonly panelId?: string
   readonly emptyText?: string
+  /**
+   * `own` (default): the grid scrolls in its own box and renders a window of its rows. `panel`: a
+   * bounded grid (MON, REG) renders every row and the panel body scrolls, so the one scroll box is the
+   * panel's own Tab stop (axe scrollable-region-focusable; a grid's box holds no Tab stop in a panel).
+   */
+  readonly scroll?: GridScroll
 }
 
 const MISSING = '--'
@@ -196,6 +202,14 @@ function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active
   )
 }
 
+/** Column widths that fit every numeric value and every header (see columnWidth). */
+function useColumnWidths<Row extends RowData>(columns: readonly MonitorColumn<Row>[], rows: readonly Row[]): string[] {
+  return useMemo(
+    () => columns.map((c) => columnWidth(c.width, c.kind, c.header, c.kind === 'num' ? rows.map((r) => cellText(c, r)) : [])),
+    [columns, rows],
+  )
+}
+
 function activeId<Row extends RowData>(ids: Ids, display: readonly DisplayRow<Row>[], pos: GridPos, rendered: (row: number) => boolean): string | undefined {
   if (pos.row === HEADER_ROW) return ids.header(pos.col)
   const d = display[pos.row]
@@ -216,7 +230,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
   const { sorted, sort, toggleSort, groupOrder } = useSortedRows(rows, columns, rowId, initialSort, groupOf)
   const display = useMemo(() => buildDisplayRows(sorted, { rowId, numbered, groupOf, groupOrder }), [sorted, rowId, numbered, groupOf, groupOrder])
   const colCount = columns.length + (numbered ? 1 : 0)
-  const win = useGridWindow(display)
+  const win = useGridWindow(display, props.scroll)
   const { scrollToRow } = win
   const [rawActive, setActive] = useState<GridPos>({ row: 0, col: 0 })
   const active = clampPos(rawActive, display.length, colCount)
@@ -265,11 +279,12 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
     revealColumn(document.getElementById(current))
   }, [current, revealColumn])
   const maxNumber = items.reduce((m, i) => Math.max(m, i.n), 1)
+  const widths = useColumnWidths(columns, rows)
 
   return (
     <div className="nqt-grid-wrap">
       <span id={hintId} className="sr-only">{GRID.keysHint}</span>
-      <div ref={win.scrollRef} className="nqt-grid-scroll">
+      <div ref={win.scrollRef} className={props.scroll === 'panel' ? 'nqt-grid-scroll nqt-grid-scroll--panel' : 'nqt-grid-scroll'}>
         <table
           className="nqt-grid"
           role="grid"
@@ -284,7 +299,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
         >
           <colgroup>
             {numbered ? <col style={{ width: `${numberWidthEm(maxNumber)}em` }} /> : null}
-            {columns.map((c) => <col key={c.id} style={{ width: `${c.width}px` }} />)}
+            {columns.map((c, i) => <col key={c.id} style={{ width: widths[i] }} />)}
           </colgroup>
           <GridHeader columns={columns} numbered={numbered} ids={ids} active={active} sort={sort} onSort={sortByCol} />
           <tbody>

@@ -1,0 +1,255 @@
+/* RUNS and RUN (look spec 4.4 to 4.8 and 7.4). Tokens only, square corners, no transitions: every
+   state change is a hard cut. The screen fills its panel body; grids and the chart take the rest. */
+
+.runs-screen,
+.run-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+/* The tabpanel the tab strip controls: it takes the rest of the screen, as its content did. */
+.runs-tabpanel,
+.run-tabpanel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.runs-grid,
+.run-grid {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.runs-counts {
+  margin-left: 16px;
+  white-space: pre;
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.runs-note,
+.runs-msg,
+.run-note,
+.run-msg {
+  margin: 0;
+  padding: 0 5px;
+  min-height: var(--row-h);
+  line-height: var(--row-h);
+  color: var(--muted);
+  font-size: var(--fs-nav);
+}
+
+.runs-msg,
+.run-msg { color: var(--text); font-size: var(--fs-data); }
+
+/* Bracket tags: text first, colour second (UI_SPEC section 1, principle 5). */
+.runs-tag,
+.run-tag {
+  margin-right: 6px;
+  color: var(--warn);
+  white-space: nowrap;
+}
+
+.run-tag-down { color: var(--c-down); }
+
+/* ---------- RUN header strip (22px rows) ---------- */
+.run-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 12px;
+  min-height: var(--param-h);
+  padding: 0 5px;
+  background: var(--bg);
+}
+
+.run-strip .nqt-card-summary { margin: 0; }
+.run-strip-sep { color: var(--muted); }
+.run-anchor { white-space: nowrap; }
+
+.run-ledger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-height: var(--param-h);
+  padding: 1px 5px;
+}
+
+.run-ledger-label { color: var(--data); }
+
+.run-ledger-cmd {
+  margin: 0;
+  padding: 0 4px;
+  background: var(--btn-grey);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-nav);
+  line-height: 20px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: all;
+}
+
+.run-ledger-hint { color: var(--muted); font-size: var(--fs-nav); }
+
+.run-btn {
+  min-height: var(--target-min);
+  min-width: 48px;
+  padding: 0 8px;
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  background: var(--btn-grey);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.run-btn:hover { background: var(--hover-menu); }
+.run-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.run-btn[aria-disabled="true"] { color: var(--muted); cursor: default; }
+
+/* ---------- RUN chart tab: chart about 66%, statistics about 33% ---------- */
+.run-chart-tab {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.run-chart {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.run-chart-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 240px;
+}
+
+.run-unusable {
+  margin: 8px 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--c-down);
+  color: var(--text);
+}
+
+.run-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+/* The side scrolls rather than squeezing a block: a shrunk note ran under the Balance check card. */
+.run-side > * { flex-shrink: 0; }
+
+.run-stats {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.run-stats caption {
+  padding: 0 5px;
+  background: var(--raised);
+  color: var(--white);
+  font-weight: var(--fw-bold);
+  line-height: var(--row-h);
+  text-align: left;
+}
+
+.run-stats th,
+.run-stats td {
+  height: var(--row-h);
+  padding: 0 5px;
+  line-height: var(--row-h);
+  white-space: nowrap;
+}
+
+.run-stats thead th {
+  background: var(--th-bg);
+  border-top: 1px solid var(--th-rule);
+  color: var(--th-fg);
+  font-weight: var(--fw-regular);
+  text-align: right;
+}
+
+.run-stats thead th:first-child { text-align: left; }
+.run-stats tbody th { color: var(--data); font-weight: var(--fw-regular); text-align: left; }
+.run-stats td { text-align: right; }
+.run-stats .up { color: var(--c-up); }
+.run-stats .down { color: var(--c-down); }
+
+/* ---------- RUN paging row ---------- */
+.run-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--param-h);
+  padding: 0 5px;
+}
+
+/* ---------- RUN config tab: numbered read-only sections ---------- */
+.run-config {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.run-config h3 {
+  margin: 0;
+  padding: 0 5px;
+  background: var(--th-bg);
+  border-top: 1px solid var(--th-rule);
+  color: var(--white);
+  font-size: var(--fs-data);
+  font-weight: var(--fw-bold);
+  line-height: var(--row-h);
+}
+
+.run-config dl { margin: 0; padding: 2px 5px 6px; }
+
+.run-config-pair {
+  display: grid;
+  grid-template-columns: minmax(160px, 22%) minmax(0, 1fr);
+  gap: 8px;
+  min-height: var(--row-h);
+  align-items: start;
+}
+
+.run-config dt { color: var(--data); line-height: var(--row-h); }
+
+.run-config dd {
+  margin: 1px 0;
+  padding: 0 4px;
+  background: var(--btn-grey);
+  color: var(--text);
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+/* Scroll boxes that are roving items: the 2px white keyboard ring (UI_SPEC section 9, 2.4.7). */
+.run-side:focus-visible,
+.run-config:focus-visible,
+.ledg-pairs:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}

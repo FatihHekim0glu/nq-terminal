@@ -13,9 +13,15 @@ interface LegendRow {
   readonly value: string
 }
 
-function Legend({ rows, top }: { readonly rows: readonly LegendRow[]; readonly top: number }) {
+/**
+ * A price pane shorter than this keeps only its Last price row: the High on, Average and Low on rows
+ * would run over the volume pane and under the attribution logo (the HOME GP panel at 1366x768).
+ */
+export const LEGEND_STATS_MIN_PANE = 120
+
+function Legend({ rows, top, clearLogo = false }: { readonly rows: readonly LegendRow[]; readonly top: number; readonly clearLogo?: boolean }) {
   return (
-    <div className="chart-legend" style={{ top: top + G.legendInset }}>
+    <div className={clearLogo ? 'chart-legend candle-legend-clear-logo' : 'chart-legend'} style={{ top: top + G.legendInset }}>
       {rows.map((r) => (
         <div key={r.name} className="candle-legend-row">
           <span className="chart-legend-swatch" style={r.swatch ? { background: `var(${r.swatch})` } : undefined} />
@@ -44,10 +50,11 @@ export function Legends(p: LegendsProps) {
   const when = (i: number) => formatTime(p.bars.t[i] ?? 0, p.intraday, p.timeZone)
   const px = (v: number | null | undefined) => formatPrice(v, p.precision)
   const price: LegendRow[] = [{ swatch: '--candle-up', name: fillCopy(CANDLE.legendName, { name: p.name, field: CANDLE.lastPrice }), value: px(p.bars.c[p.index]) }]
-  if (p.stats) {
+  const priceHeight = (p.paneTops[1] ?? Infinity) - (p.paneTops[0] ?? 0)
+  if (p.stats && priceHeight >= LEGEND_STATS_MIN_PANE) {
     price.push(
       { name: fillCopy(CANDLE.highOn, { date: when(p.stats.highIndex) }), value: px(p.stats.high) },
-      { name: CANDLE.average, value: formatPrice(p.stats.average, p.precision + 2) },
+      { name: CANDLE.average, value: px(p.stats.average) },
       { name: fillCopy(CANDLE.lowOn, { date: when(p.stats.lowIndex) }), value: px(p.stats.low) },
     )
   }
@@ -57,7 +64,7 @@ export function Legends(p: LegendsProps) {
     <>
       <Legend rows={price} top={0} />
       {p.paneTops[1] !== undefined ? (
-        <Legend top={p.paneTops[1]} rows={[{ swatch: '--chart-vol', name: fillCopy(CANDLE.legendName, { name: p.name, field: CANDLE.volume }), value: formatVolume(p.bars.v[p.index]) }]} />
+        <Legend top={p.paneTops[1]} clearLogo rows={[{ swatch: '--chart-vol', name: fillCopy(CANDLE.legendName, { name: p.name, field: CANDLE.volume }), value: formatVolume(p.bars.v[p.index]) }]} />
       ) : null}
       {ind && p.paneTops[2] !== undefined ? (
         <Legend top={p.paneTops[2]} rows={[{

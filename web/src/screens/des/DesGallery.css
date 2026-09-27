@@ -1,0 +1,2 @@
+/* The DES gallery frame: one panel filling the gallery page (gallery builds only). Tokens only. */
+.des-gallery { height: 100%; min-height: 0; background: var(--bg); }

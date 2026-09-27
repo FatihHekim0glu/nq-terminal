@@ -1,0 +1,78 @@
+/* LIVE and JRNL (look spec 7.11): label and value strips, the countdown line, the chart beside the
+   reconciliation table, the journal lists. Tokens only; every state is a hard cut. */
+.live-screen,
+.jrnl-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg);
+}
+/* LIVE is a size container the height of the panel body: the strips, tiles and chart fill one screen of
+   it (the chart takes what the rows above leave), and the journals follow in the body's scroll. */
+.live-screen { height: 100%; min-height: 0; container-type: size; container-name: live; }
+.live-screen > * { flex: 0 0 auto; }
+.live-top {
+  display: flex;
+  flex-direction: column;
+  height: max(100cqh, 400px);
+  min-height: 0;
+}
+.live-top > * { flex: 0 0 auto; }
+/* A short panel (the 1366x768 split) shows the chart before the KPI tiles, so more of it is in view,
+   and gives the block the height a whole chart needs; the body scrolls to the rest. */
+@container live (max-height: 320px) {
+  .live-top { height: max(100cqh, 600px); }
+  .live-top > .kpi-row { order: 1; }
+}
+.jrnl-screen { height: 100%; min-height: 0; }
+
+.live-strip {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  margin: 0;
+  padding: 0 6px;
+  list-style: none;
+  line-height: var(--row-h);
+}
+.live-item { white-space: nowrap; }
+.live-label { color: var(--data); }
+.live-value { color: var(--white); font-weight: 700; }
+.live-value.live-up { color: var(--c-up); }
+.live-value.live-down { color: var(--c-down); }
+.live-value.live-warn { color: var(--warn); }
+
+.live-times { padding: 0 6px; }
+.live-message { margin: 0; padding: 0 6px; line-height: var(--row-h); color: var(--text); }
+.live-basis { color: var(--text); }
+.live-guard { color: var(--warn); font-weight: 700; }
+
+.live-screen .kpi-row { padding: 4px 6px; }
+
+.live-top > .live-perf { display: flex; flex: 1 1 0; flex-direction: column; min-height: 200px; }
+.live-perf > * { flex: 0 0 auto; }
+/* The chart and the reconciliation table side by side. */
+.live-perf > .live-perf-row {
+  display: flex;
+  flex: 1 1 0;
+  gap: 2px;
+  min-height: 0;
+}
+.live-chart { flex: 1 1 520px; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.live-chart > :last-child { flex: 1 1 auto; min-height: 0; }
+.live-recon { flex: 0 1 auto; min-width: 0; }
+/* Unless the panel is wide (1920px), the table (a few rows) goes under the chart at full width. */
+@container live (max-width: 1700px) {
+  .live-perf > .live-perf-row { flex-direction: column; }
+  .live-recon { flex: 0 0 auto; }
+}
+.live-journals { flex: 0 0 auto; padding-top: 2px; }
+.nqt-grid.live-table { table-layout: fixed; }
+
+.nqt-grid .live-plumbing-tag { color: var(--warn); font-weight: 700; }
+.nqt-grid .live-empty-state { color: var(--text); }
+
+.jrnl-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.jrnl-body > .nqt-grid-wrap { flex: 1 1 auto; }
+.jrnl-tag { color: var(--warn); font-weight: 700; }
+.jrnl-status { margin-left: auto; padding-right: 6px; color: var(--text); white-space: nowrap; }

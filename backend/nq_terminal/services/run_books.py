@@ -179,6 +179,13 @@ def exposure_view(book: RunBook, raw_px: np.ndarray | None = None) -> RunExposur
     if found is None:
         return RunExposure(run_id=book.run_id, tag=POST_HOC, available=False, note=NO_SNAPSHOTS, exposure=None,
                            turnover=None)
+    turnover = clean_json(exposure.turnover(book, "fills", raw_px))
     return RunExposure(run_id=book.run_id, tag=POST_HOC, available=True, note=None,
-                       exposure=ExposureView.model_validate(clean_json(found)),
-                       turnover=TurnoverView.model_validate(clean_json(exposure.turnover(book, "fills", raw_px))))
+                       exposure=ExposureView.model_validate(_with_t(clean_json(found))),
+                       turnover=TurnoverView.model_validate(_with_t(turnover)))
+
+
+def _with_t(view: dict) -> dict:
+    """`t` beside `date`: epoch seconds at 00:00 UTC of each session date, the axis of the equity charts, so the
+    exposure panes share their crosshair link group."""
+    return {**view, "t": [int(pd.Timestamp(str(d), tz="UTC").timestamp()) for d in view.get("date", [])]}

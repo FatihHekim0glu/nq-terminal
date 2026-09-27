@@ -1,6 +1,7 @@
 // Public shapes of LineStack (TASKS 5.1): a stack of uPlot panes sharing one time axis, used by EQ,
 // DD, RR and the RUN equity panes (look spec 6 and 7.5).
 import type { PanelLink } from '../state/linkGroups'
+import type { SummaryDrawdown } from './ChartA11ySummary'
 import type { UplotConstructor } from './lazy'
 import type { RANGE_TOOLBAR } from './theme'
 
@@ -30,6 +31,12 @@ export interface LineStackPane {
   readonly signed?: boolean
   /** Whether the Log toggle applies to this pane (only when every value is above zero). */
   readonly logAllowed?: boolean
+  /**
+   * The API's maximum drawdown for this pane's first series, formatted with its unit, and its basis.
+   * Equity panes pass it; every other pane leaves it out, and the accessible name then states none.
+   * The chart never derives a drawdown from the plotted values.
+   */
+  readonly summaryDrawdown?: SummaryDrawdown
 }
 
 export type RangeKey = (typeof RANGE_TOOLBAR.ranges)[number]

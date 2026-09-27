@@ -51,7 +51,7 @@ export default function ChartLibrariesGallery() {
   const equity = useMemo(() => equityFixture({ count: 260, seed: 5, start: '2021-06-01' }), [])
   const bars = useMemo(() => ohlcvFixture({ count: 260, seed: 5, start: '2021-06-01' }), [])
   const monthly = useMemo(monthlyFixture, [])
-  const equityLabel = describeSeries({ name: P.equityName, t: equity.t.map(isoDate), v: equity.v, drawdown: true })
+  const equityLabel = describeSeries({ name: P.equityName, t: equity.t.map(isoDate), v: equity.v })
   const last = bars[bars.length - 1]
   const barsLabel = fillCopy(P.candlesSummary, {
     count: bars.length, start: isoDate(bars[0]?.time ?? 0), end: isoDate(last?.time ?? 0), last: last?.close.toFixed(2) ?? '',

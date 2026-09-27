@@ -1,7 +1,8 @@
 // Tab strips (look spec 4.4). `top`: trapezoid tabs whose right edge slants out 5px, active
 // grey with black text, inactive dark grey, on a black strip. `sub`: the flat sub-tab strip on the
 // active-tab grey, active sub-tab in selection blue. Labels are numbered (`1) Equity`); each tab is a
-// numbered item (Number <GO>) and a roving item of its panel, so Left and Right move between tabs.
+// numbered item (Number <GO>) and a roving item of its panel: Left and Right move between tabs and
+// wrap, Home and End go to the ends, Down goes into the panel content (WorkspaceFocus).
 // Inside a panel the strip renders into the panel's tab slot, under the red bar.
 import type { KeyboardEvent } from 'react'
 import { useNumbered } from './PanelChrome.numbers'

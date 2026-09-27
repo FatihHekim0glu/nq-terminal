@@ -71,6 +71,7 @@ from nq_terminal.services.files import (
     RETRY_DELAY_S,
     FileCache,
     FileDecodeError,
+    redact_local_paths,
     sanitise,
     thaw,
 )
@@ -464,9 +465,15 @@ class ResearchService:
         history, auxiliaries = self._screen_files(stem) if stem is not None else ([], {})
         summary_name = self._round(name)[1]
         summary = self._read(self.screens / summary_name, "text", summary_name) if summary_name else None
-        return HypothesisDetail(card=card, des=_des(name, screen), screen=thaw(screen), spec=thaw(spec) if isinstance(spec, Mapping) else None,
-                                auxiliaries=auxiliaries, history=history,
-                                summary_name=summary_name if summary is not None else None, summary_md=summary)
+        local = self._local
+        return HypothesisDetail(card=card, des=_des(name, screen), screen=local(thaw(screen)),
+                                spec=local(thaw(spec)) if isinstance(spec, Mapping) else None,
+                                auxiliaries=local(auxiliaries), history=history,
+                                summary_name=summary_name if summary is not None else None, summary_md=local(summary))
+
+    def _local(self, value: Any) -> Any:
+        """No response names a local folder (the research JSON records absolute paths in prose and caches)."""
+        return redact_local_paths(value, self.root)
 
     # series -----------------------------------------------------------------
 
@@ -555,6 +562,8 @@ class ResearchService:
         path = self.root / spec
         in_experiments = spec.endswith(".json") and self._inside(path, self.experiments)
         actual = self._read(path, "sha256", spec) if in_experiments else None
+        own = self._read(path, "json", spec) if in_experiments else None
+        own = own if isinstance(own, Mapping) else {}
         head = doc.get("headline") if isinstance(doc.get("headline"), Mapping) else {}
         n = head.get("n_valid")
         return Confirmation(
@@ -562,7 +571,8 @@ class ResearchService:
             alpha=_finite(head.get("alpha")), verdict=str(doc.get("verdict", "")), spec=spec,
             spec_sha256=doc.get("spec_sha256"),
             spec_sha_ok=actual is not None and actual == doc.get("spec_sha256") == entry.get("spec_sha256"),
-            opening_closed=entry.get("closed") is True, label=self._label(entry), parent=CONFIRMS.get(name))
+            opening_closed=entry.get("closed") is True, label=self._label(entry), parent=CONFIRMS.get(name),
+            pass_bar=self._local(thaw(own.get("pass_bar"))), hypothesis=self._local(thaw(own.get("hypothesis"))))
 
     def confirmations(self) -> list[Confirmation]:
         found = (self._confirmation(entry) for entry in self._openings())
@@ -600,10 +610,11 @@ class ResearchService:
             raise UnknownNameError(f"unknown sealed file: {name}" if safe_name(name) else "unknown sealed file")
         kind, label = SEALED_KINDS[path.suffix.lower()], self._sealed_label()
         if kind == "markdown":
-            return SealedView(name=name, kind=kind, label=label, markdown=self._read(path, "text", path.name))
+            markdown = self._local(self._read(path, "text", path.name))
+            return SealedView(name=name, kind=kind, label=label, markdown=markdown)
         if kind == "json":
             return SealedView(name=name, kind=kind, label=label,
-                              data=strip_price_keys(thaw(self._read(path, "json", path.name))))
+                              data=self._local(strip_price_keys(thaw(self._read(path, "json", path.name)))))
         raw = self._read(path, "csv", path.name)
         if raw is None:
             raise ResearchDataError(f"sealed file {path.name} disappeared while being read")

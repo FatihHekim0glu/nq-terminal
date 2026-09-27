@@ -6,8 +6,8 @@
 import type uPlot from 'uplot'
 import { FENCE } from '../copy/lineStack'
 import { drawFence, fenceCanvasX, fenceStyle, pixelRatio } from './fence'
-import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, tagBlocksLabel, type Tag } from './LineStack.draw'
-import { yRange, type Values } from './LineStack.model'
+import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, tagBlocksLabel, valueAxisSize, type SharedGutter, type Tag } from './LineStack.draw'
+import { visibleIndexRange, yRange, yRangeClearOfLegend, type Values } from './LineStack.model'
 import { formatAxisValue, linearTicks, logTicks, timeAxisLayout, type TimeAxisLayout } from './LineStack.time'
 import type { LineStackPane, LineStackSeries } from './LineStack.types'
 import { lineStackSeries, makeUplotTheme, type ChartTokens } from './theme'
@@ -15,6 +15,14 @@ import { lineStackSeries, makeUplotTheme, type ChartTokens } from './theme'
 export interface PaneDrawInfo {
   /** The fence's x in CSS pixels from the plot's left edge, or null when it is out of view. */
   readonly fenceX: number | null
+}
+
+/** A box in CSS pixels from the pane element's top-left corner. */
+export interface PaneBox {
+  readonly left: number
+  readonly top: number
+  readonly width: number
+  readonly height: number
 }
 
 export interface PaneSync {
@@ -42,6 +50,10 @@ export interface PaneBuild {
   readonly onDraw?: (u: uPlot, info: PaneDrawInfo) => void
   readonly onCursor?: (u: uPlot) => void
   readonly onScale?: (u: uPlot) => void
+  /** Where the pane's HTML legend sits, so the value range can keep the curve out from under it. */
+  readonly legendBox?: () => PaneBox | null
+  /** The stack's shared value-axis width and this pane's index in it; alone, a pane sizes itself. */
+  readonly gutter?: { readonly shared: SharedGutter; readonly index: number }
 }
 
 type Styles = ReturnType<typeof lineStackSeries>
@@ -72,17 +84,49 @@ function signedFill(pos: string, neg: string): uPlot.Series.Fill {
   }
 }
 
-function seriesOptions(s: LineStackSeries, styles: Styles): uPlot.Series {
+/** 'area' is the primary series' fill alone, 'line' its stroke alone; 'whole' is a series as it is. */
+type SeriesPart = 'whole' | 'area' | 'line'
+
+interface DrawStep {
+  readonly index: number
+  readonly part: SeriesPart
+}
+
+/** The white series a pane is about: the equity curve, or the underwater curve of a drawdown pane. */
+const LEAD_STYLES: ReadonlySet<LineStackSeries['style']> = new Set(['primary', 'underwater'])
+
+/**
+ * The order uPlot draws a pane's series in (it draws by index). The lead series is split: its area
+ * first, under every line, and its line last, so a benchmark that runs close to it never covers the
+ * series the screen is about. A pane without a lead series, or with only one series, keeps its order.
+ */
+function drawOrder(pane: LineStackPane): readonly DrawStep[] {
+  const p = pane.series.findIndex((s) => LEAD_STYLES.has(s.style))
+  const whole = pane.series.map((_, index): DrawStep => ({ index, part: 'whole' }))
+  if (p === -1 || pane.series.length < 2) return whole
+  return [{ index: p, part: 'area' }, ...whole.filter((d) => d.index !== p), { index: p, part: 'line' }]
+}
+
+/** uPlot's data for a pane: the times, then each series' values in draw order. */
+export function paneUplotData<T>(t: T, pane: LineStackPane, values: readonly T[]): T[] {
+  return [t, ...drawOrder(pane).map((d) => values[d.index]!)]
+}
+
+function seriesOptions(s: LineStackSeries, styles: Styles, part: SeriesPart = 'whole'): uPlot.Series {
   const base = { label: s.name, spanGaps: false, points: { show: false } }
   switch (s.style) {
     case 'primary': {
       const { stroke, width, fill } = styles.primary
+      if (part === 'line') return { ...base, stroke, width }
       // Look spec 6.2: a flat area down to the pane bottom.
-      return { ...base, stroke, width, fill, fillTo: (u: uPlot) => u.scales.y?.min ?? 0 }
+      const fillTo = (u: uPlot) => u.scales.y?.min ?? 0
+      if (part === 'area') return { ...base, stroke, width: 0, fill, fillTo }
+      return { ...base, stroke, width, fill, fillTo }
     }
     case 'underwater': {
       const { stroke, width, fill } = styles.underwater
-      return { ...base, stroke, width, fill, fillTo: 0 }
+      if (part === 'line') return { ...base, stroke, width }
+      return { ...base, stroke, width: part === 'area' ? 0 : width, fill, fillTo: 0 }
     }
     case 'perfDiff': {
       const { stroke, width, fillPos, fillNeg } = styles.perfDiff
@@ -150,6 +194,11 @@ function paneDecor(b: PaneBuild, theme: ReturnType<typeof makeUplotTheme>, logOn
       const hidden = (v: number) => tagBlocksLabel(u, tags, v, b.tokens.font, b.pxRatio) || labelLeavesCanvas(u, v, b.tokens.font, b.pxRatio)
       return splits.map((v) => (hidden(v) ? null : formatAxisValue(v, step ?? v, unit)))
     },
+    // uPlot calls size after values, so the tags of this layout are known here.
+    size: (u, values) => {
+      const need = valueAxisSize(u, values ?? [], tags, b.tokens.font, b.pxRatio)
+      return b.gutter ? b.gutter.shared(b.gutter.index, need) : need
+    },
   }
   const draw = (u: uPlot) => {
     // After the series (uPlot runs drawAxes before them), so an area fill never covers the zero line.
@@ -162,6 +211,46 @@ function paneDecor(b: PaneBuild, theme: ReturnType<typeof makeUplotTheme>, logOn
     b.onDraw?.(u, { fenceX: fenceX === null ? null : (fenceX - u.bbox.left) / pixelRatio(u) })
   }
   return { yAxis, layoutOf, draw }
+}
+
+/** The gap in CSS pixels kept between the legend's edge and the curve. */
+const LEGEND_GAP_PX = 2
+
+/** Highest value of any series between indexes i0 and i1, or null when all are gaps. */
+function peakIn(data: readonly Values[], i0: number, i1: number): number | null {
+  let peak: number | null = null
+  for (const v of data) {
+    for (let i = i0; i <= i1; i += 1) {
+      const x = v[i]
+      if (x !== null && x !== undefined && (peak === null || x > peak)) peak = x
+    }
+  }
+  return peak
+}
+
+/**
+ * The y range with room above the curve where it runs under the legend (look spec 6.1). The plot box
+ * comes from uPlot once it is laid out, and from the options before that. An underwater pane peaks at
+ * its zero line, which may pass under the legend, so it keeps the plain range.
+ */
+function legendClearRange(u: uPlot | null, b: PaneBuild, range: [number, number], logOn: boolean, theme: ReturnType<typeof makeUplotTheme>): [number, number] {
+  const box = b.legendBox?.() ?? null
+  if (box === null || box.width <= 0 || box.height <= 0 || u === null) return range
+  if (b.pane.series.some((s) => s.style === 'underwater')) return range
+  const pr = b.pxRatio
+  const padding = theme.padding
+  const laidOut = (u.bbox?.height ?? 0) > 0 && (u.bbox?.width ?? 0) > 0
+  const plotTop = laidOut ? u.bbox.top / pr : padding[0]!
+  const plotLeft = laidOut ? u.bbox.left / pr : padding[3]!
+  const plotH = laidOut ? u.bbox.height / pr : b.height - padding[0]! - padding[2]! - (b.isBottom ? theme.axes[0]!.size : 0)
+  const plotW = laidOut ? u.bbox.width / pr : b.width - padding[1]! - padding[3]! - theme.axes[1]!.size
+  const below = box.top + box.height + LEGEND_GAP_PX - plotTop
+  const right = box.left + box.width + LEGEND_GAP_PX - plotLeft
+  if (plotH <= 0 || plotW <= 0 || below <= 0 || right <= 0) return range
+  const [x0, x1] = paddedView(b.view())
+  const span = visibleIndexRange(b.t, x0, x0 + (x1 - x0) * Math.min(1, right / plotW))
+  const peak = span === null ? null : peakIn(b.data, span[0], span[1])
+  return yRangeClearOfLegend(range, peak, below / plotH, logOn)
 }
 
 export function paneOptions(b: PaneBuild): uPlot.Options {
@@ -181,10 +270,15 @@ export function paneOptions(b: PaneBuild): uPlot.Options {
     },
     scales: {
       x: { time: true, range: () => paddedView(b.view()) },
-      y: { auto: true, distr: logOn ? 3 : 1, ...(logOn ? { log: 10 as const } : {}), range: (_u, min, max) => yRange(min, max, logOn) },
+      y: {
+        auto: true,
+        distr: logOn ? 3 : 1,
+        ...(logOn ? { log: 10 as const } : {}),
+        range: (u, min, max) => legendClearRange(u, b, yRange(min, max, logOn), logOn, theme),
+      },
     },
     axes: [timeAxis(theme, b, decor.layoutOf), decor.yAxis],
-    series: [{}, ...b.pane.series.map((s) => seriesOptions(s, styles))],
+    series: [{}, ...drawOrder(b.pane).map((d) => seriesOptions(b.pane.series[d.index]!, styles, d.part))],
     hooks: {
       draw: [decor.draw],
       setCursor: b.onCursor ? [b.onCursor] : [],

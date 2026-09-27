@@ -390,8 +390,9 @@ def build(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = No
                      relative=rel, stored_alpha=stored, validity=val)
 
 
-def home_panel(s: SessionSeries, context: Context) -> HomePanel:
-    """HOME [B]: equity against the benchmark, underwater and the rolling Sharpe over the long window."""
+def home_panel(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = None) -> HomePanel:
+    """HOME [B]: equity against the benchmark, underwater and the rolling Sharpe over the long window, with the
+    tear sheet's alpha tiles (the screen's stored fit [PRE-REG] where it records one, else the terminal's own)."""
     u = units(s)
     long = rolling.windows_for(s.periods)[1]
     eq, dd = equity_view(s, u), drawdown_view(s, u)
@@ -400,6 +401,7 @@ def home_panel(s: SessionSeries, context: Context) -> HomePanel:
     return HomePanel(**info(s, context), equity_unit=u.equity, t=eq.t, date=eq.date, equity=eq.equity,
                      bench_equity=eq.bench, underwater=dd.dd, bench_underwater=dd.bench_dd,
                      rolling_sharpe=nums(rolling.rolling_sharpe(s.r, long, s.periods)), rolling_window=long,
-                     rolling_unit=rolling.WINDOW_UNIT[s.periods],
-                     sharpe=num(perf.sharpe(s.r, s.periods)), bench_sharpe=num(bench_sharpe),
-                     max_drawdown=dd.max_drawdown, bench_max_drawdown=dd.bench_max_drawdown)
+                     rolling_unit=rolling.WINDOW_UNIT[s.periods], rolling_unit_label=u.ratio,
+                     drawdown_unit=dd.unit, sharpe=num(perf.sharpe(s.r, s.periods)), bench_sharpe=num(bench_sharpe),
+                     max_drawdown=dd.max_drawdown, bench_max_drawdown=dd.bench_max_drawdown,
+                     alpha=_alpha_tiles(s, relative_view(s, u), stored))

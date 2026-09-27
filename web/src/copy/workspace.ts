@@ -120,7 +120,7 @@ export const CHART = {
   keysHint: 'T toggles the table view while the chart has focus.',
   emptySeries: '{name}: no data.',
   seriesSummary: '{name}: {count} points from {start} to {end}; first {first}, last {last}, low {min}, high {max}{unit}.',
-  seriesSummaryDrawdown: '{name}: {count} points from {start} to {end}; first {first}, last {last}, low {min}, high {max}{unit}; max drawdown {drawdown}.',
+  seriesSummaryDrawdown: '{name}: {count} points from {start} to {end}; first {first}, last {last}, low {min}, high {max}{unit}; max drawdown {drawdown} ({basis}).',
 } as const
 
 /** Replaces each `{name}` slot with its value; unknown slots are left as they are. */

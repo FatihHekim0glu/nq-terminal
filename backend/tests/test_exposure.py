@@ -121,10 +121,20 @@ def test_sized_waterfall_on_hand_numbers():
     assert fall["slippage"] == pytest.approx(0.5 * n, abs=1e-9)
 
 
+def _era_costs(run_id: str) -> bool:
+    venue = real_runs().detail(run_id).venue or {}
+    rows = venue.get("instruments") if isinstance(venue, dict) else None
+    return any(str(r.get("cost_per_side", "")).startswith(exposure.ERA_COST_PREFIX) for r in rows or ())
+
+
 def test_real_waterfalls_sum_to_pnl_total_and_the_balance_check():
     ids = usable_real_ids()
     assert len(ids) >= 50
     for run_id in ids:
+        if _era_costs(run_id):
+            with pytest.raises(exposure.CostError, match="changes by era"):
+                real_book(run_id)
+            continue
         book = real_book(run_id)
         fall = exposure.cost_waterfall(book)
         assert fall["net"] == book.pnl_total == book.delta_usd, run_id

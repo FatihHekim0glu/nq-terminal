@@ -83,6 +83,6 @@ describe('Heatmap scale legend', () => {
   it('shows the MRET ramp labelled min at the left and max at the right', () => {
     render(<Heatmap data={heat} />)
     const ends = [...document.querySelectorAll('.echarts-scale-end')].map((e) => e.textContent)
-    expect(ends).toEqual(['-2.00', '+3.00'])
+    expect(ends).toEqual(['-2.00%', '+3.00%'])
   })
 })

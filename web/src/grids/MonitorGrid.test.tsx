@@ -117,6 +117,26 @@ describe('MonitorGrid structure (look spec 4.8)', () => {
     expect(bodyRows()[0]?.getAttribute('aria-rowindex')).toBe('2')
   })
 
+  it('scroll="panel": renders every row and leaves the scrolling to the panel body (axe 2.1.1 on HOME)', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ sym: `S${i}`, sector: 'Equity', last: i, chg: null }))
+    render(
+      <div className="nqt-panel-body" tabIndex={0}>
+        <MonitorGrid label="Panel" rows={many} columns={COLUMNS} rowId={(r) => r.sym} scroll="panel" />
+      </div>,
+    )
+    expect(bodyRows()).toHaveLength(200)
+    const box = grid().closest('.nqt-grid-scroll')
+    expect(box?.classList.contains('nqt-grid-scroll--panel')).toBe(true)
+    expect(document.querySelectorAll('tr.nqt-grid-spacer')).toHaveLength(0)
+  })
+
+  it('born failing: the default grid keeps its own scroll box and its window', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ sym: `S${i}`, sector: 'Equity', last: i, chg: null }))
+    render(<MonitorGrid label="Own" rows={many} columns={COLUMNS} rowId={(r) => r.sym} />)
+    expect(bodyRows().length).toBeLessThan(200)
+    expect(grid().closest('.nqt-grid-scroll')?.classList.contains('nqt-grid-scroll--panel')).toBe(false)
+  })
+
   it('applies a row class from rowClassName (the journal hatches plumbing rows this way)', () => {
     render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} rowClassName={(r) => (r.sym === 'ES' ? 'plumbing-row' : undefined)} />)
     expect(bodyRows()[1]?.classList.contains('plumbing-row')).toBe(true)

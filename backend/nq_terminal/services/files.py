@@ -191,6 +191,38 @@ def thaw(value: Any) -> Any:
     return value
 
 
+# ---------------------------------------------------------------- local paths
+
+
+_WINDOWS_HOME = re.compile(r"\b[A-Za-z]:[\\/]+Users[\\/]+[^\\/\"\r\n]+", re.IGNORECASE)
+_POSIX_HOME = re.compile(r"(?<![\w.~])/(?:home|Users)/[^/\s\"]+")
+_SEPARATORS = re.compile(r"[\\/]+")
+
+
+def _root_prefixes(root: Path) -> re.Pattern[str]:
+    """The root written with either separator, then at least one separator, in any case."""
+    parts = [re.escape(part) for part in _SEPARATORS.split(str(root)) if part]
+    return re.compile(r"[\\/]+".join(parts) + r"[\\/]+", re.IGNORECASE)
+
+
+def redact_local_paths(value: Any, root: Path) -> Any:
+    """A copy of `value` in which no string names a local folder: a path under `root` keeps only its part below
+    the root, and any other home folder (`C:\\Users\\<name>`, `/home/<name>`, `/Users/<name>`) becomes `~`, so a
+    response never carries the user name (research JSON records absolute cache and source paths in prose)."""
+    prefix = _root_prefixes(Path(root))
+
+    def _redact(item: Any) -> Any:
+        if isinstance(item, str):
+            return _POSIX_HOME.sub("~", _WINDOWS_HOME.sub("~", prefix.sub("", item)))
+        if isinstance(item, Mapping):
+            return {key: _redact(inner) for key, inner in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [_redact(inner) for inner in item]
+        return item
+
+    return _redact(value)
+
+
 # ---------------------------------------------------------------- parsers
 
 

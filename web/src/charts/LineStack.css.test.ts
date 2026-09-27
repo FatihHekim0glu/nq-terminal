@@ -35,6 +35,11 @@ describe('LineStack.css', () => {
     for (const m of code.matchAll(/border-radius\s*:\s*([^;]+);/g)) expect(m[1]!.trim()).toBe('0')
   })
 
+  it('hides the High, Average and Low legend rows in a short pane, so the legend never covers the time axis', () => {
+    expect(code).toMatch(/\.linestack-pane\s*\{[^}]*container-type:\s*size/)
+    expect(code).toMatch(/@container\s*\(max-height:\s*\d+px\)\s*\{\s*\.linestack-legend-stat\s*\{\s*display:\s*none/)
+  })
+
   it("replaces uPlot's dashed grey cursor with solid 1px lines in the crosshair token (look spec 9.2)", () => {
     expect(code).toMatch(/\.u-cursor-x\s*\{[^}]*border-right:\s*1px solid var\(--crosshair\)/)
     expect(code).toMatch(/\.u-cursor-y\s*\{[^}]*border-bottom:\s*1px solid var\(--crosshair\)/)

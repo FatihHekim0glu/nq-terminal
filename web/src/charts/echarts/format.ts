@@ -5,15 +5,21 @@ function trimNegativeZero(text: string): string {
   return /^-0(\.0+)?$/.test(text) ? text.slice(1) : text
 }
 
-/** Fixed decimals, never `-0.00`. */
+function groupThousands(text: string): string {
+  const [whole = '', frac] = text.split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return frac === undefined ? grouped : `${grouped}.${frac}`
+}
+
+/** Fixed decimals with thousands grouped, never `-0.00`. */
 export function fixed(value: number, decimals: number): string {
-  return trimNegativeZero(value.toFixed(decimals))
+  return groupThousands(trimNegativeZero(value.toFixed(decimals)))
 }
 
 /** Fixed decimals with an explicit `+` on positive values; zero (after rounding) has no sign. */
 export function signed(value: number, decimals: number): string {
   const text = fixed(value, decimals)
-  return /^[0.]+$/.test(text) || text.startsWith('-') ? text : `+${text}`
+  return /^[0.,]+$/.test(text) || text.startsWith('-') ? text : `+${text}`
 }
 
 const P_FLOOR = 0.0001

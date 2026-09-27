@@ -54,8 +54,8 @@ export function createLegend(host: HTMLElement, series: readonly LegendSeries[],
   })
   const statRows = single
     ? [0, 1, 2].map(() => {
-        cell(box, 'chart-legend-swatch linestack-legend-blank')
-        return { name: cell(box, 'chart-legend-name'), value: cell(box, 'chart-legend-value') }
+        cell(box, 'chart-legend-swatch linestack-legend-blank linestack-legend-stat')
+        return { name: cell(box, 'chart-legend-name linestack-legend-stat'), value: cell(box, 'chart-legend-value linestack-legend-stat') }
       })
     : []
   host.append(box)

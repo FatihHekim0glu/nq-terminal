@@ -11,7 +11,7 @@ import type { CustomSeriesOption, EChartsOption, LineSeriesOption } from './core
 import { fixed, signed, withUnit } from './format'
 import {
   baseOption, fenceLine, FENCE_SECONDS, isFiniteNumber, markLine, niceAxis, refLine, spreadLabels, textFont, themeXAxis,
-  themeYAxis, type LineLabelPosition, type MarkLineItem, type NiceAxis, type PlotRect,
+  themeYAxis, type MarkLineItem, type NiceAxis, type PlotRect,
 } from './shared'
 
 export interface DistributionRisk {
@@ -50,7 +50,7 @@ const BIN_GAP = 1
 /** With a series: the series pane ends at 66% of the width, the histogram starts at 70%. */
 const SERIES_RIGHT = '34%'
 const HIST_LEFT = '70%'
-/** With a series: a gutter right of the histogram holds the line labels, clear of the bars. */
+/** A gutter right of the histogram (and of its value axis, when it has one) holds the line labels. */
 const LABEL_GUTTER = 64
 /** Gap between the pane's right edge and a gutter label (ECharts' own markLine label distance). */
 const GUTTER_LABEL_PAD = 5
@@ -119,50 +119,48 @@ function curveSeries(input: DistributionInput, colour: string, axes: { x: number
   }
 }
 
-/** One reference line: its return value, label, colour and label place inside the pane. */
+/** One reference line: its return value, label and colour. */
 interface RefSpec {
   readonly value: number
   readonly label: string
   readonly colour: string
-  readonly inside: LineLabelPosition
 }
 
 /** Mean, one sigma, VaR and CVaR, in that order (VaR and CVaR are losses, so drawn at -v). */
 function refSpecs(input: DistributionInput, tokens: ChartTokens): RefSpec[] {
   const p = echartsPresets(tokens).distribution
-  const specs: RefSpec[] = [{ value: input.mean, label: DISTRIBUTION.mean, colour: p.curve, inside: 'insideEndTop' }]
+  const specs: RefSpec[] = [{ value: input.mean, label: DISTRIBUTION.mean, colour: p.curve }]
   if (isFiniteNumber(input.sd)) {
-    specs.push({ value: input.mean + input.sd, label: DISTRIBUTION.plusSigma, colour: p.curve, inside: 'insideEndTop' })
-    specs.push({ value: input.mean - input.sd, label: DISTRIBUTION.minusSigma, colour: p.curve, inside: 'insideEndTop' })
+    specs.push({ value: input.mean + input.sd, label: DISTRIBUTION.plusSigma, colour: p.curve })
+    specs.push({ value: input.mean - input.sd, label: DISTRIBUTION.minusSigma, colour: p.curve })
   }
-  const risk: readonly [number | null, string, LineLabelPosition][] = [
-    [input.risk.var95, DISTRIBUTION.var95, 'insideStartTop'],
-    [input.risk.cvar95, DISTRIBUTION.cvar95, 'insideEndBottom'],
-    [input.risk.var99, DISTRIBUTION.var99, 'insideStartTop'],
-    [input.risk.cvar99, DISTRIBUTION.cvar99, 'insideEndBottom'],
+  const risk: readonly [number | null, string][] = [
+    [input.risk.var95, DISTRIBUTION.var95],
+    [input.risk.cvar95, DISTRIBUTION.cvar95],
+    [input.risk.var99, DISTRIBUTION.var99],
+    [input.risk.cvar99, DISTRIBUTION.cvar99],
   ]
-  for (const [v, label, inside] of risk) {
-    if (isFiniteNumber(v)) specs.push({ value: -v, label, colour: p.risk, inside })
+  for (const [v, label] of risk) {
+    if (isFiniteNumber(v)) specs.push({ value: -v, label, colour: p.risk })
   }
   return specs
 }
 
 /**
- * The dashed lines. Inside the pane, VaR is labelled at the left and CVaR at the right so neighbours
- * do not meet. In the gutter layout the lines carry no label: gutterLabels() draws them instead.
+ * The dashed lines, with no label of their own: gutterLabels() draws the labels in a gutter, so the
+ * mean and one-sigma lines of a narrow distribution (a tiny sd) never print over each other, and no
+ * label sits inside a histogram bar.
  */
-function riskLines(specs: readonly RefSpec[], gutter: boolean): MarkLineItem[] {
-  return specs.map((s) =>
-    gutter ? refLine({ yAxis: s.value }, s.colour) : refLine({ yAxis: s.value }, s.colour, { label: s.label, position: s.inside }),
-  )
+function riskLines(specs: readonly RefSpec[]): MarkLineItem[] {
+  return specs.map((s) => ({ ...refLine({ yAxis: s.value }, s.colour), name: s.label }))
 }
 
 /**
- * The gutter labels, right of the histogram pane, each level with its line. Placed in pixels at draw
- * time, so lines closer than a text line (CVaR 95 and VaR 99 on a short pane) get labels that do not
- * touch: a crowded run is spread to one text line apart.
+ * The gutter labels, right of the histogram pane (past its value axis when the pane has one), each
+ * level with its line. Placed in pixels at draw time, so lines closer than a text line get labels that
+ * do not touch: a crowded run is spread to one text line apart.
  */
-function gutterLabels(specs: readonly RefSpec[], axes: { x: number; y: number }, tokens: ChartTokens): CustomSeriesOption {
+function gutterLabels(specs: readonly RefSpec[], axes: { x: number; y: number }, tokens: ChartTokens, offset: number): CustomSeriesOption {
   const font = textFont(tokens)
   return {
     id: 'lineLabels',
@@ -180,7 +178,7 @@ function gutterLabels(specs: readonly RefSpec[], axes: { x: number; y: number },
         type: 'group',
         children: specs.map((s, i) => ({
           type: 'text' as const,
-          x: plot.x + plot.width + GUTTER_LABEL_PAD,
+          x: plot.x + plot.width + offset + GUTTER_LABEL_PAD,
           y: Math.round(ys[i]!),
           style: { text: s.label, fill: s.colour, align: 'left' as const, verticalAlign: 'middle' as const, font: `${font.fontSize}px ${font.fontFamily}` },
         })),
@@ -211,22 +209,25 @@ export function distributionOption(input: DistributionInput, tokens: ChartTokens
   const { min, max, interval } = yExtent(input)
   const font = textFont(tokens)
   const theme = { y: themeYAxis(tokens), x: themeXAxis(tokens) }
-  const y = { ...theme.y, axisLabel: { ...theme.y.axisLabel, ...font } }
+  // The return axis names its unit on every label (a percent axis reads 1.5%, as the bar ladders do).
+  const y = { ...theme.y, axisLabel: { ...theme.y.axisLabel, ...font, formatter: (value: number) => withUnit(String(value), input.unit) } }
   const x = { ...theme.x, axisLabel: { ...theme.x.axisLabel, ...font } }
   const countAxis = (gridIndex: number) => ({ ...x, type: 'value' as const, gridIndex, min: 0 })
   const hasSeries = input.series !== undefined
   const axes = hasSeries ? { x: 1, y: 1 } : { x: 0, y: 0 }
   const specs = refSpecs(input, tokens)
+  // Without a series the histogram carries the value axis on its right, so the labels go past it.
+  const labelOffset = hasSeries ? 0 : CHART_GEOMETRY.axisGutter
   const series = [
     histSeries(bars, axes),
     curveSeries(input, colours.curve, axes),
-    linesSeries(riskLines(specs, hasSeries), axes, tokens),
-    ...(hasSeries ? [gutterLabels(specs, axes, tokens)] : []),
+    linesSeries(riskLines(specs), axes, tokens),
+    gutterLabels(specs, axes, tokens, labelOffset),
   ]
   if (!hasSeries) {
     return {
       ...baseOption(tokens),
-      grid: [{ left: 8, right: CHART_GEOMETRY.axisGutter, top: 8, bottom: 24 }],
+      grid: [{ left: 8, right: CHART_GEOMETRY.axisGutter + LABEL_GUTTER, top: 8, bottom: 24 }],
       xAxis: [countAxis(0)],
       yAxis: [{ ...y, type: 'value', gridIndex: 0, min, max, interval }],
       series,

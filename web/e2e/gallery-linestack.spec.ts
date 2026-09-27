@@ -63,7 +63,7 @@ test('LineStack is one role="img" with a data summary, axe clean, GET only', asy
   const main = await openGallery(page, ENTRY)
   const img = main.getByRole('img')
   await expect(img).toHaveCount(1)
-  await expect(img).toHaveAttribute('aria-label', /^Strategy: \d+ points from 2010-01-04 to 2021-12-31; .*max drawdown -\d+\.\d%\. Underwater: /)
+  await expect(img).toHaveAttribute('aria-label', /^Strategy: \d+ points from 2010-01-04 to 2021-12-31; .*max drawdown -\d+\.\d% \(fixture, compounded\)\. Underwater: /)
   await expect(main.locator('[data-chart-lib="uplot"] canvas')).toHaveCount(3)
   await expect(main.locator('.chart-legend')).toHaveCount(3)
   await expectGalleryClean(page, watch)

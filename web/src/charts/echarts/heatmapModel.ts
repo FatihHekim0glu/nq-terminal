@@ -27,6 +27,11 @@ export interface HeatmapInput {
   readonly decimals?: number
   /** MON only: the strong step starts at this |value|, one threshold per column. */
   readonly strongAt?: readonly number[]
+  /**
+   * The number of leading rows the terminal computed rather than the API sent (the MRET average row).
+   * They are drawn, but the summary's low and high come from the other rows only.
+   */
+  readonly derivedRows?: number
 }
 
 export interface HeatCellView {
@@ -214,7 +219,7 @@ function mretRamp(input: HeatmapInput, tokens: ChartTokens): HeatScale {
       ]
     : [{ at: 0, fill: fill(e.min) }, { at: 1, fill: fill(e.max) }]
   const decimals = input.decimals ?? DEFAULT_DECIMALS
-  return { kind: 'ramp', stops, low: signed(e.min, decimals), high: signed(e.max, decimals) }
+  return { kind: 'ramp', stops, low: withUnit(signed(e.min, decimals), input.unit), high: withUnit(signed(e.max, decimals), input.unit) }
 }
 
 /** The legend under the grid: CORR and MON steps, or the MRET ramp from min to max. */
@@ -238,12 +243,13 @@ function extremeCells(input: HeatmapInput): { min: Extreme; max: Extreme; blank:
   let min: Extreme | null = null
   let max: Extreme | null = null
   let blank = 0
+  const derived = input.derivedRows ?? 0
   input.values.forEach((r, row) => r.forEach((v, col) => {
     if (!isFiniteNumber(v)) {
       blank += 1
       return
     }
-    if (isDiagonal(input, row, col)) return
+    if (row < derived || isDiagonal(input, row, col)) return
     const at = fillCopy(HEATMAP.at, { row: input.rows[row] ?? '', column: input.columns[col] ?? '' })
     if (min === null || v < min.value) min = { value: v, at }
     if (max === null || v > max.value) max = { value: v, at }

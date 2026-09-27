@@ -2,8 +2,10 @@
 // tabindex inside. Items that take part carry `data-roving`; the one that should get focus first
 // carries `data-roving-default`. Every other focusable element inside a panel is taken out of the
 // Tab order, so Tab and Shift+Tab move between panels. Left and Right move between the items of
-// the focused panel unless the item (a chart, a grid) already handled the key. Up, Down, Home and
-// End are left to the item, because they scroll. While a panel shows an overlay marked
+// the focused panel unless the item (a chart, a grid) already handled the key; on a tab they stay in
+// its tablist and wrap, Home and End go to the first and last tab (the ARIA tabs pattern) and Down
+// goes into the panel's content. Up and
+// Down, and Home and End on any other item, are left to the item, because they scroll. While a panel shows an overlay marked
 // `data-roving-overlay` (the related functions menu), the Tab stop is taken from that overlay's items,
 // so Tab from the command line lands in the open menu and its scroll region stays keyboard reachable.
 import { useEffect, type RefObject } from 'react'
@@ -19,6 +21,7 @@ const FOCUSABLE = [
 
 const NEXT_KEY = 'ArrowRight'
 const PREV_KEY = 'ArrowLeft'
+const INTO_KEY = 'ArrowDown'
 
 function isDisabled(el: HTMLElement): boolean {
   return el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true' || Boolean(el.hidden)
@@ -72,22 +75,52 @@ export function syncRoving(panel: HTMLElement, prefer?: HTMLElement): HTMLElemen
   return current
 }
 
-/** Moves between items on Left and Right. Returns true when it handled the key. */
+function moveTo(panel: HTMLElement, event: KeyboardEvent, next: HTMLElement): true {
+  event.preventDefault()
+  syncRoving(panel, next)
+  next.focus()
+  return true
+}
+
+/**
+ * A tab follows the ARIA tabs pattern its role promises: Left and Right stay inside its tablist and
+ * wrap at the ends, Home and End go to the first and last tab. Enter or Space selects (TabStrip).
+ */
+function handleTabKey(panel: HTMLElement, target: HTMLElement, event: KeyboardEvent): boolean | null {
+  if (target.getAttribute('role') !== 'tab') return null
+  const list = target.closest<HTMLElement>('[role="tablist"]')
+  if (!list) return null
+  const tabs = Array.from(list.querySelectorAll<HTMLElement>('[role="tab"]')).filter((el) => !isDisabled(el))
+  const index = tabs.indexOf(target)
+  const n = tabs.length
+  if (index === -1 || n === 0) return null
+  if (event.key === INTO_KEY) {
+    // Tab moves between panels, so Down is the way from the tabs into the panel's content.
+    const items = rovingItems(panel)
+    const after = items.slice(items.indexOf(tabs[n - 1]!) + 1).find((el) => !list.contains(el))
+    return after ? moveTo(panel, event, after) : false
+  }
+  const pick: Record<string, number> = { [NEXT_KEY]: (index + 1) % n, [PREV_KEY]: (index - 1 + n) % n, Home: 0, End: n - 1 }
+  const at = pick[event.key]
+  if (at === undefined) return false
+  return moveTo(panel, event, tabs[at]!)
+}
+
+/** Moves between items on Left and Right (and between tabs on Home and End). True when it handled the key. */
 export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false
-  if (event.key !== NEXT_KEY && event.key !== PREV_KEY) return false
   const target = event.target as HTMLElement | null
   if (!target || isTextField(target)) return false
+  const tab = handleTabKey(panel, target, event)
+  if (tab !== null) return tab
+  if (event.key !== NEXT_KEY && event.key !== PREV_KEY) return false
   const items = rovingItems(panel)
   const index = items.indexOf(target)
   if (index === -1) return false
   const step = event.key === NEXT_KEY ? 1 : -1
   const next = items[Math.min(Math.max(index + step, 0), items.length - 1)]
   if (!next) return false
-  event.preventDefault()
-  syncRoving(panel, next)
-  next.focus()
-  return true
+  return moveTo(panel, event, next)
 }
 
 /** Keeps a panel element's roving tabindex in step with its content as screens render. */

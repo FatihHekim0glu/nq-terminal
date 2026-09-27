@@ -269,11 +269,23 @@ def performance_series(rows: Sequence[JournalRow],
                        keep: Callable[[Iterable[Mapping]], list] = paper_plumbing.performance_rows) -> dict:
     """Target against actual over the close rows that may be read as performance (LV2)."""
     data = [r.data for r in rows]
+    line_of = {id(r.data): r.line_no for r in rows}
     kept = keep(data)
     check_no_plumbing(kept)
-    closes = [close_fields(r) for r in kept if r.get("type") == "close"]
+    close_rows = [r for r in kept if r.get("type") == "close"]
+    closes = [close_fields(r) for r in close_rows]
     columns = {name: [c[name] for c in closes] for name in CLOSE_FIELDS}
-    return {"plumbing_rows_skipped": len(data) - len(kept), **columns}
+    return {"plumbing_rows_skipped": len(data) - len(kept), **columns,
+            "t": [_midnight_utc(d) for d in columns["date"]], "line_no": [line_of[id(r)] for r in close_rows]}
+
+
+def _midnight_utc(date: Any) -> int | None:
+    """Epoch seconds at 00:00 UTC of an ISO session date (the charts' axis), or None for a missing date."""
+    try:
+        day = dt.date.fromisoformat(str(date)[:10])
+    except ValueError:
+        return None
+    return int(dt.datetime(day.year, day.month, day.day, tzinfo=dt.timezone.utc).timestamp())
 
 
 def last_close(rows: Sequence[JournalRow]) -> Mapping[str, Any] | None:

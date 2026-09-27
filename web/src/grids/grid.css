@@ -145,6 +145,11 @@
   min-height: 0;
 }
 .nqt-grid-wrap > .nqt-grid-scroll { flex: 1 1 auto; }
+/* scroll="panel": the grid takes its full height and the panel body scrolls it (the body is the panel's
+   Tab stop); the sticky header then sticks to the body, and a row brought into view clears it. */
+.nqt-grid-wrap:has(> .nqt-grid-scroll--panel) { height: auto; }
+.nqt-grid-scroll.nqt-grid-scroll--panel { overflow: visible; }
+.nqt-grid-scroll--panel .nqt-grid tbody tr { scroll-margin-top: var(--row-h); }
 .nqt-grid tr.nqt-grid-spacer td { padding: 0; background: var(--bg); }
 .nqt-grid thead th:not(.hot) { cursor: pointer; }
 .nqt-grid .sort-mark { color: var(--th-fg); }

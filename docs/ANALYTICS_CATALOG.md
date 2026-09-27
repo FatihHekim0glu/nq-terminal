@@ -40,7 +40,7 @@ The terminal never produces a new pass or fail. Verdicts come from the result fi
 | PF7 | P1 | Omega(0) | `Σmax(r,0) / Σmax(-r,0)` | daily r | empyrical `omega_ratio` |
 | PF8 | P1 | Tail ratio | `abs(Q95/Q5)`, linear quantiles | daily r | quantstats and empyrical `tail_ratio` |
 | PF9 | P1 | Gain to pain (monthly) | `Σ r_m / abs(Σ min(r_m,0))`; A: month sums, B: compounded months | monthly r | quantstats `gain_to_pain_ratio` [argument name unverified] |
-| PF10 | P0 | Stats table: hit rate, best and worst day and month, % positive months, skew, excess kurtosis, n, years | skew `scipy.stats.skew(bias=False)`, kurtosis `kurtosis(fisher=True, bias=False)` as the screens | daily r | scipy |
+| PF10 | P0 | Stats table: hit rate, best and worst day and month, % positive months, skew, excess kurtosis, n, years | hit rate = periods with r > 0 over periods with r != 0 (flat periods are left out of the denominator, as quantstats `win_rate`; the tile says "non-zero periods"); skew `scipy.stats.skew(bias=False)`, kurtosis `kurtosis(fisher=True, bias=False)` as the screens | daily r | scipy |
 | PF11 | P2 | Ulcer index, recovery factor | `sqrt(mean(DD²))` (n, documented); total return / abs(MaxDD) | DD1 | quantstats `ulcer_index` (n-1: document the difference) |
 
 ## 2. Drawdowns

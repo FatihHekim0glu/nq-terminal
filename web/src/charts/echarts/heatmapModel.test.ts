@@ -171,8 +171,9 @@ describe('heatScale (the legend under the grid)', () => {
     const s = heatScale(mret, T)
     expect(s.kind).toBe('ramp')
     if (s.kind !== 'ramp') return
-    expect(s.low).toBe('-4.00')
-    expect(s.high).toBe('+3.00')
+    // The scale ends carry the unit: cells print bare numbers, so the legend says what they are.
+    expect(s.low).toBe('-4.00%')
+    expect(s.high).toBe('+3.00%')
     expect(s.stops[0]).toMatchObject({ at: 0, fill: seagHeat(-4, 4, T).fill })
     expect(s.stops[s.stops.length - 1]).toMatchObject({ at: 1, fill: seagHeat(3, 4, T).fill })
   })
@@ -190,6 +191,13 @@ describe('describeHeatmap and heatmapTable', () => {
     expect(describeHeatmap(mret)).toBe(
       'Monthly returns: 3 rows by 3 columns; low -4.00% at 2021 Feb, high +3.00% at 2021 Jan; 3 blank cells.',
     )
+  })
+
+  it('born failing: leaves terminal-computed rows (the MRET average) out of the extremes', () => {
+    const avg = { ...mret, rows: ['1 yr avg', ...mret.rows.slice(1)], derivedRows: 1, values: [[-9, 9, null], ...mret.values.slice(1)] }
+    const text = describeHeatmap(avg)
+    expect(text).not.toContain('avg')
+    expect(text).not.toContain('9.00')
   })
 
   it('leaves the CORR diagonal out of the extremes', () => {

@@ -7,6 +7,7 @@ import { displayContext } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { COMMAND_LINE } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
+import { requestHelpTopic } from '../screens/help/helpTopic.store'
 import { functionMenu, helpMenu, lastMenu, relatedMenu, searchMenu, sectorMenu, type MenuItem } from './CommandLine.menus'
 import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
 import { postMessage } from './MessageLine.store'
@@ -46,7 +47,11 @@ function numberGo(p: CommandLineParts, n: number): string | null {
 function openMenuAction(p: CommandLineParts, action: LineAction): void {
   const index = p.options.index
   if (action.kind === 'sector') p.menus.open(sectorMenu(action.sector, index))
-  else if (action.kind === 'help') p.menus.open(helpMenu(action.code))
+  else if (action.kind === 'help') {
+    p.menus.open(helpMenu(action.code))
+    // An open HELP panel also shows that function's page beside the menu.
+    requestHelpTopic(action.code)
+  }
   else if (action.kind === 'last') p.menus.open(lastMenu(p.history.history.entries))
   else if (action.kind === 'menu') {
     if (p.menus.stack.length > 1) p.menus.up()

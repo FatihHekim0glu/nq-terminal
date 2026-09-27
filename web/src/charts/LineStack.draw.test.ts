@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CHART_TOKENS, tagPolygon } from './theme'
-import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, tagBlocksLabel } from './LineStack.draw'
+import { drawMinorYTicks, drawTags, drawTimeAxis, drawZeroLine, labelLeavesCanvas, lastValueTags, sharedGutter, tagBlocksLabel } from './LineStack.draw'
 import { fakePlot, type CtxCall } from './LineStack.testUtil'
 import { timeAxisLayout } from './LineStack.time'
 
@@ -109,6 +109,23 @@ describe('last-value pentagon tags (look spec 6.1)', () => {
     expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(17)
   })
 
+  it('keeps a stacked pair of tags inside the pane when the lower one would cross its bottom', () => {
+    // A pane with no time axis below it: the plot is flush with the canvas bottom (the splitter).
+    const base = fakePlot({ xMin: 0, xMax: 4, yMin: 0.92, yMax: 1, height: 300, pxRatio: 2 })
+    const flush = { ...base, height: 300 - 45 }
+    const tags = lastValueTags(flush, t, [
+      { values: [1, 1, 1, 1, 0.9214], colour: c.accent2 },
+      { values: [1, 1, 1, 1, 0.92], colour: c.chartS1 },
+    ], 4, '')
+    const half = (17 / 2) * 2
+    const ys = tags.map((x) => x.y).sort((a, b) => a - b)
+    expect(ys[1]!).toBeLessThanOrEqual(flush.height * 2 - half)
+    expect(ys[0]!).toBeGreaterThanOrEqual(half)
+    expect(ys[1]! - ys[0]!).toBeGreaterThanOrEqual(17 * 2)
+    // The strategy (white, lower value) keeps its place below the benchmark: the pair moves up together.
+    expect(tags[1]!.y).toBeGreaterThan(tags[0]!.y)
+  })
+
   it('draws each tag as the pentagon from the theme geometry, with its text', () => {
     const u = fakePlot({ xMin: 0, xMax: 4, yMin: 0, yMax: 10, pxRatio: 1 })
     const tags = lastValueTags(u, t, [{ values: [1, 2, 3, 4, 5], colour: c.accent2 }], 2, '')
@@ -130,5 +147,25 @@ describe('last-value pentagon tags (look spec 6.1)', () => {
     const px = (v: number) => u.valToPos(v, 'y', true)
     const near = 5 + 14 / (px(0) - px(1))
     expect(tagBlocksLabel(u, tags, near)).toBe(true)
+  })
+})
+
+describe('sharedGutter: one value-axis width for every pane of a stack', () => {
+  it('widens every pane to the widest need, so the plots keep one right edge and one time axis', () => {
+    const widened: Array<[number, number]> = []
+    const gutter = sharedGutter((width, from) => widened.push([width, from]))
+    expect(gutter(0, 57)).toBe(57)
+    expect(gutter(1, 80)).toBe(80)
+    expect(widened).toEqual([[80, 1]])
+    // The first pane, laid out again after the widen, now takes the shared width.
+    expect(gutter(0, 57)).toBe(80)
+    expect(widened).toHaveLength(1)
+    // A zoom that shortens the tag narrows the stack again.
+    expect(gutter(1, 60)).toBe(60)
+    expect(widened).toEqual([[80, 1], [60, 1]])
+  })
+
+  it('never goes under the 57px gutter of the look spec', () => {
+    expect(sharedGutter(() => {})(0, 20)).toBe(57)
   })
 })

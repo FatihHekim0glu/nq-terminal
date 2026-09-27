@@ -1,0 +1,28 @@
+/* HELP topic pages (look spec 7.12), on top of chrome/HelpScreen.css: the screen name in white, the
+   context, argument and status as an amber-label list, the numbered examples and related functions.
+   Tokens only; 11px floor; square corners; no transitions. */
+.help-screen-name { color: var(--white); }
+.help-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0 12px; margin: 0; line-height: var(--row-h); }
+.help-facts dt { color: var(--data); }
+.help-facts dd { margin: 0; color: var(--text); }
+.help-list { margin: 0; padding-left: 1.2em; color: var(--data); }
+.help-list li { max-width: 100ch; }
+.help .cmd-link-wrap .hot,
+.help-related .hot { display: inline-block; margin-right: 2px; color: var(--muted); transform: scaleX(.63); transform-origin: right center; }
+.help-related { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.help-related-btn,
+.help-back {
+  min-height: 24px;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--data);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.help-related-btn:hover,
+.help-back:hover { background: var(--hover-menu); }
+.help-related-btn .code { color: var(--white); }
+.help-back { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }

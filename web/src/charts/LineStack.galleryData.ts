@@ -56,14 +56,18 @@ export function galleryStack(): GalleryStack {
   const gapTo = t.findIndex((x) => x > utc('2020-03-27'))
   const strategy = equityFixture({ count: t.length, seed: 21, start: '2010-01-04', drift: 0.00032, vol: 0.009, gaps: [[gapFrom, gapTo]] }).v
   const benchmark = equityFixture({ count: t.length, seed: 5, start: '2010-01-04', drift: 0.00042, vol: 0.013 }).v
+  const underwater = underwaterPercent(strategy)
+  // A screen passes the API's figure; the gallery passes the low of its own fixture underwater curve.
+  const low = underwater.reduce<number>((m, v) => (v === null ? m : Math.min(m, v)), 0)
   return {
     t,
     panes: [
       {
         id: 'eq', weight: 3, logAllowed: true, decimals: 2,
+        summaryDrawdown: { value: `${low.toFixed(1)}%`, basis: G.basis },
         series: [{ name: G.strategy, style: 'primary', values: strategy }, { name: G.benchmark, style: 'benchmark', values: benchmark }],
       },
-      { id: 'dd', weight: 1.3, unit: '%', decimals: 1, zero: 'white', series: [{ name: G.underwater, style: 'underwater', values: underwaterPercent(strategy) }] },
+      { id: 'dd', weight: 1.3, unit: '%', decimals: 1, zero: 'white', series: [{ name: G.underwater, style: 'underwater', values: underwater }] },
       {
         id: 'rr', weight: 1.3, zero: 'grey', decimals: 2,
         series: [

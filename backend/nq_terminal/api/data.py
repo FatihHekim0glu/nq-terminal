@@ -67,7 +67,7 @@ from nq_terminal.services.catalog import (
     processed_dir,
 )
 from nq_terminal.services.fence import fence_filter
-from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError, thaw
+from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError, redact_local_paths, thaw
 from nq_terminal.services.market import (
     BASIS,
     HORIZONS,
@@ -336,5 +336,7 @@ def qa_report(name: str = PathParam(..., max_length=MAX_NAME_CHARS),
     except FileDecodeError as exc:
         raise HTTPException(status_code=502, detail=f"QA report {name!r} could not be decoded") from exc
     fenced, dropped = fence_filter(content)
+    # The reports record absolute file paths; no response may name a local folder (or the user name in it).
+    local = redact_local_paths(fenced, services.settings.data_root)
     return QaReport(name=found.name, modified_utc=found.modified_utc, fence_end=IS_END.date().isoformat(),
-                    fenced_out=dropped, content=fenced)
+                    fenced_out=dropped, content=local)

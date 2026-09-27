@@ -6,6 +6,7 @@
 // The level (minutes, hours, days, months or years) is the finest whose labels stay MIN_LABEL_PX
 // apart. All times are UTC epoch seconds (the API's `t`); daily bars sit at 00:00 UTC.
 import { MONTHS } from '../copy/lineStack'
+import { groupThousands } from './LineStack.model'
 
 export type TimeLevel = 'minute' | 'hour' | 'day' | 'month' | 'year'
 
@@ -250,9 +251,14 @@ export function logTicks(min: number, max: number, heightPx: number, minSpace: n
   return out
 }
 
-/** A value-axis label: the decimals the step needs, ASCII minus, never "-0", then the unit. */
+/**
+ * A value-axis label: the decimals the step needs, thousands grouped as on the tags and legend
+ * (look spec 3.4), ASCII minus, never "-0", then the unit.
+ */
 export function formatAxisValue(v: number, step: number, unit: string): string {
   const d = axisDecimals(step)
   const text = v.toFixed(d)
-  return `${Number(text) === 0 ? (0).toFixed(d) : text}${unit}`
+  if (Number(text) === 0) return `${(0).toFixed(d)}${unit}`
+  const sign = text.startsWith('-') ? '-' : ''
+  return `${sign}${groupThousands(sign ? text.slice(1) : text)}${unit}`
 }

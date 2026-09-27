@@ -51,6 +51,8 @@ class UniverseRow:
     root: str
     sector: str
     units: str
+    tick: float
+    tick_usd: float
     last_date: str
     last_close: float | None
     last_close_back: float | None
@@ -133,6 +135,7 @@ def _row(panel: Panel, a: int, contract: Contract, sessions: dict[str, int], win
     normalised = {label: (None if value is None or sd is None else _finite(value / (sd * math.sqrt(sessions[label]))))
                   for label, value in returns.items()}
     return UniverseRow(symbol=panel.symbols[a], root=contract.root, sector=contract.sector, units=contract.units,
+                       tick=float(contract.tick), tick_usd=float(contract.tick_usd),
                        last_date=str(panel.days[-1]), last_close=_finite(panel.N[-1, a]),
                        last_close_back=_finite(panel.B[-1, a]), stale_last=bool(panel.stale[-1, a]), returns=returns,
                        vol_normalised=normalised,

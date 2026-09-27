@@ -28,6 +28,9 @@
    the value stays whole (WCAG 1.4.10; the table view has every value in full). */
 .candle-plot .chart-legend { max-width: calc(100% - 16px); grid-template-columns: 13px minmax(0, max-content) auto; }
 .candle-legend-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The attribution logo (licence) sits at the bottom left of the price pane; the legend of the pane
+   under it starts clear of the logo's width so the logo never covers the legend's first letters. */
+.candle-plot .chart-legend.candle-legend-clear-logo { left: 44px; max-width: calc(100% - 52px); }
 
 /* The second time-axis row: labels centred in each year, month or day span. */
 .candle-strip { flex: 0 0 16px; overflow: hidden; }

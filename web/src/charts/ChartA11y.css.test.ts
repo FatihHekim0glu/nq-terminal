@@ -37,3 +37,9 @@ describe('ChartA11y.css focus ring', () => {
     expect(rule(a11y, '.chart-a11y-figure')).toMatch(/isolation:\s*isolate/)
   })
 })
+
+describe('ChartA11y.css readout', () => {
+  it('insets the crosshair readout 5px from the panel edge, as table cells are', () => {
+    expect(rule(a11y, '.chart-a11y-readout')).toMatch(/padding:\s*0 5px/)
+  })
+})

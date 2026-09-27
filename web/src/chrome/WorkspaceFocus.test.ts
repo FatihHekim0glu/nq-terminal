@@ -111,3 +111,49 @@ describe('handleRovingKey: arrows move inside the panel', () => {
     expect(handleRovingKey(el, key(el.querySelector('#i') as HTMLElement, 'ArrowRight'))).toBe(false)
   })
 })
+
+describe('handleRovingKey on a tab: the ARIA tabs keyboard pattern', () => {
+  const html = `
+    <div role="tablist">
+      <button role="tab" data-roving id="t1">1</button>
+      <button role="tab" data-roving id="t2">2</button>
+      <button role="tab" data-roving id="t3">3</button>
+    </div>
+    <button data-roving id="after">after</button>`
+
+  it('born failing: Right on the last tab wraps to the first, never leaving the tablist', () => {
+    const el = panel(html)
+    const last = el.querySelector('#t3') as HTMLElement
+    expect(handleRovingKey(el, key(last, 'ArrowRight'))).toBe(true)
+    expect(document.activeElement?.id).toBe('t1')
+  })
+
+  it('Left on the first tab wraps to the last', () => {
+    const el = panel(html)
+    expect(handleRovingKey(el, key(el.querySelector('#t1') as HTMLElement, 'ArrowLeft'))).toBe(true)
+    expect(document.activeElement?.id).toBe('t3')
+  })
+
+  it('Home and End jump to the first and last tab', () => {
+    const el = panel(html)
+    expect(handleRovingKey(el, key(el.querySelector('#t2') as HTMLElement, 'End'))).toBe(true)
+    expect(document.activeElement?.id).toBe('t3')
+    expect(handleRovingKey(el, key(el.querySelector('#t3') as HTMLElement, 'Home'))).toBe(true)
+    expect(document.activeElement?.id).toBe('t1')
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['t1'])
+  })
+
+  it('Down on a tab moves into the panel content (Tab moves between panels, so this is the way in)', () => {
+    const el = panel(html)
+    expect(handleRovingKey(el, key(el.querySelector('#t1') as HTMLElement, 'ArrowDown'))).toBe(true)
+    expect(document.activeElement?.id).toBe('after')
+    // Left from the content goes back to the tabs, as on any roving item.
+    expect(handleRovingKey(el, key(el.querySelector('#after') as HTMLElement, 'ArrowLeft'))).toBe(true)
+    expect(document.activeElement?.id).toBe('t3')
+  })
+
+  it('leaves Home and End alone on an item that is not a tab (it scrolls)', () => {
+    const el = panel(html)
+    expect(handleRovingKey(el, key(el.querySelector('#after') as HTMLElement, 'Home'))).toBe(false)
+  })
+})

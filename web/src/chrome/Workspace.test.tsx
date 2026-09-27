@@ -14,6 +14,7 @@ import Workspace, { WORKSPACE_THEME, type FocusedPanel, type WorkspaceHandle } f
 import { toStored } from './WorkspaceStorage'
 import { panelTabStops } from './WorkspaceFocus'
 import { activateNumbered, numberedItems } from './NumberedActions'
+import { BUILT_SCREENS, type ScreenRegistry } from './WorkspaceScreens'
 
 class NoopResizeObserver {
   observe(): void {}
@@ -45,6 +46,10 @@ function command(code: string, extra: Partial<ParsedCommand> = {}): ParsedComman
   return { mnemonic, context: null, contextSource: 'none', args: {}, canonical: code, ...extra }
 }
 
+// These tests exercise the workspace itself (layouts, focus, history, menus), so every screen but HELP
+// renders its labelled placeholder, which needs no API; the built screens have their own tests.
+const SHELL_SCREENS: ScreenRegistry = { HELP: BUILT_SCREENS.HELP }
+
 function renderWorkspace(props: Partial<Parameters<typeof Workspace>[0]> = {}) {
   const ref = createRef<WorkspaceHandle>()
   const layouts = createLayoutsStore(memoryStorage())
@@ -52,7 +57,7 @@ function renderWorkspace(props: Partial<Parameters<typeof Workspace>[0]> = {}) {
   const onScreenChange = vi.fn()
   const utils = render(
     <div style={{ width: 1200, height: 800 }}>
-      <Workspace ref={ref} layouts={layouts} linkGroups={linkGroups} onScreenChange={onScreenChange} {...props} />
+      <Workspace ref={ref} screens={SHELL_SCREENS} layouts={layouts} linkGroups={linkGroups} onScreenChange={onScreenChange} {...props} />
     </div>,
   )
   return { ...utils, ref, layouts, linkGroups, onScreenChange }

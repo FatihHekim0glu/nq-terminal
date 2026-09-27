@@ -361,7 +361,10 @@ class HomePanel(SeriesInfo):
     rolling_sharpe: list[Num]
     rolling_window: int
     rolling_unit: Literal["sessions", "months"]
+    rolling_unit_label: str = Field(description="unit of the rolling Sharpe values (the tear sheet's ratio unit)")
+    drawdown_unit: str = Field(description="unit of the underwater series (the tear sheet's drawdown unit)")
     sharpe: Num
     bench_sharpe: Num
     max_drawdown: Num
     bench_max_drawdown: Num
+    alpha: list[Kpi] = Field(description="the tear sheet's two alpha tiles, alpha_annual then alpha_t, unchanged")

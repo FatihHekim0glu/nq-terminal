@@ -1,0 +1,153 @@
+// REG, the registry board (TASKS 6.1; UI_SPEC 7 "REG and MT"; look spec 7.2, modelled on the equity
+// screening layout): red function bar with an amber filter field and 96) Actions, 97) Settings,
+// 98) Export; a round rail on the left; the selected screening criteria with their matches (counts
+// from GET /api/registry); the MonitorGrid of every registry row (name, round, verdict badge, n, p,
+// control p, Bonferroni, Holm, BH q, spec sha with the registry and re-hash status); and the sealed
+// confirmations in their own block with their own alpha. Enter, a double click or Number <GO> on a
+// row opens DES for it. Read only: four GETs, no verdict computed here.
+import { useCallback, useMemo, useState } from 'react'
+import { useConfirmations, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
+import { AmberField } from '../../chrome/Field'
+import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
+import { postMessage } from '../../chrome/MessageLine.store'
+import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
+import type { ScreenProps } from '../../chrome/WorkspaceScreens'
+import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
+import { REG } from '../../copy/reg'
+import MonitorGrid from '../../grids/MonitorGrid'
+import { saveText } from '../../chrome/download'
+import { REG_COLUMNS, regRowId } from './regColumns'
+import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
+import { openDes } from './open'
+import { ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
+import './reg.css'
+
+type FilterCriterion = Exclude<CriterionId, 'rows'>
+
+interface BarProps {
+  readonly actions: PanelActions
+  readonly filter: string
+  readonly onFilter: (text: string) => void
+  readonly showChecks: boolean
+  readonly onShowChecks: (show: boolean) => void
+  readonly onClear: () => void
+  readonly onExport: () => void
+}
+
+function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, onExport }: BarProps) {
+  const items: FunctionBarItem[] = [
+    {
+      n: FUNCTION_NUMBERS.actions,
+      label: FUNCTION_BAR.actions,
+      menu: [
+        { label: REG.actions.openMt, onSelect: () => actions.open('MT') },
+        { label: PANEL.related, onSelect: () => actions.related() },
+        { label: PANEL.back, onSelect: () => actions.back() },
+        { label: PANEL.forward, onSelect: () => actions.forward() },
+      ],
+    },
+    {
+      n: FUNCTION_NUMBERS.settings,
+      label: FUNCTION_BAR.settings,
+      menu: [
+        { label: showChecks ? REG.settings.hideChecks : REG.settings.showChecks, onSelect: () => onShowChecks(!showChecks) },
+        { label: REG.settings.clear, onSelect: onClear },
+      ],
+    },
+    { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, menu: [{ label: REG.export.csv, onSelect: onExport }] },
+  ]
+  const field = <AmberField label={REG.filterLabel} value={filter} onChange={onFilter} placeholder={REG.filterPlaceholder} width="15em" />
+  return <FunctionBar panelId={actions.panelId} title={REG.title} items={items} field={field} />
+}
+
+function exportRows(rows: readonly RegRow[]): void {
+  const ok = saveText(REG.export.fileName, toCsv(rows))
+  postMessage(ok ? fillCopy(REG.export.done, { file: REG.export.fileName }) : REG.export.unavailable, ok ? 'info' : 'error')
+}
+
+function useRegData() {
+  const registry = useRegistry()
+  const cards = useHypotheses()
+  const mt = useMultipleTesting()
+  const confirmations = useConfirmations()
+  const rows = useMemo(
+    () => (registry.data && (cards.data || cards.isError) ? buildRegRows(registry.data, cards.data ?? []) : null),
+    [registry.data, cards.data, cards.isError],
+  )
+  const confirmRows = useMemo(() => (confirmations.data ? confirmationRows(confirmations.data) : null), [confirmations.data])
+  return { registry, cards, alpha: mt.data?.alpha ?? null, rows, confirmations, confirmRows }
+}
+
+interface Filters {
+  readonly text: string
+  readonly round: RoundKey
+  readonly criterion: FilterCriterion | null
+  readonly showChecks: boolean
+}
+
+const NO_FILTER: Filters = { text: '', round: 'all', criterion: null, showChecks: true }
+
+/** The rows the filters keep, the round rail and the criteria counts. */
+function useRegView(data: ReturnType<typeof useRegData>, f: Filters) {
+  const { registry, rows, alpha } = data
+  const shown = useMemo(() => {
+    if (!rows) return []
+    const kept = filterRows(rows, { text: f.text, round: f.round, criterion: f.criterion, alpha })
+    return f.showChecks ? kept : kept.filter((r) => r.badge !== 'CHECK')
+  }, [rows, f, alpha])
+  const groups = useMemo(() => (rows ? roundGroups(rows) : []), [rows])
+  const crit = useMemo(() => (registry.data && rows ? criteria(registry.data.counts, rows, alpha) : []), [registry.data, rows, alpha])
+  return { shown, groups, crit }
+}
+
+export default function RegScreen(_props: ScreenProps) {
+  const actions = usePanelActions()
+  const data = useRegData()
+  const { registry, cards, rows, confirmations, confirmRows } = data
+  const [f, setF] = useState<Filters>(NO_FILTER)
+  const { shown, groups, crit } = useRegView(data, f)
+  const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
+  const tag = <span className="reg-tag">[PRE-REG]</span>
+  return (
+    <div className="reg-screen" data-screen="REG">
+      <RegBar
+        actions={actions}
+        filter={f.text}
+        onFilter={(text) => setF((x) => ({ ...x, text }))}
+        showChecks={f.showChecks}
+        onShowChecks={(showChecks) => setF((x) => ({ ...x, showChecks }))}
+        onClear={() => setF(NO_FILTER)}
+        onExport={() => exportRows(shown)}
+      />
+      {registry.isError ? (
+        <p className="reg-msg down" role="alert">{fillCopy(REG.failed, { detail: registry.error.detail })}</p>
+      ) : rows === null ? (
+        <p className="reg-msg" role="status">{REG.loading}</p>
+      ) : (
+        <div className="reg-body">
+          <RoundRail panelId={actions.panelId} groups={groups} selected={f.round} onSelect={(round) => setF((x) => ({ ...x, round }))} />
+          <div className="reg-main">
+            <CriteriaBlock
+              panelId={actions.panelId}
+              items={crit}
+              selected={f.criterion}
+              onToggle={(id) => setF((x) => ({ ...x, criterion: x.criterion === id ? null : id }))}
+              tag={tag}
+            />
+            {cards.isError ? <p className="reg-msg down">{fillCopy(REG.cardsFailed, { detail: cards.error.detail })}</p> : null}
+            <div className="reg-grid">
+              <MonitorGrid label={REG.gridLabel} rows={shown} columns={REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
+            </div>
+            <VerdictNotes rows={shown} />
+            <ConfirmBlock
+              panelId={actions.panelId}
+              rows={confirmRows}
+              error={confirmations.isError ? confirmations.error.detail : null}
+              onOpen={openDes}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

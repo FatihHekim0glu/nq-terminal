@@ -140,3 +140,33 @@ export function numberWidthEm(maxNumber: number): number {
   const digits = String(Math.max(Math.trunc(maxNumber), 1)).length
   return digits <= 3 ? 2.2 : 2.2 + (digits - 3) * 0.6
 }
+
+/**
+ * Glyph widths in ch (the width of 0) for the grid's sans face at data size, measured in Chromium and
+ * rounded up: digits are tabular (1ch), punctuation and spaces about half, % and wide capitals more.
+ */
+const NARROW = new Set(['.', ',', ':', ';', ' ', '(', ')', '[', ']', '|', "'"])
+const WIDE = new Set(['%', 'M', 'W', 'm', 'w', '@'])
+
+/** An upper estimate of a text's width in ch, for a column floor (no layout needed). */
+export function textWidthCh(text: string): number {
+  let w = 0
+  for (const ch of text) w += NARROW.has(ch) ? 0.5 : WIDE.has(ch) ? 1.7 : /[A-Z]/.test(ch) ? 1.15 : 1
+  return Math.round(w * 100) / 100
+}
+
+/** Horizontal padding of a grid cell (grid.css: 5px each side). */
+const CELL_PAD_PX = 10
+/** Slack for rounding and sub-pixel layout, in ch. */
+const SLACK_CH = 0.5
+
+/**
+ * A column's CSS width: its declared px, but never narrower than its header, and for a numeric column
+ * never narrower than its widest value, so a number is never cut to an ellipsis (look spec 4.8 and 3
+ * allow truncation for long names only).
+ */
+export function columnWidth(px: number, kind: 'name' | 'num' | 'text', header: string, texts: Iterable<string>): string {
+  let ch = textWidthCh(header)
+  if (kind === 'num') for (const t of texts) ch = Math.max(ch, textWidthCh(t))
+  return `max(${px}px, calc(${Math.round((ch + SLACK_CH) * 100) / 100}ch + ${CELL_PAD_PX}px))`
+}

@@ -171,7 +171,7 @@ class EquitySeries(ResponseModel):
     pnl: list[float]
     balance: list[float] | None = None
     unrealized: list[float] | None = None
-    net_qty: list[int | list[int]] | None = None
+    net_qty: list[int | list[int] | dict[str, int]] | None = None  # a mapping by contract in multi-contract books
 
 
 class CompareSeries(ResponseModel):

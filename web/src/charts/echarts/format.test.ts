@@ -16,6 +16,12 @@ describe('number formats for the ECharts set', () => {
     expect(fixed(-2.5, 1)).toBe('-2.5')
   })
 
+  it('groups thousands, so a cost ladder in USD reads as the waterfall beside it does', () => {
+    expect(signed(1609172.86, 2)).toBe('+1,609,172.86')
+    expect(fixed(-10354.14, 2)).toBe('-10,354.14')
+    expect(fixed(999.5, 1)).toBe('999.5')
+  })
+
   it('prints p-values to four decimals with a floor', () => {
     expect(formatP(0.04567)).toBe('0.0457')
     expect(formatP(0.00003)).toBe('<0.0001')

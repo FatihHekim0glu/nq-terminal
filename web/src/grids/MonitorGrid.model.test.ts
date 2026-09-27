@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest'
 import {
   HEADER_ROW,
   buildDisplayRows,
+  columnWidth,
   compareValues,
+  textWidthCh,
   moveActive,
   numberWidthEm,
   spacerHeights,
@@ -139,5 +141,22 @@ describe('numberWidthEm', () => {
   it('widens the N) column for five-digit numbers', () => {
     expect(numberWidthEm(19)).toBe(2.2)
     expect(numberWidthEm(10_000)).toBeGreaterThan(2.2)
+  })
+})
+
+describe('column widths: a number or a header is never cut with an ellipsis (look spec 4.8)', () => {
+  it('estimates text width in ch at or above the measured width of the grid face', () => {
+    // Measured in Chromium at 15px, where 1ch is 7.46px: '+11.69%' 53.4px, 'Hash ok' 50.3px.
+    expect(textWidthCh('1234')).toBe(4)
+    expect(textWidthCh('+11.69%')).toBeGreaterThanOrEqual(53.4 / 7.46)
+    expect(textWidthCh('Hash ok') + 0.5).toBeGreaterThanOrEqual(50.3 / 7.46)
+    expect(textWidthCh('Net P&L (USD)') + 0.5).toBeGreaterThanOrEqual(88.8 / 7.46)
+  })
+
+  it('keeps the declared px width and adds a ch floor that fits the widest value and the header', () => {
+    const css = columnWidth(62, 'num', '1M %', ['+11.69%', '-0.40%', '--'])
+    expect(css).toBe(`max(62px, calc(${textWidthCh('+11.69%') + 0.5}ch + 10px))`)
+    // A text column fits its header only; long names may still end in an ellipsis.
+    expect(columnWidth(36, 'text', 'Flag', ['a very long text value'])).toBe(`max(36px, calc(${textWidthCh('Flag') + 0.5}ch + 10px))`)
   })
 })
