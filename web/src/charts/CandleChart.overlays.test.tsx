@@ -45,4 +45,24 @@ describe('CandleChart legends (look spec 6.1)', () => {
     expect(legends[1]!.classList.contains('candle-legend-clear-logo')).toBe(true)
     expect(legends[0]!.classList.contains('candle-legend-clear-logo')).toBe(false)
   })
+
+  // U29: the attribution logo sits in the terminal's lowest pane, which is RV22 (the indicator pane)
+  // whenever an indicator is drawn, not the volume pane above it; Legends always insets the volume
+  // legend and never RV22's, so with an indicator drawn the clear-logo inset was on the wrong pane.
+  it('insets the indicator legend (RV22, the lowest pane) clear of the logo when an indicator is drawn, not the volume legend above it', () => {
+    const { container } = render(
+      <Legends {...PROPS} paneTops={[0, 200, 300]} indicator={{ name: 'SMA 20', values: [null, null, 14400] }} />,
+    )
+    const legends = container.querySelectorAll<HTMLElement>('.chart-legend')
+    expect(legends).toHaveLength(3)
+    expect(legends[1]!.classList.contains('candle-legend-clear-logo')).toBe(false)
+    expect(legends[2]!.classList.contains('candle-legend-clear-logo')).toBe(true)
+  })
+
+  it('keeps the volume legend clear of the logo when there is no indicator pane beneath it', () => {
+    const { container } = render(<Legends {...PROPS} indicator={{ name: 'SMA 20', values: [null, null, 14400] }} />)
+    const legends = container.querySelectorAll<HTMLElement>('.chart-legend')
+    expect(legends).toHaveLength(2)
+    expect(legends[1]!.classList.contains('candle-legend-clear-logo')).toBe(true)
+  })
 })

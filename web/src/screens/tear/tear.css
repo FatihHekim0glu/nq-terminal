@@ -26,19 +26,26 @@
 
 /* The parameter row and the tab view fill exactly one screen of the panel body (the row may wrap, so
    the view takes what is left rather than a fixed sum); never so short that a chart has no room. The
-   run books follow below in the body's scroll. */
+   run books follow below in the body's scroll. G10: a floor, not a fixed height, so a view whose
+   content needs more than 390px/100cqh grows the panel instead of overflowing onto whatever follows
+   (a run's own books, or a HOME quadrant's other tiles when the tear sheet is embedded there). */
 .tear-screen {
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
-  height: max(390px, 100cqh);
+  min-height: max(390px, 100cqh);
   min-width: 0;
 }
 
+/* flex: 1 0 auto (G10): the view takes the rest of one screen, but never less than its own content, so
+   in a short panel (a HOME quadrant, where the KPI row wraps) it grows .tear-screen past its floor and the
+   books below follow it, instead of the view being squeezed and drawing over them. The charts inside
+   are absolutely positioned (echarts.css, LineStack.css), so their content adds nothing past their
+   min-height floors. */
 .tear-view {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
+  flex: 1 0 auto;
   gap: 4px;
   min-height: 0;
   min-width: 0;
@@ -85,11 +92,13 @@
 /* The yearly bars: 220px, less in a short panel so the heat map above keeps its room. */
 .tear-chart-short { flex: 0 0 auto; height: clamp(140px, 30cqh, 220px); min-height: 0; }
 
+/* Basis and floor from the chart's 160px (G10), not auto: the statistics box beside the chart scrolls on
+   its own, so its full length must not become the row's height (and with it the whole view's). */
 .tear-split {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 160px;
   gap: 8px;
-  min-height: 0;
+  min-height: 160px;
   min-width: 0;
 }
 .tear-split > .tear-chart { flex: 1 1 auto; }

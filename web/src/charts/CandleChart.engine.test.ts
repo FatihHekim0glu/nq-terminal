@@ -191,6 +191,27 @@ describe('keyboard crosshair and zoom', () => {
     expect(r.from).toBeLessThan(-0.5)
     expect((0 - r.from) * (800 / (r.to - r.from))).toBeGreaterThanOrEqual(24 - 1e-9)
   })
+
+  it('opens with enough left room to clear the TradingView logo under the RV22 pane (U29)', () => {
+    // The library draws its attribution logo at left:10px, width:35px in the host's bottom-left
+    // corner (lightweight-charts.standalone.production.js), i.e. under the lowest pane. With an
+    // indicator that is the RV22 pane, not volume, so its opening room must clear the whole 45px,
+    // not just the 24px reserved for a time label.
+    const { fake } = setup()
+    const r = fake.range()!
+    const pxRoom = (0 - r.from) * (800 / (r.to - r.from))
+    expect(pxRoom).toBeGreaterThanOrEqual(45 - 1e-9)
+  })
+
+  it('keeps the smaller time-label room when there is no indicator pane', () => {
+    // Without an indicator, volume is the lowest pane and the library logo sits over it instead;
+    // out of scope for U29 (its legend already clears the logo). No need to widen the opening room.
+    const { fake } = setup({ indicator: undefined })
+    const r = fake.range()!
+    const pxRoom = (0 - r.from) * (800 / (r.to - r.from))
+    expect(pxRoom).toBeGreaterThanOrEqual(24 - 1e-9)
+    expect(pxRoom).toBeLessThan(45)
+  })
 })
 
 describe('link group crosshair', () => {

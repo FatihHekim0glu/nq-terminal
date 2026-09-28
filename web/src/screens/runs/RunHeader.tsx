@@ -9,15 +9,23 @@ import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import { readBalance } from '../../tiles/BalanceCheck'
 import { BADGE, RUN } from '../../copy/runs'
-import { balanceBadge, checkText, checkTone, runTags } from './model'
-import { coverageOf, runFacts, type RunDetail } from './runModel'
+import { balanceBadge, checkText, checkTone, formatWindow, runTags } from './model'
+import { coverageOf, runFacts, type Fact, type RunDetail } from './runModel'
 
 const roving = { [ROVING_ATTR]: '' }
 
+/** runFacts' Window fact as 'start to end', which reads as inclusive on both ends; the half-open
+ * '[start, end)' form (U14, same as the RUNS table) never claims the bound itself was a session. */
+function withHalfOpenWindow(detail: RunDetail, facts: readonly Fact[]): readonly Fact[] {
+  const window = formatWindow(detail.summary.start, detail.summary.end)
+  return facts.map((f) => (f.label === RUN.header.window ? { ...f, value: window } : f))
+}
+
 export function RunFacts({ detail }: { readonly detail: RunDetail }) {
+  const facts = withHalfOpenWindow(detail, runFacts(detail))
   return (
     <div className="run-strip" role="group" aria-label={RUN.header.label}>
-      {runFacts(detail).map((f) => (
+      {facts.map((f) => (
         <span key={f.label} className="run-fact">
           <ReadOnlyValue label={f.label}>{f.value}</ReadOnlyValue>
         </span>

@@ -33,7 +33,7 @@ export const EVT = {
   summaryEmpty: '{name}: no complete event window, so no mean path.',
   summarySelected: ' Event {date} shown: {value} at the last offset.',
   mean: 'Mean path',
-  band: 'Band, mean ± 1.96 se',
+  band: 'Band, mean ± 1.96 se (a spread, not a confidence interval)',
   selected: 'Selected event',
   eventLine: 'Event',
   colOffset: 'Offset',
@@ -42,7 +42,7 @@ export const EVT = {
   colLower: 'Band low',
   colUpper: 'Band high',
   colSelected: 'Selected',
-  caption: '{name}, pointwise band from the cross-event standard error, not a band whole paths stay inside',
+  caption: '{name}, pointwise band from the cross-event standard error, not a band whole paths stay inside and not a confidence interval',
   xSession: 'Sessions from the event',
   xMinute: 'Minutes from the release',
   endHeading: 'At the last offset ({to})',
@@ -67,7 +67,9 @@ export const EVT = {
   pickNote: 'Number <GO> on a row draws that event over the mean path.',
   units: 'Values: return in percent of the price at the release minute, 2 decimals, signed.',
   unitsDaily: 'Values: cumulative sum of daily returns from the close before the event, in percent, 2 decimals, signed; a sum, so over several sessions it is close to but not exactly the price change.',
-  bandNote: 'Band: {note}.',
+  // The API's band_note already opens with 'band: ...' (services/events.py BAND_NOTE); no extra
+  // 'Band: ' label here, or it would read 'Band: band: ...' (G17).
+  bandNote: '{note}.',
   source: 'Events: {source}; FOMC check: {check}.',
   exportName: 'evt',
 } as const

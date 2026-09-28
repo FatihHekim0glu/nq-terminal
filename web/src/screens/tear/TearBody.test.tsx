@@ -2,7 +2,7 @@
 // D20 regression: run honesty tags ([PROBE: never a result], [ANCHOR]) must travel onto the tear
 // sheet header, the same as RUN and RUNS (runs/model.ts runTags, UI_SPEC section 6). TearBody already
 // shows tearTags(data) (the analytics [POST HOC] tag); a probe or anchor run must show its own tag too.
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
@@ -81,5 +81,35 @@ describe('tear sheet honesty tags (D20)', () => {
     const row = screen.getByRole('group', { name: 'Tear sheet parameters' })
     expect(within(row).queryByText('[PROBE: never a result]')).toBeNull()
     expect(within(row).queryByText('[ANCHOR]')).toBeNull()
+  })
+})
+
+// G08: the tile face shortens a unit ('%' for '% per year', nothing for a unitless ratio such as a t
+// statistic), but the popover must still state the API's own full unit, not the shortened one. The
+// fix wires kpiTiles' `unit` field (already computed) into KpiTile's `unit` prop at TearBody.tsx.
+describe('KPI tile popovers show the API\'s full unit, not the shortened tile-face one (G08)', () => {
+  function tileByLabel(label: string): HTMLElement {
+    const el = screen.getByText(label, { selector: '.kpi-label' })
+    const button = el.closest('button')
+    if (!button) throw new Error(`no KPI tile button for ${label}`)
+    return button
+  }
+
+  it('the Alpha t popover states the API\'s own unit in full, not a blank tile-face unit', async () => {
+    show()
+    await screen.findByRole('list', { name: 'Tear sheet key figures' })
+    const tile = tileByLabel('Alpha t')
+    fireEvent.click(tile)
+    const fullUnit = RUN_ANALYTICS.kpis.find((k) => k.key === 'alpha_t')!.unit
+    expect(fullUnit.length).toBeGreaterThan(0)
+    expect(screen.getByText(`Unit: ${fullUnit}`)).toBeTruthy()
+  })
+
+  it('the Alpha popover states "per year", not the tile face\'s bare %', async () => {
+    show()
+    await screen.findByRole('list', { name: 'Tear sheet key figures' })
+    const tile = tileByLabel('Alpha')
+    fireEvent.click(tile)
+    expect(screen.getByText(/^Unit: /).textContent).toContain('per year')
   })
 })

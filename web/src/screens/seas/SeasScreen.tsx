@@ -219,17 +219,21 @@ function Body({ query, s, set, page, subject }: {
       <TabStrip panelId={actions.panelId} label={SEAS.tabsLabel} tabs={TABS.map((id) => ({ id, label: SEAS.tabs[id] }))}
         selected={s.tab} onSelect={(id) => set({ ...s, tab: id as SeasTab })} controls={pageId} start={TAB_START} />
       <Params s={s} set={set} data={data} isHypothesis={isHypothesis} costs={recordedCosts ?? []} />
-      {noSeries ? (
-        <p className="seas-line mkt-warn-text" role="status">{fillCopy(SEAS.noSeries, { name: subject })}</p>
-      ) : data ? (
-        <div id={pageId} role="tabpanel" aria-label={SEAS.tabs[s.tab]}>
-          {s.tab === 'heatmap' ? <HeatView data={data} /> : <PanelView key={s.tab} data={data} tab={s.tab} />}
-          <Notes data={data} />
-        </div>
-      ) : (
-        <QueryStatus loading={result.isPending} error={result.error} loadingText={fillCopy(SEAS.loading, { name: subject })}
-          failedText={fillCopy(SEAS.failed, { name: subject })} />
-      )}
+      {/* Always rendered, whatever the query state, so every tab's aria-controls resolves to a real
+          tabpanel (G18): loading and error left it missing, which axe flags as aria-valid-attr-value. */}
+      <div id={pageId} role="tabpanel" aria-label={SEAS.tabs[s.tab]}>
+        {noSeries ? (
+          <p className="seas-line mkt-warn-text" role="status">{fillCopy(SEAS.noSeries, { name: subject })}</p>
+        ) : data ? (
+          <>
+            {s.tab === 'heatmap' ? <HeatView data={data} /> : <PanelView key={s.tab} data={data} tab={s.tab} />}
+            <Notes data={data} />
+          </>
+        ) : (
+          <QueryStatus loading={result.isPending} error={result.error} loadingText={fillCopy(SEAS.loading, { name: subject })}
+            failedText={fillCopy(SEAS.failed, { name: subject })} />
+        )}
+      </div>
     </>
   )
 }

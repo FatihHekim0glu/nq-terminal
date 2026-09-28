@@ -227,7 +227,7 @@ export function distributionOption(input: DistributionInput, tokens: ChartTokens
   if (!hasSeries) {
     return {
       ...baseOption(tokens),
-      grid: [{ left: 8, right: CHART_GEOMETRY.axisGutter + LABEL_GUTTER, top: 8, bottom: 24 }],
+      grid: [{ left: 8, right: CHART_GEOMETRY.axisGutter + LABEL_GUTTER, top: 8, bottom: 24, containLabel: true }],
       xAxis: [countAxis(0)],
       yAxis: [{ ...y, type: 'value', gridIndex: 0, min, max, interval }],
       series,
@@ -236,10 +236,10 @@ export function distributionOption(input: DistributionInput, tokens: ChartTokens
   return {
     ...baseOption(tokens),
     grid: [
-      { left: 8, right: SERIES_RIGHT, top: 8, bottom: 24 },
-      { left: HIST_LEFT, right: LABEL_GUTTER, top: 8, bottom: 24 },
+      { left: 8, right: SERIES_RIGHT, top: 8, bottom: 24, containLabel: true },
+      { left: HIST_LEFT, right: LABEL_GUTTER, top: 8, bottom: 24, containLabel: true },
     ],
-    xAxis: [{ ...x, type: 'time', gridIndex: 0, axisLabel: { ...x.axisLabel, formatter: seriesTimeFormat(input.series!.t) } }, countAxis(1)],
+    xAxis: [{ ...x, type: 'time', gridIndex: 0, axisLabel: { ...x.axisLabel, ...seriesAxisLabel(input.series!.t) } }, countAxis(1)],
     yAxis: [
       { ...y, type: 'value', gridIndex: 0, min, max, interval },
       { type: 'value', gridIndex: 1, min, max, interval, show: false },
@@ -249,11 +249,27 @@ export function distributionOption(input: DistributionInput, tokens: ChartTokens
 }
 
 const DAY_S = 86_400
+const DAY_LEVEL_FORMAT = '{dd} {MMM}'
 /** The series' time labels by span: years over three years, month and year over three months, else day and month. */
 export function seriesTimeFormat(t: readonly number[]): string {
   const span = t.length > 1 ? (t[t.length - 1]! - t[0]!) / DAY_S : 0
   if (span > 3 * 365) return '{yyyy}'
-  return span > 90 ? '{MMM} {yy}' : '{dd} {MMM}'
+  return span > 90 ? '{MMM} {yy}' : DAY_LEVEL_FORMAT
+}
+
+/**
+ * The series axis label (G10): `hideOverlap` so ECharts drops a tick's text rather than draw it over its
+ * neighbour, and, at day-level spans, a level formatter with the month named on every day tick, not only
+ * a month-boundary one: ECharts' own level formatter otherwise names the month only where a tick falls on
+ * a month start, so a series that stays inside one month (no boundary to reach) read as bare day numbers
+ * nowhere naming a month at all. A single '{dd} {MMM}' template on every tick, the earlier fix, let a
+ * month-boundary label instead run into the day beside it (e.g. '29 Ap01 May' at common panel widths);
+ * hideOverlap alone already prevents that collision, so day ticks are free to all carry their month.
+ */
+function seriesAxisLabel(t: readonly number[]): { readonly hideOverlap: true; readonly formatter: string | Record<string, string> } {
+  const format = seriesTimeFormat(t)
+  const formatter = format === DAY_LEVEL_FORMAT ? { year: '{yyyy}', month: '{MMM}', day: '{d} {MMM}' } : format
+  return { hideOverlap: true, formatter }
 }
 
 function sum(values: readonly number[]): number {

@@ -2,7 +2,6 @@
 // Anchor`, plus kind, window, fees, hit rate, coverage and the tags). Names amber, numbers right-aligned
 // with fixed decimals, badges in colour and text. Sharpe and max drawdown are the compare stats.
 import type { MonitorColumn } from '../../grids/MonitorGrid'
-import { fillCopy } from '../../copy/workspace'
 import { RUNS } from '../../copy/runs'
 import {
   balanceBadge,
@@ -12,6 +11,7 @@ import {
   formatFraction,
   formatRatio,
   formatUsd,
+  formatWindow,
   runTags,
   signTone,
   type CompareStats,
@@ -38,7 +38,7 @@ function baseColumns(): MonitorColumn<RunSummary>[] {
     { id: 'variant', header: C.variant, width: 78, kind: 'text', value: (r) => r.variant },
     {
       id: 'window', header: C.window, width: 190, kind: 'text', value: (r) => r.start,
-      format: (r) => (r.start && r.end ? fillCopy(RUNS.window, { start: r.start, end: r.end }) : '--'),
+      format: (r) => formatWindow(r.start, r.end),
     },
     { id: 'trades', header: C.trades, width: 64, kind: 'num', value: (r) => r.n_trades, format: (r) => formatCount(r.n_trades) },
     {

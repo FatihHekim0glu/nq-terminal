@@ -220,3 +220,50 @@ describe('seriesTimeFormat: the per-period series axis (look spec 7.5 RET)', () 
     expect(seriesTimeFormat([0, 50 * day])).toBe('{dd} {MMM}')
   })
 })
+
+describe('G10: the series x-axis never draws two date labels over each other', () => {
+  const day = 86_400
+  const fortySessions: DistributionInput = {
+    ...base,
+    series: { t: Array.from({ length: 40 }, (_, i) => 1262563200 + i * day), v: Array.from({ length: 40 }, () => 0) },
+  }
+
+  it('hides any label ECharts still finds overlapping, and uses a level formatter at day span (every day tick names its own month)', () => {
+    const option = distributionOption(fortySessions, T) as Record<string, any>
+    const [x0] = [option.xAxis].flat()
+    expect(x0.axisLabel.hideOverlap).toBe(true)
+    expect(x0.axisLabel.formatter).toEqual({ year: '{yyyy}', month: '{MMM}', day: '{d} {MMM}' })
+  })
+
+  // G10: at day level, ECharts' own level formatter only names the month on a tick that falls on a
+  // month boundary; a series that stays inside one month never reaches one, so every one of its day
+  // ticks used to print bare numbers with no month anywhere in the axis (distributionModel.ts:268).
+  it('a series that never crosses a month boundary still names the month on every day tick', () => {
+    const marchStart = Date.UTC(2020, 2, 5) / 1000
+    const twentySessions: DistributionInput = {
+      ...base,
+      series: { t: Array.from({ length: 20 }, (_, i) => marchStart + i * day), v: Array.from({ length: 20 }, () => 0) },
+    }
+    const option = distributionOption(twentySessions, T) as Record<string, any>
+    const [x0] = [option.xAxis].flat()
+    expect(x0.axisLabel.formatter.day).toContain('{MMM}')
+  })
+
+  it('still hides overlap at month and year spans, where one token per tick is already enough', () => {
+    const months: DistributionInput = { ...base, series: { t: [0, 200 * day], v: [0, 0] } }
+    const years: DistributionInput = { ...base, series: { t: [0, 12 * 365 * day], v: [0, 0] } }
+    const monthOption = distributionOption(months, T) as Record<string, any>
+    const yearOption = distributionOption(years, T) as Record<string, any>
+    expect(monthOption.xAxis[0].axisLabel.hideOverlap).toBe(true)
+    expect(monthOption.xAxis[0].axisLabel.formatter).toBe('{MMM} {yy}')
+    expect(yearOption.xAxis[0].axisLabel.hideOverlap).toBe(true)
+    expect(yearOption.xAxis[0].axisLabel.formatter).toBe('{yyyy}')
+  })
+
+  it('reserves the y-label gutter on every grid, so a wide value label is never clipped at a narrow panel width', () => {
+    const noSeries = distributionOption(base, T) as Record<string, any>
+    expect([noSeries.grid].flat().every((g: Record<string, any>) => g.containLabel === true)).toBe(true)
+    const withTime = distributionOption(fortySessions, T) as Record<string, any>
+    expect([withTime.grid].flat().every((g: Record<string, any>) => g.containLabel === true)).toBe(true)
+  })
+})

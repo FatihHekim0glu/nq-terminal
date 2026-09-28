@@ -1,14 +1,16 @@
 // What the chrome's keys do (spec 4.2 and 5.2): the key toolbar buttons, the nav toolbar controls and
-// the global keys (F1, F2 and F4, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn, Alt+1 to 9, Alt+K) all land
-// here, so a button and its key always do the same thing. Every action is a read or a focus change:
-// nothing here can place, change or withdraw anything.
+// the global keys (F1, F2 and F4, F8 to F11, End, Shift+End, PgUp and PgDn, Shift+PgUp and PgDn,
+// Alt+1 to 9, Alt+K) all land here, so a button and its key always do the same thing. Every action is
+// a read or a focus change: nothing here can place, change or withdraw anything.
 import { withValue } from '../commands/messages'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
-import type { KeyedSector } from '../commands/sectors'
+import { displayContext, type KeyedSector } from '../commands/sectors'
+import type { ResolvedContext } from '../commands/types'
 import { MESSAGES, NAV_TOOLBAR, FRAME_STRIP } from '../copy/chrome'
 import { SECTOR_TITLES } from '../copy/commands'
+import { NAV_MESSAGES, RESERVED_F_MESSAGES } from '../copy/help'
 import type { CommandLineHandle } from './CommandLine'
-import type { GlobalKeyAction } from './CommandLine.keys'
+import type { GlobalKeyAction, ReservedFKey } from './CommandLine.keys'
 import type { MenuModel } from './CommandLine.menus'
 import { exportPanel, focusPanelAt, pagePanel } from './KeyToolbar.panels'
 import type { KeyId } from './KeyToolbar'
@@ -19,8 +21,14 @@ import type { NavAction } from './NavToolbar'
 export interface ChromeWorkspace {
   goBack?(panelId: string): boolean
   goForward?(panelId: string): boolean
+  /** What the panel shows right now, after a move (U10): the BACK/FORWARD message names this, not
+   * env's focusedCode/focusedContextLine, which still hold what the panel showed before the move. */
+  shownIn?(panelId: string): { readonly code: MnemonicCode; readonly context: ResolvedContext | null } | null
   /** Alt+N: focus panel N in reading order. */
   focusPanelNumber?(n: number): boolean
+  /** True and focuses it when a panel showing `code` already exists (U20): F1 pressed again, or held,
+   * while a HELP panel is already open focuses that panel instead of adding another one. */
+  focusPanelShowing?(code: MnemonicCode): boolean
   /** MENU: the related functions menu inside the focused panel (spec 4.7, with its panel dim). */
   openRelatedMenu?(panelId?: string): boolean
 }
@@ -38,6 +46,17 @@ export interface ChromeEnv {
 
 export const HELP_TWICE_MS = 500
 
+/** Every reserved F-key's message (U11): F2 and F4 from copy/chrome.ts, F3 and F5 to F7 from
+ * copy/help.ts, so a new reserved key never posts undefined. */
+const RESERVED_MESSAGES: Readonly<Record<ReservedFKey, string>> = {
+  F2: MESSAGES.reservedKeys.F2,
+  F3: RESERVED_F_MESSAGES.F3,
+  F4: MESSAGES.reservedKeys.F4,
+  F5: RESERVED_F_MESSAGES.F5,
+  F6: RESERVED_F_MESSAGES.F6,
+  F7: RESERVED_F_MESSAGES.F7,
+}
+
 function favouritesMenu(): MenuModel {
   const tabs = [
     [FRAME_STRIP.tabs.HOME, 'HOME'],
@@ -52,7 +71,11 @@ export function createChromeActions(env: ChromeEnv) {
   let lastHelp = Number.NEGATIVE_INFINITY
   const now = env.now ?? (() => performance.now())
 
-  /** F1: the focused screen's help (or the function typed in the line); twice quickly: the HELP index. */
+  /** F1: the focused screen's help (or the function typed in the line); twice quickly: the HELP
+   * index, the same as typed HELP (U20): its own panel (WorkspaceModel.planOpen's newPanel branch
+   * carries the HELP carve-out, so it never joins the focused panel's link group), unless a HELP
+   * panel is already open, in which case this only focuses it. A held or repeated F1 reaches here
+   * once per genuine press only: useTerminalKeys drops repeat keydown events before this runs. */
   const help = () => {
     const t = now()
     const twice = t - lastHelp <= HELP_TWICE_MS
@@ -61,14 +84,31 @@ export function createChromeActions(env: ChromeEnv) {
     if (!cmd) return
     const typed = cmd.lineText().split(/\s+/).map((w) => findMnemonic(w)).find((m) => m !== undefined)?.code
     const code = typed ?? env.focusedCode()
-    if (twice || !code) cmd.runLine('HELP')
-    else cmd.help(code)
+    if (twice || !code) {
+      if (env.workspace()?.focusPanelShowing?.('HELP')) return
+      cmd.runLine('HELP', true)
+      return
+    }
+    cmd.help(code)
   }
   const back = (forward: boolean) => {
     const id = env.focusedPanelId()
     const ws = env.workspace()
     const moved = id !== null && (forward ? ws?.goForward?.(id) : ws?.goBack?.(id))
-    if (!moved) postMessage(forward ? MESSAGES.forwardNone : MESSAGES.backNone)
+    if (!moved) {
+      postMessage(forward ? MESSAGES.forwardNone : MESSAGES.backNone)
+      return
+    }
+    // Says where BACK or FORWARD landed, e.g. 'Back to NQ1 Index GP.' (U10), instead of leaving
+    // whatever the line said before (a stale 'Opened ES GP.', or nothing). Read from the workspace's
+    // post-move shownIn, not env's focusedCode/focusedContextLine: those track the panel Terminal
+    // rendered before the move (App.tsx sets them only while rendering), so right after goBack/
+    // goForward they still name the panel just left, not the one landed on.
+    const shown = id !== null ? (ws?.shownIn?.(id) ?? null) : null
+    const landed = shown
+      ? [shown.context ? displayContext(shown.context, null) : null, shown.code].filter((part): part is string => Boolean(part)).join(' ')
+      : [env.focusedContextLine(), env.focusedCode()].filter((part): part is string => Boolean(part)).join(' ')
+    if (landed) postMessage(withValue(forward ? NAV_MESSAGES.forwardTo : NAV_MESSAGES.backTo, landed))
   }
   const page = (dir: 1 | -1) => {
     const pages = env.cmd()?.takeCount() ?? 1
@@ -127,6 +167,8 @@ export function runGlobalKey(a: ChromeActions, env: ChromeEnv, action: GlobalKey
       return a.sector(action.sector)
     case 'back':
       return a.back(false)
+    case 'forward':
+      return a.back(true)
     case 'page':
       return a.page(action.dir)
     case 'history':
@@ -136,7 +178,7 @@ export function runGlobalKey(a: ChromeActions, env: ChromeEnv, action: GlobalKey
     case 'keymap':
       return env.toggleKeymap()
     case 'reserved':
-      return postMessage(MESSAGES.reservedKeys[action.key])
+      return postMessage(RESERVED_MESSAGES[action.key])
     default:
       return undefined
   }

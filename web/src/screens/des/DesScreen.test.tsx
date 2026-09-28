@@ -13,6 +13,7 @@ import { DEFLATED } from '../../copy/deflated'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import { DEFLATED_REAL } from '../reg/deflatedFixtures'
+import { desDeflatedText } from '../reg/deflatedModel'
 import DesScreen from './DesScreen'
 import { CONFIRMATION, HYPOTHESES, INSTRUMENT_NQ, OVERNIGHT, PANEL, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
 
@@ -202,10 +203,15 @@ describe('DES, hypothesis tear sheet', () => {
   it('shows the hypothesis DSR against SR0 from SV3, [POST HOC], in the registration box', async () => {
     await openHypothesis('volmanaged_v0')
     const vm = DEFLATED_REAL.rows.find((r) => r.name === 'volmanaged_v0')!
+    const expected = desDeflatedText(DEFLATED_REAL, 'volmanaged_v0')!
+    // Concrete anchors so the assertion cannot pass on any text, whatever desDeflatedText's wording is.
+    expect(expected).toContain(`SR0 ${vm.sr0_own_period!.toFixed(4)} per session`)
+    expect(expected).toContain(`${vm.dsr_null!.toFixed(3)} under V0`)
+    expect(expected).toContain('N 21')
+    expect(expected).toContain('Without mim_v0')
     const label = await screen.findByText(DEFLATED.desLabel)
     const box = label.closest('tr') ?? label.parentElement!
-    await waitFor(() => expect(box.textContent).toContain(
-      `DSR < 0.000001 under V (SR0 ${vm.sr0_own_period!.toFixed(4)}), ${vm.dsr_null!.toFixed(3)} under V0 (SR0 ${vm.sr0_null_own_period!.toFixed(4)}), N 21`))
+    await waitFor(() => expect(box.textContent).toContain(expected))
     expect(calls.filter((c) => c.url === '/api/analytics/deflated').every((c) => c.method === 'GET')).toBe(true)
   })
 

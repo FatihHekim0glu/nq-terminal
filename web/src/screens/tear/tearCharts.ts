@@ -240,7 +240,7 @@ export interface StatRow {
 }
 
 export interface StatSection {
-  readonly id: 'summary' | 'risk' | 'validity'
+  readonly id: 'summary' | 'risk' | 'tails' | 'validity'
   readonly title: string
   readonly rows: readonly StatRow[]
 }
@@ -264,24 +264,49 @@ function summaryRows(data: Analytics): StatRow[] {
   ]
 }
 
+/** VaR and CVaR only (G16): positive values are losses, the horizon's own sign convention. The 21-session
+ * tail rows are a different convention (negative = loss) and get their own section, tailsRows() below. */
 function riskRows(data: Analytics): StatRow[] {
   const r = data.risk
   const v = (x: number | null) => formatValue(x, r.unit, 2)
-  const rows: StatRow[] = [
+  return [
     { id: 'var95', label: L.var95, value: v(r.var_95) },
     { id: 'cvar95', label: L.cvar95, value: v(r.cvar_95) },
     { id: 'var99', label: L.var99, value: v(r.var_99) },
     { id: 'cvar99', label: L.cvar99, value: v(r.cvar_99) },
   ]
-  const tails = r.tails21
-  if (!tails) return rows
+}
+
+type Tails21 = NonNullable<Analytics['risk']['tails21']>
+
+/** The 21-session overlapping-sum tail rows (G16): shown only once there is at least one window, in
+ * their own section (its title states the sign convention), never mixed into the 1-session risk rows. */
+function tailsRows(data: Analytics, tails: Tails21): StatRow[] {
+  const r = data.risk
+  const v = (x: number | null) => formatValue(x, r.unit, 2)
   const window = tails.window
   return [
-    ...rows,
     { id: 'tails5', label: fillCopy(L.tails5, { window }), value: v(tails.shortfall_5pct) },
     { id: 'tails1', label: fillCopy(L.tails1, { window }), value: v(tails.shortfall_1pct) },
     { id: 'tailsN', label: fillCopy(L.tailsN, { window }), value: formatNumber(tails.n, 0, { thousands: true }) },
   ]
+}
+
+function tailsSection(data: Analytics): StatSection | null {
+  const tails = data.risk.tails21
+  if (!tails || tails.n === 0) return null
+  return { id: 'tails', title: fillCopy(TEAR_RET.tailsTitle, { window: tails.window }), rows: tailsRows(data, tails) }
+}
+
+/** G16: with too few 21-session windows, the 5% and 1% tails fall on the same worst window (19 windows
+ * round both quantiles to 1), so the two figures are not independent estimates; said once, not silently
+ * shown as if they were. */
+export function tailsNote(data: Analytics): string | null {
+  const tails = data.risk.tails21
+  if (!tails || tails.n === 0) return null
+  if (tails.shortfall_1pct === null || tails.shortfall_5pct === null) return null
+  if (tails.shortfall_1pct !== tails.shortfall_5pct) return null
+  return fillCopy(TEAR_RET.tailsNote, { n: tails.n })
 }
 
 type TrackRecord = Analytics['validity']['min_trl']['at_zero']
@@ -302,6 +327,12 @@ function validityRows(data: Analytics): StatRow[] {
     { id: 'minTrlZero', label: L.minTrlZero, value: minTrlText(trl.at_zero, periods) },
     { id: 'actual', label: L.actual, value: fillCopy(TEAR_RET.periods, { n: formatNumber(trl.at_zero.actual_sessions, 0, { thousands: true }), unit: periods }) },
   ]
+  // U24: the annualised benchmark Sharpe PSR (benchmark Sharpe) and MinTRL (benchmark Sharpe) test
+  // against, so the threshold itself is on screen (HOME shows the same figure from bench_sharpe).
+  if (psr.benchmark_sr_per_period !== null) {
+    const annualised = psr.benchmark_sr_per_period * Math.sqrt(data.periods_per_year)
+    rows.push({ id: 'benchSharpe', label: L.benchSharpe, value: formatNumber(annualised, 2) })
+  }
   if (psr.at_benchmark !== null) rows.push({ id: 'psrBench', label: L.psrBench, value: formatNumber(psr.at_benchmark, 3) })
   if (trl.at_benchmark) rows.push({ id: 'minTrlBench', label: L.minTrlBench, value: minTrlText(trl.at_benchmark, periods) })
   return rows
@@ -320,9 +351,11 @@ export function statsNotes(data: Analytics): string[] {
 }
 
 export function statsSections(data: Analytics): StatSection[] {
+  const tails = tailsSection(data)
   return [
     { id: 'summary', title: TEAR_RET.summary, rows: summaryRows(data) },
     { id: 'risk', title: fillCopy(TEAR_RET.risk, { horizon: data.risk.horizon }), rows: riskRows(data) },
+    ...(tails ? [tails] : []),
     { id: 'validity', title: TEAR_RET.validity, rows: validityRows(data) },
   ]
 }

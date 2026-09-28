@@ -23,6 +23,10 @@ export interface DeflatedRowView {
   readonly srSession: string
   readonly skew: string
   readonly kurt: string
+  /** The trial's own Sharpe in its own period (API field `sr`): what the DSR is actually computed from. */
+  readonly srOwn: string
+  /** 'session' or 'month' (G06): the period `srOwn`, `sr0` and `sr0Null` are all in, named. */
+  readonly period: string
   readonly sr0: string
   readonly dsr: string
   readonly sr0Null: string
@@ -70,6 +74,11 @@ export function deflatedNullFacts(view: DeflatedView): string[] {
   return lines
 }
 
+/** 'month' for a monthly book (API `kind`), 'session' for every other (trades, daily, nights). */
+function periodOf(r: DeflatedView['rows'][number]): string {
+  return r.kind === 'monthly' ? DEFLATED.periods.month : DEFLATED.periods.session
+}
+
 export function deflatedRows(view: DeflatedView): DeflatedRowView[] {
   return view.rows.map((r) => ({
     name: r.name,
@@ -80,6 +89,8 @@ export function deflatedRows(view: DeflatedView): DeflatedRowView[] {
     srSession: formatNumber(r.sr_session, 4),
     skew: formatNumber(r.skew, 2),
     kurt: formatNumber(r.kurt, 2),
+    srOwn: formatNumber(r.sr, 4),
+    period: periodOf(r),
     sr0: formatNumber(r.sr0_own_period, 4),
     dsr: formatDsr(r.dsr),
     sr0Null: formatNumber(r.sr0_null_own_period, 4),
@@ -99,6 +110,33 @@ export function deflatedLadder(view: DeflatedView): BarLadderInput {
 /** One trial's row for DES; null for a name that is not a registered trial. */
 export function dsrFor(view: DeflatedView, name: string): DeflatedRowView | null {
   return deflatedRows(view).find((r) => r.name === name) ?? null
+}
+
+/**
+ * DES's DSR line for one hypothesis (G06): names the period of the Sharpe and its SR0 hurdle (a reader
+ * otherwise compares a per-session Sharpe with a per-month SR0, or the reverse, with no unit to catch
+ * it), and gives the annualised SR0 under V and V0 beside the own-period figures. Null for a name that
+ * is not a registered trial (the caller falls back to DEFLATED.desNone).
+ */
+export function desDeflatedText(view: DeflatedView, name: string): string | null {
+  const row = dsrFor(view, name)
+  if (!row) return null
+  const text = fillCopy(DEFLATED.desLine, {
+    sr: row.srOwn,
+    period: row.period,
+    floor: row.sr0,
+    annual: formatNumber(view.sr0_annual, 2),
+    floorNull: row.sr0Null,
+    annualNull: formatNumber(view.sr0_null_annual, 2),
+    dsr: row.dsr,
+    dsrNull: row.dsrNull,
+    n: view.n_trials,
+  })
+  const loo = view.leave_one_out
+  if (loo.name === null) return text
+  return `${text} ${fillCopy(DEFLATED.leaveOneOut, {
+    name: loo.name, v: formatNumber(loo.variance, 6), annualSr: formatNumber(loo.sr0_annual, 2), n: loo.n_trials,
+  })}`
 }
 
 /** REG's rows with each trial's DSR under V0; the same array until the view arrives. */

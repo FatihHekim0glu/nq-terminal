@@ -31,6 +31,27 @@ function containerBlock(query: string): string {
   return STRIPPED.slice(braceStart + 1, i)
 }
 
+describe('.tear-screen: a floor, not a fixed height, so a tall view grows the panel rather than overflowing it (G10)', () => {
+  it('sets min-height, not height, for its 390px/100cqh floor', () => {
+    const declarations = rule('.tear-screen')
+    expect(declarations).toMatch(/min-height:\s*max\(390px,\s*100cqh\)\s*;/)
+    expect(declarations).not.toMatch(/[^-]height:\s*max\(390px/)
+  })
+
+  // The floor alone is not enough: a view that may shrink to nothing (flex 1 1 0, min-height 0) never
+  // grows .tear-screen past it, so in a HOME quadrant the KPI rows wrap, the chart keeps its 160px
+  // floor and the view overprints the P1 books below (77px on EQ, 81px on RET, 101px on RR at 1366).
+  it('lets the tab view grow the screen: it never shrinks below its content', () => {
+    expect(rule('.tear-view')).toMatch(/flex:\s*1\s+0\s+auto\s*;/)
+  })
+
+  it("sizes RET's chart and statistics row from the chart's 160px floor, not the statistics' full length", () => {
+    const declarations = rule('.tear-split')
+    expect(declarations).toMatch(/flex:\s*1\s+1\s+160px\s*;/)
+    expect(declarations).toMatch(/min-height:\s*160px\s*;/)
+  })
+})
+
 describe('.tear-stats-cols: the SV7 card beside the statistics, one track in a narrow panel', () => {
   it('is a single-column grid outside the wide container', () => {
     const declarations = rule('.tear-stats-cols')

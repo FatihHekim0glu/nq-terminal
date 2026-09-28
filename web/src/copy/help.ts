@@ -43,11 +43,13 @@ export const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
   ['Shift+Enter', 'Open the result in a new panel instead of replacing the focused one (the same as NXTW before the command).'],
   ['F1', 'HELP for the focused screen, or for the function typed in the line. Twice quickly: this HELP index. If the browser opens its own help instead, press HELP on the key toolbar or type HELP.'],
   ['F2, F4', 'No function: the key toolbar replaces the old F-key plan. The browser does not act on them either; type REG or LEDG instead.'],
+  ['F3, F5, F6, F7', 'No function: held back from the browser so a sector key near them (F8 to F11) never reloads the terminal, leaves it or covers the command line. F12, Ctrl+R and Alt+F4 stay the browser\'s and the system\'s.'],
   ['F8', 'Insert Equity. nq-lab has no equities, so it matches nothing.'],
   ['F9', 'Insert Comdty: futures in rates, energy, metals, grains or livestock.'],
   ['F10', 'Insert Index: the equity index futures. If the browser takes F10 for its menu, type INDEX.'],
   ['F11', 'Insert Curncy: the currency futures. If the browser takes F11 for full screen, type CURNCY.'],
   ['End', 'BACK in the focused panel, from a panel or an empty command line; in a typed line it moves the caret.'],
+  ['Shift+End', 'FORWARD in the focused panel, from a panel or an empty command line; in a typed line or another text field it selects to the end.'],
   ['Home', 'Focus the command line from anywhere else.'],
   ['PgUp, PgDn', 'PAGE BACK and PAGE FORWARD in the focused panel; a number first (3 PgDn) jumps that many pages.'],
   ['Shift+PgUp, Shift+PgDn', 'Walk the command history (older with Shift+PgUp, newer with Shift+PgDn).'],
@@ -84,6 +86,24 @@ export const HELP_FONT_LICENCES = {
   bergoom: ['Bergoom (vendored font files with their licence file)', 'SIL Open Font Licence 1.1'],
   sourceSans: ['Source Sans 3 (self-hosted through Fontsource)', 'SIL Open Font Licence 1.1'],
   ptMono: ['PT Mono (self-hosted through Fontsource)', 'SIL Open Font Licence 1.1'],
+} as const
+
+/** The message line after BACK (End) or FORWARD (Shift+End) moves the focused panel (U10). */
+export const NAV_MESSAGES = {
+  backTo: 'Back to {value}.',
+  forwardTo: 'Forward to {value}.',
+} as const
+
+/**
+ * F3 and F5 to F7 join F2 and F4 as held back from the browser (U11), so none of the sector keys
+ * near them (F8 to F11) can ever reload the terminal, leave it or cover the command line. Paired
+ * with MESSAGES.reservedKeys (F2, F4) in copy/chrome.ts by KeyToolbar.actions.ts.
+ */
+export const RESERVED_F_MESSAGES = {
+  F3: 'F3 has no function in nq-lab: the browser find bar would cover the command line. Use SEARCH on the key toolbar (HL) instead.',
+  F5: 'F5 would reload: every panel history would be lost. Type HOME <GO> instead.',
+  F6: 'F6 has no function in nq-lab: the browser address bar would take focus from the command line.',
+  F7: 'F7 has no function in nq-lab: caret browsing is not used here.',
 } as const
 
 export const HELP_LICENCES: ReadonlyArray<readonly [string, string]> = [

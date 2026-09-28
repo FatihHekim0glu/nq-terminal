@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { DEFLATED } from '../../copy/deflated'
 import { DEFLATED as VIEW } from '../tear/tearP1.fixtures'
-import { deflatedFacts, deflatedLadder, deflatedNullFacts, deflatedRows, dsrFor, formatDsr, withDeflated } from './deflatedModel'
+import { deflatedFacts, deflatedLadder, deflatedNullFacts, deflatedRows, desDeflatedText, dsrFor, formatDsr, withDeflated } from './deflatedModel'
 import { buildRegRows } from './regModel'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import { HYPOTHESES, REGISTRY } from './regFixtures'
@@ -17,8 +18,26 @@ describe('SV3 on screen', () => {
     expect(rows.map((r) => r.name)).toEqual(['overnight_v0', 'volmanaged_v0'])
     expect(rows[1]).toEqual({
       name: 'volmanaged_v0', kind: 'daily', periods: '252', n: '39', annual: '-3.72', srSession: '-0.2342', skew: '-0.39', kurt: '2.59',
-      sr0: '0.1014', dsr: '0.016', sr0Null: '0.0600', dsrNull: '0.030',
+      srOwn: '-0.2342', period: 'session', sr0: '0.1014', dsr: '0.016', sr0Null: '0.0600', dsrNull: '0.030',
     })
+  })
+
+  it('names the own period session or month (G06): a monthly book differs from its session-basis SR', () => {
+    const rows = deflatedRows(DEFLATED_REAL)
+    const daily = rows.find((r) => r.name === 'volmanaged_v0')!
+    expect(daily.period).toBe('session')
+    expect(daily.srOwn).toBe(daily.srSession)
+    const monthly = rows.find((r) => r.name === 'tsmom_v0')!
+    expect(monthly.period).toBe('month')
+    expect(monthly.srOwn).toBe('0.3038')
+    expect(monthly.srSession).toBe('0.0663')
+    expect(monthly.sr0).toBe('1.4680')
+    expect(monthly.sr0Null).toBe('0.1689')
+  })
+
+  it('names both SR0 columns "own period" (the column copy), so their unit is never assumed', () => {
+    expect(DEFLATED.cols.sr0).toMatch(/own period/)
+    expect(DEFLATED.cols.sr0Null).toMatch(/own period/)
   })
 
   it('prints a DSR below 1e-6 as "< 0.000001", never as an exponent or a rounded 0.000', () => {
@@ -51,6 +70,26 @@ describe('SV3 on screen', () => {
     expect(dsrFor(VIEW, 'volmanaged_v0')?.dsr).toBe('0.016')
     expect(dsrFor(VIEW, 'volmanaged_v0')?.dsrNull).toBe('0.030')
     expect(dsrFor(VIEW, 'rebal_v1_confirm')).toBeNull()
+  })
+
+  it('desDeflatedText (G06): names the own period on DES, never mixing it with the annualised hurdle', () => {
+    const text = desDeflatedText(DEFLATED_REAL, 'tsmom_v0')
+    expect(text).toBe(
+      'Sharpe 0.3038 per month; SR0 1.4680 per month (5.09/yr) under V, 0.1689 per month (0.59/yr) under V0; ' +
+      'DSR < 0.000001 under V, 0.920 under V0; N 21; defined for the best trial only. ' +
+      'Without mim_v0, V is 0.000793 and SR0 0.86 annualised (N kept at 21).',
+    )
+  })
+
+  it('adds no leave-one-out clause when the API names none (the small fixture)', () => {
+    expect(VIEW.leave_one_out.name).toBeNull()
+    const text = desDeflatedText(VIEW, 'volmanaged_v0')
+    expect(text).not.toMatch(/Without/)
+    expect(text).toMatch(/^Sharpe -0\.2342 per session;/)
+  })
+
+  it('returns null for a name that is not a registered trial (the caller shows DEFLATED.desNone)', () => {
+    expect(desDeflatedText(VIEW, 'rebal_v1_confirm')).toBeNull()
   })
 
   it('names the trial that dominates V as the API words it (the real registry: mim_v0)', () => {

@@ -117,7 +117,7 @@ function Kpis({ data }: { readonly data: Analytics }) {
   return (
     <KpiRow label={TEAR.kpisLabel}>
       {tiles.map((t) => (
-        <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} signed={t.signed} description={t.description} ci={t.ci} />
+        <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} signed={t.signed} description={t.description} ci={t.ci} unit={t.unit} />
       ))}
     </KpiRow>
   )

@@ -23,6 +23,9 @@ export interface HomeTile {
   readonly decimals: number
   readonly signed: boolean
   readonly description: string
+  /** The API's own unit, before shortUnit() shortens `kpi.unit` for the tile face (G08): the popover
+   * states this one, so a shortened or dropped tile-face unit is never all a reader can see. */
+  readonly unit?: string
 }
 
 export interface HomeStack {
@@ -94,6 +97,7 @@ function alphaTiles(p: HomePanel): HomeTile[] {
     decimals: RATIO_DECIMALS,
     signed: a.key === 'alpha_annual',
     description: fillCopy(HOME_EQ.describe.alpha, { label: a.label, unit: a.unit }),
+    unit: a.unit,
   }))
 }
 
@@ -181,7 +185,7 @@ export function homeStack(p: HomePanel): HomeStack {
 /** The basis, unit, window, benchmark, dropped rows and an empty rolling pane, in words. */
 export function homeNotes(p: HomePanel): string[] {
   const notes = [
-    fillCopy(HOME_EQ.basis, { basis: p.basis, basisLabel: p.basis_label, unit: p.unit }),
+    fillCopy(HOME_EQ.basis, { basis: p.basis, basisLabel: p.basis_label, unit: p.unit, equityUnit: p.equity_unit }),
     fillCopy(HOME_EQ.window, { n: p.n, per: per(p), first: p.first, last: p.last }),
     p.bench_label ? fillCopy(HOME_EQ.bench, { bench: p.bench_label }) : HOME_EQ.noBench,
   ]

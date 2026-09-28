@@ -83,6 +83,9 @@ export interface WorkspaceController {
   focusPanel(): boolean
   /** Focus panel N in reading order (Alt+N). False when there is no such panel. */
   focusPanelNumber(n: number): boolean
+  /** Focus the panel showing mnemonic `code`, when one exists (U20: a second or held F1 with a HELP
+   * panel already open focuses it instead of adding another). False when none shows it. */
+  focusPanelShowing(code: MnemonicCode): boolean
   /** The context of the panel the user last focused, as it is now (null when none). */
   focusedContext(): ResolvedContext | null
   /** A focus event inside the workspace. */
@@ -91,6 +94,9 @@ export interface WorkspaceController {
   goBack(panelId: string): boolean
   /** Undo a goBack. False when there is nothing ahead. */
   goForward(panelId: string): boolean
+  /** What panel `id` shows right now (its effective context, not its raw stored one): the code and
+   * context to report after goBack/goForward moved it (U10). Null when the panel does not exist. */
+  shownIn(id: string): { readonly code: MnemonicCode; readonly context: ResolvedContext | null } | null
   /** Open the related functions menu in a panel (default: the focused one). */
   openRelatedMenu(panelId?: string): boolean
   closeRelatedMenu(): void
@@ -571,10 +577,18 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
       const id = Number.isInteger(n) && n > 0 ? st.view.getState().order[n - 1] : undefined
       return id ? focusById(env(), id) : false
     },
+    focusPanelShowing: (code) => {
+      const id = st.view.getState().order.find((pid) => paramsOf(st, pid)?.code === code)
+      return id ? focusById(env(), id) : false
+    },
     focusedContext: () => focusedPanel(st, env())?.context ?? null,
     onFocusIn: (target) => onFocusIn(st, env(), target),
     goBack: (id) => walk(st, env(), id, stepBack),
     goForward: (id) => walk(st, env(), id, stepForward),
+    shownIn: (id) => {
+      const params = shownParams(st, env(), id)
+      return params ? { code: params.code, context: params.context } : null
+    },
     openRelatedMenu: (id) => openRelatedMenu(st, id),
     closeRelatedMenu: () => patchView(st.view, { menu: null }),
     openInPanel: (id, code) => openInPanel(st, env(), id, code),

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import type { RefObject } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
-import { globalKeyAction, isFocusKey, useCommandLineKeys, type KeyLike } from './CommandLine.keys'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { globalKeyAction, isFocusKey, useCommandLineKeys, useTerminalKeys, type KeyLike, type KeyWhere } from './CommandLine.keys'
 
 const key = (k: string, extra: Partial<KeyLike> = {}): KeyLike => ({
   key: k,
@@ -29,18 +29,21 @@ describe('global keys (spec 5.2)', () => {
     expect(globalKeyAction(key('F11'), inPanel)).toEqual({ kind: 'sector', sector: 'CURNCY' })
   })
 
-  it('holds F2 and F4 back from the browser with no terminal action (spec 5.2 drops the F-key plan)', () => {
+  it('holds F2 to F7 back from the browser with no terminal action (spec 5.2 drops the F-key plan; U11 adds F3 and F5 to F7)', () => {
     for (const where of [inPanel, inLine, inTypedLine]) {
-      expect(globalKeyAction(key('F2'), where)).toEqual({ kind: 'reserved', key: 'F2' })
-      expect(globalKeyAction(key('F4'), where)).toEqual({ kind: 'reserved', key: 'F4' })
+      for (const f of ['F2', 'F3', 'F4', 'F5', 'F6', 'F7'] as const) {
+        expect(globalKeyAction(key(f), where)).toEqual({ kind: 'reserved', key: f })
+      }
     }
-    // Alt+F4 and Ctrl+F4 stay the system's and the browser's.
+    // Alt+F4 and Ctrl+F4 stay the system's and the browser's; so do Ctrl+R (reload) and other
+    // modified presses of the reserved keys.
     expect(globalKeyAction(key('F4', { altKey: true }), inPanel)).toBeNull()
     expect(globalKeyAction(key('F4', { ctrlKey: true }), inPanel)).toBeNull()
+    expect(globalKeyAction(key('F5', { ctrlKey: true }), inPanel)).toBeNull()
   })
 
-  it('leaves the F-keys nq-lab does not use to the browser', () => {
-    for (const f of ['F3', 'F5', 'F6', 'F7', 'F12']) expect(globalKeyAction(key(f), inPanel)).toBeNull()
+  it('leaves F12 (dev tools) to the browser: nq-lab does not use it', () => {
+    expect(globalKeyAction(key('F12'), inPanel)).toBeNull()
   })
 
   it('End is BACK from a panel or an empty line, and the caret key inside a typed line', () => {
@@ -48,6 +51,13 @@ describe('global keys (spec 5.2)', () => {
     expect(globalKeyAction(key('End'), inLine)).toEqual({ kind: 'back' })
     expect(globalKeyAction(key('End'), inTypedLine)).toBeNull()
     expect(globalKeyAction(key('End'), { ...inPanel, inTextField: true })).toBeNull()
+  })
+
+  it('Shift+End is FORWARD from a panel or an empty line, and the caret key (select to end) inside a typed line or a text field (U10)', () => {
+    expect(globalKeyAction(key('End', { shiftKey: true }), inPanel)).toEqual({ kind: 'forward' })
+    expect(globalKeyAction(key('End', { shiftKey: true }), inLine)).toEqual({ kind: 'forward' })
+    expect(globalKeyAction(key('End', { shiftKey: true }), inTypedLine)).toBeNull()
+    expect(globalKeyAction(key('End', { shiftKey: true }), { ...inPanel, inTextField: true })).toBeNull()
   })
 
   it('Home focuses the command line from elsewhere and is the caret key inside it', () => {
@@ -135,5 +145,33 @@ describe('useCommandLineKeys: Ctrl+K inside the command line (D11)', () => {
     })
     // Escape with the input already focused is the command line's own cascade (CommandLine.tsx), not this hook.
     expect(notPrevented).toBe(true)
+  })
+})
+
+describe('useTerminalKeys: a held or repeated F1 never piles up HELP panels (U20)', () => {
+  afterEach(cleanup)
+
+  const where: KeyWhere = { inCommandLine: false, lineEmpty: true, inTextField: false }
+
+  it('a repeat F1 keydown is prevented (so the browser help page never opens) but never runs the action', () => {
+    const run = vi.fn()
+    renderHook(() => useTerminalKeys(() => where, run))
+
+    let notPrevented = true
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', repeat: true, bubbles: true, cancelable: true }))
+    })
+
+    expect(notPrevented).toBe(false)
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('a plain, non-repeat F1 keydown still runs the help action', () => {
+    const run = vi.fn()
+    renderHook(() => useTerminalKeys(() => where, run))
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true, cancelable: true }))
+    })
+    expect(run).toHaveBeenCalledWith({ kind: 'help' })
   })
 })

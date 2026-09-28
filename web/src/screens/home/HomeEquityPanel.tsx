@@ -102,7 +102,7 @@ export function HomeEquityView({ panel, group, loader }: ViewProps) {
       </p>
       <KpiRow label={fillCopy(HOME_EQ.tilesLabel, { name: panel.context.name })}>
         {tiles.map((t) => (
-          <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} signed={t.signed} description={t.description} />
+          <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} signed={t.signed} description={t.description} unit={t.unit} />
         ))}
       </KpiRow>
       <div className="home-eq-chart">

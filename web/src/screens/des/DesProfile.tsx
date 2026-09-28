@@ -29,7 +29,7 @@ import {
   type HypothesisDetail,
 } from './desModel'
 import { DES_NUMBERS, runNumber, type DesTab } from './desNumbers'
-import { dsrFor } from '../reg/deflatedModel'
+import { desDeflatedText } from '../reg/deflatedModel'
 
 /** Linked runs listed on page 1; the rest are on page 4. */
 const RUNS_ON_PROFILE = 6
@@ -85,9 +85,8 @@ function DeflatedLine({ name }: { readonly name: string }) {
   const query = useDeflated()
   if (query.isError) return <>{fillCopy(DEFLATED.failed, { detail: query.error.detail })}</>
   if (!query.data) return <>{MISSING}</>
-  const row = dsrFor(query.data, name)
-  if (!row) return <>{DEFLATED.desNone}</>
-  return <>{fillCopy(DEFLATED.desLine, { dsr: row.dsr, floor: row.sr0, dsrNull: row.dsrNull, floorNull: row.sr0Null, n: query.data.n_trials })}</>
+  const text = desDeflatedText(query.data, name)
+  return <>{text ?? DEFLATED.desNone}</>
 }
 
 function RegistrationBox({ detail }: { readonly detail: HypothesisDetail }) {

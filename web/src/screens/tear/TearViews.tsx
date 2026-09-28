@@ -15,7 +15,7 @@ import type { PanelLink } from '../../state/linkGroups'
 import { Card } from './TearCard'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, yearlyLadder,
+  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, tailsNote, yearlyLadder,
   type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
@@ -155,9 +155,11 @@ function StatsTable({ data, note, children }: { readonly data: Analytics; readon
       ))}
     </table>
   )
+  const tails = tailsNote(data)
   const notes = (
     <>
-      {statsNotes(data).map((note) => <p key={note} className="tear-note">{note}</p>)}
+      {statsNotes(data).map((n) => <p key={n} className="tear-note">{n}</p>)}
+      {tails ? <p className="tear-note">{tails}</p> : null}
       {data.validity.psr.at_benchmark_note ? (
         <p className="tear-note">{fillCopy(TEAR_RET.psrBenchNote, { note: data.validity.psr.at_benchmark_note })}</p>
       ) : null}
@@ -191,10 +193,12 @@ function StatsTable({ data, note, children }: { readonly data: Analytics; readon
  * the sheet is at least 1180px wide (tear.css @container tear (min-width: 1180px)), so RET stays one
  * scrolling region with one keyboard Tab stop. It is a group, not a region: the statistics' ScrollRegion
  * is the panel's only landmark and its only roving scroll stop. The Ledoit-Wolf points are bars with their
- * 90% intervals as whiskers; the table under them has every measure per cost. The tag is the one the API
- * gives the validity rows (PSR, MinTRL): the series tag.
+ * 90% intervals as whiskers; the table under them has every measure per cost. The tag is fixed [PRE-REG]
+ * from copy (TEAR_SV7.tag), never the series tag (G07): these numbers are read from the screen file, a
+ * registered result, whatever the series itself is tagged. The validity rows below (PSR, MinTRL) keep the
+ * series tag, since the terminal computes those.
  */
-function Sv7Card({ sv7, tag, name }: { readonly sv7: Sv7; readonly tag: string; readonly name: string }) {
+function Sv7Card({ sv7, name }: { readonly sv7: Sv7; readonly name: string }) {
   const ladder = useMemo(() => sv7Ladder(sv7, name), [sv7, name])
   const table = useMemo(() => sv7Table(sv7), [sv7])
   const chartId = useChartId('tear-sv7')
@@ -202,7 +206,7 @@ function Sv7Card({ sv7, tag, name }: { readonly sv7: Sv7; readonly tag: string; 
   const span = table.columns.length + 1
   return (
     <div className="tear-sv7" role="group" aria-label={TEAR_SV7.regionLabel}>
-      <Card title={title} tag={tag}>
+      <Card title={title} tag={TEAR_SV7.tag}>
         <p className="tear-basis">{TEAR_SV7.basis}</p>
         <div className="tear-chart tear-chart-short"><BarLadder data={ladder} chartId={chartId} /></div>
         <table className="nqt-grid">
@@ -248,7 +252,7 @@ function RetView({ data, name }: ViewProps) {
       <div className="tear-split">
         <div className="tear-chart">{input ? <Distribution data={input} chartId={chartId} /> : null}</div>
         <StatsTable data={data} note={sv7Empty(sv7)}>
-          {sv7.rows.length > 0 ? <Sv7Card sv7={sv7} tag={data.tag} name={name} /> : null}
+          {sv7.rows.length > 0 ? <Sv7Card sv7={sv7} name={name} /> : null}
         </StatsTable>
       </div>
     </>

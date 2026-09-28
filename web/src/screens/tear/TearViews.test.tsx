@@ -49,7 +49,21 @@ describe('RET: the Sharpe difference (m - BH) card (SV7)', () => {
     expect(img.getAttribute('aria-label')).toContain('Whiskers show the 90% interval (Ledoit-Wolf bootstrap).')
     expect(screen.getByRole('table', { name: 'Return statistics' })).toBeTruthy()
     const title = within(card()).getByRole('heading', { level: 3 })
-    expect(title.textContent).toBe('Sharpe difference (m - BH)[POST HOC]')
+    // G07: the card's numbers are read from the screen file, a registered result, so the header is
+    // fixed [PRE-REG] even though HYP_ANALYTICS itself (the series) is tagged [POST HOC].
+    expect(HYP_ANALYTICS.tag).toBe('[POST HOC]')
+    expect(title.textContent).toBe(`Sharpe difference (m - BH)${TEAR_SV7.tag}`)
+  })
+
+  it('G07: the SV7 tag is fixed [PRE-REG] regardless of the series tag, which the validity rows still use', async () => {
+    await showRet(HYP_ANALYTICS, 'volmanaged_v0')
+    expect(TEAR_SV7.tag).toBe('[PRE-REG]')
+    const title = within(card()).getByRole('heading', { level: 3 })
+    expect(title.textContent).toContain('[PRE-REG]')
+    expect(title.textContent).not.toContain('[POST HOC]')
+    // Unaffected: the series tag itself, which the PSR/MinTRL validity rows and the KPI tiles read,
+    // stays the terminal-computed [POST HOC] it always was.
+    expect(HYP_ANALYTICS.tag).toBe('[POST HOC]')
   })
 
   it('has a table view listing each cost row with its point, interval and sample size', async () => {
@@ -123,5 +137,30 @@ describe('RET: the Sharpe difference (m - BH) card (SV7)', () => {
     expect(screen.queryByRole('img', { name: /Sharpe difference/ })).toBeNull()
     const stats = screen.getByRole('region', { name: 'Return statistics' })
     expect(within(stats).getByText(TEAR_SV7.notRecorded)).toBeTruthy()
+  })
+})
+
+describe('RET: the 21-session tails keep their own section, separate from the 1-session risk rows (G16)', () => {
+  it('keeps Risk to VaR and CVaR, gives the tails rows their own titled section, and notes the 19-window overlap', async () => {
+    await showRet(HYP_ANALYTICS, 'volmanaged_v0')
+    const stats = screen.getByRole('table', { name: 'Return statistics' })
+    const groups = within(stats).getAllByRole('rowgroup')
+    const riskGroup = groups.find((g) => g.textContent?.includes('Risk ('))
+    expect(riskGroup).toBeTruthy()
+    expect(riskGroup?.textContent).not.toContain('period tail')
+    expect(stats.textContent).toContain('21-session loss')
+    const tailsGroup = groups.find((g) => g.textContent?.includes('21-session loss'))
+    expect(tailsGroup?.textContent).toContain('period tail')
+    expect(screen.getByText(/cannot be told apart/)).toBeTruthy()
+  })
+})
+
+describe('RET: the Validity rows name the benchmark Sharpe the PSR test uses (U24)', () => {
+  it('shows a Benchmark Sharpe row before PSR (benchmark Sharpe)', async () => {
+    await showRet(HYP_ANALYTICS, 'volmanaged_v0')
+    const stats = screen.getByRole('table', { name: 'Return statistics' })
+    const rowheaders = within(stats).getAllByRole('rowheader').map((h) => h.textContent)
+    expect(rowheaders.indexOf('Benchmark Sharpe')).toBeGreaterThanOrEqual(0)
+    expect(rowheaders.indexOf('Benchmark Sharpe')).toBeLessThan(rowheaders.indexOf('PSR (benchmark Sharpe)'))
   })
 })

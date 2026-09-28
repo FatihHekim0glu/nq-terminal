@@ -154,6 +154,32 @@ describe('planOpen: Enter replaces, Shift+Enter adds (UI_SPEC section 5)', () =>
     const plan = planOpen({ panelCount: 0 }, command('LEDG'), true)
     expect(plan).toMatchObject({ kind: 'add', ref: undefined, params: { code: 'LEDG', group: '-' } })
   })
+
+  // U20: F1 pressed twice used to replace the focused HOME panel with HELP, joining its link group
+  // (A, B or C), as if HELP were a screen tied to that group's instrument. HELP added as its own new
+  // panel (F1 twice, Shift+Enter or NXTW) never carries a link chip, regardless of what group was
+  // active. HELP replacing a focused panel in place, however, keeps that panel's own link group like
+  // any other replace (the module's own 'replaced in place, keeping its link group' contract): a
+  // HELP <GO> must not permanently unlink the panel it appeared in from the next command run there.
+  // Every other context-free screen (LEDG, above) keeps joining the active group unchanged.
+  it('replacing a group-A panel in place with HELP keeps its link group, like any other replace', () => {
+    const plan = planOpen({ activePanelId: 'p1', activeGroup: 'A', panelCount: 4 }, command('HELP'), false)
+    expect(plan).toMatchObject({ kind: 'replace', panelId: 'p1', params: { code: 'HELP', group: 'A' } })
+  })
+
+  it('the command that follows a replaced HELP in the same panel still opens in its old link group', () => {
+    const plan1 = planOpen({ activePanelId: 'p1', activeGroup: 'A', panelCount: 4 }, command('HELP'), false)
+    expect(plan1.kind).toBe('replace')
+    const group1 = plan1.kind === 'replace' ? plan1.params.group : '-'
+    const plan2 = planOpen({ activePanelId: 'p1', activeGroup: group1, panelCount: 4 }, command('GP'), false)
+    expect(plan2.kind).toBe('replace')
+    expect(plan2.kind === 'replace' ? plan2.params.group : null).toBe('A')
+  })
+
+  it('never joins a link group for HELP opened as its own new panel (F1 twice, Shift+Enter or NXTW)', () => {
+    const plan = planOpen({ activePanelId: 'p1', activeGroup: 'C', panelCount: 4 }, command('HELP'), true)
+    expect(plan).toMatchObject({ kind: 'add', ref: 'p1', params: { code: 'HELP', group: '-' } })
+  })
 })
 
 describe('applyPlan against a dockview-like api', () => {
@@ -192,6 +218,26 @@ describe('applyPlan against a dockview-like api', () => {
     applyPlan(api, { kind: 'add', ref: undefined, params: paramsFromCommand(command('OOS'), '-') })
     const added = api.store[1]
     expect(added?.position).toEqual({ referencePanel: 'p1', direction: 'right' })
+  })
+
+  // U28: Shift+Enter from the focused panel (not necessarily the last in reading order) used to
+  // insert the new one right beside it, renumbering every panel after it (Alt+N no longer reaching
+  // them). It is now always appended after the last panel instead, so every existing number (and its
+  // Alt+N) stays put; the new panel simply becomes the next number.
+  it('adds the new panel after the last one in reading order, not beside the focused panel (U28)', () => {
+    const api = fakeApi([
+      { id: 'home-gp', params: paramsFromCommand(command('GP'), 'A'), title: 'NQ GP 1d', position: undefined },
+      { id: 'home-eq', params: paramsFromCommand(command('EQ'), 'B'), title: 'EQ', position: { referencePanel: 'home-gp', direction: 'below' } },
+      { id: 'home-mon', params: paramsFromCommand(command('MON'), 'A'), title: 'MON', position: { referencePanel: 'home-gp', direction: 'right' } },
+      { id: 'home-reg', params: paramsFromCommand(command('REG'), '-'), title: 'REG', position: { referencePanel: 'home-eq', direction: 'right' } },
+    ])
+    // GP (home-gp) is focused: Shift+Enter on DES used to reference it, inserting DES second.
+    applyPlan(api, { kind: 'add', ref: 'home-gp', params: paramsFromCommand(command('DES'), 'A') })
+    const added = api.store.at(-1)
+    expect(added?.params.code).toBe('DES')
+    expect(added?.position).toEqual({ referencePanel: 'home-reg', direction: 'right' })
+    // Every panel already there keeps its id (and so its reading-order number and Alt+N), untouched.
+    expect(api.store.slice(0, 4).map((p) => p.id)).toEqual(['home-gp', 'home-eq', 'home-mon', 'home-reg'])
   })
 
   it('falls back to the last panel when the requested reference no longer exists (D02)', () => {

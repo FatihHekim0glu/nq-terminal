@@ -66,7 +66,11 @@ describe('HomeEquityPanel (look spec 7.1, HOME [B])', () => {
     const faces = within(tiles).getAllByRole('button').map((b) => b.querySelector('.kpi-value')?.textContent)
     expect(faces).toEqual(['-3.72', '-3.67', '-9.5%', '-9.4%', '+3.47%', '1.18', '4'])
     expect(screen.getByText('[POST HOC]', { selector: '.home-eq-tag .tag' })).toBeTruthy()
-    expect(screen.getByText('Basis A, screen (arithmetic on a fixed K). Unit: return on capital per session.')).toBeTruthy()
+    // U24: the caption names both the return unit and the equity pane's own unit (p.equity_unit),
+    // not only the return unit, since a screen basis reads very differently in the two.
+    expect(
+      screen.getByText('Basis A, screen (arithmetic on a fixed K). Returns in return on capital per session; the equity pane plots multiple of K (K = 1), arithmetic.'),
+    ).toBeTruthy()
     expect(screen.getByText('Benchmark: same-exposure buy and hold (r_bh_1).')).toBeTruthy()
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy.mock.calls[0]![0]).toBe('/api/analytics/hypothesis/volmanaged_v0/panel')

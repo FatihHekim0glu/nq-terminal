@@ -7,6 +7,10 @@ export const GRID = {
   /** The visible `N)` hot-link number. */
   number: '{n})',
   section: '{n}) {label}',
+  /** Number <GO> on a section heading (U26): says the heading is a heading, not a row, and the
+   * numbers of the rows under it, so a numbered select on a heading is never silent. */
+  headingNumber: '{n}) {label} is a heading: rows {first} to {last}.',
+  headingNumberEmpty: '{n}) {label} is a heading.',
   keysHint:
     'Arrow keys move between cells, Page Up and Page Down by a page, Home and End along the row, Control with Home or End to the first or last row. Enter on a column header sorts by it; Enter on a row opens it.',
   empty: 'No rows.',

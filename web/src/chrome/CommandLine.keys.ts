@@ -2,9 +2,10 @@
 //  - globalKeyAction(): a pure map from a keydown to what it asks for, tested on its own;
 //  - useCommandLineKeys(): Esc, Ctrl+K and Home focus the command line from anywhere (the command line
 //    owns these, so it works on its own);
-//  - useTerminalKeys(): the rest (F1, F2 and F4, F8 to F11, End, PgUp and PgDn, Shift+PgUp and PgDn,
-//    Alt+1 to 9, Alt+K), bound once by the app, which knows the panels.
-// F2 and F4 are reserved (spec 5.2 drops the old F2 REG and F4 LEDG plan): the browser never gets them,
+//  - useTerminalKeys(): the rest (F1 to F7, F8 to F11, End, Shift+End, PgUp and PgDn, Shift+PgUp
+//    and PgDn, Alt+1 to 9, Alt+K), bound once by the app, which knows the panels.
+// F2 to F7 are reserved (spec 5.2 drops the old F2 REG and F4 LEDG plan; U11 adds F3, F5, F6 and F7 so
+// none of them reload the terminal, leave it or cover the command line): the browser never gets them,
 // and the message line says what to type instead. Alt+F4 and Ctrl+F4 stay the system's and the browser's.
 // No single printable character is bound (WCAG 2.1.4). A key a panel control already handled
 // (defaultPrevented) is left alone, so a chart's Home and End or a grid's PgUp keep working.
@@ -35,14 +36,20 @@ export type GlobalKeyAction =
   | { readonly kind: 'help' }
   | { readonly kind: 'sector'; readonly sector: KeyedSector }
   | { readonly kind: 'back' }
+  | { readonly kind: 'forward' }
   | { readonly kind: 'page'; readonly dir: 1 | -1 }
   | { readonly kind: 'history'; readonly older: boolean }
   | { readonly kind: 'panel'; readonly n: number }
   | { readonly kind: 'keymap' }
   | { readonly kind: 'reserved'; readonly key: ReservedFKey }
 
-/** F-keys held back from the browser with no terminal action of their own (spec 5.2). */
-export const RESERVED_F_KEYS = ['F2', 'F4'] as const
+/**
+ * F-keys held back from the browser with no terminal action of their own (spec 5.2). F3 (browser
+ * find), F5 (reload: every panel history would be lost), F6 (address bar) and F7 (caret browsing)
+ * join F2 and F4 (U11): a sector key near them (F8 to F11) must never reload the terminal or leave it. F12,
+ * Ctrl+R and Alt+F4 stay the browser's and the system's, unchanged.
+ */
+export const RESERVED_F_KEYS = ['F2', 'F3', 'F4', 'F5', 'F6', 'F7'] as const
 export type ReservedFKey = (typeof RESERVED_F_KEYS)[number]
 
 function isReserved(key: string): key is ReservedFKey {
@@ -84,6 +91,12 @@ export function globalKeyAction(e: KeyLike, where: KeyWhere): GlobalKeyAction | 
   if (mods === 'alt') return altKey(e)
   if (mods === 'shift') {
     if (e.key === 'PageUp' || e.key === 'PageDown') return { kind: 'history', older: e.key === 'PageUp' }
+    if (e.key === 'End') {
+      // FORWARD (U10): the same caret-key guard as End (Back), so Shift+End still selects to the end
+      // of a typed line or another text field rather than paging the focused panel forward.
+      const caretKey = where.inCommandLine ? !where.lineEmpty : where.inTextField
+      return caretKey ? null : { kind: 'forward' }
+    }
     return null
   }
   if (mods !== 'none') return null
@@ -143,6 +156,13 @@ export function useTerminalKeys(where: () => KeyWhere, run: (action: GlobalKeyAc
     function onKeyDown(e: KeyboardEvent) {
       const action = globalKeyAction(e, latest.current.where())
       if (!action || action.kind === 'focus-command') return
+      // A held or repeated F1 (U20) still must not reach the browser's own help page, but must not
+      // run help again either: help() itself has no key-repeat guard (it reads a real clock for the
+      // F1-twice window), so a repeat event run through it piles up HELP panels one per event.
+      if (e.repeat && action.kind === 'help') {
+        e.preventDefault()
+        return
+      }
       e.preventDefault()
       latest.current.run(action)
     }

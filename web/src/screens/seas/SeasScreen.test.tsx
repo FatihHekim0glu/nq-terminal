@@ -194,6 +194,32 @@ describe('SEAS screen', () => {
     expect(text.replace('no p-value', '')).not.toMatch(/p-value|p value|t-stat|welch|significan/)
   })
 
+  it('keeps every tab\'s aria-controls pointing at a real tabpanel while the query is pending (G18)', () => {
+    renderSeas({ kind: 'instrument', value: 'NQ' })
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.length).toBeGreaterThan(0)
+    for (const tab of tabs) {
+      const id = tab.getAttribute('aria-controls')
+      expect(id).toBeTruthy()
+      expect(document.getElementById(id!)?.getAttribute('role')).toBe('tabpanel')
+    }
+  })
+
+  it('keeps every tab\'s aria-controls pointing at a real tabpanel when the query fails (G18)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      new Response(JSON.stringify({ detail: 'boom' }), { status: 500, headers: { 'content-type': 'application/json' } }),
+    ))
+    renderSeas({ kind: 'instrument', value: 'NQ' })
+    await screen.findByRole('alert')
+    const tabs = screen.getAllByRole('tab')
+    expect(tabs.length).toBeGreaterThan(0)
+    for (const tab of tabs) {
+      const id = tab.getAttribute('aria-controls')
+      expect(id).toBeTruthy()
+      expect(document.getElementById(id!)?.getAttribute('role')).toBe('tabpanel')
+    }
+  })
+
   it('exports the shown tab with no request', async () => {
     renderSeas({ kind: 'instrument', value: 'NQ' })
     await screen.findByRole('img', { name: /by calendar month/ })

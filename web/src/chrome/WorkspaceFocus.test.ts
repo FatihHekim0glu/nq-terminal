@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { act, renderHook } from '@testing-library/react'
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ROVING_OVERLAY_ATTR, ROVING_SCROLL_ATTR, handleRovingKey, panelTabStops, syncRoving } from './WorkspaceFocus'
+import { ROVING_OVERLAY_ATTR, ROVING_SCROLL_ATTR, handleRovingKey, panelTabStops, syncRoving, usePanelRoving } from './WorkspaceFocus'
 
 function panel(html: string): HTMLElement {
   const el = document.createElement('section')
@@ -92,6 +94,31 @@ describe('syncRoving: one tab stop per panel', () => {
     expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
   })
 
+  // After a panel menu or dropdown closes, an unrelated resync (the MutationObserver, no explicit
+  // `prefer`) must not leave the overflowing body with no Tab stop of its own (axe
+  // scrollable-region-focusable, G21). Arrow-key roving onto the control (an explicit `prefer`) is
+  // untouched, so normal title-bar navigation still keeps its stop.
+  it('gives an overflowing body back its Tab stop once a title-bar control is no longer preferred', () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div data-roving data-roving-default id="body">x</div>`)
+    const body = el.querySelector('#body') as HTMLElement
+    Object.defineProperty(body, 'scrollHeight', { value: 400, configurable: true })
+    Object.defineProperty(body, 'clientHeight', { value: 200, configurable: true })
+    const bar = el.querySelector('#bar') as HTMLElement
+    syncRoving(el, bar)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
+  })
+
+  it('leaves a non-overflowing body off the Tab stop, so a title-bar control stays sticky', () => {
+    const el = panel(`<button data-roving id="bar">b</button><div data-roving data-roving-default id="body">x</div>`)
+    syncRoving(el, el.querySelector('#bar') as HTMLElement)
+    syncRoving(el)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['bar'])
+  })
+
   it('writes nothing when the tab stops are already right (so an observer cannot loop)', () => {
     const el = panel(`<button data-roving id="a">a</button><div data-roving data-roving-default id="b">b</div>`)
     syncRoving(el)
@@ -102,6 +129,47 @@ describe('syncRoving: one tab stop per panel', () => {
     records.push(...observer.takeRecords())
     observer.disconnect()
     expect(records).toEqual([])
+  })
+})
+
+// G21 characterization (not a fix: usePanelRoving's docstring claim was false, the behaviour is kept
+// on purpose; see WorkspaceFocus.ts's keepBodyReachable and syncRoving docstrings). usePanelRoving's
+// own MutationObserver echoes every tabindex write it sees as an ambient resync (no explicit
+// `prefer`), including the write a deliberate arrow move onto a title-bar control just made, so
+// within a microtask the Tab stop is handed back to an overflowing body even though the title-bar
+// control still holds real DOM focus. Tab from that control therefore lands on the same panel's body
+// (one extra Tab), deliberately, so the panel's one scrolling region stays reachable (axe
+// scrollable-region-focusable).
+describe('usePanelRoving + its own live MutationObserver: the title-bar echo (G21)', () => {
+  it('hands the Tab stop back to an overflowing body within a microtask, even while the title-bar control still holds focus', async () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div data-roving data-roving-default id="body" tabindex="0">x</div>`)
+    const body = el.querySelector('#body') as HTMLElement
+    Object.defineProperty(body, 'scrollHeight', { value: 400, configurable: true })
+    Object.defineProperty(body, 'clientHeight', { value: 200, configurable: true })
+    const bar = el.querySelector('#bar') as HTMLElement
+
+    const ref = { current: el } as RefObject<HTMLElement | null>
+    const { result } = renderHook(() => usePanelRoving(ref))
+    body.focus()
+    expect(document.activeElement).toBe(body)
+
+    act(() => {
+      const fake = { target: body, nativeEvent: key(body, 'ArrowLeft') } as unknown as ReactKeyboardEvent<HTMLElement>
+      result.current(fake)
+    })
+    // The deliberate move: ArrowLeft from the overflowing body onto the title-bar control.
+    expect(document.activeElement).toBe(bar)
+
+    // Let the live MutationObserver's queued callback (the ambient echo) run.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(document.activeElement).toBe(bar)
+    expect(body.getAttribute('tabindex')).toBe('0')
+    expect(bar.getAttribute('tabindex')).toBe('-1')
   })
 })
 
@@ -168,6 +236,20 @@ describe('handleRovingKey: arrows move inside the panel', () => {
   it('leaves the arrows to a select and to editable content', () => {
     const el = panel(`<div data-roving id="a">a</div><select data-roving id="s"><option>x</option></select><div data-roving id="b">b</div>`)
     expect(handleRovingKey(el, key(el.querySelector('#s') as HTMLElement, 'ArrowRight'))).toBe(false)
+  })
+
+  // MON's 'Vol-normalised' checkbox trapped Left and Right: a checkbox has no caret, so it must join
+  // the roving walk rather than being treated as a text field (G11).
+  it('a checkbox joins the roving walk instead of trapping the arrows', () => {
+    const el = panel(`<input type="checkbox" data-roving id="c" /><button data-roving id="b">b</button>`)
+    const checkbox = el.querySelector('#c') as HTMLElement
+    expect(handleRovingKey(el, key(checkbox, 'ArrowRight'))).toBe(true)
+    expect(document.activeElement?.id).toBe('b')
+  })
+
+  it('keeps a radio input native, like a select', () => {
+    const el = panel(`<div data-roving id="a">a</div><input type="radio" data-roving id="r" /><div data-roving id="b">b</div>`)
+    expect(handleRovingKey(el, key(el.querySelector('#r') as HTMLElement, 'ArrowRight'))).toBe(false)
   })
 })
 
