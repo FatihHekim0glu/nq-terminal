@@ -24,19 +24,23 @@ import { PanelActionsContext, type PanelActions } from './PanelChrome.actions'
 import { NumberingContext } from './PanelChrome.numbers'
 import RelatedMenu from './RelatedMenu'
 import ScreenBoundary from './ScreenBoundary'
-import { createWorkspaceController, type ControllerEnv, type FocusedPanel, type RunTarget, type WorkspaceController } from './WorkspaceController'
+import { createWorkspaceController, type ControllerEnv, type FocusedPanel, type RunTarget, type ShownLayout, type WorkspaceController } from './WorkspaceController'
 import { PANEL_COMPONENT, effectiveContext, panelSubject, panelTitle, sanitiseParams } from './WorkspaceModel'
+import type { RunPreview } from './WorkspacePreview'
 import WorkspacePlaceholder from './WorkspacePlaceholder'
 import { createWorkspaceView, type WorkspaceView } from './WorkspaceView'
 import { BUILT_SCREENS, type ScreenRegistry } from './WorkspaceScreens'
 import type { ParsedCommand } from '../commands/parser'
 import './Workspace.css'
 
-export type { FocusedPanel, RunTarget } from './WorkspaceController'
+export type { FocusedPanel, RunTarget, ShownLayout } from './WorkspaceController'
+export type { RunPreview } from './WorkspacePreview'
 
 export interface WorkspaceHandle {
   /** False when the Workspace has no dockview api yet (a command typed before it finished loading). */
   run(command: ParsedCommand, target: RunTarget): boolean
+  /** What run(command, target) would do, with no side effects. Null with no dockview api yet. */
+  preview(command: ParsedCommand, target: RunTarget): RunPreview | null
   /** Focus the panel the user last focused. False when there is none. */
   focusPanel(): boolean
   /** Focus panel N in reading order (Alt+N). False when there is no such panel. */
@@ -51,6 +55,10 @@ export interface WorkspaceHandle {
   openRelatedMenu(panelId?: string): boolean
   /** Close the related functions menu wherever it is open. */
   closeRelatedMenu(): void
+  /** Reset the shown screen to its default layout ('reset'), or report it already is ('default'). */
+  resetLayout(): 'reset' | 'default' | null
+  /** Undo the last layout change. The screen it restored, or null when there was nothing to undo. */
+  undo(): MnemonicCode | null
 }
 
 export interface WorkspaceProps {
@@ -61,6 +69,8 @@ export interface WorkspaceProps {
   readonly linkGroups?: LinkGroupsStore
   readonly onScreenChange?: (code: MnemonicCode) => void
   readonly onFocusedPanelChange?: (panel: FocusedPanel | null) => void
+  readonly onLayoutChange?: (shown: ShownLayout) => void
+  readonly onLayoutDropped?: (code: MnemonicCode) => void
 }
 
 /** 2px black gutters between panels; no panel borders (look spec 4.3). */
@@ -177,6 +187,8 @@ function useController(props: WorkspaceProps, rootRef: RefObject<HTMLElement | n
     root: () => rootRef.current,
     onScreenChange: props.onScreenChange,
     onFocusedPanelChange: props.onFocusedPanelChange,
+    onLayoutChange: props.onLayoutChange,
+    onLayoutDropped: props.onLayoutDropped,
   }
   const controller = useRef<WorkspaceController | null>(null)
   controller.current ??= createWorkspaceController(() => env.current as ControllerEnv)
@@ -197,6 +209,7 @@ export default function Workspace(props: WorkspaceProps) {
   const controller = useController(props, rootRef)
   useImperativeHandle(props.ref, () => ({
     run: controller.run,
+    preview: controller.preview,
     focusPanel: controller.focusPanel,
     focusPanelNumber: controller.focusPanelNumber,
     focusedContext: controller.focusedContext,
@@ -204,6 +217,8 @@ export default function Workspace(props: WorkspaceProps) {
     goForward: controller.goForward,
     openRelatedMenu: controller.openRelatedMenu,
     closeRelatedMenu: controller.closeRelatedMenu,
+    resetLayout: controller.resetLayout,
+    undo: controller.undo,
   }))
   const env = { screens: props.screens ?? BUILT_SCREENS, linkGroups: props.linkGroups ?? useLinkGroups, controller, view: controller.view }
   return (

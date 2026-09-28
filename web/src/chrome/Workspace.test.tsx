@@ -140,7 +140,7 @@ describe('Workspace (dockview) with the default layouts', () => {
     expect(document.activeElement).toBe(oos)
   })
 
-  it('restores a screen layout saved from another screen, and resets it when typed on itself', async () => {
+  it('restores a screen layout saved from another screen, and restores it again when typed on itself (RESET is the only way to reset)', async () => {
     const { ref } = renderWorkspace()
     await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => screen.getByRole('group', { name: 'REG content' }).focus())
@@ -154,7 +154,15 @@ describe('Workspace (dockview) with the default layouts', () => {
     await waitFor(() => expect(panelTitles()).toEqual(['REG', 'MT']))
     act(() => ref.current?.run(command('HOME'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(customised))
+    // Typing HOME again, now that HOME is already shown, still restores the saved layout: a bare
+    // mnemonic never resets (the D-defect this wave fixes). Only ref.current.resetLayout() (RESET) does.
     act(() => ref.current?.run(command('HOME'), 'replace'))
+    await waitFor(() => expect(panelTitles()).toEqual(customised))
+    let outcome: string | null = null
+    act(() => {
+      outcome = ref.current?.resetLayout() ?? null
+    })
+    expect(outcome).toBe('reset')
     await waitFor(() => expect(panelTitles()).toEqual(HOME_TITLES))
   })
 

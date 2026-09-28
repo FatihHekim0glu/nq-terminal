@@ -50,12 +50,22 @@ function panelsAreScreens(panels: unknown): boolean {
 }
 
 /**
+ * The dockview JSON inside a stored entry, or null when it asks for groups the terminal does not use,
+ * or holds a panel that is not a screen panel. Does not check the entry's base signature: a caller
+ * that means to restore it under the screen it names (undo, a stale-base drop) wants exactly this, not
+ * the signature check fromStored also makes.
+ */
+export function readDock(stored: Readonly<Record<string, unknown>>): SerializedDockview | null {
+  const dock = stored.dock
+  if (!isRecord(dock) || !isRecord(dock.grid) || hasExtraGroups(dock) || !panelsAreScreens(dock.panels)) return null
+  return dock as unknown as SerializedDockview
+}
+
+/**
  * The dockview JSON to restore for `code`, or null when the stored entry was saved from another
  * default, asks for groups the terminal does not use, or holds a panel that is not a screen panel.
  */
 export function fromStored(code: MnemonicCode, stored: Readonly<Record<string, unknown>>): SerializedDockview | null {
   if (stored.base !== layoutSignature(code)) return null
-  const dock = stored.dock
-  if (!isRecord(dock) || !isRecord(dock.grid) || hasExtraGroups(dock) || !panelsAreScreens(dock.panels)) return null
-  return dock as unknown as SerializedDockview
+  return readDock(stored)
 }

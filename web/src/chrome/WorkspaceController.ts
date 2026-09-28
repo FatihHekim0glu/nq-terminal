@@ -5,8 +5,10 @@
 //   panel, loads the screen's layout); Shift+Enter opens a new panel (WorkspaceModel.planOpen).
 // - A layout is saved only after a command changes it (replace, new panel, back, forward), never on
 //   load, so an untouched default is never stored and a changed default reaches every viewer.
-// - A screen's mnemonic typed from another screen restores its saved layout; typed on the screen
-//   already shown, it resets that screen to its default.
+// - A screen's mnemonic always restores its saved layout, on the screen it is typed from and on the
+//   screen already shown alike: typing a bare mnemonic never loses a customised layout. RESET
+//   (resetLayout()) is the only way back to a screen's default; a 10-deep undo ring (WorkspaceUndo)
+//   can bring back what RESET, or a stale saved layout dropped for an old default, took away.
 // - Each panel keeps its own history: a replace records what the panel showed; goBack and
 //   goForward walk it (WorkspaceHistory), retargeting the panel's link group to what comes back.
 // - The focused panel and its context are read when asked (focusedContext), never cached, so a
@@ -17,17 +19,19 @@
 //   context a contextless command takes. Whether Enter replaces a panel or loads a layout still
 //   follows real focus (UI_SPEC section 5).
 // - Focus moving into another panel closes the related functions menu; focus on the chrome does not.
-import type { DockviewApi, DockviewGroupPanel } from 'dockview-react'
+import type { DockviewApi, DockviewGroupPanel, SerializedDockview } from 'dockview-react'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
 import { layoutFor as savedLayoutFor, type LayoutsStore } from '../state/layouts'
-import type { LinkGroupsStore } from '../state/linkGroups'
+import { LINK_GROUPS, type LinkGroupsStore } from '../state/linkGroups'
 import { syncRoving } from './WorkspaceFocus'
 import { EMPTY_HISTORY, recordVisit, stepBack, stepForward, type HistoryStep, type PanelHistory } from './WorkspaceHistory'
 import { layoutFor } from './WorkspaceLayouts'
 import { applyPlan, effectiveContext, panelTitle, planOpen, sanitiseParams, type DockApiLike, type OpenPlan, type PanelParams } from './WorkspaceModel'
-import { fromStored, toStored } from './WorkspaceStorage'
+import { describePlan, type PreviewInput, type RunPreview } from './WorkspacePreview'
+import { fromStored, layoutSignature, readDock, toStored } from './WorkspaceStorage'
+import { EMPTY_RING, popUndo, pushUndo, type UndoCause, type UndoEntry, type UndoRing } from './WorkspaceUndo'
 import { createWorkspaceView, patchView, readingOrder, type WorkspaceView } from './WorkspaceView'
 
 export type RunTarget = 'replace' | 'new-panel'
@@ -42,6 +46,14 @@ export interface FocusedPanel {
   readonly context: ResolvedContext | null
 }
 
+/** The screen whose layout the panels are arranged under, for the chrome to show an edited mark and
+ * offer RESET and UNDO. `workspace` is reserved for a named-workspace feature not built yet: null. */
+export interface ShownLayout {
+  readonly code: MnemonicCode
+  readonly edited: boolean
+  readonly workspace: string | null
+}
+
 export interface ControllerEnv {
   readonly initialScreen: MnemonicCode
   readonly layouts: LayoutsStore
@@ -49,6 +61,11 @@ export interface ControllerEnv {
   readonly root: () => HTMLElement | null
   readonly onScreenChange?: (code: MnemonicCode) => void
   readonly onFocusedPanelChange?: (panel: FocusedPanel | null) => void
+  /** The shown screen and whether it is edited, after every change that could affect either. */
+  readonly onLayoutChange?: (shown: ShownLayout) => void
+  /** A saved layout was refused because it was made from an old default, and the default now shows;
+   * UNDO can still bring it back. Never fires for a tampered layout (today's silent fallback). */
+  readonly onLayoutDropped?: (code: MnemonicCode) => void
 }
 
 export interface WorkspaceController {
@@ -57,6 +74,8 @@ export interface WorkspaceController {
   onReady(api: DockviewApi): void
   /** False when there was no dockview api yet (a command typed before the Workspace finished loading). */
   run(command: ParsedCommand, target: RunTarget): boolean
+  /** What run(command, target) would do, with no side effects. Null with no dockview api yet. */
+  preview(command: ParsedCommand, target: RunTarget): RunPreview | null
   /** Recompute the addressed panel and report it again, for a change (e.g. a link-group retarget) that
    * did not itself go through run(). */
   refreshFocused(): void
@@ -78,6 +97,12 @@ export interface WorkspaceController {
   /** Open a function in a panel, keeping its link group and, when the function takes it, its context. */
   openInPanel(panelId: string, code: MnemonicCode): boolean
   toggleMaximise(panelId: string): void
+  /** Reset the shown screen to its default layout. 'reset' when a saved layout was cleared (UNDO can
+   * bring it back), 'default' when it already showed the default, null with no dockview api yet. */
+  resetLayout(): 'reset' | 'default' | null
+  /** Undo the last of up to 10 layout changes (a replace, add, back, forward, related-menu open, RESET
+   * or a dropped saved layout). The screen it restored, or null when there is nothing to undo. */
+  undo(): MnemonicCode | null
 }
 
 function adapt(api: DockviewApi): DockApiLike {
@@ -106,15 +131,20 @@ export function prepareGroup(group: DockviewGroupPanel): void {
   }
 }
 
-function tryStoredLayout(api: DockviewApi, code: MnemonicCode, stored: Readonly<Record<string, unknown>>): boolean {
-  const dock = fromStored(code, stored)
-  if (!dock) return false
+/** Applies a dockview JSON already checked structurally sound (readDock or fromStored); false (and no
+ * change attempted beyond what dockview itself did) when it throws or a panel fails sanitiseParams. */
+function applyDock(api: DockviewApi, dock: SerializedDockview): boolean {
   try {
     api.fromJSON(dock)
   } catch {
     return false
   }
   return api.panels.length > 0 && api.panels.every((p) => sanitiseParams(p.params) !== null)
+}
+
+function tryStoredLayout(api: DockviewApi, code: MnemonicCode, stored: Readonly<Record<string, unknown>>): boolean {
+  const dock = fromStored(code, stored)
+  return dock !== null && applyDock(api, dock)
 }
 
 function panelElement(root: HTMLElement | null, id: string): HTMLElement | null {
@@ -136,16 +166,11 @@ function seedLinkGroups(api: DockviewApi, linkGroups: LinkGroupsStore): void {
   }
 }
 
-/** `reported` is the screen the chrome (FrameStrip, status bar) currently shows, the same code the
- * controller last passed to onScreenChange; `shown` is the screen whose layout the panels are actually
- * arranged under. A bare mnemonic resets only when it names both: the screen the chrome shows and the
- * screen whose layout is arranged. A Shift+Enter add (or any command that only touches a panel) moves
- * `reported` without moving `shown`, so on its own it can no longer make the next bare mnemonic on that
- * screen look like "typed on itself" and wipe a layout the user never asked to reset. */
-function loadMode(command: ParsedCommand, plan: LoadPlan, reported: MnemonicCode, shown: MnemonicCode): LoadMode {
+/** A bare command (no typed context, no argument) always restores the screen's saved layout, even on
+ * the screen already shown; RESET (resetLayout()) is the only way to reset a screen to its default. */
+function loadMode(command: ParsedCommand): LoadMode {
   const bare = command.context === null && Object.keys(command.args).length === 0
-  if (!bare) return 'plain'
-  return plan.layout.screen === reported && plan.layout.screen === shown ? 'reset' : 'restore'
+  return bare ? 'restore' : 'plain'
 }
 
 /** What the controller remembers between calls; only the controller's own functions change it. */
@@ -156,9 +181,8 @@ interface ControllerState {
   ranIn: string | null
   /** The screen whose layout the panels are currently arranged under (what a save keys on). */
   shown: MnemonicCode
-  /** The screen the chrome was last told is showing (what onScreenChange last reported). */
-  reported: MnemonicCode
   histories: ReadonlyMap<string, PanelHistory>
+  undo: UndoRing
   readonly view: WorkspaceView
 }
 
@@ -211,18 +235,48 @@ function saveShown(st: ControllerState, env: ControllerEnv, dock: DockviewApi): 
   env.layouts.getState().saveLayout(st.shown, toStored(st.shown, dock.toJSON()))
 }
 
+/** Remembers the panels' current state (before whatever the caller is about to do) as an undo entry. */
+function snapshot(st: ControllerState, env: ControllerEnv, cause: UndoCause): void {
+  const api = st.api
+  if (!api) return
+  st.undo = pushUndo(st.undo, {
+    screen: st.shown,
+    dock: api.toJSON() as unknown as Readonly<Record<string, unknown>>,
+    stored: savedLayoutFor(env.layouts.getState(), st.shown),
+    contexts: env.linkGroups.getState().contexts,
+    cause,
+  })
+}
+
+/** Tells the chrome what screen is shown and whether it is edited (a saved layout exists for it). */
+function reportShown(st: ControllerState, env: ControllerEnv): void {
+  const edited = savedLayoutFor(env.layouts.getState(), st.shown) !== null
+  env.onLayoutChange?.({ code: st.shown, edited, workspace: null })
+}
+
 function loadScreen(st: ControllerState, env: ControllerEnv, dock: DockviewApi, plan: LoadPlan, mode: LoadMode): void {
   const { layouts, linkGroups } = env
   const code = plan.layout.screen
   if (mode === 'reset') layouts.getState().resetLayout(code)
   const stored = mode === 'restore' ? savedLayoutFor(layouts.getState(), code) : null
   const restored = stored !== null && tryStoredLayout(dock, code, stored)
+  // Structurally sound but saved from an old default: dropped, not silently discarded (D-defect: the
+  // viewer's layout used to vanish with no way back). Structurally unsound (tampered, or truly not a
+  // dockview layout at all) keeps today's silent fallback: no undo entry, no announcement.
+  const droppedDock = stored && !restored ? readDock(stored) : null
+  const restorable = droppedDock !== null && Object.values(droppedDock.panels).every((p) => sanitiseParams(p.params) !== null)
+  const dropped = stored !== null && restorable && stored.base !== layoutSignature(code)
+  const contexts = linkGroups.getState().contexts
   if (stored && !restored) layouts.getState().resetLayout(code)
   if (!restored) applyPlan(adapt(dock), plan)
   st.histories = new Map()
   prepareAll(st, dock)
   seedLinkGroups(dock, linkGroups)
   st.shown = code
+  if (dropped && stored && droppedDock) {
+    st.undo = pushUndo(st.undo, { screen: code, dock: droppedDock as unknown as Readonly<Record<string, unknown>>, stored, contexts, cause: 'dropped' })
+    env.onLayoutDropped?.(code)
+  }
 }
 
 /** Marks the command target with the focus line and tells the chrome which panel it is. */
@@ -270,9 +324,42 @@ function applyToPanel(st: ControllerState, env: ControllerEnv, plan: Exclude<Ope
   }
 }
 
+/** A dockview panels dict, keyed for a stable JSON.stringify: fromJSON rebuilds it in grid-traversal
+ * order, which differs from the insertion order an incremental replace leaves behind, even when the
+ * two states are otherwise identical. */
+function sortedPanels(panels: unknown): unknown {
+  if (typeof panels !== 'object' || panels === null) return panels
+  return Object.fromEntries(Object.entries(panels as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+}
+
+/** The dockview JSON a snapshot is compared on: grid and panels only, ignoring which group has focus
+ * (activeGroup), so a command that only shifted focus is still seen as a no-op layout change. */
+function layoutKey(dock: Readonly<Record<string, unknown>>): string {
+  const { grid, panels } = dock as { grid?: unknown; panels?: unknown }
+  return JSON.stringify({ grid, panels: sortedPanels(panels) })
+}
+
+/** True when undo entry `e` (the state snapshotted before a command ran) already equals the state the
+ * workspace is in right now: same screen, dock layout, link-group contexts and saved layout. A command
+ * whose net effect was a no-op (e.g. a bare restore of the layout already shown) leaves nothing worth
+ * undoing, and a first UNDO that visibly did nothing would look like a bug. */
+function unchanged(st: ControllerState, env: ControllerEnv, e: UndoEntry): boolean {
+  const api = st.api
+  if (!api) return false
+  return (
+    e.screen === st.shown &&
+    layoutKey(e.dock) === layoutKey(api.toJSON() as unknown as Readonly<Record<string, unknown>>) &&
+    JSON.stringify(e.contexts) === JSON.stringify(env.linkGroups.getState().contexts) &&
+    JSON.stringify(e.stored) === JSON.stringify(savedLayoutFor(env.layouts.getState(), st.shown))
+  )
+}
+
 function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): boolean {
   const api = st.api
   if (!api) return false
+  const ringBefore = st.undo
+  snapshot(st, env, 'change')
+  const pushed = st.undo === ringBefore ? null : (st.undo.at(-1) ?? null)
   // Replace or load follows real focus (UI_SPEC section 5), not the display target; a new panel still
   // anchors to the panel the command line addresses (the focus line) when nothing has real DOM focus,
   // so it opens beside that panel instead of hidden as a tab of whatever group dockview left active.
@@ -281,14 +368,35 @@ function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, ta
   const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
   const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
   const before = new Set(api.panels.map((p) => p.id))
-  if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command, plan, st.reported, st.shown))
+  if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command))
   else applyToPanel(st, env, plan, command)
   st.ranIn = ranInAfter(plan, before, api)
   if (!focusedId(st)) st.lastFocused = null
-  st.reported = command.mnemonic.code
   env.onScreenChange?.(command.mnemonic.code)
   announce(st, env)
+  reportShown(st, env)
+  // Restoring ringBefore wholesale, instead of slicing off just the newest entry, also keeps the
+  // oldest entry the ring dropped when it was already full at UNDO_DEPTH.
+  if (pushed && st.undo.at(-1) === pushed && unchanged(st, env, pushed)) st.undo = ringBefore
   return true
+}
+
+function preview(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): RunPreview | null {
+  const api = st.api
+  if (!api) return null
+  const real = focusedId(st)
+  const anchor = target === 'new-panel' ? (real ?? targetId(st)) : real
+  const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
+  const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
+  const input: PreviewInput = {
+    plan,
+    command,
+    order: st.view.getState().order,
+    paramsOf: (id) => paramsOf(st, id),
+    shown: st.shown,
+    hasSaved: (code) => savedLayoutFor(env.layouts.getState(), code) !== null,
+  }
+  return describePlan(input)
 }
 
 /** Replace panel `id` with `params` without recording history (back, forward). */
@@ -298,6 +406,7 @@ function showInPanel(st: ControllerState, env: ControllerEnv, id: string, params
   prepareAll(st, dock)
   saveShown(st, env, dock)
   if (params.group !== '-' && params.context) env.linkGroups.getState().setContext(params.group, params.context)
+  reportShown(st, env)
   if (targetId(st) === id) announce(st, env)
 }
 
@@ -314,6 +423,7 @@ function walk(st: ControllerState, env: ControllerEnv, id: string, step: (h: Pan
   }
   st.histories = new Map([...st.histories, [id, result.history]])
   if (!target) return false
+  snapshot(st, env, 'change')
   showInPanel(st, env, id, target)
   return true
 }
@@ -323,6 +433,7 @@ function openInPanel(st: ControllerState, env: ControllerEnv, id: string, code: 
   const def = findMnemonic(code)
   const dock = st.api
   if (!current || !def || !dock) return false
+  snapshot(st, env, 'change')
   const groupContext = current.group === '-' ? null : env.linkGroups.getState().contexts[current.group]
   const shown = effectiveContext(current, groupContext)
   const context = shown && def.accepts.includes(shown.kind) ? shown : null
@@ -332,6 +443,7 @@ function openInPanel(st: ControllerState, env: ControllerEnv, id: string, code: 
   patchView(st.view, { menu: null })
   prepareAll(st, dock)
   saveShown(st, env, dock)
+  reportShown(st, env)
   if (targetId(st) === id) announce(st, env)
   focusById(env, id)
   return true
@@ -359,9 +471,9 @@ function onReady(st: ControllerState, env: ControllerEnv, dock: DockviewApi): vo
   dock.onDidAddGroup((group) => prepareGroup(group))
   dock.onDidLayoutChange(() => refreshView(st))
   loadScreen(st, env, dock, { kind: 'load', layout: layoutFor(env.initialScreen) }, 'restore')
-  st.reported = env.initialScreen
   env.onScreenChange?.(env.initialScreen)
   announce(st, env)
+  reportShown(st, env)
 }
 
 function onFocusIn(st: ControllerState, env: ControllerEnv, target: EventTarget | null): void {
@@ -390,6 +502,53 @@ function toggleMaximise(st: ControllerState, id: string): void {
   refreshView(st)
 }
 
+/** Reset the shown screen's layout to its default. Snapshotted first, so UNDO can bring it back. */
+function resetLayout(st: ControllerState, env: ControllerEnv): 'reset' | 'default' | null {
+  const api = st.api
+  if (!api) return null
+  const code = st.shown
+  if (savedLayoutFor(env.layouts.getState(), code) === null) return 'default'
+  snapshot(st, env, 'reset')
+  loadScreen(st, env, api, { kind: 'load', layout: layoutFor(code) }, 'reset')
+  st.ranIn = null
+  if (!focusedId(st)) st.lastFocused = null
+  announce(st, env)
+  reportShown(st, env)
+  return 'reset'
+}
+
+/** Undo the last layout change. Untrusted dock JSON off the ring is re-validated through readDock and
+ * sanitiseParams the same way a stored layout is, and falls back to the screen's default plan; the
+ * layouts store is written only once that validation succeeds, so a corrupt undo entry never saves a
+ * layout that could not itself be restored. */
+function undo(st: ControllerState, env: ControllerEnv): MnemonicCode | null {
+  const api = st.api
+  if (!api) return null
+  const popped = popUndo(st.undo)
+  if (!popped) return null
+  st.undo = popped.ring
+  const { entry } = popped
+  const validated = readDock({ dock: entry.dock })
+  const ok = validated !== null && applyDock(api, validated)
+  if (ok && validated) {
+    if (entry.cause === 'dropped') env.layouts.getState().saveLayout(entry.screen, toStored(entry.screen, validated))
+    else if (entry.stored) env.layouts.getState().saveLayout(entry.screen, entry.stored)
+    else env.layouts.getState().resetLayout(entry.screen)
+  } else {
+    env.layouts.getState().resetLayout(entry.screen)
+    applyPlan(adapt(api), { kind: 'load', layout: layoutFor(entry.screen) })
+  }
+  for (const group of LINK_GROUPS) env.linkGroups.getState().setContext(group, entry.contexts[group])
+  st.histories = new Map()
+  prepareAll(st, api)
+  st.shown = entry.screen
+  st.ranIn = null
+  st.lastFocused = null
+  announce(st, env)
+  reportShown(st, env)
+  return entry.screen
+}
+
 /** `env` is read on every call, so the controller always sees the Workspace's latest props. */
 export function createWorkspaceController(env: () => ControllerEnv): WorkspaceController {
   const st: ControllerState = {
@@ -397,14 +556,15 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     lastFocused: null,
     ranIn: null,
     shown: env().initialScreen,
-    reported: env().initialScreen,
     histories: new Map(),
+    undo: EMPTY_RING,
     view: createWorkspaceView(),
   }
   return {
     view: st.view,
     onReady: (dock) => onReady(st, env(), dock),
     run: (command, target) => run(st, env(), command, target),
+    preview: (command, target) => preview(st, env(), command, target),
     refreshFocused: () => announce(st, env()),
     focusPanel: () => focusPanel(st, env()),
     focusPanelNumber: (n) => {
@@ -419,5 +579,7 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     closeRelatedMenu: () => patchView(st.view, { menu: null }),
     openInPanel: (id, code) => openInPanel(st, env(), id, code),
     toggleMaximise: (id) => toggleMaximise(st, id),
+    resetLayout: () => resetLayout(st, env()),
+    undo: () => undo(st, env()),
   }
 }
