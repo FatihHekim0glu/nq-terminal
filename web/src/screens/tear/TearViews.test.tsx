@@ -56,7 +56,10 @@ describe('RET: the Sharpe difference (m - BH) card (SV7)', () => {
     await showRet(HYP_ANALYTICS, 'volmanaged_v0')
     fireEvent.click(within(card()).getByRole('button', { name: 'Table' }))
     const table = within(card()).getByRole('table', { name: LADDER.name })
-    const rows = within(table).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))
+    // The first column is a row header (ChartA11y, D38), the rest are cells.
+    const rows = within(table).getAllByRole('row').slice(1).map((r) => [
+      ...within(r).getAllByRole('rowheader'), ...within(r).getAllByRole('cell'),
+    ].map((c) => c.textContent))
     expect(rows).toEqual([
       ['1 tick', '-0.0032', '-0.2913', '+0.3409', '2686'],
       ['2 ticks', '-0.0061', '-0.2942', '+0.3380', '2686'],
