@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { MNEMONIC_SCREENS, SUGGESTION_DETAILS } from '../copy/commands'
+import { BUILT_CODES } from './built'
+import { withValue } from './messages'
+import { MNEMONICS } from './registry'
 import { fuzzy, sheetGroups, suggest } from './suggest'
 import type { CommandIndexData } from './types'
 
@@ -86,6 +90,29 @@ describe('suggestions', () => {
   it('offers the chrome words with the functions', () => {
     expect(values('LA')).toContain('LAST ')
     expect(values('ME')).toContain('MENU ')
+  })
+
+  it('labels a built P1 function with its screen title: VC suggests VCONE, not "not built yet"', () => {
+    const [vcone] = suggest('VC', INDEX)
+    expect(vcone).toMatchObject({ value: 'VCONE ', label: 'VCONE', group: 'function', detail: MNEMONIC_SCREENS.VCONE })
+    expect(vcone?.detail).not.toContain('not built yet')
+    expect(suggest('NQ ', INDEX).find((s) => s.label === 'DQ')?.detail).toBe(MNEMONIC_SCREENS.DQ)
+  })
+
+  it('keeps "not built yet", with the priority, only for the unbuilt JOBS slot', () => {
+    const [jobs] = suggest('JOBS', INDEX)
+    expect(jobs).toMatchObject({ value: 'JOBS ', group: 'function', detail: withValue(SUGGESTION_DETAILS.notBuilt, `${MNEMONIC_SCREENS.JOBS} (P2)`) })
+    expect(jobs?.detail).toMatch(/, not built yet$/)
+  })
+
+  it('titles every built function and flags only the others, the index loaded or not', () => {
+    for (const index of [INDEX, null]) {
+      for (const m of MNEMONICS) {
+        const detail = suggest(m.code, index).find((s) => s.label === m.code)?.detail
+        if (BUILT_CODES.has(m.code)) expect(detail, m.code).toBe(m.screen)
+        else expect(detail, m.code).toMatch(/, not built yet$/)
+      }
+    }
   })
 
   it('ends a first-token list of two or more letters with a SEARCH row that runs HL', () => {

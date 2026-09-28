@@ -1,6 +1,7 @@
 // Numbered menus the command line shows in its sheet (spec 5.1 items 3, 4, 6, 8, 9 and 4.7): a
 // context's functions, the sector menus, the last commands, related functions, one function's help and
 // HL search results. Pure builders; CommandLine.state.ts decides what choosing an item does.
+import { isBuilt } from '../commands/built'
 import { withValue } from '../commands/messages'
 import { MNEMONICS, findMnemonic, type MnemonicCode, type MnemonicDef } from '../commands/registry'
 import { FUTURES_SECTORS, displayContext, displayInstrument, sectorForRoot, type SectorCode } from '../commands/sectors'
@@ -86,13 +87,13 @@ export function lastMenu(entries: readonly string[]): MenuModel {
   return menu('last', COMMAND_LINE.lastTitle, recent.map((line) => ({ label: line, detail: '', act: { kind: 'run', line } })), [], intro)
 }
 
-/** Related functions for the focused panel: its context's functions, or the screens that take none. */
+/** Related functions for the focused panel: its context's functions, or the built screens that take none. */
 export function relatedMenu(context: ResolvedContext | null, index: CommandIndexData | null): MenuModel {
   if (context) {
     const fns = functionMenu(context, index)
     return { ...fns, key: `related:${fns.key}`, title: COMMAND_LINE.menuTitle, breadcrumb: [COMMAND_LINE.menuTitle, fns.title] }
   }
-  const drafts = MNEMONICS.filter((m) => m.accepts.length === 0 && m.priority === 'P0').map((m) => ({ label: m.code, detail: m.screen, act: functionAct(m, null) }))
+  const drafts = MNEMONICS.filter((m) => m.accepts.length === 0 && isBuilt(m.code)).map((m) => ({ label: m.code, detail: m.screen, act: functionAct(m, null) }))
   return menu('related', COMMAND_LINE.menuTitle, drafts)
 }
 

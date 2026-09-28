@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BUILT_CODES } from '../commands/built'
+import { MNEMONIC_SCREENS } from '../copy/commands'
 import { RELATED } from '../copy/workspace'
 import { NumberingContext, type NumberedItem } from './PanelChrome.numbers'
 import RelatedMenu, { relatedEntries } from './RelatedMenu'
@@ -22,20 +24,48 @@ function rowTexts(): string[] {
 }
 
 describe('relatedEntries: the functions that accept the panel context', () => {
+  const codesFor = (context: Parameters<typeof relatedEntries>[0]) => relatedEntries(context).flatMap((c) => c.functions.map((f) => f.code))
+  const byCategory = (context: Parameters<typeof relatedEntries>[0]) => Object.fromEntries(relatedEntries(context).map((c) => [c.key, c.functions.map((f) => f.code)]))
+
   it('keeps functions that take the context kind or no context, grouped by category', () => {
     const cats = relatedEntries(NQ)
-    const codes = cats.flatMap((c) => c.functions.map((f) => f.code))
+    const codes = codesFor(NQ)
     expect(codes).toEqual(expect.arrayContaining(['GP', 'GIP', 'DES', 'REG', 'HELP']))
     expect(codes).not.toContain('RUN')
     expect(codes).not.toContain('EQ')
     expect(cats.every((c) => c.functions.length > 0)).toBe(true)
   })
 
-  it('lists every P0 function when the panel has no context, and no P1 or P2 function', () => {
-    const codes = relatedEntries(null).flatMap((c) => c.functions.map((f) => f.code))
-    expect(codes).toContain('RUN')
-    expect(codes).not.toContain('COST')
-    expect(codes).not.toContain('JOBS')
+  it('lists the built P1 instrument screens for an instrument, after the P0 prices functions', () => {
+    expect(byCategory(NQ).prices).toEqual(['GP', 'GIP', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ'])
+    const codes = codesFor(NQ)
+    for (const code of ['COST', 'BLK', 'EXPO', 'SEAL']) expect(codes, code).not.toContain(code)
+  })
+
+  it('files COST under research and runs, BLK and SEAL under research, EXPO under runs', () => {
+    const hypothesis = byCategory({ kind: 'hypothesis', value: 'volmanaged_v0' })
+    expect(hypothesis.research).toEqual(['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL'])
+    expect(hypothesis.runs).toEqual(['RUNS', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST'])
+    const run = byCategory({ kind: 'run', value: 'nt_dtsmom_v0_ts1' })
+    expect(run.research).toEqual(['REG', 'MT', 'COST'])
+    expect(run.runs).toEqual(['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO'])
+  })
+
+  it('lists every built function when the panel has no context, P0 first in each category, and never JOBS', () => {
+    expect(byCategory(null)).toEqual({
+      prices: ['GP', 'GIP', 'MON', 'CORR', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ'],
+      research: ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL'],
+      runs: ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO'],
+      live: ['LIVE', 'JRNL', 'OOS'],
+      terminal: ['HOME', 'HELP'],
+    })
+    expect(new Set(codesFor(null))).toEqual(BUILT_CODES)
+    expect(codesFor(null)).not.toContain('JOBS')
+  })
+
+  it('titles each P1 row with its screen name', () => {
+    const prices = relatedEntries(NQ).find((c) => c.key === 'prices')
+    expect(prices?.functions.find((f) => f.code === 'VCONE')?.title).toBe(MNEMONIC_SCREENS.VCONE)
   })
 })
 
@@ -66,6 +96,12 @@ describe('RelatedMenu (look spec 4.7)', () => {
     expect(rows[1]).toMatch(/^2\) GP /)
     const columns = screen.getAllByRole('group')
     expect(columns.length).toBe(2)
+  })
+
+  it('shows the built P1 instrument screens as numbered function rows for an instrument', () => {
+    renderMenu()
+    const rows = rowTexts().map((text) => text.replace(/^\d+\) /, ''))
+    for (const code of ['VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ'] as const) expect(rows, code).toContain(`${code} ${MNEMONIC_SCREENS[code]}`)
   })
 
   it('focuses the first row on open and moves with the arrows', () => {

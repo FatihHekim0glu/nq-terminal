@@ -4,6 +4,7 @@
 // symbol or ticker. sheetGroups() cuts the ranked list into the sheet's groups (6 rows each, 9 when
 // one group matches) and counts what the "More ..." row holds.
 import { CHROME_WORDS, SUGGESTION_DETAILS } from '../copy/commands'
+import { isBuilt } from './built'
 import { resolveContext } from './contexts'
 import { withValue } from './messages'
 import { stripSector } from './parser'
@@ -52,8 +53,9 @@ export function fuzzy(s: string, q: string): boolean {
   return false
 }
 
+/** A built screen shows its title; only an unbuilt one (JOBS) says so, with its priority. */
 function functionCandidate(m: MnemonicDef): Candidate {
-  const detail = m.priority === 'P0' ? m.screen : withValue(SUGGESTION_DETAILS.notBuilt, `${m.screen} (${m.priority})`)
+  const detail = isBuilt(m.code) ? m.screen : withValue(SUGGESTION_DETAILS.notBuilt, `${m.screen} (${m.priority})`)
   return { label: m.code, detail, group: 'function' }
 }
 

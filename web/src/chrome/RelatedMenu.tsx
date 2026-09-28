@@ -8,6 +8,7 @@
 // `N) MNEM  Title` and open that function in this panel. Escape goes up one level, then closes.
 // While open, its rows are the panel's numbered items (Number <GO>).
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { isBuilt } from '../commands/built'
 import { MNEMONICS, findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
 import { RELATED, fillCopy } from '../copy/workspace'
@@ -17,11 +18,15 @@ import './RelatedMenu.css'
 
 type CategoryKey = keyof typeof RELATED.categories
 
-/** House grouping of the P0 functions (the reference menus group per function; there is no rule). */
+/**
+ * House grouping of the built functions (the reference menus group per function; there is no rule).
+ * The P0 functions come first in each category and the P1 screens follow in registry order; COST
+ * takes a run or a hypothesis, so it sits under both research and runs.
+ */
 const CATEGORY_CODES: ReadonlyArray<readonly [CategoryKey, readonly MnemonicCode[]]> = [
-  ['prices', ['GP', 'GIP', 'MON', 'CORR']],
-  ['research', ['DES', 'REG', 'MT']],
-  ['runs', ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG']],
+  ['prices', ['GP', 'GIP', 'MON', 'CORR', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ']],
+  ['research', ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL']],
+  ['runs', ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO']],
   ['live', ['LIVE', 'JRNL', 'OOS']],
   ['terminal', ['HOME', 'HELP']],
 ]
@@ -39,11 +44,11 @@ export interface RelatedCategory {
 
 function fits(code: MnemonicCode, context: ResolvedContext | null): boolean {
   const def = findMnemonic(code)
-  if (!def || def.priority !== 'P0') return false
+  if (!def || !isBuilt(code)) return false
   return context === null || def.accepts.length === 0 || def.accepts.includes(context.kind)
 }
 
-/** The P0 functions that take the panel's context (or none), by category; empty categories dropped. */
+/** The built functions that take the panel's context (or none), by category; empty categories dropped. */
 export function relatedEntries(context: ResolvedContext | null): RelatedCategory[] {
   const known = new Set(MNEMONICS.map((m) => m.code))
   return CATEGORY_CODES.map(([key, codes]) => ({
