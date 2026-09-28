@@ -10,7 +10,7 @@ import { fillCopy } from '../../copy/workspace'
 import { deflatedFacts, deflatedLadder, deflatedNullFacts, deflatedRows, type DeflatedView } from './deflatedModel'
 
 const C = DEFLATED.cols
-const NUMERIC = ['periods', 'n', 'annual', 'srSession', 'skew', 'kurt', 'sr0', 'dsr', 'sr0Null', 'dsrNull'] as const
+const NUMERIC = ['periods', 'n', 'annual', 'srSession', 'skew', 'kurt', 'srOwn', 'sr0', 'dsr', 'sr0Null', 'dsrNull'] as const
 
 function Table({ view }: { readonly view: DeflatedView }) {
   const rows = useMemo(() => deflatedRows(view), [view])

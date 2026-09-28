@@ -5,7 +5,7 @@ export const REG = {
   title: 'Registry board',
   gridLabel: 'Registry board: every registry row',
   filterLabel: 'Filter hypotheses by name',
-  filterPlaceholder: '<Enter filter>',
+  filterPlaceholder: '<Filter by name>',
   loading: 'Reading the registry.',
   failed: 'The registry could not be read: {detail}',
   cardsFailed: 'The hypothesis cards could not be read ({detail}): verdicts come from the registry text; rounds and re-hash status are unknown.',

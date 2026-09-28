@@ -151,6 +151,18 @@ export function formatCount(v: number | null | undefined): string {
   return usable(v) ? String(v) : MISSING
 }
 
+/**
+ * `[start, end)`: the run's window as a half-open interval (U14). The API gives calendar bounds, not
+ * always trading days (a run can read '2015-01-01 to 2015-02-01', a holiday and a Sunday), and a sealed
+ * run's end can be the first day of the sealed year (the za and overnight fixtures both end
+ * '2022-01-01'). A plain 'start to end' then reads as inclusive on both ends, which is not what either
+ * bound promises; the bracket notation marks the end as exclusive without claiming the start or end
+ * date itself was a session.
+ */
+export function formatWindow(start: string | null | undefined, end: string | null | undefined): string {
+  return start && end ? `[${start}, ${end})` : MISSING
+}
+
 function decimalsOf(v: number): number {
   if (Number.isInteger(v)) return 0
   const text = String(v)

@@ -11,6 +11,7 @@ import {
   formatFraction,
   formatRatio,
   formatUsd,
+  formatWindow,
   inRunsTab,
   logColumns,
   matchesRunFilter,
@@ -145,6 +146,24 @@ describe('number formats (look spec 3.4): fixed decimals, explicit sign, -- for 
     expect(formatExact(131.64, 2)).toBe('131.64')
     expect(formatExact(1083, 2)).toBe('1083.00')
     expect(formatExact(null, 2)).toBe('--')
+  })
+})
+
+describe('formatWindow (U14): a half-open interval, never implying either bound was a session', () => {
+  it('marks the end exclusive: the za and overnight fixtures no longer read as reaching into 2022', () => {
+    const run = byId('nt_overnight_v0_fixture_open')
+    expect(formatWindow(run.start, run.end)).toBe('[2010-09-28, 2022-01-01)')
+  })
+
+  it('keeps a real session-to-session window in the same bracket form', () => {
+    const run = byId('nt_dtsmom_v0_fixture_ts1')
+    expect(formatWindow(run.start, run.end)).toBe('[2012-01-03, 2012-01-25)')
+  })
+
+  it('shows -- when either bound is missing', () => {
+    expect(formatWindow(null, '2015-01-01')).toBe('--')
+    expect(formatWindow('2015-01-01', null)).toBe('--')
+    expect(formatWindow(undefined, undefined)).toBe('--')
   })
 })
 

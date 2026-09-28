@@ -134,14 +134,19 @@
 .mt-head { flex: 0 0 auto; padding: 0 5px; }
 .mt-line { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mt-chart { position: relative; flex: 1 1 50%; min-height: calc(var(--row-h) * 8); }
-.mt-grid { flex: 1 1 40%; min-height: calc(var(--row-h) * 4); }
+/* flex: 0 0 auto (G02): the grid takes its content height (panelScroll.css lets .mt-grid .nqt-grid-scroll
+   overflow visible for every row), so it never grows to fill a share of the body and draw over what
+   follows; the panel body is the one Tab stop that scrolls to it. */
+.mt-grid { flex: 0 0 auto; min-height: calc(var(--row-h) * 4); }
 .mt-confirm-list { margin: 0; padding: 0 5px; list-style: none; }
 .mt-confirm-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* SV3 on MT: a band, the facts, the DSR ladder (fixed height) and the table. MT's own view (family, scatter,
    adjusted table, confirmations) stays exactly one screen of the panel body, as before; SV3 follows it in the
    body's scroll, so the scatter and the adjusted table keep their room. */
-.reg-screen[data-screen="MT"] > .mt-body { flex: 0 0 auto; height: 100cqh; }
+/* min-height, not height (G02): the body stays free to grow past one screen when the grid renders every
+   row, so the confirmations and SV3 follow it in the panel body's scroll instead of being drawn over. */
+.reg-screen[data-screen="MT"] > .mt-body { flex: 0 0 auto; min-height: 100cqh; }
 .mt-deflated { flex: 0 0 auto; }
 .mt-deflated-chart { position: relative; height: 200px; min-width: 0; }
 .reg-caption {
@@ -160,14 +165,17 @@
   .reg-rail { display: none; }
 }
 
-/* A short panel: criteria on one wrapping line, no notes; the confirmation tables lose their header row
-   but still render whole, the panel body scrolling them (nqt-grid-scroll--panel: no max-height here). */
+/* A short panel: criteria on one wrapping line; the confirmation tables lose their header row but still
+   render whole, the panel body scrolling them (nqt-grid-scroll--panel: no max-height here). U06: the
+   [PRE-REG]/[POST HOC] provenance stays readable here, wrapped rather than hidden or ellipsised with no
+   tooltip, on both REG (the confirmations' band note, the verdict notes) and MT (the stored/recomputed
+   line under the family line). */
 @container reg (max-height: 560px) {
-  .reg-crit-head, .reg-universe, .reg-notes { display: none; }
+  .reg-crit-head, .reg-universe { display: none; }
   .reg-crit-list { display: flex; flex-wrap: wrap; column-gap: 12px; }
   .reg-crit-list .reg-item { width: auto; }
-  .reg-band .reg-muted, .reg-confirm-table thead { display: none; }
-  .mt-head .mt-line + .mt-line { display: none; }
+  .reg-confirm-table thead { display: none; }
+  .reg-band, .reg-notes li, .mt-head .mt-line { white-space: normal; overflow: visible; text-overflow: clip; }
   .mt-chart { min-height: calc(var(--row-h) * 6); }
 }
 

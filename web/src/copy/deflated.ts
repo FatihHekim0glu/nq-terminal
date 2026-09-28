@@ -14,6 +14,9 @@ export const DEFLATED = {
   extra: 'Extra view only: it never overrides a frozen pass bar and gives no verdict.',
   caption: "Deflated Sharpe by registered trial under V and under V0; SR0 in each trial's own period",
   ladderName: 'Deflated Sharpe by registered trial under the null variance V0',
+  /** G06: the row's own period, session or month, so a reader never compares a Sharpe in one period
+   * with an SR0 hurdle in another with no unit to catch it. */
+  periods: { session: 'session', month: 'month' },
   cols: {
     name: 'Trial',
     kind: 'Series',
@@ -23,14 +26,15 @@ export const DEFLATED = {
     srSession: 'SR/session',
     skew: 'Skew',
     kurt: 'Kurtosis',
-    sr0: 'SR0 (V)',
+    srOwn: 'SR (own period)',
+    sr0: 'SR0 (V), own period',
     dsr: 'DSR (V)',
-    sr0Null: 'SR0 (V0)',
+    sr0Null: 'SR0 (V0), own period',
     dsrNull: 'DSR (V0)',
   },
   regColumn: 'DSR V0',
   regNote: 'DSR V0 [POST HOC]: Deflated Sharpe over {n} registered trials on one daily basis (SV3), under the null variance V0; an extra view only, never a verdict. MT shows it beside the empirical V.',
   desLabel: 'Deflated Sharpe [POST HOC]',
-  desLine: 'DSR {dsr} under V (SR0 {floor}), {dsrNull} under V0 (SR0 {floorNull}), N {n}',
+  desLine: 'Sharpe {sr} per {period}; SR0 {floor} per {period} ({annual}/yr) under V, {floorNull} per {period} ({annualNull}/yr) under V0; DSR {dsr} under V, {dsrNull} under V0; N {n}; defined for the best trial only.',
   desNone: 'not an SV3 trial (unregistered)',
 } as const
