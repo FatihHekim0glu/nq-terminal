@@ -4,6 +4,7 @@
 // while it is open they never poll and the stream refreshes them; otherwise they poll every LIVE_POLL_MS as in P0.
 import { QueryClient, keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { ApiError, apiGet } from './client'
+import { useHealthInterval } from './connection'
 import { LIVE_POLL_MS, apiQueryKey, type ApiQueryKey } from './queryKey'
 import type { ApiPath, GetArgs, RequestOf, Schemas, SuccessOf } from './types'
 import { useLivePollInterval } from './useLiveStream'
@@ -22,6 +23,10 @@ export interface ApiQueryOptions {
   /** Keeps the previous query key's data on screen (the grid stays mounted, keyboard focus survives)
    *  while a new key's page loads, e.g. a paged GET whose offset self-corrects (D28). */
   readonly keepPreviousData?: boolean
+  /** Overrides the client's retry policy (the health poll never retries: its own interval backs off). */
+  readonly retry?: false
+  /** Overrides the client's networkMode (the health poll stays 'always', so recovery can be seen). */
+  readonly networkMode?: 'online' | 'always'
 }
 
 export interface PageQuery {
@@ -66,6 +71,8 @@ export function useApiQuery<P extends ApiPath>(
     enabled: options.enabled ?? true,
     refetchInterval: options.refetchInterval ?? false,
     ...(options.staleTime === undefined ? {} : { staleTime: options.staleTime }),
+    ...(options.retry === undefined ? {} : { retry: options.retry }),
+    ...(options.networkMode === undefined ? {} : { networkMode: options.networkMode }),
     ...(options.keepPreviousData ? { placeholderData: keepPreviousData } : {}),
   })
 }
@@ -78,7 +85,11 @@ function useLive(extra: ApiQueryOptions = {}): ApiQueryOptions {
 const hasId = (...ids: ReadonlyArray<string>): boolean => ids.every((id) => id.trim() !== '')
 
 // System
-export const useHealth = () => useApiQuery('/api/health', {}, live)
+/** Polled at the connection state machine's own interval (2 s, backing off while down); never retried
+ *  (a fast, frequent probe should fail fast) and always attempted regardless of the browser's online
+ *  flag, so a health check can see the backend recover even while onlineManager reports offline. */
+export const useHealth = () =>
+  useApiQuery('/api/health', {}, { refetchInterval: useHealthInterval(), staleTime: 0, retry: false, networkMode: 'always' })
 export const useCommands = () => useApiQuery('/api/commands', {}, { refetchInterval: COMMANDS_POLL_MS })
 
 // Research

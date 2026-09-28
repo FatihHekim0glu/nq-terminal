@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { QueryClientProvider, onlineManager } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './client'
+import { INITIAL_CONNECTION, connectionStore, nextConnection, resetConnection, type ConnectionState } from './connection'
 import {
   LIVE_POLL_MS,
   apiQueryKey,
@@ -159,6 +160,10 @@ describe('the loopback backend keeps working when the browser reports offline (D
     expect(createApiQueryClient().getDefaultOptions().queries?.networkMode).toBe('always')
   })
 
+  it('defaults refetchOnReconnect to false (v2 fix 2: the connection supervisor is the only recovery path, never doubled by a plain reconnect refetch)', () => {
+    expect(createApiQueryClient().getDefaultOptions().queries?.refetchOnReconnect).toBe(false)
+  })
+
   it('keeps polling health every LIVE_POLL_MS while the browser reports offline', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
@@ -170,6 +175,71 @@ describe('the loopback backend keeps working when the browser reports offline (D
       await vi.advanceTimersByTimeAsync(LIVE_POLL_MS * 2 + 50)
       expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1)
       expect(result.current.fetchStatus).not.toBe('paused')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('useHealth (connection state machine, roadmap #7)', () => {
+  const outage = (status = 502) => new ApiError({ kind: 'http', path: '/api/health', status, body: null, detail: `${status}` })
+
+  afterEach(() => {
+    onlineManager.setOnline(true)
+    resetConnection()
+  })
+
+  it('never retries a failed health check (its own interval already backs off)', async () => {
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ detail: 'unavailable' }, 503))
+    const { result } = renderHook(() => useHealth(), { wrapper: wrapper() })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('always attempts the health check, even while onlineManager reports offline (networkMode always)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ kill_switch_on: false }))
+      // The client's own default is 'online' here, so only useHealth's own networkMode: 'always' keeps
+      // the check running; the client default of 'always' (D27, pinned above) would let this pass
+      // even if useHealth lost its own override.
+      const client = new QueryClient({ defaultOptions: { queries: { networkMode: 'online', retry: false, refetchOnWindowFocus: false } } })
+      const onlineWrapper = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      )
+      const { result } = renderHook(() => useHealth(), { wrapper: onlineWrapper })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      onlineManager.setOnline(false)
+      spy.mockClear()
+      await vi.advanceTimersByTimeAsync(LIVE_POLL_MS * 2 + 50)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1)
+      expect(result.current.fetchStatus).not.toBe('paused')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('polls every 2000 ms while not down, then backs off to 4000 ms as soon as the connection goes down', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ kill_switch_on: false }))
+      renderHook(() => useHealth(), { wrapper: wrapper() })
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+
+      await vi.advanceTimersByTimeAsync(2000 + 50)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(2)
+
+      // Drives the shared connection store down directly (three consecutive outage failures);
+      // useHealthInterval reads this store, independently of this hook's own query client.
+      let state: ConnectionState = INITIAL_CONNECTION
+      for (const at of [1, 2, 3]) state = nextConnection(state, { kind: 'fail', at, error: outage() })
+      connectionStore.setState(state, true)
+
+      spy.mockClear()
+      await vi.advanceTimersByTimeAsync(2000 + 50)
+      expect(spy).not.toHaveBeenCalled() // still inside the 4000 ms backoff window, not the old 2000 ms one
+      await vi.advanceTimersByTimeAsync(2000 + 50)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1)
     } finally {
       vi.useRealTimers()
     }
