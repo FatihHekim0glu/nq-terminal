@@ -7,6 +7,7 @@ import { displayContext } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { COMMAND_LINE } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
+import { WORKSPACE } from '../copy/workspace'
 import { requestHelpTopic } from '../screens/help/helpTopic.store'
 import { functionMenu, helpMenu, lastMenu, relatedMenu, searchMenu, sectorMenu, type MenuItem } from './CommandLine.menus'
 import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
@@ -29,7 +30,7 @@ function loadContext(p: CommandLineParts, context: ResolvedContext): void {
 }
 
 /** Number <GO>: item n of the open menu, else of the focused panel. Returns the line to keep, or null. */
-function numberGo(p: CommandLineParts, n: number): string | null {
+function numberGo(p: CommandLineParts, n: number, newPanel: boolean): string | null {
   const menu = p.menus.menu
   if (!menu) {
     if (!p.options.onNumber?.(n)) postMessage(withValue(COMMAND_LINE.noItem, String(n)))
@@ -40,7 +41,7 @@ function numberGo(p: CommandLineParts, n: number): string | null {
     postMessage(withValue(COMMAND_LINE.noMenuItem, String(n)))
     return ''
   }
-  chooseItem(p, item)
+  chooseItem(p, item, newPanel)
   return null
 }
 
@@ -64,7 +65,17 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
   switch (action.kind) {
     case 'run': {
       const panel = newPanel || action.newPanel
-      p.options.onRun(action.command, panel ? 'new-panel' : 'replace')
+      // A plain stub (most tests) returns undefined, which reads as having run; the real Workspace
+      // answers `false` when it has no dockview api yet (its own lazy chunk still loading, or mounted
+      // but not past onReady), meaning nothing opened.
+      const ran = p.options.onRun(action.command, panel ? 'new-panel' : 'replace')
+      if (ran === false) {
+        p.menus.close()
+        postMessage(WORKSPACE.notReady)
+        // Keep the line (not history.remember'd below, since it did not run) so the user can just
+        // press Enter again once the Workspace is ready, instead of retyping the whole command (D18).
+        return action.command.canonical
+      }
       p.history.remember(action.command.canonical)
       p.menus.close()
       postMessage(withValue(panel ? COMMAND_LINE.ranNewPanel : COMMAND_LINE.ran, action.command.canonical))
@@ -75,7 +86,7 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
       loadContext(p, action.context)
       return ''
     case 'number':
-      return numberGo(p, action.n)
+      return numberGo(p, action.n, newPanel)
     case 'search':
       if (action.query === '') {
         postMessage(COMMAND_LINE.searchEmpty)
@@ -107,7 +118,7 @@ export function runText(p: CommandLineParts, text: string, newPanel: boolean): v
   if (keep !== null) p.s.edit(keep)
 }
 
-export function chooseItem(p: CommandLineParts, item: MenuItem): void {
+export function chooseItem(p: CommandLineParts, item: MenuItem, newPanel = false): void {
   const act = item.act
   if (act.kind === 'open') p.menus.open(act.menu, false)
   else if (act.kind === 'context') loadContext(p, act.context)
@@ -115,7 +126,7 @@ export function chooseItem(p: CommandLineParts, item: MenuItem): void {
     p.menus.close()
     p.s.edit(act.line)
     p.inputRef.current?.focus()
-  } else runText(p, act.line, false)
+  } else runText(p, act.line, newPanel)
 }
 
 /** Tab: complete the line with the suggestion's text. */
@@ -125,7 +136,7 @@ export function takeSuggestion(p: CommandLineParts, s: Suggestion): void {
 }
 
 /** A click, or Enter after arrowing: an instrument loads, the SEARCH row runs, More opens its group. */
-export function chooseSuggestion(p: CommandLineParts, value: string): void {
+export function chooseSuggestion(p: CommandLineParts, value: string, newPanel = false): void {
   if (value.startsWith(MORE_PREFIX)) {
     p.s.setExpanded(value.slice(MORE_PREFIX.length) as SuggestionGroup)
     p.inputRef.current?.focus()
@@ -133,7 +144,7 @@ export function chooseSuggestion(p: CommandLineParts, value: string): void {
   }
   const s = p.ordered.find((x) => x.value.trim() === value.trim())
   if (!s) return
-  if (s.group === 'instrument' || s.group === 'search') runText(p, s.value, false)
+  if (s.group === 'instrument' || s.group === 'search') runText(p, s.value, newPanel)
   else takeSuggestion(p, s)
   p.inputRef.current?.focus()
 }

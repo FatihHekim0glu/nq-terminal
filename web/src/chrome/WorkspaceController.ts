@@ -55,7 +55,11 @@ export interface WorkspaceController {
   /** Panel numbers, the focused panel, the menu owner and the maximised panel, for rendering. */
   readonly view: WorkspaceView
   onReady(api: DockviewApi): void
-  run(command: ParsedCommand, target: RunTarget): void
+  /** False when there was no dockview api yet (a command typed before the Workspace finished loading). */
+  run(command: ParsedCommand, target: RunTarget): boolean
+  /** Recompute the addressed panel and report it again, for a change (e.g. a link-group retarget) that
+   * did not itself go through run(). */
+  refreshFocused(): void
   /** Focus the panel the user last focused, else the first panel. False when there is none. */
   focusPanel(): boolean
   /** Focus panel N in reading order (Alt+N). False when there is no such panel. */
@@ -132,10 +136,16 @@ function seedLinkGroups(api: DockviewApi, linkGroups: LinkGroupsStore): void {
   }
 }
 
-function loadMode(command: ParsedCommand, plan: LoadPlan, shown: MnemonicCode): LoadMode {
+/** `reported` is the screen the chrome (FrameStrip, status bar) currently shows, the same code the
+ * controller last passed to onScreenChange; `shown` is the screen whose layout the panels are actually
+ * arranged under. A bare mnemonic resets only when it names both: the screen the chrome shows and the
+ * screen whose layout is arranged. A Shift+Enter add (or any command that only touches a panel) moves
+ * `reported` without moving `shown`, so on its own it can no longer make the next bare mnemonic on that
+ * screen look like "typed on itself" and wipe a layout the user never asked to reset. */
+function loadMode(command: ParsedCommand, plan: LoadPlan, reported: MnemonicCode, shown: MnemonicCode): LoadMode {
   const bare = command.context === null && Object.keys(command.args).length === 0
   if (!bare) return 'plain'
-  return plan.layout.screen === shown ? 'reset' : 'restore'
+  return plan.layout.screen === reported && plan.layout.screen === shown ? 'reset' : 'restore'
 }
 
 /** What the controller remembers between calls; only the controller's own functions change it. */
@@ -144,7 +154,10 @@ interface ControllerState {
   lastFocused: string | null
   /** The panel the last command ran in (replaced or added); null after a layout load. */
   ranIn: string | null
+  /** The screen whose layout the panels are currently arranged under (what a save keys on). */
   shown: MnemonicCode
+  /** The screen the chrome was last told is showing (what onScreenChange last reported). */
+  reported: MnemonicCode
   histories: ReadonlyMap<string, PanelHistory>
   readonly view: WorkspaceView
 }
@@ -225,11 +238,21 @@ function ranInAfter(plan: OpenPlan, before: ReadonlySet<string>, dock: DockviewA
   return null
 }
 
-/** Remember what panel `id` shows before it changes to `next`. */
-function remember(st: ControllerState, id: string, next: PanelParams): void {
-  const before = paramsOf(st, id)
-  if (!before) return
-  const was = JSON.stringify(before)
+/** What panel `id` actually displays right now: its link group's context, when the screen takes it,
+ * not its raw stored params, which may hold a context the panel stopped showing the moment another
+ * panel retargeted the group. Null when the panel does not exist. */
+function shownParams(st: ControllerState, env: ControllerEnv, id: string): PanelParams | null {
+  const params = paramsOf(st, id)
+  if (!params) return null
+  return { ...params, context: effectiveContext(params, params.group === '-' ? null : env.linkGroups.getState().contexts[params.group]) }
+}
+
+/** Remember what panel `id` shows before it changes to `next`: what it actually displayed, not its raw
+ * stored params (see shownParams). */
+function remember(st: ControllerState, env: ControllerEnv, id: string, next: PanelParams): void {
+  const shown = shownParams(st, env, id)
+  if (!shown) return
+  const was = JSON.stringify(shown)
   if (was === JSON.stringify(next)) return
   const history = st.histories.get(id) ?? EMPTY_HISTORY
   st.histories = new Map([...st.histories, [id, recordVisit(history, was)]])
@@ -237,7 +260,7 @@ function remember(st: ControllerState, id: string, next: PanelParams): void {
 
 function applyToPanel(st: ControllerState, env: ControllerEnv, plan: Exclude<OpenPlan, LoadPlan>, command: ParsedCommand): void {
   const dock = st.api as DockviewApi
-  if (plan.kind === 'replace') remember(st, plan.panelId, plan.params)
+  if (plan.kind === 'replace') remember(st, env, plan.panelId, plan.params)
   applyPlan(adapt(dock), plan)
   prepareAll(st, dock)
   saveShown(st, env, dock)
@@ -247,20 +270,25 @@ function applyToPanel(st: ControllerState, env: ControllerEnv, plan: Exclude<Ope
   }
 }
 
-function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): void {
+function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): boolean {
   const api = st.api
-  if (!api) return
-  // Replace or load follows real focus (UI_SPEC section 5), not the display target.
+  if (!api) return false
+  // Replace or load follows real focus (UI_SPEC section 5), not the display target; a new panel still
+  // anchors to the panel the command line addresses (the focus line) when nothing has real DOM focus,
+  // so it opens beside that panel instead of hidden as a tab of whatever group dockview left active.
   const real = focusedId(st)
-  const focused = { activePanelId: real ?? undefined, activeGroup: real ? paramsOf(st, real)?.group : undefined }
+  const anchor = target === 'new-panel' ? (real ?? targetId(st)) : real
+  const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
   const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
   const before = new Set(api.panels.map((p) => p.id))
-  if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command, plan, st.shown))
+  if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command, plan, st.reported, st.shown))
   else applyToPanel(st, env, plan, command)
   st.ranIn = ranInAfter(plan, before, api)
   if (!focusedId(st)) st.lastFocused = null
+  st.reported = command.mnemonic.code
   env.onScreenChange?.(command.mnemonic.code)
   announce(st, env)
+  return true
 }
 
 /** Replace panel `id` with `params` without recording history (back, forward). */
@@ -274,7 +302,7 @@ function showInPanel(st: ControllerState, env: ControllerEnv, id: string, params
 }
 
 function walk(st: ControllerState, env: ControllerEnv, id: string, step: (h: PanelHistory, current: string) => HistoryStep | null): boolean {
-  const current = paramsOf(st, id)
+  const current = shownParams(st, env, id)
   if (!current) return false
   const result = step(st.histories.get(id) ?? EMPTY_HISTORY, JSON.stringify(current))
   if (!result) return false
@@ -299,7 +327,7 @@ function openInPanel(st: ControllerState, env: ControllerEnv, id: string, code: 
   const shown = effectiveContext(current, groupContext)
   const context = shown && def.accepts.includes(shown.kind) ? shown : null
   const next: PanelParams = { code: def.code, context, args: {}, group: current.group }
-  remember(st, id, next)
+  remember(st, env, id, next)
   adapt(dock).replacePanel(id, next, panelTitle(next))
   patchView(st.view, { menu: null })
   prepareAll(st, dock)
@@ -331,6 +359,7 @@ function onReady(st: ControllerState, env: ControllerEnv, dock: DockviewApi): vo
   dock.onDidAddGroup((group) => prepareGroup(group))
   dock.onDidLayoutChange(() => refreshView(st))
   loadScreen(st, env, dock, { kind: 'load', layout: layoutFor(env.initialScreen) }, 'restore')
+  st.reported = env.initialScreen
   env.onScreenChange?.(env.initialScreen)
   announce(st, env)
 }
@@ -363,11 +392,20 @@ function toggleMaximise(st: ControllerState, id: string): void {
 
 /** `env` is read on every call, so the controller always sees the Workspace's latest props. */
 export function createWorkspaceController(env: () => ControllerEnv): WorkspaceController {
-  const st: ControllerState = { api: null, lastFocused: null, ranIn: null, shown: env().initialScreen, histories: new Map(), view: createWorkspaceView() }
+  const st: ControllerState = {
+    api: null,
+    lastFocused: null,
+    ranIn: null,
+    shown: env().initialScreen,
+    reported: env().initialScreen,
+    histories: new Map(),
+    view: createWorkspaceView(),
+  }
   return {
     view: st.view,
     onReady: (dock) => onReady(st, env(), dock),
     run: (command, target) => run(st, env(), command, target),
+    refreshFocused: () => announce(st, env()),
     focusPanel: () => focusPanel(st, env()),
     focusPanelNumber: (n) => {
       const id = Number.isInteger(n) && n > 0 ? st.view.getState().order[n - 1] : undefined

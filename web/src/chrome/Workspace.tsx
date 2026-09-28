@@ -35,7 +35,8 @@ import './Workspace.css'
 export type { FocusedPanel, RunTarget } from './WorkspaceController'
 
 export interface WorkspaceHandle {
-  run(command: ParsedCommand, target: RunTarget): void
+  /** False when the Workspace has no dockview api yet (a command typed before it finished loading). */
+  run(command: ParsedCommand, target: RunTarget): boolean
   /** Focus the panel the user last focused. False when there is none. */
   focusPanel(): boolean
   /** Focus panel N in reading order (Alt+N). False when there is no such panel. */
@@ -144,7 +145,9 @@ function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
         landmark={false}
       >
         {Screen ? (
-          <ScreenBoundary resetKey={`${params.code}:${context?.kind ?? ''}:${context?.value ?? ''}`}>
+          <ScreenBoundary
+            resetKey={`${params.code}:${context?.kind ?? ''}:${context?.value ?? ''}:${params.args.date ?? ''}:${params.args.timeframe ?? ''}`}
+          >
             <Suspense fallback={<p className="ws-empty">{WORKSPACE.loadingScreen}</p>}>
               <Screen params={params} context={context} />
             </Suspense>
@@ -166,16 +169,26 @@ const COMPONENTS = { [PANEL_COMPONENT]: ScreenPanel }
 /** One controller per mounted Workspace, reading the latest props through a ref. */
 function useController(props: WorkspaceProps, rootRef: RefObject<HTMLElement | null>): WorkspaceController {
   const env = useRef<ControllerEnv | null>(null)
+  const linkGroups = props.linkGroups ?? useLinkGroups
   env.current = {
     initialScreen: props.initialScreen ?? 'HOME',
     layouts: props.layouts ?? useLayouts,
-    linkGroups: props.linkGroups ?? useLinkGroups,
+    linkGroups,
     root: () => rootRef.current,
     onScreenChange: props.onScreenChange,
     onFocusedPanelChange: props.onFocusedPanelChange,
   }
   const controller = useRef<WorkspaceController | null>(null)
   controller.current ??= createWorkspaceController(() => env.current as ControllerEnv)
+  // A link group can be retargeted from outside a run() (the nav toolbar's own context control, look
+  // spec 4.2): the addressed panel's reported context would otherwise go stale until the next command.
+  useEffect(
+    () =>
+      linkGroups.subscribe((state, prev) => {
+        if (state.contexts !== prev.contexts) controller.current?.refreshFocused()
+      }),
+    [linkGroups],
+  )
   return controller.current
 }
 

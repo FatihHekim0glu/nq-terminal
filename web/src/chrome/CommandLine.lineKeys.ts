@@ -43,11 +43,11 @@ function enter(p: CommandLineParts, shiftKey: boolean): void {
   const menu = p.menus.menu
   const row = p.menus.row
   if (menu && row !== null && menu.items[row]) {
-    chooseItem(p, menu.items[row])
+    chooseItem(p, menu.items[row], shiftKey)
     return
   }
   if (p.sheetOpen && p.s.navigated && (p.highlighted || p.s.selected.startsWith(MORE_PREFIX))) {
-    chooseSuggestion(p, p.s.selected.startsWith(MORE_PREFIX) ? p.s.selected : (p.highlighted?.value ?? ''))
+    chooseSuggestion(p, p.s.selected.startsWith(MORE_PREFIX) ? p.s.selected : (p.highlighted?.value ?? ''), shiftKey)
     return
   }
   runText(p, p.s.line, shiftKey)

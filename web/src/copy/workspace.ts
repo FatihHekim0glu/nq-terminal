@@ -10,6 +10,7 @@ export const WORKSPACE = {
   loading: 'Loading the workspace.',
   loadingScreen: 'Loading this screen.',
   screenFailed: 'This screen could not be drawn: {detail}. The other panels are not affected.',
+  notReady: 'The workspace is still loading. Try the command again in a moment.',
 } as const
 
 export const PANEL = {

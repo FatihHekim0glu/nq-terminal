@@ -5,6 +5,7 @@ import App from './App'
 import { layoutFor } from './chrome/WorkspaceLayouts'
 import { COMMAND_LINE } from './copy/commands'
 import { FRAME_STRIP, KEY_TOOLBAR, NAV_TOOLBAR, TAPE } from './copy/chrome'
+import { WORKSPACE } from './copy/workspace'
 import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
 
@@ -266,5 +267,52 @@ describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, comma
     fireEvent.click(screen.getByRole('button', { name: KEY_TOOLBAR.custom.REG }))
     const status = screen.getByRole('contentinfo')
     await waitFor(() => expect(segment(status, 'Screen REG')).toBeTruthy())
+  })
+
+  it('refreshes the nav toolbar context after a context-only line retargets the link group (D04)', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const nav = screen.getByRole('group', { name: NAV_TOOLBAR.label })
+    const gp = within(main).getByRole('group', { name: 'NQ GP 1d content' })
+    act(() => gp.focus())
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Context NQ1 Index/ })).toBeTruthy())
+    await runLine('ES')
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Context ES1 Index/ })).toBeTruthy())
+    fireEvent.click(within(nav).getByRole('button', { name: /Context ES1 Index/ }))
+    expect(useLinkGroups.getState().contexts.A?.value).toBe('ES')
+  })
+
+  it('keeps a customised HOME layout when the HOME frame tab is clicked afterwards (D16)', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    act(() => within(main).getByRole('group', { name: 'REG content' }).focus())
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    expect(localStorage.getItem('nqt.layouts')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'HOME' }))
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    const stored: { readonly layouts?: Readonly<Record<string, unknown>> } = JSON.parse(localStorage.getItem('nqt.layouts') ?? '{}')
+    expect(stored.layouts).toHaveProperty('HOME')
+  })
+
+  it('drops a command typed before the lazy Workspace finishes loading, without reporting it ran (D18)', async () => {
+    vi.resetModules()
+    vi.doMock('./chrome/Workspace', () => new Promise(() => {}))
+    try {
+      const { default: FreshApp } = await import('./App')
+      render(<FreshApp />)
+      // Not runLine(): it waits for the box to clear, and the not-ready path now keeps the line
+      // (below) so the user can simply press Enter again once the Workspace is ready.
+      const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+      fireEvent.change(input, { target: { value: 'REG' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      await waitFor(() => expect(screen.getByText(WORKSPACE.notReady)).toBeTruthy())
+      expect(input.value).toBe('REG')
+      expect(screen.queryByText('Opened REG.')).toBeNull()
+      expect(localStorage.getItem('nqt.cmd.history') ?? '').not.toContain('REG')
+    } finally {
+      vi.doUnmock('./chrome/Workspace')
+      vi.resetModules()
+    }
   })
 })
