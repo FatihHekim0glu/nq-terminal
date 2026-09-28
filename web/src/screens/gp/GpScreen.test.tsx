@@ -152,6 +152,19 @@ describe('GP: the RV22 indicator pane and the instrument field (Phase 8, look sp
     off()
     expect(lines.map((l) => l.line)).toEqual(['ZN GP'])
   })
+
+  it('the amber instrument field keeps the panel\'s date on a GIP panel (D08)', async () => {
+    serve()
+    const lines: LineRequest[] = []
+    const off = onLineRequest((r) => lines.push(r))
+    mount(<GIPScreen params={params('GIP', { date: '2019-03-14' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    const bar = screen.getByRole('toolbar', { name: 'Intraday chart functions' })
+    fireEvent.click(await within(bar).findByRole('combobox', { name: 'Instrument' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'TY1 Comdty' }))
+    off()
+    expect(lines.map((l) => l.line)).toEqual(['ZN GIP 2019-03-14'])
+  })
 })
 
 describe('GP: candles from /api/bars', () => {

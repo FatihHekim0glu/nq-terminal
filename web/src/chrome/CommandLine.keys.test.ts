@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { globalKeyAction, type KeyLike } from './CommandLine.keys'
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from '@testing-library/react'
+import type { RefObject } from 'react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { globalKeyAction, isFocusKey, useCommandLineKeys, type KeyLike } from './CommandLine.keys'
 
 const key = (k: string, extra: Partial<KeyLike> = {}): KeyLike => ({
   key: k,
@@ -78,5 +81,59 @@ describe('global keys (spec 5.2)', () => {
 
   it('binds no single printable character (WCAG 2.1.4)', () => {
     for (const c of 'abcdefghijklmnopqrstuvwxyz0123456789+-') expect(globalKeyAction(key(c), inPanel)).toBeNull()
+  })
+})
+
+describe('useCommandLineKeys: Ctrl+K inside the command line (D11)', () => {
+  afterEach(() => {
+    // Unmounts every renderHook tree from this file, so its window 'storage'/'keydown' listener is
+    // removed and cannot fire (with a now-detached input) during a later test.
+    cleanup()
+    document.body.innerHTML = ''
+  })
+
+  it('is recognised as the focus key everywhere, even with the input already focused', () => {
+    expect(isFocusKey(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))).toBe('ctrl-k')
+    expect(isFocusKey(new KeyboardEvent('keydown', { key: 'K', metaKey: true }))).toBe('ctrl-k')
+  })
+
+  it('born failing: selects the line and prevents the browser default even when the input already has focus', () => {
+    const input = document.createElement('input')
+    input.value = 'NQ GP'
+    document.body.appendChild(input)
+    input.focus()
+    expect(document.activeElement).toBe(input)
+
+    const inputRef = { current: input } as RefObject<HTMLInputElement | null>
+    const previousFocus = { current: null } as RefObject<HTMLElement | null>
+    renderHook(() => useCommandLineKeys(inputRef, previousFocus))
+
+    let notPrevented = true
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }))
+    })
+
+    expect(notPrevented).toBe(false)
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+  })
+
+  it('still lets Escape and Home take the early-return path unaffected when the input is already focused', () => {
+    const input = document.createElement('input')
+    input.value = 'NQ GP'
+    document.body.appendChild(input)
+    input.focus()
+
+    const inputRef = { current: input } as RefObject<HTMLInputElement | null>
+    const previousFocus = { current: null } as RefObject<HTMLElement | null>
+    renderHook(() => useCommandLineKeys(inputRef, previousFocus))
+
+    let notPrevented = true
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    })
+    // Escape with the input already focused is the command line's own cascade (CommandLine.tsx), not this hook.
+    expect(notPrevented).toBe(true)
   })
 })

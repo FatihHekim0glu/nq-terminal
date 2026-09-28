@@ -68,19 +68,25 @@ function persist(storage: SafeStorage, layouts: Readonly<Record<string, Serialis
 export type LayoutsStore = UseBoundStore<StoreApi<LayoutsState>>
 
 export function createLayoutsStore(storage: SafeStorage = safeLocalStorage): LayoutsStore {
-  return create<LayoutsState>()((set, get) => ({
+  const store = create<LayoutsState>()((set, get) => ({
     layouts: loadLayouts(storage),
     saveLayout: (screen, layout) => {
       const copy = isScreenCode(screen) ? toStoredCopy(layout) : null
       if (!copy) return false
-      const layouts = { ...get().layouts, [screen]: copy }
+      // Storage overrides memory (another window's newer save wins), but memory is the base: when
+      // storage is blocked or a write failed, loadLayouts(storage) comes back empty and must not drop
+      // every other screen this window already holds in memory (D05, a lost update). The 'storage'
+      // listener below keeps memory in step with another window's save (or reset) while this one stays
+      // open, so by the time this runs, memory already has whatever storage would otherwise re-add.
+      const layouts = { ...get().layouts, ...loadLayouts(storage), [screen]: copy }
       set({ layouts })
       persist(storage, layouts)
       return true
     },
     resetLayout: (screen) => {
-      if (!Object.hasOwn(get().layouts, screen)) return
-      const layouts = Object.fromEntries(Object.entries(get().layouts).filter(([key]) => key !== screen))
+      const current = { ...get().layouts, ...loadLayouts(storage) }
+      if (!Object.hasOwn(current, screen)) return
+      const layouts = Object.fromEntries(Object.entries(current).filter(([key]) => key !== screen))
       set({ layouts })
       persist(storage, layouts)
     },
@@ -89,6 +95,13 @@ export function createLayoutsStore(storage: SafeStorage = safeLocalStorage): Lay
       persist(storage, {})
     },
   }))
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key !== null && e.key !== LAYOUTS_KEY) return
+      store.setState({ layouts: loadLayouts(storage) })
+    })
+  }
+  return store
 }
 
 /** The app-wide layout store over window.localStorage. */

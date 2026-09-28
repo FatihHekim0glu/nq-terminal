@@ -49,6 +49,21 @@ export default function Tooltip({ text, children }: TooltipProps) {
     clear()
     setPlace(null)
   }
+  // Escape must dismiss a tip shown by pointer hover too, even while focus sits elsewhere (the command
+  // line, another control): the trigger's own onKeyDown only fires when the trigger has focus (D15).
+  useEffect(() => {
+    if (!place) return
+    // The DOM's own KeyboardEvent, not React's (the import above names the synthetic one).
+    function onKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      hide()
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [place])
   const own = children.props
 
   const trigger = cloneElement(children, {

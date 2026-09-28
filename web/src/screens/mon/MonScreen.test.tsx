@@ -13,6 +13,8 @@ import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome
 import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import { stubLayout } from '../../grids/testing'
+import { LAST_IS_DAY } from '../gp/useGpWindow'
+import { drillFunctions } from './FunctionsMenu'
 import MonScreen from './MonScreen'
 import { MON_DEFAULTS_KEY } from './MonScreen'
 import { LABEL, makeUniverse } from './testUniverse'
@@ -188,7 +190,8 @@ describe('MON screen', () => {
     const items = within(dialog).getAllByRole('menuitem')
     expect(items.map((i) => i.textContent)).toEqual(['1) GP Candle chart', '2) GIP Intraday chart', '3) DES Instrument description', '4) CORR Correlation matrix'])
     act(() => { expect(activateNumbered(PANEL_ID, 2)).toBe(true) })
-    expect(lines).toEqual([{ line: 'NQ GIP', newPanel: false }])
+    expect(lines).toEqual([{ line: drillFunctions('NQ')[1]!.line, newPanel: false }])
+    expect(lines[0]!.line).toBe(`NQ GIP ${LAST_IS_DAY}`)
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.keyDown(grid, { key: 'Enter' })
     const again = await screen.findByRole('dialog')

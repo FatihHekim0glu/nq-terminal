@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MNEMONICS } from '../commands/registry'
+import { parseLine } from '../commands/line'
 import { HELP, HELP_KEYS } from '../copy/help'
 import { onLineRequest } from './CommandLine.bus'
 import HelpScreen from './HelpScreen'
@@ -107,6 +108,23 @@ describe('HelpScreen, generated from the command registry (spec 7.12)', () => {
     fireEvent.change(search, { target: { value: 'drawdown' } })
     fireEvent.keyDown(search, { key: 'Enter' })
     expect(seen).toHaveBeenCalledWith({ line: 'HL drawdown', newPanel: false })
+    stop()
+  })
+
+  it('born failing (D14): a query with punctuation, including a screen title itself, still parses as a search', () => {
+    const seen = vi.fn()
+    const stop = onLineRequest(seen)
+    render(<HelpScreen built={new Set()} />)
+    const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+    const search = within(bar).getByRole('textbox', { name: HELP.searchLabel })
+    for (const query of ['Analytics: equity', 'P&L', '[POST HOC]']) {
+      fireEvent.change(search, { target: { value: query } })
+      fireEvent.keyDown(search, { key: 'Enter' })
+      const line = seen.mock.calls.at(-1)?.[0]?.line as string
+      expect(line).toBe(`HL ${query}`)
+      const result = parseLine(line, { index: null, fallbackContext: null })
+      expect(result).toEqual({ ok: true, action: { kind: 'search', query } })
+    }
     stop()
   })
 

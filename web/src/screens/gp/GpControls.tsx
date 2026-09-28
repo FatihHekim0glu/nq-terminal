@@ -10,6 +10,10 @@ import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import { GP_COPY as C } from '../../copy/gp'
 import { SPAN_CAP_YEARS, type GpTimeframe, type RangeCode, type Variant } from './model'
+// GIP's argument is required (registry.ts def('GIP', ..., 'date')): requesting '<root> GIP' with no
+// date is always rejected by the parser (D08). LAST_IS_DAY is the same fallback the GIP screen itself
+// uses when a command names no date.
+import { LAST_IS_DAY } from './useGpWindow'
 
 const roving = { [ROVING_ATTR]: '' }
 
@@ -18,12 +22,20 @@ const roving = { [ROVING_ATTR]: '' }
  * serves, by generic ticker; choosing one runs `<root> GP` (or GIP) through the command line, so it
  * lands in the panel's history like a typed command.
  */
-export function InstrumentField({ root, mode }: { readonly root: string; readonly mode: 'GP' | 'GIP' }) {
+export interface InstrumentFieldProps {
+  readonly root: string
+  readonly mode: 'GP' | 'GIP'
+  /** The GIP panel's own session date (win.date), carried over so switching instrument keeps it (D08). */
+  readonly date?: string | null
+}
+
+export function InstrumentField({ root, mode, date }: InstrumentFieldProps) {
   const commands = useCommands()
   const index = commands.data ?? null
   const roots = (index?.instruments ?? []).map((i) => i.root)
   const options = (roots.includes(root) ? roots : [root, ...roots]).map((r) => ({ value: r, label: displayInstrument(r, index) }))
-  return <DropdownField label={C.instrument} value={root} options={options} onChange={(next) => (next !== root ? requestLine(`${next} ${mode}`) : undefined)} />
+  const line = (next: string) => (mode === 'GIP' ? `${next} GIP ${date ?? LAST_IS_DAY}` : `${next} GP`)
+  return <DropdownField label={C.instrument} value={root} options={options} onChange={(next) => (next !== root ? requestLine(line(next)) : undefined)} />
 }
 
 export interface ParamsProps {

@@ -3,6 +3,7 @@
 // screens (HOME, REG, RUNS, LEDG, LIVE, OOS), then a wrench for the key map. Buttons are 24px tall on
 // a 48px pitch, black uppercase labels clipped at the edge, square corners; each names its key and
 // action for assistive technology. No sector keys: F8 to F11 insert them.
+import type { MouseEvent } from 'react'
 import { KEY_TOOLBAR } from '../copy/chrome'
 import './KeyToolbar.css'
 
@@ -17,9 +18,17 @@ export interface KeyToolbarProps {
 const OFFICIAL: readonly OfficialKey[] = ['esc', 'help', 'search', 'menu', 'pgback', 'pgfwd']
 const CUSTOM: readonly CustomKey[] = ['HOME', 'REG', 'RUNS', 'LEDG', 'LIVE', 'OOS']
 
+// A pointer click moves focus to the button on mousedown, before the click fires; without holding that
+// back, the command line's onBlur runs first and closes its suggestion list, so a CANCEL click cascades
+// two steps (close the list, then clear the line) in one press (D12). The sheet and menu rows already
+// hold pointer focus back the same way.
+function preventPointerFocus(e: MouseEvent) {
+  e.preventDefault()
+}
+
 function KeyButton({ id, text, name, colour, onKey }: { readonly id: KeyId; readonly text: string; readonly name: string; readonly colour: 'cancel' | 'go'; readonly onKey: (key: KeyId) => void }) {
   return (
-    <button type="button" className="key-btn" data-key={id} data-colour={colour} aria-label={name} onClick={() => onKey(id)}>
+    <button type="button" className="key-btn" data-key={id} data-colour={colour} aria-label={name} onMouseDown={preventPointerFocus} onClick={() => onKey(id)}>
       {text}
     </button>
   )
@@ -34,7 +43,7 @@ export function KeyToolbar({ onKey }: KeyToolbarProps) {
       {CUSTOM.map((id) => (
         <KeyButton key={id} id={id} text={id} name={KEY_TOOLBAR.custom[id]} colour="go" onKey={onKey} />
       ))}
-      <button type="button" className="key-map-btn" data-key="keymap" aria-label={KEY_TOOLBAR.keymap} onClick={() => onKey('keymap')}>
+      <button type="button" className="key-map-btn" data-key="keymap" aria-label={KEY_TOOLBAR.keymap} onMouseDown={preventPointerFocus} onClick={() => onKey('keymap')}>
         <span aria-hidden="true">{KEY_TOOLBAR.keymapGlyph}</span>
       </button>
     </div>

@@ -94,6 +94,14 @@ describe('spec 8.4 parser cases', () => {
     expect(action(parse('HL'))).toEqual({ kind: 'search', query: '' })
   })
 
+  it('born failing (D14): HL takes a query with punctuation, including the screen titles themselves', () => {
+    expect(action(parse('HL Analytics: equity'))).toEqual({ kind: 'search', query: 'Analytics: equity' })
+    expect(action(parse('hl P&L'))).toEqual({ kind: 'search', query: 'P&L' })
+    expect(action(parse('HL [POST HOC]'))).toEqual({ kind: 'search', query: '[POST HOC]' })
+    // A plain over-length line is still refused, HL query included.
+    expect(failure(parse(`HL ${'x'.repeat(250)}`)).code).toBe('too-long')
+  })
+
   it('MAIN is HOME', () => {
     const a = action(parse('MAIN'))
     expect(a.kind === 'run' && a.command.mnemonic.code).toBe('HOME')
