@@ -59,6 +59,11 @@
 .dockview-theme-nqt .dv-content-container { background: var(--bg); }
 .dockview-theme-nqt .dv-groupview { border-radius: 0; }
 
+/* dockview-react's own stylesheet puts a 1s background-color transition on its scrollbar; every
+   state change here is a hard cut (8.5 e), so it is cut back to none rather than left to the
+   library default (G22). */
+.nqt-workspace .dv-scrollbar { transition: none; }
+
 /* Classic scrollbars in every panel (IS-09): always visible, 15px, square, taking layout space. The
    thumb is the lighter grey that passes 3:1 on the track (1.4.11). */
 /* scrollbar-color only for Firefox: in Chromium it would switch off the ::-webkit-scrollbar styling. */

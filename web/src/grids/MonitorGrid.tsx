@@ -11,6 +11,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import type { RowData } from '@tanstack/react-table'
 import { GRID } from '../copy/grids'
 import { fillCopy } from '../copy/workspace'
+import { postMessage } from '../chrome/MessageLine.store'
 import { usePanelActions } from '../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../chrome/PanelChrome.numbers'
 import { ROVING_ATTR, ROVING_DEFAULT_ATTR, ROVING_SCROLL_ATTR } from '../chrome/WorkspaceFocus'
@@ -102,7 +103,24 @@ function makeIds(base: string): Ids {
   }
 }
 
-/** Number <GO> items: a row number selects and opens its row; a section number selects its section. */
+/** The numbered data rows between a heading (just after display index `i`) and the next one: their
+ * first and last `N)` numbers, or null when the heading has none (U26). */
+function headingSpan<Row extends RowData>(display: readonly DisplayRow<Row>[], i: number): { readonly first: number; readonly last: number } | null {
+  let first: number | null = null
+  let last: number | null = null
+  for (let j = i + 1; j < display.length; j += 1) {
+    const row = display[j]!
+    if (row.kind === 'group') break
+    if (row.n === null) continue
+    first ??= row.n
+    last = row.n
+  }
+  return first === null || last === null ? null : { first, last }
+}
+
+/** Number <GO> items: a row number selects and opens its row; a section number selects its section
+ * and says what it holds, e.g. '1) Equity is a heading: rows 10 to 12.' (U26), so a numbered select
+ * on a heading is never silent. */
 function useNumberedRows<Row extends RowData>(
   display: readonly DisplayRow<Row>[],
   labelOf: (row: Row) => string,
@@ -113,8 +131,18 @@ function useNumberedRows<Row extends RowData>(
     const items: NumberedItem[] = []
     display.forEach((d, i) => {
       if (d.n === null) return
-      if (d.kind === 'group') items.push({ n: d.n, label: d.label, run: () => select(i) })
-      else items.push({ n: d.n, label: labelOf(d.row), run: () => { select(i); open(d.row) } })
+      if (d.kind === 'group') {
+        const { n, label } = d
+        const span = headingSpan(display, i)
+        items.push({
+          n,
+          label,
+          run: () => {
+            select(i)
+            postMessage(span ? fillCopy(GRID.headingNumber, { n, label, first: span.first, last: span.last }) : fillCopy(GRID.headingNumberEmpty, { n, label }))
+          },
+        })
+      } else items.push({ n: d.n, label: labelOf(d.row), run: () => { select(i); open(d.row) } })
     })
     return items
   }, [display, labelOf, select, open])

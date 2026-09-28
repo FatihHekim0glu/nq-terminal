@@ -50,6 +50,10 @@
 .help a { color: var(--link); text-underline-offset: 2px; }
 .help-licences { list-style: none; display: grid; gap: 2px; color: var(--text); }
 
+/* HELP's own live search results (U19): in normal document flow directly under the field's row, so
+   they never overlap anything and are never a page-level overlay a stray click could be caught by. */
+.help-search { background: var(--ac-bg); border-bottom: 1px solid var(--cmd-border); }
+
 @media (max-width: 700px) {
   .help { grid-template-columns: minmax(0, 1fr); }
 }

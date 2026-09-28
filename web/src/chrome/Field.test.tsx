@@ -39,6 +39,45 @@ describe('AmberField (look spec 4.5)', () => {
     render(<AmberField label="Filter" value="x" onChange={() => {}} disabled />)
     expect((screen.getByRole('textbox', { name: 'Filter' }) as HTMLInputElement).disabled).toBe(true)
   })
+
+  // U19: HELP's own in-panel search results are a listbox this field owns, so it is a combobox
+  // (role, aria-autocomplete, aria-expanded, aria-controls, aria-activedescendant), not a plain textbox.
+  it('becomes a combobox naming its listbox and active option when a combobox prop is given', () => {
+    render(<AmberField label="Search help" value="GP" onChange={() => {}} combobox={{ listId: 'lst', expanded: true, activeId: 'lst-opt-1' }} />)
+    const input = screen.getByRole('combobox', { name: 'Search help' })
+    expect(input.getAttribute('aria-autocomplete')).toBe('list')
+    expect(input.getAttribute('aria-expanded')).toBe('true')
+    expect(input.getAttribute('aria-controls')).toBe('lst')
+    expect(input.getAttribute('aria-activedescendant')).toBe('lst-opt-1')
+  })
+
+  it('drops aria-controls and aria-activedescendant when the combobox is collapsed', () => {
+    render(<AmberField label="Search help" value="" onChange={() => {}} combobox={{ listId: 'lst', expanded: false }} />)
+    const input = screen.getByRole('combobox', { name: 'Search help' })
+    expect(input.getAttribute('aria-expanded')).toBe('false')
+    expect(input.getAttribute('aria-controls')).toBeNull()
+    expect(input.getAttribute('aria-activedescendant')).toBeNull()
+  })
+
+  it('calls a given onKeyDown before the built-in Enter/onSubmit handling, which a preventDefault skips', () => {
+    const onSubmit = vi.fn()
+    const onKeyDown = vi.fn((e: { preventDefault: () => void }) => e.preventDefault())
+    render(<AmberField label="Search help" value="cost" onChange={() => {}} onSubmit={onSubmit} onKeyDown={onKeyDown} />)
+    const input = screen.getByRole('textbox', { name: 'Search help' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onKeyDown).toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('still runs onSubmit on Enter when the given onKeyDown does not prevent the default', () => {
+    const onSubmit = vi.fn()
+    const onKeyDown = vi.fn()
+    render(<AmberField label="Search help" value="cost" onChange={() => {}} onSubmit={onSubmit} onKeyDown={onKeyDown} />)
+    const input = screen.getByRole('textbox', { name: 'Search help' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onKeyDown).toHaveBeenCalled()
+    expect(onSubmit).toHaveBeenCalledWith('cost')
+  })
 })
 
 describe('DropdownField and its amber list', () => {
@@ -88,6 +127,46 @@ describe('DropdownField and its amber list', () => {
     expect(field.getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(field)
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+})
+
+describe('DropdownField keeps Home, End, PageUp and PageDown inside the open list (G04)', () => {
+  const MANY = Array.from({ length: 10 }, (_, i) => ({ value: String(i), label: `Item ${i}` }))
+  const activeLabel = (field: HTMLElement) => {
+    const id = field.getAttribute('aria-activedescendant')
+    return document.getElementById(id ?? '')?.textContent
+  }
+
+  it('End moves the highlight to the last option, keeps the list open and consumes the event', () => {
+    render(<DropdownField label="Freq" value="0" options={MANY} onChange={() => {}} />)
+    const field = screen.getByRole('combobox', { name: 'Freq' })
+    fireEvent.keyDown(field, { key: 'ArrowDown' })
+    const notPrevented = fireEvent.keyDown(field, { key: 'End' })
+    expect(notPrevented).toBe(false)
+    expect(field.getAttribute('aria-expanded')).toBe('true')
+    expect(activeLabel(field)).toBe('Item 9')
+  })
+
+  it('Home moves the highlight to the first option', () => {
+    render(<DropdownField label="Freq" value="5" options={MANY} onChange={() => {}} />)
+    const field = screen.getByRole('combobox', { name: 'Freq' })
+    fireEvent.click(field)
+    const notPrevented = fireEvent.keyDown(field, { key: 'Home' })
+    expect(notPrevented).toBe(false)
+    expect(field.getAttribute('aria-expanded')).toBe('true')
+    expect(activeLabel(field)).toBe('Item 0')
+  })
+
+  it('PageDown and PageUp move by a page and clamp at the ends', () => {
+    render(<DropdownField label="Freq" value="0" options={MANY} onChange={() => {}} />)
+    const field = screen.getByRole('combobox', { name: 'Freq' })
+    fireEvent.click(field)
+    fireEvent.keyDown(field, { key: 'PageDown' })
+    expect(activeLabel(field)).toBe('Item 8')
+    fireEvent.keyDown(field, { key: 'PageDown' })
+    expect(activeLabel(field)).toBe('Item 9')
+    fireEvent.keyDown(field, { key: 'PageUp' })
+    expect(activeLabel(field)).toBe('Item 1')
   })
 })
 

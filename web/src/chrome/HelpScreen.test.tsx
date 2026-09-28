@@ -103,7 +103,7 @@ describe('HelpScreen, generated from the command registry (spec 7.12)', () => {
     expect(bar.className).toContain('fn-bar')
     expect(within(bar).getByText('Help').className).toContain('fn-title')
     expect(within(bar).getByRole('button', { name: /96\)\s*Actions/ }).getAttribute('aria-haspopup')).toBe('menu')
-    const search = within(bar).getByRole('textbox', { name: HELP.searchLabel })
+    const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
     expect(search.getAttribute('placeholder')).toBe('<Search help>')
     fireEvent.change(search, { target: { value: 'drawdown' } })
     fireEvent.keyDown(search, { key: 'Enter' })
@@ -111,12 +111,155 @@ describe('HelpScreen, generated from the command registry (spec 7.12)', () => {
     stop()
   })
 
+  // The HL popover used to be the command line's own, anchored under it and covering HELP's own
+  // field until Esc; results for HELP's own field now render inside the HELP panel as the user
+  // types, so the field itself is never covered and there is no page-level overlay to intercept
+  // clicks (U19).
+  it('shows live search results inside the HELP panel as the user types, not only after Enter', () => {
+    render(<HelpScreen built={new Set()} />)
+    const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+    const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(search, { target: { value: 'GP' } })
+    const list = screen.getByRole('listbox')
+    expect(within(list).getAllByRole('option').length).toBeGreaterThan(0)
+    expect(within(list).getByText('GP')).toBeTruthy()
+  })
+
+  it('clicking a live result runs its line and closes the results, without covering the field', () => {
+    const seen = vi.fn()
+    const stop = onLineRequest(seen)
+    render(<HelpScreen built={new Set()} />)
+    const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+    const search = within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
+    fireEvent.change(search, { target: { value: 'HOME' } })
+    const list = screen.getByRole('listbox')
+    fireEvent.click(within(list).getByText('HOME'))
+    expect(seen).toHaveBeenCalledWith({ line: 'HOME', newPanel: false })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    stop()
+  })
+
+  it('clears the live results once the field is emptied', () => {
+    render(<HelpScreen built={new Set()} />)
+    const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+    const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+    fireEvent.change(search, { target: { value: 'GP' } })
+    expect(screen.getByRole('listbox')).toBeTruthy()
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  // U19: the in-panel results used to be reachable only by mouse; the field is now a combobox that
+  // owns its own listbox, so keyboard and screen reader users can reach, pick and dismiss a result.
+  describe('the in-panel search results are keyboard- and screen-reader-reachable (U19)', () => {
+    it('names its (collapsed) listbox and expands aria-expanded/aria-controls once results show', () => {
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+      expect(search.getAttribute('aria-expanded')).toBe('false')
+      expect(search.getAttribute('aria-controls')).toBeNull()
+      fireEvent.change(search, { target: { value: 'GP' } })
+      const list = screen.getByRole('listbox')
+      expect(search.getAttribute('aria-expanded')).toBe('true')
+      expect(search.getAttribute('aria-controls')).toBe(list.id)
+    })
+
+    it('ArrowDown highlights the first option, reported through aria-activedescendant', () => {
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+      fireEvent.change(search, { target: { value: 'GP' } })
+      const list = screen.getByRole('listbox')
+      const first = within(list).getAllByRole('option')[0]!
+      fireEvent.keyDown(search, { key: 'ArrowDown' })
+      expect(search.getAttribute('aria-activedescendant')).toBe(first.id)
+    })
+
+    it('Enter with a highlighted result chooses it, with no HL request (U19, #13)', () => {
+      const seen = vi.fn()
+      const stop = onLineRequest(seen)
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+      fireEvent.change(search, { target: { value: 'GP' } })
+      const list = screen.getByRole('listbox')
+      const first = within(list).getAllByRole('option')[0]!
+      const chosen = first.textContent
+      fireEvent.keyDown(search, { key: 'ArrowDown' })
+      fireEvent.keyDown(search, { key: 'Enter' })
+      expect(seen).toHaveBeenCalledTimes(1)
+      const line = seen.mock.calls[0]?.[0]?.line as string
+      expect(line).not.toMatch(/^HL /)
+      expect(chosen).toContain(line.replace(/ HELP$/, ''))
+      expect(screen.queryByRole('listbox')).toBeNull()
+      stop()
+    })
+
+    it('Escape with text in the field clears the field and the listbox, defaultPrevented', () => {
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
+      fireEvent.change(search, { target: { value: 'GP' } })
+      expect(screen.getByRole('listbox')).toBeTruthy()
+      const notPrevented = fireEvent.keyDown(search, { key: 'Escape' })
+      expect(notPrevented).toBe(false)
+      expect(search.value).toBe('')
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+
+    it('D14 is unchanged: Enter with no highlighted row still requests HL <query>', () => {
+      const seen = vi.fn()
+      const stop = onLineRequest(seen)
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
+      fireEvent.change(search, { target: { value: 'drawdown' } })
+      fireEvent.keyDown(search, { key: 'Enter' })
+      expect(seen).toHaveBeenCalledWith({ line: 'HL drawdown', newPanel: false })
+      stop()
+    })
+  })
+
+  // A context-taking mnemonic used to loop back to the same search results and never open anything:
+  // chooseSearchResult's setQuery(item.act.line) just re-ran the same search (HelpScreen.tsx:239).
+  describe('choosing a context-taking function or a chrome word actually opens it', () => {
+    it('clicking a context-taking function (EQ) opens its help, the same as the contents rail', () => {
+      const seen = vi.fn()
+      const stop = onLineRequest(seen)
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
+      fireEvent.change(search, { target: { value: 'equity' } })
+      const list = screen.getByRole('listbox')
+      fireEvent.click(within(list).getByText('EQ'))
+      expect(seen).toHaveBeenCalledWith({ line: 'EQ HELP', newPanel: false })
+      expect(search.value).toBe('')
+      expect(screen.queryByRole('listbox')).toBeNull()
+      stop()
+    })
+
+    it('clicking a chrome word (NXTW) runs its line directly, not a re-search', () => {
+      const seen = vi.fn()
+      const stop = onLineRequest(seen)
+      render(<HelpScreen built={new Set()} />)
+      const bar = screen.getByRole('toolbar', { name: 'Help functions' })
+      const search = within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
+      fireEvent.change(search, { target: { value: 'NXTW' } })
+      const list = screen.getByRole('listbox')
+      fireEvent.click(within(list).getByText('NXTW'))
+      expect(seen).toHaveBeenCalledWith({ line: 'NXTW', newPanel: false })
+      expect(search.value).toBe('')
+      stop()
+    })
+  })
+
   it('born failing (D14): a query with punctuation, including a screen title itself, still parses as a search', () => {
     const seen = vi.fn()
     const stop = onLineRequest(seen)
     render(<HelpScreen built={new Set()} />)
     const bar = screen.getByRole('toolbar', { name: 'Help functions' })
-    const search = within(bar).getByRole('textbox', { name: HELP.searchLabel })
+    const search = within(bar).getByRole('combobox', { name: HELP.searchLabel })
     for (const query of ['Analytics: equity', 'P&L', '[POST HOC]']) {
       fireEvent.change(search, { target: { value: query } })
       fireEvent.keyDown(search, { key: 'Enter' })

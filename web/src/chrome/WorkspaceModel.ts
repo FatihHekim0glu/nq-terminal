@@ -2,7 +2,8 @@
 // dockview calls. Pure except for applyPlan, which only touches the api it is given.
 //   Enter:       a multi-panel screen loads its default layout; otherwise the focused panel is
 //                replaced in place (keeping its link group); with nothing focused, the layout loads.
-//   Shift+Enter: a new panel opens to the right of the focused one, in its link group.
+//   Shift+Enter: a new panel opens after the last one in reading order, in its link group; never
+//                beside the focused panel, which would renumber every panel after it (U28).
 import type { CommandArgs, ParsedCommand } from '../commands/parser'
 import { TIMEFRAMES, findMnemonic } from '../commands/registry'
 import { displayContext } from '../commands/sectors'
@@ -108,7 +109,15 @@ function layoutForCommand(command: ParsedCommand): ScreenLayout {
 
 export function planOpen(state: WorkspaceFocusState, command: ParsedCommand, newPanel: boolean): OpenPlan {
   const group = state.activeGroup ?? '-'
-  if (newPanel) return { kind: 'add', ref: state.activePanelId, params: paramsFromCommand(command, group) }
+  if (newPanel) {
+    // HELP added as a new panel (F1 twice, Shift+Enter or NXTW) is a reference screen, never tied to
+    // an instrument, hypothesis or run: it never carries a link chip, regardless of what group was
+    // active (U20). Every other context-free screen (LEDG, REG, RUNS...) still joins the active
+    // group, unchanged. HELP replacing a panel in place is not carved out here: it keeps that
+    // panel's own link group like any other replace, below.
+    const addGroup = command.mnemonic.code === 'HELP' ? '-' : group
+    return { kind: 'add', ref: state.activePanelId, params: paramsFromCommand(command, addGroup) }
+  }
   const layout = layoutForCommand(command)
   if (layout.panels.length > 1 || !state.activePanelId) return { kind: 'load', layout }
   return { kind: 'replace', panelId: state.activePanelId, params: paramsFromCommand(command, group) }
@@ -135,12 +144,12 @@ function loadLayout(api: DockApiLike, layout: ScreenLayout): void {
   }
 }
 
-function addPanel(api: DockApiLike, params: PanelParams, ref: string | undefined): void {
-  const known = ref !== undefined && api.panels.some((p) => p.id === ref)
-  // dockview opens a panel with no position as a hidden tab in whatever group is active; when the
-  // requested reference is missing (or there was none), anchor to the last panel instead, so the new
-  // panel always gets its own visible group.
-  const fallback = known ? ref : api.panels.at(-1)?.id
+function addPanel(api: DockApiLike, params: PanelParams): void {
+  // Always after the last panel in reading order, never beside the one that was focused (Shift+Enter
+  // or NXTW): inserting there renumbers every panel to its right, so Alt+N no longer reaches them
+  // (U28). dockview opens a panel with no position as a hidden tab in whatever group is active, so an
+  // empty workspace (no last panel) still gets none, its own visible group.
+  const fallback = api.panels.at(-1)?.id
   const position = fallback ? { referencePanel: fallback, direction: 'right' as const } : undefined
   api.addPanel({ id: freshId(api), component: PANEL_COMPONENT, title: panelTitle(params), params, position })
 }
@@ -151,12 +160,12 @@ export function applyPlan(api: DockApiLike, plan: OpenPlan): void {
     return
   }
   if (plan.kind === 'add') {
-    addPanel(api, plan.params, plan.ref)
+    addPanel(api, plan.params)
     return
   }
   if (api.panels.some((p) => p.id === plan.panelId)) {
     api.replacePanel(plan.panelId, plan.params, panelTitle(plan.params))
     return
   }
-  addPanel(api, plan.params, undefined)
+  addPanel(api, plan.params)
 }

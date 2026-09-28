@@ -57,7 +57,7 @@ export const KEY_TOOLBAR = {
 export const NAV_TOOLBAR = {
   label: 'Navigation toolbar',
   back: 'Back, End',
-  forward: 'Forward',
+  forward: 'Forward, Shift+End',
   contextLabel: 'Context {value}: show its functions',
   noContext: 'No context: show the sector menus',
   mnemonicLabel: '{value}: help for this function',

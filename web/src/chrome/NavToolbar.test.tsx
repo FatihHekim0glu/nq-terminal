@@ -30,6 +30,14 @@ describe('NavToolbar: the 22px nav toolbar for the focused panel (spec 4.2)', ()
     expect(within(bar).getByRole('button', { name: NAV_TOOLBAR.related })).toBeTruthy()
   })
 
+  // openIssue (U10/U11): back already names its key ('Back, End'); forward read plain 'Forward' with
+  // no key at all, though Shift+End reaches it (KeyToolbar.actions.ts, CommandLine.keys.ts).
+  it('names the forward control\'s key (Shift+End), the same as back names End', () => {
+    const { bar } = setup()
+    const forward = within(bar).getByRole('button', { name: /Shift\+End/ })
+    expect(forward.getAttribute('aria-label')).toBe(NAV_TOOLBAR.forward)
+  })
+
   it('shows the kill switch and TWS state beside the message glyph', () => {
     const { bar } = setup({ kill: 'on' })
     expect(within(bar).getByText('KILL ON')).toBeTruthy()

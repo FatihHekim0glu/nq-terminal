@@ -5,6 +5,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
+import { resetMessage, useMessage } from '../chrome/MessageLine.store'
 import { activateNumbered, numberedItems, registerNumbered, resetNumbered } from '../chrome/NumberedActions'
 import { PanelActionsContext, type PanelActions } from '../chrome/PanelChrome.actions'
 import { NumberingContext } from '../chrome/PanelChrome.numbers'
@@ -50,7 +51,10 @@ function Panel({ children }: { readonly children: ReactNode }) {
 beforeAll(() => stubLayout(400))
 
 beforeEach(() => resetNumbered())
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  resetMessage()
+})
 
 function grid(): HTMLElement {
   return screen.getByRole('grid')
@@ -282,6 +286,18 @@ describe('MonitorGrid and Number <GO> (look spec 5.1 item 5)', () => {
     })
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(activeCell().textContent).toBe('2) Rates')
+  })
+
+  // U26 (P-keys): a section heading is a hot-link number too, but selecting it used to post nothing.
+  it('a heading number selects its section and posts what it holds, not a silent select', () => {
+    const onOpen = vi.fn()
+    render(<Panel><MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} groupOf={(r) => r.sector} onOpen={onOpen} /></Panel>)
+    act(() => {
+      expect(activateNumbered(PANEL_ID, 1)).toBe(true)
+    })
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(activeCell().textContent).toBe('1) Equity')
+    expect(useMessage.getState().text).toBe('1) Equity is a heading: rows 10 to 12.')
   })
 
   it('drops its registration when it unmounts', () => {

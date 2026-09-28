@@ -34,8 +34,19 @@ function isDisabled(el: HTMLElement): boolean {
   return el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true' || Boolean(el.hidden)
 }
 
+// Text-like input types: the ones with a caret and a selection range (an input with no type attribute
+// defaults to 'text'). A checkbox, button, submit or other non-text input has no caret, so it joins the
+// roving walk instead of swallowing the arrows (G11).
+const TEXT_INPUT_TYPES = new Set(['text', 'search', 'number', 'email', 'tel', 'url', 'password', 'date'])
+
 function isTextField(el: HTMLElement): boolean {
-  return el.isContentEditable || el.matches('input, textarea, select')
+  if (el.isContentEditable || el instanceof HTMLTextAreaElement) return true
+  return el instanceof HTMLInputElement && TEXT_INPUT_TYPES.has(el.type)
+}
+
+/** A select or a radio input keeps its own native arrow-key behaviour and never joins the roving walk. */
+function isNativeArrowField(el: HTMLElement): boolean {
+  return el instanceof HTMLSelectElement || (el instanceof HTMLInputElement && el.type === 'radio')
 }
 
 /**
@@ -87,15 +98,38 @@ function pickCurrent(items: readonly HTMLElement[], prefer?: HTMLElement): HTMLE
 }
 
 /**
- * Leaves exactly one Tab stop in the panel: `prefer` when it is an item, else the current one,
- * else the default item, else the first. Writes only attributes that change, so a
- * MutationObserver that calls it cannot loop. Returns the Tab stop.
+ * When the current stop sits outside the scrolling default item (a title-bar or function-bar
+ * control, e.g. Options or a Variant dropdown) and that default item overflows, leaving it as the
+ * sole stop takes the panel's one scrolling region out of the Tab order entirely (axe
+ * scrollable-region-focusable, G21). This only fires on an ambient resync (no explicit `prefer`),
+ * but usePanelRoving's own MutationObserver turns every tabindex write, including the one a
+ * deliberate arrow-key move onto a title-bar control just made, into exactly such a resync: within a
+ * microtask of that move, this hands the Tab stop straight back to the overflowing body, even while
+ * the title-bar control still holds real DOM focus (WorkspaceFocus.test.ts characterizes this). Tab
+ * from that control therefore lands on the same panel's body (one extra Tab) rather than on whatever
+ * comes after the panel; that is deliberate, so the panel's one scrolling region is never left with
+ * no Tab stop of its own.
+ */
+function keepBodyReachable(items: readonly HTMLElement[], current: HTMLElement): HTMLElement | undefined {
+  const body = items.find((el) => el.hasAttribute(ROVING_DEFAULT_ATTR))
+  if (!body || body === current || body.contains(current)) return undefined
+  return body.scrollHeight > body.clientHeight ? body : undefined
+}
+
+/**
+ * Leaves exactly one Tab stop in the panel: `prefer` when it is an item, else the current one
+ * (subject to keepBodyReachable, above, when `prefer` was not given), else the default item, else
+ * the first. Writes only attributes that change, so the MutationObserver that calls this on every
+ * mutation (usePanelRoving, below) cannot loop forever on its own writes, though one such echo call
+ * is itself expected, immediately after any write that moves the stop off an overflowing body.
+ * Returns the Tab stop.
  */
 export function syncRoving(panel: HTMLElement, prefer?: HTMLElement): HTMLElement | undefined {
   const items = rovingItems(panel)
   const overlay = panel.querySelector<HTMLElement>(`[${ROVING_OVERLAY_ATTR}]`)
   const inOverlay = overlay ? items.filter((el) => overlay.contains(el)) : []
-  const current = pickCurrent(inOverlay.length > 0 ? inOverlay : items, prefer)
+  let current = pickCurrent(inOverlay.length > 0 ? inOverlay : items, prefer)
+  if (!overlay && !prefer && current) current = keepBodyReachable(items, current) ?? current
   for (const el of panel.querySelectorAll<HTMLElement>(FOCUSABLE)) {
     if (!items.includes(el)) setTabIndex(el, -1)
   }
@@ -139,6 +173,7 @@ export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boole
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false
   const target = event.target as HTMLElement | null
   if (!target) return false
+  if (isNativeArrowField(target)) return false
   if (isTextField(target) && !caretAtEdge(target, event.key)) return false
   const tab = handleTabKey(panel, target, event)
   if (tab !== null) return tab

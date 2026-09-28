@@ -43,7 +43,7 @@ describe('HELP index (spec 7.12): the page the HELP command opens', () => {
     const off = onLineRequest(seen)
     renderHelp()
     const bar = screen.getByRole('toolbar', { name: `${HELP.title} functions` })
-    const field = within(bar).getByRole('textbox', { name: HELP.searchLabel })
+    const field = within(bar).getByRole('combobox', { name: HELP.searchLabel })
     expect(field.getAttribute('placeholder')).toBe(HELP.searchPlaceholder)
     fireEvent.change(field, { target: { value: 'drawdown' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -143,5 +143,96 @@ describe('HELP topic pages: one function\'s help in the panel', () => {
     renderHelp()
     act(() => requestHelpTopic('MON'))
     expect(screen.getByRole('region', { name: 'Help for MON' })).toBeTruthy()
+  })
+})
+
+// U19: results for HELP's own field render inside the HELP panel as the user types, owned by the field
+// (an ARIA 1.2 combobox), instead of the command line's popover, which is anchored under the command line
+// and covered this field until Esc. This is the HELP screen the workspace registers (WorkspaceScreens).
+describe("HELP search: live results inside the panel, reachable by keyboard (U19)", () => {
+  function searchField() {
+    const bar = screen.getByRole('toolbar', { name: `${HELP.title} functions` })
+    return within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
+  }
+
+  it('shows no list until something is typed, then a listbox the field names in aria-controls', () => {
+    renderHelp()
+    const field = searchField()
+    expect(field.getAttribute('aria-expanded')).toBe('false')
+    expect(field.getAttribute('aria-controls')).toBeNull()
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(field, { target: { value: 'GP' } })
+    const list = screen.getByRole('listbox')
+    expect(within(list).getByText('GP')).toBeTruthy()
+    expect(field.getAttribute('aria-expanded')).toBe('true')
+    expect(field.getAttribute('aria-controls')).toBe(list.id)
+  })
+
+  it('ArrowDown and ArrowUp move the highlight, reported through aria-activedescendant', () => {
+    renderHelp()
+    const field = searchField()
+    fireEvent.change(field, { target: { value: 'GP' } })
+    const options = within(screen.getByRole('listbox')).getAllByRole('option')
+    expect(fireEvent.keyDown(field, { key: 'ArrowDown' })).toBe(false)
+    expect(field.getAttribute('aria-activedescendant')).toBe(options[0]!.id)
+    fireEvent.keyDown(field, { key: 'ArrowUp' })
+    expect(field.getAttribute('aria-activedescendant')).toBe(options[0]!.id)
+  })
+
+  it('Enter on a highlighted function that takes a context opens its help here, like the contents rail, with no HL request', () => {
+    const seen = vi.fn()
+    const off = onLineRequest(seen)
+    renderHelp()
+    const field = searchField()
+    fireEvent.change(field, { target: { value: 'GP' } })
+    const options = within(screen.getByRole('listbox')).getAllByRole('option')
+    const gp = options.findIndex((o) => o.textContent?.includes('GP'))
+    for (let i = 0; i <= gp; i += 1) fireEvent.keyDown(field, { key: 'ArrowDown' })
+    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false)
+    off()
+    expect(seen).not.toHaveBeenCalled()
+    expect(screen.getByRole('region', { name: 'Help for GP' })).toBeTruthy()
+    expect(tocItem('GP').getAttribute('aria-current')).toBe('true')
+    expect(field.value).toBe('')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('a function with no context runs its line; a chrome word runs itself, never a re-search', () => {
+    const seen = vi.fn()
+    const off = onLineRequest(seen)
+    renderHelp()
+    const field = searchField()
+    fireEvent.change(field, { target: { value: 'HOME' } })
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('HOME'))
+    expect(seen).toHaveBeenLastCalledWith({ line: 'HOME', newPanel: false })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(field, { target: { value: 'NXTW' } })
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('NXTW'))
+    off()
+    expect(seen).toHaveBeenLastCalledWith({ line: 'NXTW', newPanel: false })
+    expect(field.value).toBe('')
+  })
+
+  it('Escape with text clears the field and the list, and is kept from the global Esc key', () => {
+    renderHelp()
+    const field = searchField()
+    fireEvent.change(field, { target: { value: 'GP' } })
+    expect(fireEvent.keyDown(field, { key: 'Escape' })).toBe(false)
+    expect(field.value).toBe('')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('a plain Enter still runs HL on the command line (D14) and hides the list until the next edit', () => {
+    const seen = vi.fn()
+    const off = onLineRequest(seen)
+    renderHelp()
+    const field = searchField()
+    fireEvent.change(field, { target: { value: 'drawdown' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    off()
+    expect(seen).toHaveBeenCalledWith({ line: 'HL drawdown', newPanel: false })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(field, { target: { value: 'drawdow' } })
+    expect(screen.getByRole('listbox')).toBeTruthy()
   })
 })

@@ -41,12 +41,18 @@ export interface WorkspaceHandle {
   focusPanel(): boolean
   /** Focus panel N in reading order (Alt+N). False when there is no such panel. */
   focusPanelNumber(n: number): boolean
+  /** Focus the panel showing mnemonic `code` (U20: F1 pressed again, or held, while a HELP panel is
+   * already open focuses it instead of adding another). False when none shows it. */
+  focusPanelShowing(code: MnemonicCode): boolean
   /** The focused panel's context as it is now: the command line's fallback, read at parse time. */
   focusedContext(): ResolvedContext | null
   /** BACK in a panel's own history (End, the `<` button). False when there is nothing behind. */
   goBack(panelId: string): boolean
   /** Forward in a panel's own history (the `>` button). False when there is nothing ahead. */
   goForward(panelId: string): boolean
+  /** What panel `panelId` shows right now (U10: the message after goBack/goForward names where it
+   * landed, not the stale panel the chrome had focused before the move). Null when it does not exist. */
+  shownIn(panelId: string): { readonly code: MnemonicCode; readonly context: ResolvedContext | null } | null
   /** Open the related functions menu (MENU) in a panel, by default the focused one. */
   openRelatedMenu(panelId?: string): boolean
   /** Close the related functions menu wherever it is open. */
@@ -199,9 +205,11 @@ export default function Workspace(props: WorkspaceProps) {
     run: controller.run,
     focusPanel: controller.focusPanel,
     focusPanelNumber: controller.focusPanelNumber,
+    focusPanelShowing: controller.focusPanelShowing,
     focusedContext: controller.focusedContext,
     goBack: controller.goBack,
     goForward: controller.goForward,
+    shownIn: controller.shownIn,
     openRelatedMenu: controller.openRelatedMenu,
     closeRelatedMenu: controller.closeRelatedMenu,
   }))

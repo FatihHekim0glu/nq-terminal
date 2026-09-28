@@ -26,6 +26,14 @@ function VisibleLabel({ label, id }: LabelProps) {
   return useContext(ParamRowContext) ? <span id={id} className="param-label">{label}</span> : null
 }
 
+/** Makes the field an ARIA 1.2 combobox for a listbox the field owns (U19: HELP's own in-panel
+ * search results), rather than the command line's own popover pattern. */
+export interface AmberFieldCombobox {
+  readonly listId: string
+  readonly expanded: boolean
+  readonly activeId?: string
+}
+
 export interface AmberFieldProps {
   readonly label: string
   readonly value: string
@@ -36,9 +44,13 @@ export interface AmberFieldProps {
   readonly width?: string
   /** Runs with the current value on Enter, e.g. a search field that runs HL. */
   readonly onSubmit?: (value: string) => void
+  /** Called before the built-in Enter/onSubmit handling; a caller that calls preventDefault (e.g. an
+   * arrow key moving a highlighted result, or Enter choosing one) skips that built-in handling. */
+  readonly onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  readonly combobox?: AmberFieldCombobox
 }
 
-export function AmberField({ label, value, onChange, placeholder, disabled = false, width, onSubmit }: AmberFieldProps) {
+export function AmberField({ label, value, onChange, placeholder, disabled = false, width, onSubmit, onKeyDown, combobox }: AmberFieldProps) {
   const labelId = useId()
   const inRow = useContext(ParamRowContext)
   return (
@@ -55,8 +67,15 @@ export function AmberField({ label, value, onChange, placeholder, disabled = fal
         aria-labelledby={inRow ? labelId : undefined}
         aria-label={inRow ? undefined : label}
         style={width ? { width } : undefined}
+        role={combobox ? 'combobox' : undefined}
+        aria-autocomplete={combobox ? 'list' : undefined}
+        aria-expanded={combobox ? combobox.expanded : undefined}
+        aria-controls={combobox?.expanded ? combobox.listId : undefined}
+        aria-activedescendant={combobox?.activeId}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
+          onKeyDown?.(e)
+          if (e.defaultPrevented) return
           if (!onSubmit || e.key !== 'Enter' || e.nativeEvent.isComposing) return
           e.preventDefault()
           onSubmit(e.currentTarget.value)
@@ -128,6 +147,18 @@ export function DropdownField({ label, value, options, onChange, disabled = fals
     if (key === 'ArrowDown' || key === 'ArrowUp') {
       event.preventDefault()
       const step = key === 'ArrowDown' ? 1 : -1
+      setActive((i) => Math.min(Math.max(i + step, 0), options.length - 1))
+    } else if (key === 'Home' || key === 'End') {
+      // The ARIA listbox pattern: Home and End move the highlight to the first and last option while the
+      // list is open, rather than reaching the global Home (focus-command) and End (panel back) keys (G04).
+      event.preventDefault()
+      event.stopPropagation()
+      setActive(key === 'Home' ? 0 : options.length - 1)
+    } else if (key === 'PageUp' || key === 'PageDown') {
+      // A page inside the list, not the global panel page (G04).
+      event.preventDefault()
+      event.stopPropagation()
+      const step = key === 'PageDown' ? 8 : -8
       setActive((i) => Math.min(Math.max(i + step, 0), options.length - 1))
     } else if (key === 'Enter' || key === ' ') {
       event.preventDefault()
