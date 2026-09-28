@@ -54,6 +54,9 @@ describe('RET additions', () => {
       ['omega', 'Omega (0)', '[POST HOC]', 'A'], ['tail_ratio', 'Tail ratio', '[POST HOC]', 'A'], ['gain_to_pain', 'Gain to pain (monthly)', '[POST HOC]', 'A'],
     ])
     expect(tiles[0]!.kpi.value).toBe(HYP_EXTENDED.ratios[0]!.value)
+    // G08: the popover shows the API's full unit (not the tile face's shortened one), the same
+    // one-field pattern as tearKpis.ts and homeEquity.model.ts's alpha tiles.
+    expect(tiles.map((t) => t.unit)).toEqual(HYP_EXTENDED.ratios.map((r) => r.unit))
   })
 
   it('born failing: outside its monotone domain Cornish-Fisher is not defined and the historical VaR stands beside it', () => {

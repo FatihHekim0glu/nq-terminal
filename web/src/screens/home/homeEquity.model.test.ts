@@ -123,9 +123,18 @@ describe('homeStack: equity, underwater and rolling Sharpe panes on one time axi
 describe('homeNotes and drawdownUnit: the basis, the window and the benchmark in words', () => {
   it('states basis, unit, window and benchmark', () => {
     const notes = homeNotes(PANEL_A)
-    expect(notes).toContain('Basis A, screen (arithmetic on a fixed K). Unit: return on capital per session.')
+    // U24: the basis line named p.unit (the return unit) while the equity pane actually plots
+    // p.equity_unit; a screen basis, where they read very differently ('return on capital per
+    // session' vs 'multiple of K (K = 1), arithmetic'), left the caption naming the wrong one.
+    expect(notes).toContain('Basis A, screen (arithmetic on a fixed K). Returns in return on capital per session; the equity pane plots multiple of K (K = 1), arithmetic.')
     expect(notes).toContain('4 sessions from 2011-04-25 to 2011-04-28.')
     expect(notes).toContain('Benchmark: same-exposure buy and hold (r_bh_1).')
+  })
+
+  it('U24: the basis line still names the return unit and now also the equity pane\'s own unit', () => {
+    const [basisLine] = homeNotes(PANEL_A)
+    expect(basisLine).toContain(PANEL_A.unit)
+    expect(basisLine).toContain(PANEL_A.equity_unit)
   })
 
   it('says why the rolling pane is empty, and only when it is', () => {
@@ -169,6 +178,9 @@ describe('homeTiles: the Sharpe unit and the alpha tiles come from the API', () 
       expect(t.kpi.basis).toBe(PANEL_A.alpha[i]!.basis)
       expect(t.kpi.note).toBe(PANEL_A.alpha[i]!.note)
       expect(t.description).toContain(PANEL_A.alpha[i]!.unit)
+      // G08: carried on the tile spec itself (not only the description), so the popover can show the
+      // API's full unit for a face the tile shortens or drops (HomeEquityPanel.tsx wires it through).
+      expect(t.unit).toBe(PANEL_A.alpha[i]!.unit)
     }
   })
 

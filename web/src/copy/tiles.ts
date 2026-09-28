@@ -7,6 +7,9 @@ export const KPI = {
   /** Added to the tile's name, so a screen reader hears that it opens details. */
   detailsHint: 'Show details',
   basisA: 'Basis A: a screen value, read from the research screen.',
+  /** [POST HOC] Basis A tiles: the terminal computed the value on the screen's series, it did not read
+   * it from a registered result (G08). */
+  basisAComputed: "Basis A: computed by the terminal on the research screen's series.",
   basisB: 'Basis B: an account value, from the Nautilus account.',
   unit: 'Unit: {unit}',
   note: 'Note: {note}',

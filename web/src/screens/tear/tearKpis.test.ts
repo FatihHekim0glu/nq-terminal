@@ -39,6 +39,16 @@ describe('KPI row (UI_SPEC section 7, tear sheet order)', () => {
     }
   })
 
+  it('G08: keeps the full API unit for the popover, separate from the short face unit', () => {
+    const tiles = kpiTiles(HYP_ANALYTICS)
+    const alpha = byKey(tiles, 'alpha_annual')
+    expect(alpha.unit).toBe('% per year')
+    expect(alpha.kpi.unit).toBe('%')
+    const alphaT = byKey(tiles, 'alpha_t')
+    expect(alphaT.unit).toBe('t statistic (gating, as the screen records it)')
+    expect(alphaT.kpi.unit).toBe('')
+  })
+
   it('says when a value is shown as a percentage of the API fraction', () => {
     const tile = byKey(kpiTiles(RUN_ANALYTICS), 'cagr')
     expect(tile.kpi.unit).toBe('%')

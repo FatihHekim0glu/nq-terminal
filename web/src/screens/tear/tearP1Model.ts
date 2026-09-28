@@ -96,6 +96,7 @@ export function ratioTiles(ext: Extended): TileSpec[] {
     signed: false,
     description: fillCopy(TEAR.kpiDescription, { label: kpi.label, unit: kpi.unit, tag: kpi.tag }),
     ci: null,
+    unit: kpi.unit,
   }))
 }
 

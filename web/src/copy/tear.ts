@@ -144,11 +144,16 @@ export const TEAR_RET = {
     sharpe: 'Sharpe',
     ci: '95% interval',
     psrZero: 'PSR (0)',
+    benchSharpe: 'Benchmark Sharpe',
     psrBench: 'PSR (benchmark Sharpe)',
     minTrlZero: 'MinTRL (0)',
     minTrlBench: 'MinTRL (benchmark Sharpe)',
     actual: 'Track record',
   },
+  /** G16: the 21-session tail rows get their own section (overlapping sums are losses when negative,
+   * the opposite sign convention from the VaR/CVaR rows above them). */
+  tailsTitle: '{window}-session loss (overlapping sums, negative = loss)',
+  tailsNote: 'With only {n} windows, the 5% and 1% tails fall on the same window and cannot be told apart.',
   ciValue: '{lo} to {hi}',
   periods: '{n} {unit}',
   reasons: {
@@ -172,6 +177,10 @@ export const TEAR_RET = {
  */
 export const TEAR_SV7 = {
   title: 'Sharpe difference (m - BH)',
+  /** G07: fixed, never the series tag. The card's numbers are read from the screen file (a registered
+   * result, SV7's own basis text below), so they are [PRE-REG] regardless of whether the series itself
+   * is tagged [POST HOC] or [PRE-REG]. */
+  tag: '[PRE-REG]',
   regionLabel: 'Sharpe difference tests',
   basis: "Read from the screen file, never recomputed: the annualised Sharpe of the strategy minus buy and hold's, per cost in ticks per side, on the file's own sample (Observations below).",
   chartName: '{name} {label} by cost, Ledoit-Wolf, annualised',

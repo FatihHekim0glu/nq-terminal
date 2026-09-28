@@ -12,6 +12,9 @@ const SHARPE: Kpi = { key: 'sharpe', label: 'Sharpe', value: 0.9912, unit: 'rati
 const MAXDD: Kpi = { key: 'max_dd', label: 'Max DD', value: -22.61, unit: '%', basis: 'B', tag: '[POST HOC]', note: null }
 const ALPHA: Kpi = { key: 'alpha', label: 'Alpha', value: 3.52, unit: '%/yr', basis: 'A', tag: '[PRE-REG]', note: 'read from the screen JSON' }
 const PSR: Kpi = { key: 'psr', label: 'PSR(0)', value: null, unit: 'probability', basis: 'B', tag: '[POST HOC]', note: 'fewer than 30 sessions' }
+// G08: a Basis A tile the terminal computed, not one read from the screen JSON.
+const SHARPE_A_COMPUTED: Kpi = { key: 'sharpe_a', label: 'Sharpe', value: -3.72, unit: 'ratio', basis: 'A', tag: '[POST HOC]', note: null }
+const ALPHA_T: Kpi = { key: 'alpha_t', label: 'Alpha t', value: 1.18, unit: '', basis: 'A', tag: '[PRE-REG]', note: null }
 
 afterEach(() => cleanup())
 
@@ -68,6 +71,34 @@ describe('KpiTile', () => {
     expect(screen.getByRole('button', { name: /Max DD/ }).querySelector('.kpi-value')?.textContent).toBe('-22.6%')
     expect(screen.getByRole('button', { name: /Max DD/ }).querySelector('.kpi-unit')).toBeNull()
     expect(screen.getByRole('button', { name: /Sharpe/ }).querySelector('.kpi-unit')).toBeNull()
+  })
+
+  it('G08: a Basis A tile tagged [POST HOC] says the terminal computed it, not that it was read from the screen', () => {
+    render(<KpiTile kpi={SHARPE_A_COMPUTED} />)
+    fireEvent.click(screen.getByRole('button', { name: /Sharpe/ }))
+    expect(screen.queryByText(/read from the research screen/)).toBeNull()
+    expect(screen.getByText("Basis A: computed by the terminal on the research screen's series.")).toBeTruthy()
+  })
+
+  it('G08: the popover unit line uses the API full unit, not the short face unit', () => {
+    render(<KpiTile kpi={ALPHA} unit="% per year" />)
+    fireEvent.click(screen.getByRole('button', { name: /Alpha/ }))
+    expect(screen.getByText('Unit: % per year')).toBeTruthy()
+    expect(screen.queryByText('Unit: %/yr')).toBeNull()
+  })
+
+  it('G08: a unitless face (a bare t statistic) still states its full unit in the popover', () => {
+    render(<KpiTile kpi={ALPHA_T} unit="t statistic (gating, as the screen records it)" />)
+    const tile = screen.getByRole('button', { name: /Alpha t/ })
+    expect(tile.querySelector('.kpi-unit')).toBeNull()
+    fireEvent.click(tile)
+    expect(screen.getByText('Unit: t statistic (gating, as the screen records it)')).toBeTruthy()
+  })
+
+  it('G08: without a unit prop the popover falls back to the tile kpi.unit, as before', () => {
+    render(<KpiTile kpi={SHARPE} description="Annualised Sharpe ratio of daily account returns, 252 sessions a year." />)
+    fireEvent.click(screen.getByRole('button', { name: /Sharpe/ }))
+    expect(screen.getByText('Unit: ratio')).toBeTruthy()
   })
 
   it('shows -- for a missing value and says why in the popover', () => {

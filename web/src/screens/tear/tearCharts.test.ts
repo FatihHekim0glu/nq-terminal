@@ -13,6 +13,7 @@ import {
   rrStack,
   statsNotes,
   statsSections,
+  tailsNote,
   yearlyLadder,
 } from './tearCharts'
 
@@ -194,6 +195,57 @@ describe('RET (look spec 7.5)', () => {
     const notes = statsNotes(HYP_ANALYTICS)
     expect(notes).toEqual(['Not reachable: the Sharpe is at or below the threshold (MinTRL (0), MinTRL (benchmark Sharpe)).'])
     expect(statsNotes({ ...HYP_ANALYTICS, validity: { ...HYP_ANALYTICS.validity, min_trl: { ...HYP_ANALYTICS.validity.min_trl, at_zero: { ...HYP_ANALYTICS.validity.min_trl.at_zero, reason: 'reachable', reachable: true, sessions: 400 }, at_benchmark: null } } })).toEqual([])
+  })
+})
+
+describe('G16: the 21-session tail rows get their own section, separate from the 1-session risk rows', () => {
+  it('keeps Risk to VaR and CVaR only, and gives the tails their own titled section naming the window and the sign convention', () => {
+    const sections = statsSections(HYP_ANALYTICS)
+    expect(sections.map((s) => s.id)).toEqual(['summary', 'risk', 'tails', 'validity'])
+    const risk = sections.find((s) => s.id === 'risk')!
+    expect(risk.rows.map((r) => r.id)).toEqual(['var95', 'cvar95', 'var99', 'cvar99'])
+    const tails = sections.find((s) => s.id === 'tails')!
+    expect(tails.rows.map((r) => r.id)).toEqual(['tails5', 'tails1', 'tailsN'])
+    expect(tails.title).toBe('21-session loss (overlapping sums, negative = loss)')
+  })
+
+  it('shows no tails section for a series with no 21-session windows (RUN_ANALYTICS: n = 0)', () => {
+    expect(RUN_ANALYTICS.risk.tails21?.n).toBe(0)
+    expect(statsSections(RUN_ANALYTICS).map((s) => s.id)).toEqual(['summary', 'risk', 'validity'])
+  })
+})
+
+describe('tailsNote (G16): says when too few windows separate the 5% and 1% tails', () => {
+  it('notes it when 19 windows round both quantiles to the same worst window', () => {
+    expect(HYP_ANALYTICS.risk.tails21).toMatchObject({ n: 19, shortfall_1pct: -0.0789560099999999, shortfall_5pct: -0.0789560099999999 })
+    expect(tailsNote(HYP_ANALYTICS)).toBe('With only 19 windows, the 5% and 1% tails fall on the same window and cannot be told apart.')
+  })
+
+  it('says nothing for a series with no 21-session windows', () => {
+    expect(tailsNote(RUN_ANALYTICS)).toBeNull()
+  })
+
+  it('says nothing once the two tails separate', () => {
+    const wide = { ...HYP_ANALYTICS, risk: { ...HYP_ANALYTICS.risk, tails21: { ...HYP_ANALYTICS.risk.tails21!, shortfall_1pct: -0.12, shortfall_5pct: -0.08 } } }
+    expect(tailsNote(wide)).toBeNull()
+  })
+})
+
+describe('U24: RET names the benchmark Sharpe the PSR (benchmark Sharpe) row tests against', () => {
+  it('adds an annualised Benchmark Sharpe row before PSR (benchmark Sharpe), matching HOME (-3.67)', () => {
+    const validity = statsSections(HYP_ANALYTICS).find((s) => s.id === 'validity')!
+    const ids = validity.rows.map((r) => r.id)
+    expect(ids.indexOf('benchSharpe')).toBeGreaterThanOrEqual(0)
+    expect(ids.indexOf('benchSharpe')).toBeLessThan(ids.indexOf('psrBench'))
+    const row = validity.rows.find((r) => r.id === 'benchSharpe')!
+    expect(row.label).toBe('Benchmark Sharpe')
+    expect(row.value).toBe('-3.67')
+  })
+
+  it('has no Benchmark Sharpe row when the series has no benchmark', () => {
+    expect(RUN_ANALYTICS.validity.psr.benchmark_sr_per_period).toBeNull()
+    const ids = statsSections(RUN_ANALYTICS).find((s) => s.id === 'validity')!.rows.map((r) => r.id)
+    expect(ids).not.toContain('benchSharpe')
   })
 })
 

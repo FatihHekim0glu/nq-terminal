@@ -16,7 +16,10 @@ export const HOME_EQ = {
   tagNote: 'computed by the terminal from the {source}, descriptive',
   sourceHypothesis: 'screen series',
   sourceRun: 'run series',
-  basis: 'Basis {basis}, {basisLabel}. Unit: {unit}.',
+  // U24: the equity pane plots p.equity_unit, not p.unit (the return unit): on a screen basis they
+  // read very differently ('return on capital per session' vs 'multiple of K (K = 1), arithmetic'),
+  // so the caption must name both, not only the return unit.
+  basis: 'Basis {basis}, {basisLabel}. Returns in {unit}; the equity pane plots {equityUnit}.',
   window: '{n} {per} from {first} to {last}.',
   bench: 'Benchmark: {bench}.',
   noBench: 'No benchmark series for this context.',

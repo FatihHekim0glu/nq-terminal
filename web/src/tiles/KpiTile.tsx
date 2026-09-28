@@ -22,6 +22,10 @@ export interface KpiTileProps {
   readonly description?: string
   /** A confidence interval shown beside the value, e.g. Sharpe [CI]. */
   readonly ci?: readonly [number, number] | null
+  /** The API's full unit for the popover's "Unit: ..." line (G08); `kpi.unit` alone, already shortened
+   * for the tile face, would print a bare '%' for '% per year' and nothing at all for a unitless ratio
+   * such as a t statistic. Defaults to `kpi.unit` when not given. */
+  readonly unit?: string
 }
 
 const MISSING = '--'
@@ -44,13 +48,20 @@ export function formatKpi(value: number | null, unit: string, decimals: number, 
   return `${plus}${frac === undefined ? grouped : `${grouped}.${frac}`}${unit === '%' ? '%' : ''}`
 }
 
-function Popover({ id, kpi, description }: { readonly id: string; readonly kpi: Kpi; readonly description?: string }) {
+/** Basis A reads two ways (G08): [PRE-REG] means the screen recorded the value; [POST HOC] means the
+ * terminal computed it from the screen's series. Basis B is always the Nautilus account. */
+function basisText(kpi: Kpi): string {
+  if (kpi.basis !== 'A') return KPI.basisB
+  return kpi.tag === '[POST HOC]' ? KPI.basisAComputed : KPI.basisA
+}
+
+function Popover({ id, kpi, description, unit }: { readonly id: string; readonly kpi: Kpi; readonly description?: string; readonly unit: string }) {
   return (
     <div id={id} className="kpi-pop">
       <p className="kpi-pop-title">{kpi.label}</p>
       {description ? <p>{description}</p> : null}
-      <p className="kpi-pop-basis">{kpi.basis === 'A' ? KPI.basisA : KPI.basisB}</p>
-      <p>{fillCopy(KPI.unit, { unit: kpi.unit })}</p>
+      <p className="kpi-pop-basis">{basisText(kpi)}</p>
+      <p>{fillCopy(KPI.unit, { unit })}</p>
       {kpi.note ? <p>{fillCopy(KPI.note, { note: kpi.note })}</p> : null}
     </div>
   )
@@ -68,7 +79,7 @@ function useOutsidePress(open: boolean, root: RefObject<HTMLElement | null>, clo
   }, [open, root, close])
 }
 
-export default function KpiTile({ kpi, decimals = 2, signed = false, description, ci }: KpiTileProps) {
+export default function KpiTile({ kpi, decimals = 2, signed = false, description, ci, unit }: KpiTileProps) {
   const [open, setOpen] = useState(false)
   const popId = useId()
   const root = useRef<HTMLDivElement>(null)
@@ -102,7 +113,7 @@ export default function KpiTile({ kpi, decimals = 2, signed = false, description
         </span>
         <span className="kpi-tag">{kpi.tag}</span>
       </button>
-      {open ? <Popover id={popId} kpi={kpi} description={description} /> : null}
+      {open ? <Popover id={popId} kpi={kpi} description={description} unit={unit ?? kpi.unit} /> : null}
     </div>
   )
 }

@@ -16,6 +16,9 @@ export interface TileSpec {
   readonly signed: boolean
   readonly description: string
   readonly ci: readonly [number, number] | null
+  /** The API's own unit, before shortUnit() shortens `kpi.unit` for the tile face (G08): the popover
+   * states this one, so '% per year' and 't statistic...' are not lost to a blank or bare '%'. */
+  readonly unit?: string
 }
 
 /** Decimals by KPI key; everything else gets 2. */
@@ -36,6 +39,7 @@ function sharpeInterval(data: Analytics): readonly [number, number] | null {
 export function kpiTiles(data: Analytics): TileSpec[] {
   return data.kpis.map((kpi) => ({
     kpi: { ...kpi, value: toDisplay(kpi.value, kpi.unit), unit: shortUnit(kpi.unit) },
+    unit: kpi.unit,
     decimals: DECIMALS[kpi.key] ?? 2,
     signed: SIGNED.has(kpi.key),
     description: describe(kpi),

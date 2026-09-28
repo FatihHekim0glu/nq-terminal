@@ -83,7 +83,7 @@ function RatiosCard({ ext }: { readonly ext: Extended }) {
   return (
     <Card title={P.ratios.title} tag={ext.tag}>
       <KpiRow label={P.ratios.label}>
-        {tiles.map((t) => <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} description={t.description} />)}
+        {tiles.map((t) => <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} description={t.description} unit={t.unit} />)}
       </KpiRow>
     </Card>
   )
