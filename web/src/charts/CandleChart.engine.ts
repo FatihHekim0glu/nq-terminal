@@ -53,6 +53,14 @@ export const VOLUME_MA_BARS = 20
 const PANE_SEPARATOR_PX = 1
 /** Room left of the first bar in the opening view: half a time label ("09:30") plus a margin. */
 export const LEFT_LABEL_ROOM_PX = 24
+/**
+ * Room left of the first bar when an indicator pane (RV22) is the lowest pane: the library draws its
+ * TradingView attribution logo at left:10px, width:35px in the host's bottom-left corner, i.e. under
+ * the lowest pane's plot (U29, a11y-visual crop-GP-logo-1366.png). Without an indicator, volume is the
+ * lowest pane instead and its legend already clears the logo (CandleChart.overlays.tsx clearLogo), so
+ * the smaller LEFT_LABEL_ROOM_PX still applies there.
+ */
+export const LOGO_ROOM_PX = 45
 /** Fallback label width per character where no canvas can measure (tests). */
 const FALLBACK_CHAR_PX = 7
 
@@ -460,7 +468,7 @@ interface OpeningFit {
  * (withLeftRoom). The library has no size until it has laid out, so the fit is made again on each
  * resize until the pointer enters the chart or a key moves it.
  */
-function openingFit(chart: IChartApi, host: HTMLElement, n: number, theme: LwcTheme): OpeningFit {
+function openingFit(chart: IChartApi, host: HTMLElement, n: number, theme: LwcTheme, room: number): OpeningFit {
   const scale = chart.timeScale()
   let pristine = true
   const fit = () => {
@@ -470,7 +478,7 @@ function openingFit(chart: IChartApi, host: HTMLElement, n: number, theme: LwcTh
       return
     }
     const all = { from: -0.5, to: n - 0.5 + theme.chart.timeScale.rightOffset }
-    scale.setVisibleLogicalRange(withLeftRoom(all, width, LEFT_LABEL_ROOM_PX))
+    scale.setVisibleLogicalRange(withLeftRoom(all, width, room))
   }
   const touched = () => { pristine = false }
   host.addEventListener('pointerenter', touched)
@@ -515,7 +523,7 @@ export function mountCandleChart(lib: LwcModule, host: HTMLElement, input: Candl
   const onMove = pointerHandler(input, keys.follow, events.onCursor)
   moves.subscribe(onMove)
   const scale = chart.timeScale()
-  const fit = openingFit(chart, host, input.bars.t.length, theme)
+  const fit = openingFit(chart, host, input.bars.t.length, theme, input.indicator ? LOGO_ROOM_PX : LEFT_LABEL_ROOM_PX)
   const onSize = () => {
     fit.onSize()
     emitView()

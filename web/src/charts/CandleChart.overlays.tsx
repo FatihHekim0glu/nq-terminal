@@ -64,10 +64,16 @@ export function Legends(p: LegendsProps) {
     <>
       <Legend rows={price} top={0} />
       {p.paneTops[1] !== undefined ? (
-        <Legend top={p.paneTops[1]} clearLogo rows={[{ swatch: '--chart-vol', name: fillCopy(CANDLE.legendName, { name: p.name, field: CANDLE.volume }), value: formatVolume(p.bars.v[p.index]) }]} />
+        // The attribution logo sits in the terminal's lowest pane: RV22 (the indicator pane) whenever
+        // one is drawn, otherwise the volume pane here (U29).
+        <Legend
+          top={p.paneTops[1]}
+          clearLogo={!(ind && p.paneTops[2] !== undefined)}
+          rows={[{ swatch: '--chart-vol', name: fillCopy(CANDLE.legendName, { name: p.name, field: CANDLE.volume }), value: formatVolume(p.bars.v[p.index]) }]}
+        />
       ) : null}
       {ind && p.paneTops[2] !== undefined ? (
-        <Legend top={p.paneTops[2]} rows={[{
+        <Legend top={p.paneTops[2]} clearLogo rows={[{
           swatch: '--chart-s1', name: ind.name,
           value: typeof indValue === 'number' ? `${indValue.toFixed(ind.digits ?? 1)}${ind.unit ?? ''}` : '',
         }]} />

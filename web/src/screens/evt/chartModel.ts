@@ -38,6 +38,13 @@ function points(offsets: readonly number[], values: ReadonlyArray<number | null>
   return offsets.map((k, i) => [k, isFiniteNumber(values[i]) ? values[i]! : null])
 }
 
+// U04 (dogfood round): on a small user-picked slice (e.g. 2 FOMC events) this pointwise 1.96 se band
+// can read as a significance test, which C7 bans; SEAS's convention is a plain one-SE spread, labelled
+// as such (see EVT.band and EVT.caption). Hiding the band below a minimum n, or moving to t(n-1)
+// quantiles, would change this function's output for every n the shared EVT fixtures use (n=2 in
+// fixtures.ts's makeStudy(), pinned by model.test.ts), so it needs a deliberate decision on that
+// fixture (and, if the z itself moves, a backend change plus a qa/crosscheck/p11_evt.py update) rather
+// than a silent change here. Tracked in docs/ANALYTICS_CATALOG.md MV8 and left open.
 function band(input: EventPathInput, fill: string): LineSeriesOption[] {
   const width = input.offsets.map((_, i) => {
     const lo = input.lower[i]
