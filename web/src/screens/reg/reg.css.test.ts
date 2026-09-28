@@ -23,3 +23,17 @@ describe('reg.css', () => {
     expect(missing).toEqual([])
   })
 })
+
+// REG's sealed confirmations and accepted amendments (finding 10, axe scrollable-region-focusable on HOME):
+// both scroll wrappers render whole and let the panel body scroll them (grid.css nqt-grid-scroll--panel),
+// so no inner scroller ever needs its own Tab stop under the roving model.
+describe('.reg-confirm-scroll: the panel body scrolls it whole, never an inner scroller', () => {
+  it('is never given a max-height, anywhere in the file, container blocks included', () => {
+    const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '')
+    for (const m of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = (m[1] ?? '').split(',').map((s) => s.trim())
+      if (!selectors.includes('.reg-confirm-scroll')) continue
+      expect(m[2] ?? '', `rule for .reg-confirm-scroll: ${m[2]}`).not.toMatch(/max-height/)
+    }
+  })
+})

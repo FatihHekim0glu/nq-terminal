@@ -95,6 +95,11 @@ describe('REG: registry board', () => {
     expect(cells).toEqual(expect.arrayContaining(['rebal_v0', '54', '0.3375', '0.05', '[FAIL]', '64bf..0f33', 'ok', 'CLOSED']))
     expect(within(block).getByText('[SPENT]')).toBeTruthy()
     expect(within(block).getByText(/spent window, opened 2026-09-26, descriptive only/)).toBeTruthy()
+    // The panel body scrolls the confirmations as one with the grid (nqt-grid-scroll--panel, grid.css); no
+    // tabindex of its own, so the roving model does not fight it for the panel's one Tab stop.
+    const scroll = block.querySelector('.reg-confirm-scroll')!
+    expect(scroll.classList.contains('nqt-grid-scroll--panel')).toBe(true)
+    expect(scroll.hasAttribute('tabindex')).toBe(false)
   })
 
   it('opens DES for a row on Enter and on Number <GO>', async () => {
@@ -214,6 +219,9 @@ describe('REG: registry board', () => {
     expect(within(block).getByText(/Accepted 2026-09-27T03:20:09Z from results\/amendment_acceptances.md: 4 amendments, all unchanged\./)).toBeTruthy()
     expect(within(block).getAllByRole('row')).toHaveLength(5)
     expect(within(block).getByText('experiments/vt_har_v0_amend2.json')).toBeTruthy()
+    const scroll = block.querySelector('.reg-confirm-scroll')!
+    expect(scroll.classList.contains('nqt-grid-scroll--panel')).toBe(true)
+    expect(scroll.hasAttribute('tabindex')).toBe(false)
   })
 
   it('keeps the grid inside a narrow panel (a 682px HOME cell): the lower-priority columns drop, and it says so', async () => {

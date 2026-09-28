@@ -111,7 +111,9 @@
 .reg-band-title { color: var(--white); font-weight: var(--fw-bold); }
 /* The accepted-amendments line stays in a short panel (unlike the confirmations note): it is the state. */
 .reg-accept-line { color: var(--muted); }
-.reg-confirm-scroll { max-height: calc(var(--row-h) * 5); }
+/* Both confirmation tables (accepted amendments, sealed confirmations) render whole: the panel body is
+   their Tab stop and scrolls them with the grid and the notes, as one (grid.css nqt-grid-scroll--panel). An
+   inner scroller here would lose the roving focus's one Tab stop and fail axe scrollable-region-focusable. */
 .reg-confirm-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reg-link {
   margin: 0;
@@ -158,13 +160,13 @@
   .reg-rail { display: none; }
 }
 
-/* A short panel: criteria on one wrapping line, no notes. */
+/* A short panel: criteria on one wrapping line, no notes; the confirmation tables lose their header row
+   but still render whole, the panel body scrolling them (nqt-grid-scroll--panel: no max-height here). */
 @container reg (max-height: 560px) {
   .reg-crit-head, .reg-universe, .reg-notes { display: none; }
   .reg-crit-list { display: flex; flex-wrap: wrap; column-gap: 12px; }
   .reg-crit-list .reg-item { width: auto; }
   .reg-band .reg-muted, .reg-confirm-table thead { display: none; }
-  .reg-confirm-scroll { max-height: calc(var(--row-h) * 2); }
   .mt-head .mt-line + .mt-line { display: none; }
   .mt-chart { min-height: calc(var(--row-h) * 6); }
 }

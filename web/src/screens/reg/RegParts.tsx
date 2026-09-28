@@ -120,7 +120,7 @@ export function AcceptanceBlock({ acceptances }: { readonly acceptances: Schemas
         <span className={acceptances.all_unchanged || !acceptances.found ? 'reg-accept-line' : 'reg-accept-line down'}>{acceptanceLine(acceptances)}</span>
       </p>
       {rows.length > 0 ? (
-        <div className="nqt-grid-scroll reg-confirm-scroll">
+        <div className="nqt-grid-scroll nqt-grid-scroll--panel reg-confirm-scroll">
           <table className="nqt-grid reg-confirm-table">
             <thead>
               <tr>{heads.map((h) => <th key={h} scope="col">{h}</th>)}</tr>
@@ -156,7 +156,7 @@ function ConfirmTable({ rows, onOpen }: { readonly rows: readonly ConfirmRow[]; 
   const heads = [C.name, C.parent, C.n, C.p, C.alpha, C.verdict, C.sha, C.hash, C.opening, C.label]
   const numeric = new Set<string>([C.n, C.p, C.alpha])
   return (
-    <div className="nqt-grid-scroll reg-confirm-scroll">
+    <div className="nqt-grid-scroll nqt-grid-scroll--panel reg-confirm-scroll">
       <table className="nqt-grid reg-confirm-table">
         <thead>
           <tr>{heads.map((h) => <th key={h} scope="col" className={numeric.has(h) ? 'num' : undefined}>{h}</th>)}</tr>
