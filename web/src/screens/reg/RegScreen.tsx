@@ -1,31 +1,38 @@
 // REG, the registry board (TASKS 6.1; UI_SPEC 7 "REG and MT"; look spec 7.2, modelled on the equity
 // screening layout): red function bar with an amber filter field and 96) Actions, 97) Settings,
 // 98) Export; a round rail on the left; the selected screening criteria with their matches (counts
-// from GET /api/registry); the MonitorGrid of every registry row (name, round, verdict badge, n, p,
-// control p, Bonferroni, Holm, BH q, spec sha with the registry and re-hash status, the tag (edge,
-// [OVERLAY], check) and the amendments); the accepted amendments re-hashed now; and the sealed
-// confirmations in their own block with their own alpha. Enter, a double click or Number <GO> on a
-// row opens DES for it. The DSR column is SV3's Deflated Sharpe ([POST HOC], an extra view only, never a
-// verdict) from GET /api/analytics/deflated. Read only: five GETs, no verdict computed here.
-import { useCallback, useMemo, useState } from 'react'
+// from GET /api/registry); a sub tab strip (91) Board, 92) Evidence, roadmap #5) outside HOME's REG
+// cell, which stays the plain board it always was; the MonitorGrid of every registry row (name,
+// round, verdict badge, n, p, control p, Bonferroni, Holm, BH q, spec sha with the registry and
+// re-hash status, the tag (edge, [OVERLAY], check) and the amendments); the accepted amendments
+// re-hashed now; and the sealed confirmations in their own block with their own alpha. Enter, a
+// double click or Number <GO> on a row opens DES for it. The DSR column is SV3's Deflated Sharpe
+// ([POST HOC], an extra view only, never a verdict) from GET /api/analytics/deflated. Read only.
+import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
 import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
+import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import { DEFLATED } from '../../copy/deflated'
+import { EVIDENCE, REG_VIEW_COPY } from '../../copy/evidence'
 import { REG } from '../../copy/reg'
 import { SPEC } from '../../copy/tiles'
 import MonitorGrid from '../../grids/MonitorGrid'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { saveText } from '../../chrome/download'
+import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { REG_COLUMNS, REG_COMPACT_COLUMNS, regRowId } from './regColumns'
 import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
+import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
+import { needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
+import { RegViewBody, useEvidenceData } from './RegViewBody'
 import './reg.css'
 
 type FilterCriterion = Exclude<CriterionId, 'rows'>
@@ -38,9 +45,11 @@ interface BarProps {
   readonly onShowChecks: (show: boolean) => void
   readonly onClear: () => void
   readonly onExport: () => void
+  /** Set only on 92) Evidence: 98) Export then also offers the evidence matrix as its own CSV. */
+  readonly onExportEvidence?: () => void
 }
 
-function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, onExport }: BarProps) {
+function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, onExport, onExportEvidence }: BarProps) {
   const items: FunctionBarItem[] = [
     {
       n: FUNCTION_NUMBERS.actions,
@@ -60,7 +69,14 @@ function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, 
         { label: REG.settings.clear, onSelect: onClear },
       ],
     },
-    { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, menu: [{ label: REG.export.csv, onSelect: onExport }] },
+    {
+      n: FUNCTION_NUMBERS.export,
+      label: FUNCTION_BAR.export,
+      menu: [
+        { label: REG.export.csv, onSelect: onExport },
+        ...(onExportEvidence ? [{ label: EVIDENCE.export.csv, onSelect: onExportEvidence }] : []),
+      ],
+    },
   ]
   const field = <AmberField label={REG.filterLabel} value={filter} onChange={onFilter} placeholder={REG.filterPlaceholder} width="15em" />
   return <FunctionBar panelId={actions.panelId} title={REG.title} items={items} field={field} />
@@ -71,7 +87,8 @@ function exportRows(rows: readonly RegRow[]): void {
   postMessage(ok ? fillCopy(REG.export.done, { file: REG.export.fileName }) : REG.export.unavailable, ok ? 'info' : 'error')
 }
 
-/** `withDsr`: REG shows the DSR column only at full width, so a narrow panel (HOME's cell) never asks for SV3. */
+/** `withDsr`: whether this render needs SV3's Deflated Sharpe (needsDeflated: the active view and
+ *  whether the panel is compact), so a narrow panel showing only the board never asks for it. */
 function useRegData(withDsr: boolean) {
   const registry = useRegistry()
   const cards = useHypotheses()
@@ -110,14 +127,38 @@ function useRegView(data: ReturnType<typeof useRegData>, f: Filters) {
 
 export default function RegScreen(_props: ScreenProps) {
   const actions = usePanelActions()
+  const views = viewsShown(actions.panelId)
+  const [view, setView] = useState<RegView>('board')
+  const active = views ? view : 'board'
+  const viewId = useId()
   const main = useElementWidth()
   const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
-  const data = useRegData(main.width !== null && !compact)
+  const data = useRegData(main.width !== null && needsDeflated(active, compact))
   const { registry, cards, rows, confirmations, confirmRows } = data
   const [f, setF] = useState<Filters>(NO_FILTER)
   const { shown, groups, crit } = useRegView(data, f)
+  const evidenceData = useEvidenceData(active, { rows, shown, cards: cards.data, confirmations: confirmations.data, deflated: data.deflated })
   const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
   const tag = <span className="reg-tag">{SPEC.preReg}</span>
+
+  const board: ReactNode = (
+    <>
+      <div className="reg-grid">
+        <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
+      </div>
+      {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
+      {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
+      <VerdictNotes rows={shown} />
+      <AcceptanceBlock acceptances={registry.data?.acceptances} />
+      <ConfirmBlock
+        panelId={actions.panelId}
+        rows={confirmRows}
+        error={confirmations.isError ? confirmations.error.detail : null}
+        onOpen={openDes}
+      />
+    </>
+  )
+
   return (
     <div className="reg-screen" data-screen="REG">
       <RegBar
@@ -128,7 +169,27 @@ export default function RegScreen(_props: ScreenProps) {
         onShowChecks={(showChecks) => setF((x) => ({ ...x, showChecks }))}
         onClear={() => setF(NO_FILTER)}
         onExport={() => exportRows(shown)}
+        onExportEvidence={
+          active === 'evidence' && evidenceData.evidence
+            ? () => {
+                const ev = evidenceData.evidence!
+                exportCsv(csvFileName(EVIDENCE.export.fileName), evidenceCsv(ev), ev.length)
+              }
+            : undefined
+        }
       />
+      {views ? (
+        <TabStrip
+          panelId={actions.panelId}
+          label={REG_VIEW_COPY.label}
+          variant="sub"
+          start={REG_VIEW_START}
+          controls={rows !== null && !registry.isError ? viewId : undefined}
+          tabs={REG_VIEWS.map((v) => ({ id: v, label: REG_VIEW_COPY[v] }))}
+          selected={active}
+          onSelect={(id) => setView(id as RegView)}
+        />
+      ) : null}
       {registry.isError ? (
         <p className="reg-msg down" role="alert">{fillCopy(REG.failed, { detail: registry.error.detail })}</p>
       ) : rows === null ? (
@@ -145,19 +206,23 @@ export default function RegScreen(_props: ScreenProps) {
               tag={tag}
             />
             {cards.isError ? <p className="reg-msg down">{fillCopy(REG.cardsFailed, { detail: cards.error.detail })}</p> : null}
-            <div className="reg-grid">
-              <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
+            <div
+              id={viewId}
+              role={views ? 'tabpanel' : undefined}
+              aria-label={views ? `${REG_VIEW_START + REG_VIEWS.indexOf(active)}) ${REG_VIEW_COPY[active]}` : undefined}
+              className="reg-view"
+            >
+              <RegViewBody
+                view={active}
+                board={board}
+                evidence={evidenceData.evidence}
+                width={main.width}
+                panelId={actions.panelId}
+                rows={shown}
+                details={evidenceData.details}
+                deflated={data.deflated}
+              />
             </div>
-            {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
-            {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
-            <VerdictNotes rows={shown} />
-            <AcceptanceBlock acceptances={registry.data?.acceptances} />
-            <ConfirmBlock
-              panelId={actions.panelId}
-              rows={confirmRows}
-              error={confirmations.isError ? confirmations.error.detail : null}
-              onOpen={openDes}
-            />
           </div>
         </div>
       )}

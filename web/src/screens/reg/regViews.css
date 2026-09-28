@@ -1,0 +1,5 @@
+/* REG's sub views (look spec 7.2, roadmap #5): the tabpanel that swaps between the board and the
+   evidence matrix, and the evidence grid's own box inside it. Colours come from reg.css's shared
+   classes (reg-msg, reg-muted, reg-warn, reg-tag); this file only shapes the layout. */
+.reg-view { display: flex; flex-direction: column; min-width: 0; }
+.reg-evidence-grid { flex: 0 0 auto; }
