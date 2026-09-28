@@ -59,7 +59,9 @@ describe('buildMonRows', () => {
     expect(nq.ticker).toBe('NQ1 Index')
     expect(nq.name).toBe('E-mini Nasdaq-100')
     const zt = rows.find((r) => r.root === 'ZT')!
-    expect(zt.last).toBe('109-07+')
+    // ZT's tick is 1/256 (0.00390625): 109.23046875 is 109 + 7.375/32, an odd eighth of a 32nd, so the
+    // 1/128 grid ('109-07+', 109.234375) is 1/256 point (about $7.81 a contract) away (D21).
+    expect(zt.last).toBe('109-073')
     expect(zt.ticker).toBe('TU1 Comdty')
     expect(rows.find((r) => r.root === 'LE')!.corr).toBe('--')
   })
@@ -103,6 +105,22 @@ describe('formatting', () => {
     expect(formatLast('CL', 75.21, TICKS.CL![0])).toBe('75.21')
     expect(formatLast('ZN', 130.59375, TICKS.ZN![0])).toBe('130-19')
     expect(formatLast('GC', null, TICKS.GC![0])).toBe('--')
+  })
+
+  it('prints a ZT (1/256 tick) last close to the tick, never a quarter-32nd away (D21)', () => {
+    // 109.23046875 = 109 + 7.375/32: on the 1/128 (quarter-32nd) grid this rounds to 109.234375, 1/256
+    // point (about $7.81 a contract) away from the served value. The CME third digit (eighths of a
+    // 32nd) carries the extra resolution: '109-073' parses back to 109 + 7/32 + 3/(8*32) = 109.23046875.
+    const text = formatLast('ZT', 109.23046875, TICKS.ZT![0])
+    expect(text).toBe('109-073')
+    const m = /^(\d+)-(\d{2})(\d)$/.exec(text)!
+    const [, whole, thirtySeconds, eighth] = m
+    // The third digit is the CME table's printed digit, not a raw eighth index (D21): decode it back
+    // through the same table QuoteHeader.format.ts's CME_EIGHTH_DIGIT uses.
+    const eighthIndex = ['0', '1', '2', '3', '5', '6', '7', '8'].indexOf(eighth!)
+    expect(Number(whole) + Number(thirtySeconds) / 32 + eighthIndex / (8 * 32)).toBeCloseTo(109.23046875, 9)
+    // A ZT value on the coarser 1/128 grid still prints with the ordinary quarter marks.
+    expect(formatLast('ZT', 109 + 6.5 / 32, TICKS.ZT![0])).toBe('109-06+')
   })
 
   it('takes the decimals from the tick the API serves, for every contract', () => {

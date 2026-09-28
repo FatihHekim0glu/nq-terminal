@@ -2,7 +2,7 @@
 // Hooks that take an id stay idle (no request) until the id is non-empty, so a panel whose link group has
 // no context yet fetches nothing. Live endpoints follow the live stream (TASKS 9.2, src/api/useLiveStream.ts):
 // while it is open they never poll and the stream refreshes them; otherwise they poll every LIVE_POLL_MS as in P0.
-import { QueryClient, useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { QueryClient, keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { ApiError, apiGet } from './client'
 import { LIVE_POLL_MS, apiQueryKey, type ApiQueryKey } from './queryKey'
 import type { ApiPath, GetArgs, RequestOf, Schemas, SuccessOf } from './types'
@@ -19,6 +19,9 @@ export interface ApiQueryOptions {
   readonly enabled?: boolean
   readonly refetchInterval?: number | false
   readonly staleTime?: number
+  /** Keeps the previous query key's data on screen (the grid stays mounted, keyboard focus survives)
+   *  while a new key's page loads, e.g. a paged GET whose offset self-corrects (D28). */
+  readonly keepPreviousData?: boolean
 }
 
 export interface PageQuery {
@@ -40,6 +43,12 @@ export function createApiQueryClient(): QueryClient {
         retryDelay: RETRY_DELAY_MS,
         staleTime: STALE_MS,
         refetchOnWindowFocus: false,
+        // The backend is loopback only (127.0.0.1:8765): the browser's online/offline flag says
+        // nothing about whether it is reachable. Without this, react-query's default networkMode
+        // ('online') pauses every fetch as soon as the OS reports no network, even though the
+        // loopback server is still up, freezing the health poll, new panels and the live views (D27).
+        networkMode: 'always',
+        refetchOnReconnect: false,
       },
     },
   })
@@ -57,6 +66,7 @@ export function useApiQuery<P extends ApiPath>(
     enabled: options.enabled ?? true,
     refetchInterval: options.refetchInterval ?? false,
     ...(options.staleTime === undefined ? {} : { staleTime: options.staleTime }),
+    ...(options.keepPreviousData ? { placeholderData: keepPreviousData } : {}),
   })
 }
 

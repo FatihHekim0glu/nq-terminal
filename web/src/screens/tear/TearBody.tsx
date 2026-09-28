@@ -6,9 +6,11 @@
 // views (TearP1: SV5 and SV6 on EQ; PF7 to PF9, RK3, RD3, RD4 and the RK5 stress panel on RET; RL3, RL4, BR3,
 // BR4 and RG1 on RR), and RR's rolling Sharpe carries each window's RL1 range (the API's rolling.sharpe_bands).
 import { useMemo, useState } from 'react'
+import { useRun } from '../../api/queries'
 import type { ApiError } from '../../api/client'
 import { useExportSource } from '../../chrome/exportSource'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
+import { RUN_TAGS } from '../../copy/runs'
 import { TEAR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
@@ -43,9 +45,12 @@ interface ParamsProps {
   readonly costs: readonly number[]
   readonly cost: number | null
   readonly onCost: (c: number) => void
+  /** The run's own honesty tags (UI_SPEC section 6: probe, anchor), which travel with it everywhere it
+   *  is shown; independent of whether the analytics body has loaded. */
+  readonly runHonestyTags: readonly string[]
 }
 
-function Params({ target, data, freq, onFreq, costs, cost, onCost }: ParamsProps) {
+function Params({ target, data, freq, onFreq, costs, cost, onCost, runHonestyTags }: ParamsProps) {
   const isRun = target.kind === 'run'
   return (
     <ParamRow label={TEAR.paramsLabel}>
@@ -72,6 +77,7 @@ function Params({ target, data, freq, onFreq, costs, cost, onCost }: ParamsProps
           onChange={(v) => onCost(Number(v))}
         />
       ) : null}
+      {runHonestyTags.map((tag) => <span key={tag} className="tear-tag">{tag}</span>)}
       {data ? tearTags(data).map((tag) => <span key={tag} className="tear-tag">{`[${tag}]`}</span>) : null}
     </ParamRow>
   )
@@ -139,10 +145,21 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
   const cost = chosenCost !== null && recorded.costs.includes(chosenCost) ? chosenCost : defaultCost(recorded.costs)
   const query = useTearAnalytics(target, freq, cost)
   const error = query.error ?? (target.kind === 'hypothesis' ? recorded.error : null)
+  // The probe and anchor honesty tags (UI_SPEC section 6) travel with the run wherever it is shown, so
+  // they are labelled here exactly as on RUN and RUNS (D20). The other runTags() cases (balance,
+  // readability, ledger) already have their own treatment on this screen (Unusable, Refusal) and are
+  // left there, so they are not duplicated in the parameter row.
+  const runDetail = useRun(target.kind === 'run' ? target.name : '')
+  const runSummary = target.kind === 'run' ? runDetail.data?.summary : undefined
+  type HonestyTag = typeof RUN_TAGS.probe | typeof RUN_TAGS.anchor | null
+  const rawHonestyTags: HonestyTag[] = runSummary
+    ? [runSummary.is_probe ? RUN_TAGS.probe : null, runSummary.is_anchor ? RUN_TAGS.anchor : null]
+    : []
+  const runHonestyTags = rawHonestyTags.filter((t): t is Exclude<HonestyTag, null> => t !== null)
   return (
     <div className="tear-body">
       <div className="tear-screen">
-        <Params target={target} data={query.data} freq={freq} onFreq={setFreq} costs={recorded.costs} cost={cost} onCost={setCost} />
+        <Params target={target} data={query.data} freq={freq} onFreq={setFreq} costs={recorded.costs} cost={cost} onCost={setCost} runHonestyTags={runHonestyTags} />
         {query.unusable ? (
           <Unusable detail={null} />
         ) : error ? (

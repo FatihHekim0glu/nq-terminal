@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../api/ApiProvider'
-import { createApiQueryClient } from '../api/queries'
+import { COMMANDS_POLL_MS, RETRY_DELAY_MS, createApiQueryClient } from '../api/queries'
 import { useLinkGroups } from '../state/linkGroups'
 import { COMMAND_LINE } from '../copy/commands'
 import { LiveCommandLine } from './CommandLine.live'
@@ -102,5 +102,36 @@ describe('LiveCommandLine: suggestions from GET /api/commands', () => {
       fireEvent.change(input, { target: { value: 'RE' } })
       expect(screen.getByText(COMMAND_LINE.indexError)).toBeTruthy()
     })
+  })
+
+  it('does not say the index did not load after one failed background refetch that keeps its data (D32)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      let call = 0
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        call += 1
+        return call === 1 ? json(COMMANDS) : json({ detail: 'down' }, 503)
+      })
+      const client = createApiQueryClient()
+      const onRun = vi.fn()
+      render(
+        <ApiProvider client={client}>
+          <LiveCommandLine focusedGroup={null} onRun={onRun} />
+        </ApiProvider>,
+      )
+      const input = screen.getByRole('combobox', { name: COMMAND_LINE.label })
+      await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1))
+
+      // 60 s later the poll re-reads /api/commands, gets a 503, retries once (RETRY_DELAY_MS) and
+      // fails again: the query goes to error but keeps its last good data (index still resolves).
+      await vi.advanceTimersByTimeAsync(COMMANDS_POLL_MS + RETRY_DELAY_MS + 100)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(3)
+      // Opens the suggestions sheet, where the index note (if any) is shown alongside the list.
+      fireEvent.change(input, { target: { value: 'NQ' } })
+      expect(within(screen.getByRole('listbox')).getByText('NQ1 Index')).toBeTruthy()
+      expect(screen.queryByText(COMMAND_LINE.indexError)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

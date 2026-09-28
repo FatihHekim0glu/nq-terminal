@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
+import { QueryClient } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
+import type { Schemas } from '../../api/types'
 import { createApiQueryClient } from '../../api/queries'
 import { liveStreamHub } from '../../api/useLiveStream'
 import { JRNL } from '../../copy/live'
 import { STREAM } from '../../copy/liveStream'
 import { stubLayout } from '../../grids/testing'
 import { ALL_ROWS, BANNER, BOOK, BOOK_CLOSE_ROWS, PREFLIGHT, emptyStatus, page, status } from './liveFixtures'
-import JrnlScreen from './JrnlScreen'
+import JrnlScreen, { Rows } from './JrnlScreen'
 
 function json(body: unknown, code = 200): Response {
   return new Response(JSON.stringify(body), { status: code, headers: { 'content-type': 'application/json' } })
@@ -151,4 +153,91 @@ describe('JRNL screen', () => {
     mount()
     expect(await screen.findByText('The journal could not be read: no journal by that name in live/logs')).toBeTruthy()
   })
+})
+
+// D28 regression: a journal over 5,000 rows keys its query on offset: newestOffset(total, PAGE), where
+// total is state copied from the previous response. Every time that key changes (cold open, or one new
+// row growing total past the page boundary), the grid unmounts to "Loading" (a keyboard user's focus
+// falls to <body>, scroll and the active row reset) and a fresh 5,000-row GET is sent. Fix: keep the
+// previous page's data (and the grid mounted) while the corrected-offset page loads.
+describe('JRNL over 5,000 rows keeps the grid mounted (D28)', () => {
+  const PAGE = 5000
+  const TOTAL_START = 6000
+  const STATUS = status()
+  // A 5,000-row page takes a while to reach the DOM in jsdom, so these waits allow for it instead of
+  // the 1 s default (which made the second case fail at random, before the corrected GET was even sent).
+  const SLOW = { timeout: 10_000 }
+  const TEST_MS = 20_000
+
+  let total = TOTAL_START
+  const calls: string[] = []
+
+  /** `n` minimal, cheap-to-render journal rows, numbered from `offset + 1`. */
+  function makeRows(n: number, offset: number): Schemas['JournalRowOut'][] {
+    return Array.from({ length: n }, (_, i) => ({
+      file: BOOK, line_no: offset + i + 1, plumbing: false, banner: null,
+      data: { type: 'warmup', date: '2026-01-01' },
+    }))
+  }
+
+  const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://127.0.0.1')
+    calls.push(`${url.pathname}${url.search}`)
+    if (url.pathname !== '/api/live/journal') return json({ detail: 'not in this test' }, 404)
+    const offset = Number(url.searchParams.get('offset') ?? '0')
+    const limit = Number(url.searchParams.get('limit') ?? String(PAGE))
+    const n = Math.max(0, Math.min(limit, total - offset))
+    return json({ items: makeRows(n, offset), total, offset, limit })
+  })
+
+  beforeEach(() => {
+    total = TOTAL_START
+    calls.length = 0
+    vi.stubGlobal('fetch', fetchSpy)
+  })
+
+  function showRows() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const view = render(
+      <ApiProvider client={client}>
+        <Rows status={STATUS} file="" type="" panelId="" />
+      </ApiProvider>,
+    )
+    return { client, ...view }
+  }
+
+  it('keeps the same grid element (keyboard focus survives) once the offset corrects to the newest page', async () => {
+    showRows()
+    // The first page (offset 0, the oldest rows) arrives and the grid mounts; focus it, as a keyboard
+    // user reading the journal would have.
+    const grid = await screen.findByRole('grid', undefined, SLOW)
+    grid.focus()
+    expect(document.activeElement).toBe(grid)
+    // The effect then corrects the offset to 1000 (the newest page) and a second GET is sent.
+    await waitFor(() => expect(calls.some((c) => c.includes('offset=1000'))).toBe(true), SLOW)
+    await waitFor(() => expect(screen.queryByText(/Loading/)).toBeNull(), SLOW)
+    // The grid must never have unmounted while the offset corrected: focus would else have fallen to
+    // <body>, and the "Loading" placeholder (no data) would have replaced it.
+    expect(document.activeElement).toBe(grid)
+    expect(screen.getByRole('grid')).toBe(grid)
+  }, TEST_MS)
+
+  it('keeps the grid mounted, with the previous page still shown, when a new row grows the total', async () => {
+    const { client } = showRows()
+    await waitFor(() => expect(calls.some((c) => c.includes('offset=1000'))).toBe(true), SLOW)
+    const grid = await screen.findByRole('grid', undefined, SLOW)
+    grid.focus()
+
+    // One journal row streams in: total grows from 6000 to 6001, and offset now corrects to 1001. A
+    // live refresh (or the P0 poll) refetches the journal query, as useLiveStream's refreshNow would.
+    calls.length = 0
+    total = TOTAL_START + 1
+    await client.refetchQueries({ predicate: (q) => q.queryKey[1] === '/api/live/journal' })
+    await waitFor(() => expect(calls.some((c) => c.includes('offset=1001'))).toBe(true), SLOW)
+    await waitFor(() => expect(screen.getByText(/6,001|6001/)).toBeTruthy(), SLOW)
+    // The grid element itself never unmounted (same node, and it kept keyboard focus) while the
+    // offset-correcting refetch was in flight.
+    expect(screen.getByRole('grid')).toBe(grid)
+    expect(document.activeElement).toBe(grid)
+  }, TEST_MS)
 })

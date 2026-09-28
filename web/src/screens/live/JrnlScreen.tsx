@@ -32,13 +32,17 @@ interface RowsProps {
   readonly panelId: string
 }
 
-function Rows({ status, file, type, panelId }: RowsProps) {
+export function Rows({ status, file, type, panelId }: RowsProps) {
   const [total, setTotal] = useState(0)
   const enabled = journalQueryEnabled(status, file)
   const query = useApiQuery(
     '/api/live/journal',
     { query: { file: file || undefined, type: type || undefined, limit: PAGE, offset: newestOffset(total, PAGE) } },
-    { refetchInterval: useLivePollInterval(), staleTime: 0, enabled },
+    // The offset self-corrects once the true total is known (newestOffset), so the query key changes
+    // right after the first page arrives, and again whenever a new row moves the newest page's start.
+    // keepPreviousData keeps the grid mounted on the previous key's rows while the corrected page
+    // loads, instead of unmounting to "Loading" (D28: lost keyboard focus, scroll and active row).
+    { refetchInterval: useLivePollInterval(), staleTime: 0, enabled, keepPreviousData: true },
   )
   const data = query.data
   const seen = data?.total

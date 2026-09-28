@@ -9,6 +9,7 @@ import LineStack from '../../charts/LineStack'
 import { ToggleGroup } from '../../chrome/Field.buttons'
 import { TEAR, TEAR_BOOKS as B } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
+import { sig } from '../expo/expoModel'
 import type { PanelLink } from '../../state/linkGroups'
 import {
   exposureStack, groupLadder, hasTrades, sensitivityLadder, slippageView, tradeStatRows, waterfallRows,
@@ -123,9 +124,11 @@ export function ExposureCard({ exposure, runId, link }: { readonly exposure: Run
   if (!spec || !e) {
     return <Card title={B.exposureTitle} tag={exposure.tag}><p className="tear-note">{fillCopy(B.unavailable, { note: exposure.note ?? '' })}</p></Card>
   }
+  // Shares expoModel's sig() with the EXPO summary table beside this card, so the same API mean never
+  // prints at two different precisions on the same screen (D23).
   const means = fillCopy(B.exposureMeans, {
-    gross: formatNumber(e.mean_gross, 2), net: formatNumber(e.mean_net, 2),
-    daily: formatNumber(t?.mean_daily, 2), annual: formatNumber(t?.annualised, 2),
+    gross: sig(e.mean_gross), net: sig(e.mean_net),
+    daily: sig(t?.mean_daily), annual: sig(t?.annualised),
   })
   return (
     <Card title={B.exposureTitle} tag={exposure.tag}>

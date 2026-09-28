@@ -153,4 +153,75 @@ describe('useLiveStream', () => {
     render(<Probe label="live" />, { wrapper: wrapper(new QueryClient()) })
     expect(screen.getByText('live polling 2000')).toBeTruthy()
   })
+
+  it('does not refresh on a kill_switch resend of the same value (D29: undoes the resumed-hello optimisation)', () => {
+    // The server resends kill_switch on every opening, even when nothing changed (StreamSession's
+    // _kill starts at None each connection, so _kill_events always emits once). A resumed hello
+    // deliberately does not refresh; the redundant kill_switch that follows it must not either.
+    const client = new QueryClient()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    render(<Probe label="live" />, { wrapper: wrapper(client) })
+    // The first connection establishes the baseline (kill off).
+    act(() => {
+      FakeSource.made[0]!.emit('hello', { ...HELLO, resumed: false })
+      FakeSource.made[0]!.emit('kill_switch', { kind: 'kill_switch', on: false })
+    })
+    act(() => vi.advanceTimersByTime(2000))
+    spy.mockClear()
+
+    // A planned renewal (StreamLimits.lifetime_s): the server answers a resumed hello (deliberately no
+    // refresh) followed by the same kill_switch value as before (on: false), even though nothing changed.
+    act(() => {
+      FakeSource.made[0]!.emit('hello', { ...HELLO, resumed: true })
+      FakeSource.made[0]!.emit('kill_switch', { kind: 'kill_switch', on: false })
+      FakeSource.made[0]!.emit('status', { kind: 'status', status: { kill_switch_on: false } })
+    })
+    act(() => vi.advanceTimersByTime(2000))
+    expect(spy).not.toHaveBeenCalled()
+
+    // A genuine flip of the kill switch still refreshes.
+    act(() => FakeSource.made[0]!.emit('kill_switch', { kind: 'kill_switch', on: true }))
+    act(() => vi.advanceTimersByTime(2000))
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes on the first kill_switch value ever seen (nothing to compare it against yet)', () => {
+    const client = new QueryClient()
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    render(<Probe label="live" />, { wrapper: wrapper(client) })
+    act(() => {
+      FakeSource.made[0]!.emit('hello', { ...HELLO, resumed: false })
+      FakeSource.made[0]!.emit('kill_switch', { kind: 'kill_switch', on: false })
+    })
+    act(() => vi.advanceTimersByTime(2000))
+    expect(spy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useLivePollInterval (D30)', () => {
+  it('re-renders only on a mode change, not on every streamed row or heartbeat', () => {
+    // useLivePollInterval is called through useLive by every live hook (LIVE, JRNL, performance,
+    // routes, tracking). Subscribing to the whole StreamSnapshot (as useLiveStreamState does) means
+    // LiveStream.onMessage's patch (lastEventAt, rows) on every event re-renders every one of those
+    // screen trees, even though the returned interval stays unchanged.
+    let renders = 0
+    function Opener() {
+      useLiveStream()
+      return null
+    }
+    function Counter() {
+      useLivePollInterval()
+      renders += 1
+      return null
+    }
+    render(<><Opener /><Counter /></>, { wrapper: wrapper(new QueryClient()) })
+    act(() => FakeSource.made[0]!.emit('hello', { ...HELLO, resumed: true }))
+    const afterHello = renders
+    // Each row is its own EventSource message (its own task), so each gets its own commit, as a real
+    // backlog of streamed rows would.
+    for (let i = 1; i <= 200; i++) {
+      act(() => FakeSource.made[0]!.emit('journal_row', { kind: 'journal_row', row: { file: 'a', line_no: i } }))
+    }
+    expect(renders - afterHello).toBeLessThanOrEqual(1)
+  })
 })

@@ -9,7 +9,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
 import { openEventStream } from './client'
-import { LiveStream, OFF_SNAPSHOT, pollIntervalFor, type StreamEvent, type StreamSnapshot } from './liveStream'
+import { LiveStream, OFF_SNAPSHOT, pollIntervalFor, type StreamEvent, type StreamMode, type StreamSnapshot } from './liveStream'
 import { LIVE_POLL_MS, apiQueryKey } from './queryKey'
 import type { ApiPath, Schemas } from './types'
 
@@ -54,6 +54,10 @@ class LiveStreamHub {
   private lingerTimer: ReturnType<typeof setTimeout> | null = null
   private settleTimer: ReturnType<typeof setTimeout> | null = null
   private firstPending: number | null = null
+  /** The last kill_switch value seen, across reconnects (D29): the server resends kill_switch on every
+   *  opening even when nothing changed, so a refresh on its bare presence would undo the resumed-hello
+   *  optimisation about every 2 minutes (StreamLimits.lifetime_s). null until the first one arrives. */
+  private lastKill: boolean | null = null
   private readonly listeners = new Set<() => void>()
   private unsubscribe: (() => void) | null = null
 
@@ -87,6 +91,7 @@ class LiveStreamHub {
     this.users = 0
     if (this.lingerTimer !== null) clearTimeout(this.lingerTimer)
     this.lingerTimer = null
+    this.lastKill = null
     this.close()
   }
 
@@ -119,7 +124,16 @@ class LiveStreamHub {
   private onEvent(event: StreamEvent): void {
     const effect = liveEventEffect(event)
     if (effect.status !== null) this.client?.setQueryData(apiQueryKey('/api/live/status'), effect.status)
-    if (effect.refresh) this.scheduleRefresh()
+    const refresh = event.kind === 'kill_switch' ? this.killChanged(event.on) : effect.refresh
+    if (refresh) this.scheduleRefresh()
+  }
+
+  /** True the first time a kill_switch value is seen, or when it differs from the last one remembered;
+   *  false on a bare resend of the value already known (D29). */
+  private killChanged(on: boolean): boolean {
+    const changed = this.lastKill === null || this.lastKill !== on
+    this.lastKill = on
+    return changed
   }
 
   private scheduleRefresh(): void {
@@ -154,7 +168,14 @@ export function useLiveStream(): StreamSnapshot {
   return useLiveStreamState()
 }
 
-/** The live queries' polling interval: none while the stream is open or on its way, P0's otherwise. */
+const getMode = (): StreamMode => liveStreamHub.getSnapshot().mode
+
+/** The live queries' polling interval: none while the stream is open or on its way, P0's otherwise.
+ *  Subscribes to the mode only, not the whole StreamSnapshot (useLiveStreamState): LiveStream.onMessage
+ *  patches the snapshot (lastEventAt, rows) on every event, and every live hook calls this through
+ *  useLive, so a full-snapshot subscription here would re-render every LIVE and JRNL screen tree once
+ *  per streamed row or heartbeat even though the returned interval almost never changes (D30). */
 export function useLivePollInterval(): number | false {
-  return pollIntervalFor(useLiveStreamState().mode, LIVE_POLL_MS)
+  const mode = useSyncExternalStore(liveStreamHub.subscribe, getMode, getMode)
+  return pollIntervalFor(mode, LIVE_POLL_MS)
 }

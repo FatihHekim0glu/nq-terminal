@@ -5,6 +5,7 @@
 import type { Schemas } from '../../api/types'
 import { DES, DES_REPORT } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
+import { decimalsFor as exactDecimalsFor } from '../runs/model'
 import {
   MISSING, breakEvenText, checkRows, decimalsFor, formatNumber, hypothesisText, passBarText, registrationKpis, ticksLabel,
   type HypothesisDetail,
@@ -102,7 +103,9 @@ export function desReport(detail: HypothesisDetail): string {
   return `${lines.join('\n')}\n`
 }
 
-const money = (v: number) => `${v.toFixed(2)} USD`
+// At least cents, but never fewer decimals than the value needs (D24): ZN's tick value (15.625) and
+// cost per side (18.125) would otherwise round to 15.63 and 18.13, contradicting the Tick row.
+const money = (v: number) => `${v.toFixed(Math.max(2, exactDecimalsFor([v])))} USD`
 
 /** The instrument DES as Markdown. */
 export function instrumentReport(d: Schemas['InstrumentDes'], name: string): string {
