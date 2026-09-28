@@ -14,7 +14,6 @@ import type { SeasPanelId, SeasonBucket, SeasonPanel, Seasonality } from './type
 
 export const FIRST_YEAR = 2010
 export const LAST_YEAR = 2021
-export const COSTS = [0, 1, 2] as const
 export const MISSING = '--'
 export const PANEL_IDS: readonly SeasPanelId[] = ['month', 'weekday', 'week_of_month', 'intraday']
 export type SeasTab = SeasPanelId | 'heatmap'
@@ -154,6 +153,17 @@ export function panelCsv(data: Seasonality, panel: SeasonPanel): string {
 export function heatCsv(data: Seasonality): string {
   const h = data.heatmap
   return toCsv(['Year', ...h.months], h.years.map((y, i) => [String(y), ...(h.values[i] ?? [])]))
+}
+
+/** A hypothesis only ever offers the costs its card recorded (card.series_costs); anything else 404s. */
+export function costOptions(costs: readonly number[]): { value: string; label: string }[] {
+  return costs.map((n) => ({ value: String(n), label: fillCopy(SEAS.costOption, { n }) }))
+}
+
+/** The project's standard cost, 1 tick per side, when the card recorded it; else the first recorded cost, else none. */
+export function defaultCost(costs: readonly number[]): number | null {
+  if (costs.includes(1)) return 1
+  return costs[0] ?? null
 }
 
 export function excludedText(panel: SeasonPanel): string | null {

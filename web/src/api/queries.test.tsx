@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -146,6 +146,30 @@ describe('hooks', () => {
       await waitFor(() => expect((result.current.data as unknown as { poll: string }).poll).toBe('changed'))
       // A change elsewhere in the body leaves the unchanged array itself as it was.
       expect((result.current.data as unknown as { journals: unknown[] }).journals).toBe(first.journals)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('the loopback backend keeps working when the browser reports offline (D27)', () => {
+  afterEach(() => onlineManager.setOnline(true))
+
+  it('sets networkMode always, so react-query never pauses a fetch on the browser online flag', () => {
+    expect(createApiQueryClient().getDefaultOptions().queries?.networkMode).toBe('always')
+  })
+
+  it('keeps polling health every LIVE_POLL_MS while the browser reports offline', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ kill_switch_on: false }))
+      const { result } = renderHook(() => useHealth(), { wrapper: wrapper() })
+      await waitFor(() => expect(result.current.isSuccess).toBe(true))
+      onlineManager.setOnline(false)
+      spy.mockClear()
+      await vi.advanceTimersByTimeAsync(LIVE_POLL_MS * 2 + 50)
+      expect(spy.mock.calls.length).toBeGreaterThanOrEqual(1)
+      expect(result.current.fetchStatus).not.toBe('paused')
     } finally {
       vi.useRealTimers()
     }

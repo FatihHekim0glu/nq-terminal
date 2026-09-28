@@ -29,6 +29,23 @@ export function scrollStep(key: string, page: number, modified: boolean): Scroll
   }
 }
 
+/** A pixel or so of slack at each edge: browser zoom or Windows display scaling (125%/150% on the PRD
+ *  platform) can leave scrollLeft a fraction of a pixel short of the exact edge value, so a strict
+ *  comparison would never release the key (D36). */
+const EDGE_TOLERANCE_PX = 1
+
+/**
+ * Whether the table can still scroll the way `key` asks (D36): ArrowLeft only past the start, and
+ * ArrowRight only short of the end, so the host gives the key back to the panel's roving focus (the
+ * Show as [Table | Pivot grid] toggle) once there is nothing left to scroll that way. Every other key
+ * (vertical, Page Up/Down, Home, End) is not gated by horizontal position.
+ */
+export function canScrollHorizontally(key: string, table: { readonly scrollLeft: number; readonly clientWidth: number; readonly scrollWidth: number }): boolean {
+  if (key === 'ArrowLeft') return table.scrollLeft > EDGE_TOLERANCE_PX
+  if (key === 'ArrowRight') return table.scrollLeft + table.clientWidth < table.scrollWidth - EDGE_TOLERANCE_PX
+  return true
+}
+
 /** The first element matching `selector` under `root`, looking inside open shadow roots too. */
 export function deepQuery(root: Element | ShadowRoot, selector: string): HTMLElement | null {
   const direct = root.querySelector<HTMLElement>(selector)

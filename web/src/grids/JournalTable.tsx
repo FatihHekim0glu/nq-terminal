@@ -8,7 +8,7 @@ import { JOURNAL } from '../copy/grids'
 import { fillCopy } from '../copy/workspace'
 import MonitorGrid, { type MonitorColumn } from './MonitorGrid'
 import type { GridScroll } from './MonitorGrid.window'
-import { journalLine, type JournalLine, type JournalRow } from './JournalTable.model'
+import { journalLine, MISSING, type JournalLine, type JournalRow } from './JournalTable.model'
 
 export interface JournalTableProps {
   readonly rows: readonly JournalRow[]
@@ -37,16 +37,20 @@ function Summary({ line }: { readonly line: JournalLine }) {
   )
 }
 
+/** A field the line prints as MISSING ('--') sorts last in both directions (MonitorGrid's contract),
+ *  not first: the en-GB numeric collator otherwise puts '-' before digits (D39). */
+const sortValue = (field: string): string | null => (field === MISSING ? null : field)
+
 const COLUMNS: MonitorColumn<Entry>[] = [
-  { id: 'date', header: JOURNAL.colDate, width: 100, kind: 'name', value: (e) => e.line.date },
-  { id: 'type', header: JOURNAL.colType, width: 110, kind: 'name', value: (e) => e.line.type },
+  { id: 'date', header: JOURNAL.colDate, width: 100, kind: 'name', value: (e) => sortValue(e.line.date) },
+  { id: 'type', header: JOURNAL.colType, width: 110, kind: 'name', value: (e) => sortValue(e.line.type) },
   {
     id: 'summary', header: JOURNAL.colSummary, width: 760, kind: 'text',
     value: (e) => (e.line.banner ? `${e.line.banner} ${e.line.summary}` : e.line.summary),
     render: (e) => <Summary line={e.line} />,
   },
   { id: 'source', header: JOURNAL.colSource, width: 56, kind: 'text', value: (e) => e.line.source, render: (e) => <span className="src">{e.line.source}</span> },
-  { id: 'time', header: JOURNAL.colTime, width: 84, kind: 'num', value: (e) => e.line.time, render: (e) => <span className="time">{e.line.time ?? '--'}</span> },
+  { id: 'time', header: JOURNAL.colTime, width: 84, kind: 'num', value: (e) => sortValue(e.line.time), render: (e) => <span className="time">{e.line.time ?? '--'}</span> },
 ]
 
 const entryId = (e: Entry) => e.line.key

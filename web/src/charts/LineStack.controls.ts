@@ -92,7 +92,13 @@ export function useStackControls(a: ControlsArgs): Controls {
       return
     }
     const step = stepCrosshair(event.key, a.cursorIdx.current, t, view.current)
-    if (step === null) return
+    // D36: at an edge (step === null), Left/Right held down (auto-repeat) is swallowed instead of
+    // handed back to the panel every time, or holding it walks focus on through the panel's other
+    // controls once the first repeat hands focus off. A fresh press still hands it back.
+    if (step === null) {
+      if (event.repeat && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) event.preventDefault()
+      return
+    }
     event.preventDefault()
     if (step.view !== view.current) apply(step.view, null)
     a.cursorIdx.current = step.idx

@@ -44,4 +44,16 @@ describe('KeyToolbar: the 32px key toolbar (spec 4.2)', () => {
     render(<KeyToolbar onKey={vi.fn()} />)
     for (const word of ['INDEX', 'COMDTY', 'CURNCY']) expect(screen.queryByText(word)).toBeNull()
   })
+
+  // D12: a pointer click moves focus to the button on mousedown; without preventDefault there the
+  // command line's onBlur closes the suggestion list first, so the CANCEL press that follows closes a
+  // second cascade step (clearing the typed line) instead of just the one step the button names.
+  it('born failing (D12): every key button holds pointer focus back with preventDefault on mousedown', () => {
+    render(<KeyToolbar onKey={vi.fn()} />)
+    for (const button of screen.getAllByRole('button')) {
+      const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true })
+      const notPrevented = button.dispatchEvent(event)
+      expect(notPrevented).toBe(false)
+    }
+  })
 })

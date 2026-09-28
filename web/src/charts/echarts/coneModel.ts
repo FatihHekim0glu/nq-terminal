@@ -134,7 +134,7 @@ export function coneTable(input: ConeInput): ChartTable {
     caption: fillCopy(CONE.caption, { name: input.name }),
     columns: [
       { key: 'step', label: CONE.colStep, numeric: true },
-      { key: 'date', label: CONE.colDate },
+      { key: 'date', label: CONE.colDate, rowHeader: true },
       ...ps.map((p) => ({ key: `p${p}`, label: pLabel(p), numeric: true })),
       { key: 'realised', label: CONE.realised, numeric: true },
     ],

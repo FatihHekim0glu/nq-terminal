@@ -14,7 +14,7 @@ import Workspace, { WORKSPACE_THEME, type FocusedPanel, type WorkspaceHandle } f
 import { toStored } from './WorkspaceStorage'
 import { panelTabStops } from './WorkspaceFocus'
 import { activateNumbered, numberedItems } from './NumberedActions'
-import { BUILT_SCREENS, type ScreenRegistry } from './WorkspaceScreens'
+import { BUILT_SCREENS, type ScreenProps, type ScreenRegistry } from './WorkspaceScreens'
 
 class NoopResizeObserver {
   observe(): void {}
@@ -156,6 +156,125 @@ describe('Workspace (dockview) with the default layouts', () => {
     await waitFor(() => expect(panelTitles()).toEqual(customised))
     act(() => ref.current?.run(command('HOME'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(HOME_TITLES))
+  })
+
+  it('does not wipe a customised HOME layout when HOME is typed again afterwards (D01)', async () => {
+    const { ref, layouts, onScreenChange } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'volmanaged_v0 EQ content' }).focus())
+    act(() => ref.current?.run(command('RUNS'), 'replace'))
+    await waitFor(() => expect(panelTitles()).toContain('RUNS'))
+    expect(onScreenChange).toHaveBeenLastCalledWith('RUNS')
+    expect(layouts.getState().layouts.HOME).toBeDefined()
+    act(() => ref.current?.run(command('HOME'), 'replace'))
+    await waitFor(() => expect(panelTitles()).toContain('RUNS'))
+    expect(layouts.getState().layouts.HOME).toBeDefined()
+  })
+
+  it('does not silently wipe a saved LIVE layout when LIVE is typed again after a Shift+Enter add and a HOME round-trip (D01 regression)', async () => {
+    const { ref, layouts } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => ref.current?.run(command('LIVE'), 'replace'))
+    await waitFor(() => expect(panelTitles()).toContain('JRNL'))
+    act(() => screen.getByRole('group', { name: 'LIVE content' }).focus())
+    act(() => ref.current?.run(command('LEDG'), 'new-panel'))
+    await waitFor(() => expect(panelTitles()).toContain('LEDG'))
+    expect(layouts.getState().layouts.LIVE).toBeDefined()
+    act(() => ref.current?.run(command('HOME'), 'replace'))
+    await waitFor(() => expect(panelTitles()).toEqual(HOME_TITLES))
+    act(() => ref.current?.run(command('LIVE'), 'new-panel'))
+    await waitFor(() => expect(panelTitles()).toContain('LIVE'))
+    act(() => (document.activeElement as HTMLElement | null)?.blur())
+    act(() => document.body.focus())
+    act(() => ref.current?.run(command('LIVE'), 'replace'))
+    await waitFor(() => expect(layouts.getState().layouts.LIVE).toBeDefined())
+    expect(panelTitles()).toContain('LEDG')
+  })
+
+  it('anchors a new panel to the addressed panel when nothing has real focus, instead of hiding it as a tab (D02)', async () => {
+    const { ref } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => ref.current?.run(command('LEDG'), 'new-panel'))
+    await waitFor(() => expect(panelTitles()).toContain('LEDG'))
+    expect(panelTitles()).toHaveLength(5)
+    expect(panelNumbers()).toHaveLength(5)
+    expect(panelNumbers().map((n) => n.split('-')[0])).toEqual(['1', '2', '3', '4', '5'])
+    let ok = false
+    act(() => {
+      ok = ref.current?.focusPanelNumber(4) ?? false
+    })
+    expect(ok).toBe(true)
+    act(() => {
+      ok = ref.current?.focusPanelNumber(5) ?? false
+    })
+    expect(ok).toBe(true)
+  })
+
+  it('BACK restores what a linked panel showed, not its stale stored context after a retarget (D03)', async () => {
+    const { ref, linkGroups } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: '27F MON content' }).focus())
+    const es = { kind: 'instrument' as const, value: 'ES' }
+    act(() => ref.current?.run(command('GP', { context: es, contextSource: 'typed', canonical: 'ES GP' }), 'replace'))
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP 1d'))
+    expect(panelTitles()[1]).toBe('ES GP')
+    act(() => screen.getByRole('group', { name: 'ES GP 1d content' }).focus())
+    act(() => ref.current?.run(command('GIP', { args: { date: '2019-03-14' }, canonical: 'GIP 2019-03-14' }), 'replace'))
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GIP 2019-03-14'))
+    let moved = false
+    act(() => {
+      moved = ref.current?.goBack('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP 1d'))
+    expect(linkGroups.getState().contexts.A?.value).toBe('ES')
+    expect(panelTitles()[1]).toBe('ES GP')
+  })
+
+  it('BACK restores what a panel showed after a context-only line retargets its link group (D09)', async () => {
+    const { ref, linkGroups } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
+    act(() => {
+      linkGroups.getState().setContext('A', { kind: 'instrument', value: 'ES' })
+    })
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP 1d'))
+    const es = { kind: 'instrument' as const, value: 'ES' }
+    act(() =>
+      ref.current?.run(command('GIP', { context: es, contextSource: 'link-group', args: { date: '2019-03-14' }, canonical: 'GIP 2019-03-14' }), 'replace'),
+    )
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GIP 2019-03-14'))
+    let moved = false
+    act(() => {
+      moved = ref.current?.goBack('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GP 1d'))
+    expect(linkGroups.getState().contexts.A?.value).toBe('ES')
+  })
+
+  it('FORWARD restores what a linked panel showed, not its stale stored context, and retargets the group (D03/D09 forward)', async () => {
+    const { ref, linkGroups } = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
+    act(() => ref.current?.run(command('GIP', { args: { date: '2019-03-14' }, canonical: 'GIP 2019-03-14' }), 'replace'))
+    await waitFor(() => expect(panelTitles()[0]).toBe('NQ GIP 2019-03-14'))
+    act(() => screen.getByRole('group', { name: '27F MON content' }).focus())
+    const es = { kind: 'instrument' as const, value: 'ES' }
+    act(() => ref.current?.run(command('GP', { context: es, contextSource: 'typed', canonical: 'ES GP' }), 'replace'))
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GIP 2019-03-14'))
+    let moved = false
+    act(() => {
+      moved = ref.current?.goBack('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('NQ GP 1d'))
+    act(() => {
+      moved = ref.current?.goForward('home-gp') ?? false
+    })
+    expect(moved).toBe(true)
+    await waitFor(() => expect(panelTitles()[0]).toBe('ES GIP 2019-03-14'))
+    expect(linkGroups.getState().contexts.A?.value).toBe('ES')
   })
 
   it('born failing: a tampered saved layout falls back to the default instead of rendering it', async () => {
@@ -420,5 +539,21 @@ describe('Workspace panels: maximise and Number <GO> (look spec 4.3, 5.1 item 5)
     const eq = screen.getByRole('region', { name: 'volmanaged_v0 EQ' })
     act(() => within(eq).getByRole('tab', { name: '2) Drawdown' }).click())
     await waitFor(() => expect(panelTitles()[2]).toBe('volmanaged_v0 DD'))
+  })
+})
+
+describe('Workspace panels: a screen that throws draws again once its arguments change (D06)', () => {
+  it('does not keep a stale render error once BACK or a new run changes the argument', async () => {
+    const ThrowingGP = ({ params }: ScreenProps) => {
+      if (params.args.timeframe === '1d') throw new Error('bad 1d bar')
+      return <p>ok {params.args.timeframe}</p>
+    }
+    const failed = () => screen.queryByText(/could not be drawn/)
+    const { ref } = renderWorkspace({ screens: { GP: ThrowingGP } })
+    await waitFor(() => expect(failed()).toBeTruthy())
+    act(() => screen.getByRole('group', { name: 'NQ GP 1d content' }).focus())
+    act(() => ref.current?.run(command('GP', { args: { timeframe: '1h' }, canonical: 'NQ GP 1h' }), 'replace'))
+    await waitFor(() => expect(failed()).toBeNull())
+    expect(screen.getByText('ok 1h')).toBeTruthy()
   })
 })

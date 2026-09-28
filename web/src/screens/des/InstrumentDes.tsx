@@ -20,6 +20,7 @@ import { displayInstrument } from '../../commands/sectors'
 import { DES, DES_REPORT } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
+import { decimalsFor } from '../runs/model'
 import InstrumentPreview from '../gp/InstrumentPreview'
 import { DesBar, DesCard, LoadError, Pairs, Status } from './DesParts'
 import { MISSING } from './desModel'
@@ -37,9 +38,12 @@ const TABS: readonly Tab[] = ['profile', 'coverage', 'notes', 'contracts']
 const K = DES.instrument
 
 const text = (v: string | null | undefined): string => (v === null || v === undefined || v === '' ? MISSING : v)
-const usd = (v: number) => fillCopy(K.usd, { value: v.toFixed(2) })
+const MIN_USD_DECIMALS = 2
+// At least cents, but never fewer decimals than the value needs (D24): ZN's tick value (15.625) and
+// cost per side (18.125) would otherwise round to 15.63 and 18.13, contradicting the Tick row (0.015625).
+const usd = (v: number) => fillCopy(K.usd, { value: v.toFixed(Math.max(MIN_USD_DECIMALS, decimalsFor([v]))) })
 
-function ContractCard({ d, name }: { readonly d: Detail; readonly name: string }) {
+export function ContractCard({ d, name }: { readonly d: Detail; readonly name: string }) {
   const c = d.contract
   return (
     <DesCard title={K.contract}>

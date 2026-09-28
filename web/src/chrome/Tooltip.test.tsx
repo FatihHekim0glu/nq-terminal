@@ -78,6 +78,26 @@ describe('Tooltip (look spec 4.5, WCAG 1.4.13)', () => {
     expect(document.activeElement).toBe(trigger)
   })
 
+  it('born failing (D15): Escape dismisses a hover-shown tip even when focus is elsewhere (WCAG 1.4.13)', () => {
+    render(
+      <div>
+        <button type="button">other</button>
+        <Tooltip text="Maximise panel">
+          <button type="button">□</button>
+        </Tooltip>
+      </div>,
+    )
+    const other = screen.getByRole('button', { name: 'other' })
+    const trigger = screen.getByRole('button', { name: '□' })
+    other.focus()
+    fireEvent.pointerMove(trigger, { clientX: 1, clientY: 1 })
+    act(() => vi.advanceTimersByTime(TOOLTIP_DELAY_MS))
+    expect(screen.getByRole('tooltip')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(document.activeElement).toBe(other)
+  })
+
   it('keeps the trigger’s own handlers', () => {
     const onClick = vi.fn()
     render(

@@ -38,11 +38,11 @@ vi.mock('../../charts/echarts/Heatmap', () => ({
 const PANEL_ID = 'p-seas'
 const actions: PanelActions = { panelId: PANEL_ID, related: () => true, back: () => true, forward: () => true, open: () => true }
 
-function hypothesisBody(): Seasonality {
+function hypothesisBody(subject: string): Seasonality {
   const base = makeSeasonality()
   return {
     ...base,
-    subject: 'volmanaged_v0',
+    subject,
     kind: 'hypothesis',
     unit: 'return on capital per session',
     aggregation: 'sum',
@@ -53,9 +53,21 @@ function hypothesisBody(): Seasonality {
   }
 }
 
+/** The card's recorded series costs per hypothesis name, as GET /api/hypotheses/{name} would answer. */
+let seriesCosts: Record<string, readonly number[]> = {}
+
+function hypothesisCard(name: string): unknown {
+  return { card: { name, series_costs: seriesCosts[name] ?? [0, 1, 2] } }
+}
+
 const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
   const url = new URL(String(input), 'http://x')
-  const body = url.pathname.startsWith('/api/seasonality/hypothesis/') ? hypothesisBody() : makeSeasonality()
+  const name = url.pathname.split('/').pop() ?? ''
+  const body = url.pathname.startsWith('/api/seasonality/hypothesis/')
+    ? hypothesisBody(name)
+    : url.pathname.startsWith('/api/hypotheses/')
+      ? hypothesisCard(name)
+      : makeSeasonality()
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 })
 
@@ -81,6 +93,7 @@ beforeEach(() => {
   fetchSpy.mockClear()
   seen.ladder = null
   seen.heat = null
+  seriesCosts = {}
   resetNumbered()
 })
 
@@ -140,11 +153,29 @@ describe('SEAS screen', () => {
   it('reads a hypothesis with its cost and says why it has no 30-minute panel', async () => {
     renderSeas({ kind: 'hypothesis', value: 'volmanaged_v0' })
     await screen.findByRole('img', { name: /volmanaged_v0 mean monthly return/ })
-    expect(urls()).toEqual(['/api/seasonality/hypothesis/volmanaged_v0?start_year=2010&end_year=2021&cost=1'])
+    expect(urls()).toEqual(['/api/hypotheses/volmanaged_v0', '/api/seasonality/hypothesis/volmanaged_v0?start_year=2010&end_year=2021&cost=1'])
     expect(screen.getByRole('combobox', { name: 'Cost' })).toBeTruthy()
     expect(screen.queryByRole('combobox', { name: 'Variant' })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: /30 minutes/ }))
     await screen.findByText('Not shown: a hypothesis series has no 1m bars.')
+  })
+
+  it('only offers a hypothesis the costs its card recorded, and never asks for one it did not (D19)', async () => {
+    seriesCosts = { vt_har_v0: [1] }
+    renderSeas({ kind: 'hypothesis', value: 'vt_har_v0' })
+    await screen.findByRole('img', { name: /vt_har_v0 mean monthly return/ })
+    expect(urls()).toEqual(['/api/hypotheses/vt_har_v0', '/api/seasonality/hypothesis/vt_har_v0?start_year=2010&end_year=2021&cost=1'])
+    fireEvent.click(screen.getByRole('combobox', { name: 'Cost' }))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map((o) => o.textContent)).toEqual(['1 tick(s)'])
+    expect(urls().some((u) => u.includes('cost=0') || u.includes('cost=2'))).toBe(false)
+  })
+
+  it('shows a no-series note and asks for nothing when a hypothesis card records no cost (D19)', async () => {
+    seriesCosts = { za_v0_c3: [] }
+    renderSeas({ kind: 'hypothesis', value: 'za_v0_c3' })
+    await screen.findByText(/No return series is recorded for za_v0_c3/)
+    expect(urls()).toEqual(['/api/hypotheses/za_v0_c3'])
+    expect(screen.queryByRole('img')).toBeNull()
   })
 
   it('re-reads when the first year changes', async () => {

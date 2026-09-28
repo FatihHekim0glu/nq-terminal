@@ -134,9 +134,19 @@ describe('zoom and scroll', () => {
     expect(stepIndex(null, -1, 100, { from: 10, to: 40.3 })).toBe(40)
     expect(stepIndex(null, 1, 100, { from: 10, to: 140 })).toBe(99)
     expect(stepIndex(40, -1, 100, null)).toBe(39)
-    expect(stepIndex(99, 1, 100, null)).toBe(99)
-    expect(stepIndex(0, -1, 100, null)).toBe(0)
     expect(stepIndex(3, 1, 0, null)).toBeNull()
+  })
+
+  // D35: null (not the clamped, unchanged index) at an edge, so a caller that only prevents default
+  // on a real move gives Left and Right back to the panel once there (CandleChart.tsx, GP and GIP).
+  it('releases the edges: null when a step would not move (already at the first or last bar)', () => {
+    expect(stepIndex(99, 1, 100, null)).toBeNull()
+    expect(stepIndex(0, -1, 100, null)).toBeNull()
+    expect(stepIndex(0, 1, 100, null)).toBe(1)
+    expect(stepIndex(99, -1, 100, null)).toBe(98)
+    // A single-bar chart: current already sits at both the first and last bar.
+    expect(stepIndex(0, -1, 1, null)).toBeNull()
+    expect(stepIndex(0, 1, 1, null)).toBeNull()
   })
 })
 

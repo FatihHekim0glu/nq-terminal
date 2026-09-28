@@ -46,15 +46,17 @@ interface BarProps {
   readonly onGrid: () => void
   readonly rolls: boolean
   readonly onRolls: () => void
+  /** The GIP panel's own session date (win.date), carried over so switching instrument keeps it (D08). */
+  readonly date: string | null
 }
 
-function GpFunctionBar({ mode, root, panelId, grid, onGrid, rolls, onRolls }: BarProps) {
+function GpFunctionBar({ mode, root, panelId, grid, onGrid, rolls, onRolls, date }: BarProps) {
   const actions = usePanelActions()
   return (
     <FunctionBar
       panelId={panelId}
       title={mode === 'GP' ? C.titleGp : C.titleGip}
-      field={<InstrumentField root={root} mode={mode} />}
+      field={<InstrumentField root={root} mode={mode} date={date} />}
       items={[
         {
           n: FUNCTION_NUMBERS.actions,
@@ -129,7 +131,7 @@ function GpBody({ mode, root, symbol, group, args, panelId }: BodyProps) {
   return (
     <div className="gp-screen" data-screen={mode}>
       <QuoteHeader quote={view.quote} />
-      <GpFunctionBar mode={mode} root={root} panelId={panelId} grid={grid} onGrid={() => setGrid(!grid)} rolls={showRolls} onRolls={() => setShowRolls(!showRolls)} />
+      <GpFunctionBar mode={mode} root={root} panelId={panelId} grid={grid} onGrid={() => setGrid(!grid)} rolls={showRolls} onRolls={() => setShowRolls(!showRolls)} date={win.date} />
       <GpParams
         mode={mode} draftStart={win.draftStart} draftEnd={win.draftEnd} onDraftStart={win.setDraftStart} onDraftEnd={win.setDraftEnd}
         onSubmit={win.submit} variant={data.variant} variants={data.variants} onVariant={setVariant}

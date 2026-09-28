@@ -81,8 +81,10 @@ export const TEAR_P1 = {
     caption: 'Up and down capture, annualised geometric',
     up: 'Up capture',
     down: 'Down capture',
-    upN: 'Benchmark-up sessions',
-    downN: 'Benchmark-down sessions',
+    upN: 'Benchmark-up {unit}',
+    downN: 'Benchmark-down {unit}',
+    unitSessions: 'sessions',
+    unitMonths: 'months',
   },
   scatter: {
     title: 'Strategy against benchmark (BR4)',

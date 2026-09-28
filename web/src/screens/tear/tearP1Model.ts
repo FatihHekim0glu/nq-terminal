@@ -235,14 +235,23 @@ export function relativeFull(ext: Extended): string | null {
   return fillCopy(TEAR_P1.relative.full, { beta: formatNumber(r.full_beta, 3), correlation: formatNumber(r.full_correlation, 3) })
 }
 
+/** The period word the up_n/down_n counts are in: months on a monthly series (run_extended's to_months,
+ *  periods_per_year 12), sessions otherwise. rolling_relative.window_unit is the fallback signal when a
+ *  series is monthly without P = 12 (D25: the capture card wrongly said "sessions" on every series). */
+function capturePeriodUnit(ext: Extended): string {
+  const monthly = ext.periods_per_year === 12 || ext.rolling_relative?.window_unit === 'months'
+  return monthly ? TEAR_P1.capture.unitMonths : TEAR_P1.capture.unitSessions
+}
+
 export function captureRows(ext: Extended): KeyValueRow[] {
   const c = ext.capture
   if (!c) return []
+  const unit = capturePeriodUnit(ext)
   return [
     { id: 'up', label: TEAR_P1.capture.up, value: formatNumber(c.up, 3) },
     { id: 'down', label: TEAR_P1.capture.down, value: formatNumber(c.down, 3) },
-    { id: 'upN', label: TEAR_P1.capture.upN, value: formatNumber(c.up_n, 0, { thousands: true }) },
-    { id: 'downN', label: TEAR_P1.capture.downN, value: formatNumber(c.down_n, 0, { thousands: true }) },
+    { id: 'upN', label: fillCopy(TEAR_P1.capture.upN, { unit }), value: formatNumber(c.up_n, 0, { thousands: true }) },
+    { id: 'downN', label: fillCopy(TEAR_P1.capture.downN, { unit }), value: formatNumber(c.down_n, 0, { thousands: true }) },
   ]
 }
 

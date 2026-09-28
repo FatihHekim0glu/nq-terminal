@@ -15,5 +15,8 @@ export interface LiveCommandLineProps extends Omit<CommandLineProps, 'index' | '
 export function LiveCommandLine({ focusedGroup, ...rest }: LiveCommandLineProps) {
   const commands = useCommands()
   const fallback = useLinkGroups((state) => (focusedGroup === null ? null : contextFor(state, focusedGroup)))
-  return <CommandLine {...rest} index={commands.data ?? null} indexError={commands.isError} fallbackContext={fallback} />
+  // A failed background refetch (the index re-reads every COMMANDS_POLL_MS) keeps the last good data:
+  // the index is still in use, so only say it did not load when there is truly nothing to show (D32).
+  const indexError = commands.isError && commands.data === undefined
+  return <CommandLine {...rest} index={commands.data ?? null} indexError={indexError} fallbackContext={fallback} />
 }

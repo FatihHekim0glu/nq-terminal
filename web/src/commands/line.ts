@@ -4,7 +4,7 @@
 // parseLine says what a line asks for (an action); the command line carries it out. Pure and total.
 import { CHROME_WORDS } from '../copy/commands'
 import { resolveContext } from './contexts'
-import { fail, parseTokens, stripSector, tokenise, type ParseError, type ParseOptions, type ParsedCommand, type Step } from './parser'
+import { MAX_LINE, fail, parseTokens, stripSector, tokenise, type ParseError, type ParseOptions, type ParsedCommand, type Step } from './parser'
 import { findMnemonic, type MnemonicCode } from './registry'
 import { sectorWord, type SectorCode } from './sectors'
 import type { ResolvedContext } from './types'
@@ -81,7 +81,15 @@ function parseRest(tokens: readonly string[], options: ParseOptions, newPanel: b
   return parsed.ok ? ok({ kind: 'run', command: parsed.command, newPanel }) : parsed
 }
 
+/** HL's query is free text (spec 5.1 item HL): titles and search terms carry punctuation (`Analytics:
+ * equity`, `P&L`, `[POST HOC]`), so it is read from the raw line before the command alphabet check
+ * (D14) rather than tokenised like the rest of the grammar. */
+const HL_LINE = /^\s*HL(?:\s+([\s\S]*))?$/i
+
 export function parseLine(input: string, options: ParseOptions): LineResult {
+  if (input.length > MAX_LINE) return fail('too-long')
+  const hl = HL_LINE.exec(input)
+  if (hl) return ok({ kind: 'search', query: (hl[1] ?? '').trim() })
   const typed = tokenise(input)
   if (!typed.ok) return typed
   const [first = '', ...rest] = typed.value

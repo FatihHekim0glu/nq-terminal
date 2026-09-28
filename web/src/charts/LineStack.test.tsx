@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { Component, type ReactNode } from 'react'
 import type uPlot from 'uplot'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LINE_STACK } from '../copy/lineStack'
@@ -8,6 +9,18 @@ import type { UplotConstructor } from './lazy'
 import LineStack from './LineStack'
 import { recordingContext } from './LineStack.testUtil'
 import type { LineStackPane, LineStackProps } from './LineStack.types'
+
+/** A minimal error boundary, the same shape ScreenBoundary gives a panel whose child throws. */
+class Boundary extends Component<{ readonly children: ReactNode }, { readonly error: string | null }> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(error: unknown) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+  render() {
+    if (this.state.error !== null) return <div role="alert">{this.state.error}</div>
+    return this.props.children
+  }
+}
 
 type Hook = (u: FakeUplot) => void
 
@@ -309,5 +322,56 @@ describe('LineStack (TASKS 5.1)', () => {
     render(<LineStack title="x" t={T} panes={PANES} loader={() => Promise.reject(new Error('offline'))} />)
     await ready()
     expect(screen.getByRole('alert').textContent).toBe('The chart failed to load: offline')
+  })
+
+  // D33: the toolbar (including the Log toggle) stays rendered in table view, so toggling it, or any
+  // other change to the build effect's deps, must not throw just because the pane hosts are unmounted.
+  it('D33: does not crash when a build dependency (Log) changes while the table view is open', async () => {
+    const { rerender } = render(
+      <Boundary>
+        <LineStack title="Fixture equity" t={T} panes={PANES} loader={loader} />
+      </Boundary>,
+    )
+    await ready()
+    const img = screen.getByRole('img')
+    fireEvent.keyDown(img, { key: 't' })
+    expect(screen.getByRole('table')).toBeTruthy()
+    const log = screen.getByRole('button', { name: LINE_STACK.logToggle })
+    fireEvent.click(log)
+    await ready()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('table')).toBeTruthy()
+
+    // A refetch (new t/panes, as LIVE gets) while the table view stays open must not throw either.
+    const newPanes: LineStackPane[] = PANES.map((p) => ({ ...p, series: p.series.map((s) => ({ ...s })) }))
+    rerender(
+      <Boundary>
+        <LineStack title="Fixture equity" t={[...T]} panes={newPanes} loader={loader} />
+      </Boundary>,
+    )
+    await ready()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('table')).toBeTruthy()
+  })
+
+  // D34: after a table-view round trip (T, T), ChartA11y remounts fresh empty `.linestack-pane` divs;
+  // the plot effect must rebuild into them (and destroy the old, now-detached uPlot instances).
+  it('D34: redraws every pane after a table view round trip (T, T)', async () => {
+    renderStack()
+    await ready()
+    const before = FakeUplot.instances.slice()
+    expect(before).toHaveLength(2)
+    const img = screen.getByRole('img')
+    fireEvent.keyDown(img, { key: 't' })
+    const region = screen.getByRole('region', { name: 'Fixture equity, every point' })
+    fireEvent.keyDown(region, { key: 't' })
+    await ready()
+    const panes = document.querySelectorAll('.linestack-pane')
+    expect(panes).toHaveLength(2)
+    for (const p of panes) expect(p.querySelector('.uplot')).not.toBeNull()
+    expect(before.every((u) => u.destroyed)).toBe(true)
+    const after = FakeUplot.instances.filter((u) => !before.includes(u))
+    expect(after).toHaveLength(2)
+    expect(after.every((u) => u.destroyed)).toBe(false)
   })
 })

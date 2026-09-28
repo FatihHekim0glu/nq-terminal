@@ -23,8 +23,10 @@ export interface SessionRow {
   readonly turnover: number | null
 }
 
-/** Two significant figures below 1 (0.0152 prints 0.015), two decimals from 1 up: the DES number rule. */
-const sig = (v: number | null | undefined) => formatNumber(v, decimalsFor([v ?? null]))
+/** Two significant figures below 1 (0.0152 prints 0.015), two decimals from 1 up: the DES number rule.
+ *  Shared with the run books' exposure card (RunBooks.ExposureCard), so the same mean never shows at
+ *  two different precisions side by side on EXPO (D23). */
+export const sig = (v: number | null | undefined) => formatNumber(v, decimalsFor([v ?? null]))
 
 export function summaryRows(view: RunExposure): SummaryRow[] {
   const e = view.exposure

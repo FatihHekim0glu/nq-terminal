@@ -2,14 +2,14 @@
 // come from /api/live/performance (performance rows only) and are drawn only after they match, date for
 // date, the journal's own non-plumbing close rows (/api/live/journal?type=close), so a plumbing row can
 // never reach the chart even if the server let one through.
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApiQuery, useLivePerformance } from '../../api/queries'
 import { useLivePollInterval } from '../../api/useLiveStream'
 import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'
 import { LIVE } from '../../copy/live'
 import { fillCopy } from '../../copy/workspace'
-import { performanceChart, reconRows, type Performance, type ReconRow } from './liveModel'
+import { performanceChart, reconRows, type ChartResult, type Performance, type ReconRow } from './liveModel'
 import PlainTable, { type PlainColumn } from './PlainTable'
 
 /** The API's largest page: a paper book writes about 250 close rows a year. */
@@ -40,16 +40,31 @@ const RECON_COLUMNS: PlainColumn<ReconRow>[] = [
 
 const reconId = (r: ReconRow) => r.key
 
-function Chart({ perf }: { readonly perf: Performance }) {
+function Chart({ perf, perfFetching }: { readonly perf: Performance; readonly perfFetching: boolean }) {
   const closes = useApiQuery(
     '/api/live/journal',
     { query: { file: perf.journal, type: 'close', limit: CLOSE_PAGE } },
     { refetchInterval: useLivePollInterval(), staleTime: 0, enabled: perf.present },
   )
-  const result = useMemo(
+  const computed = useMemo(
     () => (closes.data ? performanceChart(perf, closes.data.items, closes.data.total) : null),
     [perf, closes.data],
   )
+  // The performance and journal-close queries are refreshed together (the stream hub, or the P0 poll)
+  // but resolve independently, so for one render their lengths can differ with nothing wrong (D26).
+  // While either is still fetching, a mismatch is provisional: keep the last settled chart (its
+  // LineStack stays mounted, so the user's range survives) instead of flashing a false guard alert.
+  // Only a mismatch that is still there once both queries have settled is real. `settled` tracks the
+  // last result once fetching stops, not the last *ok* result forever: a real, persistent mismatch
+  // settles into an error and must stay an error on every later refetch, not revert to a stale chart
+  // each time a poll makes `settling` true again (that would flip the guard alert on and off, and
+  // remount the chart, on every poll).
+  const settling = perfFetching || closes.isFetching
+  const [settled, setSettled] = useState<ChartResult | null>(null)
+  useEffect(() => {
+    if (!settling && computed) setSettled(computed)
+  }, [settling, computed])
+  const result = computed?.kind === 'error' && settling && settled ? settled : computed
   const panes = useMemo<LineStackPane[] | null>(() => {
     if (result?.kind !== 'ok') return null
     return [
@@ -86,7 +101,7 @@ export default function PerformancePanel() {
         {perf.plumbing_rows_skipped > 0 ? fillCopy(LIVE.plumbingSkipped, { n: perf.plumbing_rows_skipped }) : null}
       </p>
       <div className="live-perf-row">
-        <Chart perf={perf} />
+        <Chart key={perf.journal} perf={perf} perfFetching={query.isFetching} />
         <div className="live-recon">
           <PlainTable label={LIVE.reconLabel} rows={rows} columns={RECON_COLUMNS} rowId={reconId} emptyText={LIVE.chartEmpty} />
         </div>

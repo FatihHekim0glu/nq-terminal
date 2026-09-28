@@ -11,6 +11,7 @@ import { activateNumbered, registerNumbered, resetNumbered } from '../../chrome/
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
+import { DQ } from '../../copy/dq'
 import { stubLayout } from '../../grids/testing'
 import DqScreen from './DqScreen'
 import type { DqCalendar, DqIndex, DqSymbol, GuardStatusReport } from './types'
@@ -182,5 +183,19 @@ describe('DQ screen', () => {
     expect(within(grid).getByText('OK')).toBeTruthy()
     expect(screen.getByText('1 OK, 1 mismatch, 0 with no record.')).toBeTruthy()
     expect(urls()).toContain('/api/dq/guards')
+  })
+
+  it('shows no permanent Loading when the symbol index is empty (D31)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://x')
+      const body = url.pathname === '/api/dq/symbols' ? { label: LABEL, fence: '2021-12-31', missing: ['x'], symbols: [] } : INDEX
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    renderDq()
+    await screen.findByText(DQ.noSymbols)
+    // A disabled calendar query (no symbol to ask for) must never leave a permanent aria-busy Loading
+    // line beside "No symbols": react-query reports a disabled query with no data as isPending forever.
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+    expect(screen.queryByText(DQ.loading)).toBeNull()
   })
 })

@@ -63,6 +63,28 @@ describe('number formats (look spec 3.4, decision D5)', () => {
     expect(formatPrice('ZN', 130 + 6.5 / 32, 2)).toBe('130-06+')
     expect(formatPrice('NQ', 18432.25, 2)).toBe('18432.25')
   })
+
+  it('is tick-aware: a 1/256 tick (ZT) needs an eighth-of-32nd digit the 1/128 grid cannot show (D21)', () => {
+    // 109.23046875 = 109 + 7.375/32 (7 and 3/8 of a 32nd). Rounded to the 1/128 grid (quarters of a
+    // 32nd), 7.375 and 7.5 both round to the same '109-07+', 1/256 point (about $7.81 a contract) apart.
+    expect(formatTreasury(109 + 7.375 / 32, 8)).not.toBe(formatTreasury(109 + 7.5 / 32, 8))
+    expect(formatTreasury(109 + 7.375 / 32, 8)).toBe('109-073')
+    // The CME third-digit notation is not the raw eighth index: 5/8 and 7/8 of a 32nd print as 6 and 8
+    // (½ and ¾ of a 1/256, digits 4 and 6 are skipped since they would repeat the quarter marks).
+    expect(formatTreasury(109 + 7.625 / 32, 8)).toBe('109-076')
+    expect(formatTreasury(109 + 7.875 / 32, 8)).toBe('109-078')
+    expect(formatTreasury(109 + 7.125 / 32, 8)).toBe('109-071')
+    // 7.5/32 is exactly half a 32nd (on the 1/128 grid already), so it keeps its exact quarter mark.
+    expect(formatTreasury(109 + 7.5 / 32, 8)).toBe('109-07+')
+    expect(formatTreasury(110 + 0.125 / 32, 8)).toBe('110-001') // 110.00390625, the brief's other example
+    // A value already on the 1/128 grid still prints with the quarter marks, decimals or not.
+    expect(formatTreasury(130 + 6.5 / 32, 8)).toBe('130-06+')
+    // Without tick-derived decimals (or a coarser tick), the old quarter-32nd rounding is unchanged:
+    // formatPrice('ZN', ...) and any caller that has not threaded a tick still behaves as before.
+    expect(formatTreasury(109 + 7.375 / 32)).toBe('109-07+')
+    expect(formatTreasury(109 + 7.375 / 32, 6)).toBe('109-07+')
+    expect(formatPrice('ZT', 109 + 7.375 / 32, 8)).toBe('109-073')
+  })
 })
 
 const QUOTE = {

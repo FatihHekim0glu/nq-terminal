@@ -116,10 +116,17 @@ export function useCommandLineKeys(inputRef: RefObject<HTMLInputElement | null>,
     function onKeyDown(e: KeyboardEvent) {
       const input = inputRef.current
       const which = isFocusKey(e)
-      if (!input || !which || e.defaultPrevented || document.activeElement === input) return
+      if (!input || !which || e.defaultPrevented) return
+      // Ctrl+K must still select the line and hold the browser's own shortcut back (the omnibox search
+      // in Chrome and Edge, the search bar in Firefox) even when the command line already has focus
+      // (D11); Esc and Home stay the command line's own cascade once it is focused.
+      const alreadyFocused = document.activeElement === input
+      if (alreadyFocused && which !== 'ctrl-k') return
       e.preventDefault()
       const active = document.activeElement
-      if (active instanceof HTMLElement && active !== document.body) previousFocus.current = active
+      // Ctrl+K pressed with the input already focused moves nothing: keep whatever earlier element
+      // previousFocus already names, rather than overwriting it with the input itself.
+      if (active instanceof HTMLElement && active !== document.body && active !== input) previousFocus.current = active
       input.focus()
       if (which === 'ctrl-k') input.select()
     }

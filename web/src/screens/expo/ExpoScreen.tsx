@@ -4,7 +4,7 @@
 // session as a virtualised grid, newest first. A run with no snapshots says why. `98) Export` saves the
 // per-session rows at full precision. [POST HOC]: the terminal's descriptive view of a run.
 import { useMemo, useRef } from 'react'
-import { useApiQuery } from '../../api/queries'
+import { useApiQuery, useRun } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { usePanelPage, type PanelPage } from '../../chrome/PanelChrome.page'
@@ -16,6 +16,7 @@ import type { PanelLink } from '../../state/linkGroups'
 import { BookBar, EmptyGuide, Failed, Loading } from '../cost/BookFrame'
 import { DES } from '../../copy/des'
 import { DesCard, Tag } from '../des/DesParts'
+import { runTags } from '../runs/model'
 import { ExposureCard } from '../tear/RunBooks'
 import { formatNumber } from '../tear/tearFormat'
 import { exposureCsv, sessionRows, summaryRows, type RunExposure, type SessionRow } from './expoModel'
@@ -86,6 +87,10 @@ function Sessions({ view, panelId }: { readonly view: RunExposure; readonly pane
 function Exposure({ run, page, link }: { readonly run: string; readonly page: PanelPage | null; readonly link: PanelLink }) {
   const query = useApiQuery('/api/analytics/run/{run_id}/exposure', { path: { run_id: run } }, { enabled: run !== '' })
   const view = query.data
+  // Honesty tags (UI_SPEC section 6) travel with the run wherever it is shown, so a probe or anchor run
+  // is labelled here exactly as it is on RUN and RUNS (D20).
+  const runDetail = useRun(run)
+  const tags = runDetail.data ? runTags(runDetail.data.summary) : []
   const onExport = view?.available
     ? () => {
         const out = exposureCsv(view)
@@ -102,6 +107,7 @@ function Exposure({ run, page, link }: { readonly run: string; readonly page: Pa
           <div className="books-head">
             <h3 className="books-name">{run}</h3>
             <Tag tag={DES.postHoc} />
+            {tags.map((tag) => <span key={tag} className="tear-tag">{tag}</span>)}
           </div>
           <div className="books-cols">
             <div className="books-col">

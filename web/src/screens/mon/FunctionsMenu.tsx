@@ -10,6 +10,10 @@ import { ROVING_ATTR, ROVING_OVERLAY_ATTR } from '../../chrome/WorkspaceFocus'
 import { fillCopy } from '../../copy/workspace'
 import '../../chrome/RelatedMenu.css'
 import { MON } from '../../copy/market'
+// GIP's argument is required (registry.ts def('GIP', ..., 'date')): a bare '<root> GIP' is always
+// rejected by the parser (D08), so the drill row needs a date too. LAST_IS_DAY is the same default the
+// GIP screen itself falls back to when a command names none.
+import { LAST_IS_DAY } from '../gp/useGpWindow'
 
 export interface DrillFunction {
   readonly n: number
@@ -22,7 +26,7 @@ export interface DrillFunction {
 export function drillFunctions(root: string): DrillFunction[] {
   return [
     { n: 1, code: 'GP', title: MON.drillGp, line: `${root} GP` },
-    { n: 2, code: 'GIP', title: MON.drillGip, line: `${root} GIP` },
+    { n: 2, code: 'GIP', title: MON.drillGip, line: `${root} GIP ${LAST_IS_DAY}` },
     { n: 3, code: 'DES', title: MON.drillDes, line: `${root} DES` },
     { n: 4, code: 'CORR', title: MON.drillCorr, line: '27F CORR' },
   ]

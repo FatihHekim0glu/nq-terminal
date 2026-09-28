@@ -116,7 +116,7 @@ function ChromeHeader({ screen, focused, panel, refs, env, actions }: ChromeHead
         focusedGroup={group}
         panelNumber={panel.number}
         resolveFallback={() => refs.workspace.current?.focusedContext() ?? null}
-        onRun={(command, target) => refs.workspace.current?.run(command, target)}
+        onRun={(command, target) => refs.workspace.current?.run(command, target) ?? false}
         onReturnFocus={() => refs.workspace.current?.focusPanel() ?? false}
         onContext={loadContext}
         onNumber={(n) => (panel.id ? activateNumbered(panel.id, n) : false)}

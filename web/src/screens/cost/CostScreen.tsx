@@ -6,7 +6,7 @@
 // `98) Export` saves what the screen shows at full precision. A sealed-window confirmation has its costs
 // in its own result and says where to look. Every request is a GET.
 import { useMemo, useRef } from 'react'
-import { useApiQuery, useHypothesis } from '../../api/queries'
+import { useApiQuery, useHypothesis, useRun } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
@@ -19,6 +19,7 @@ import { costRows, ladderCsv } from '../blk/ladder'
 import LadderTable from '../blk/LadderTable'
 import { MISSING, breakEvenText, costInput, type HypothesisDetail } from '../des/desModel'
 import { DesCard } from '../des/DesParts'
+import { runTags } from '../runs/model'
 import { CostsCard } from '../tear/RunBooks'
 import { formatNumber } from '../tear/tearFormat'
 import { BookBar, EmptyGuide, Failed, HypothesisRoute, Loading, type Confirmation } from './BookFrame'
@@ -161,6 +162,10 @@ function SensitivityTable({ costs }: { readonly costs: RunCosts }) {
 function RunCostsView({ run, page }: { readonly run: string; readonly page: PanelPage | null }) {
   const query = useApiQuery('/api/analytics/run/{run_id}/costs', { path: { run_id: run } }, { enabled: run !== '' })
   const costs = query.data
+  // Honesty tags (UI_SPEC section 6) travel with the run wherever it is shown, so a probe or anchor run
+  // is labelled here exactly as it is on RUN and RUNS (D20).
+  const runDetail = useRun(run)
+  const tags = runDetail.data ? runTags(runDetail.data.summary) : []
   const onExport = costs
     ? () => {
         const out = runCostsCsv(costs)
@@ -174,7 +179,10 @@ function RunCostsView({ run, page }: { readonly run: string; readonly page: Pane
       {query.isError ? <Failed name={run} error={query.error} /> : null}
       {costs ? (
         <div className="books-page">
-          <div className="books-head"><h3 className="books-name">{run}</h3></div>
+          <div className="books-head">
+            <h3 className="books-name">{run}</h3>
+            {tags.map((tag) => <span key={tag} className="tear-tag">{tag}</span>)}
+          </div>
           <div className="books-cols">
             <div className="books-col"><CostsCard costs={costs} runId={run} /></div>
             <div className="books-col">

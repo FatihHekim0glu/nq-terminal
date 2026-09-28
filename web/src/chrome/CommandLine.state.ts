@@ -26,7 +26,8 @@ export interface CommandLineOptions {
   readonly fallbackContext: Fallback
   /** Read when a command runs; takes precedence over fallbackContext. */
   readonly resolveFallback?: () => Fallback
-  readonly onRun: (command: ParsedCommand, target: RunTarget) => void
+  /** false when nothing opened (the workspace is not ready); void or true means it ran. */
+  readonly onRun: (command: ParsedCommand, target: RunTarget) => boolean | void
   /** Called on the Esc that returns focus when no previous element is known; true when it moved focus. */
   readonly onReturnFocus?: () => boolean
   /** A context typed on its own: load it into the focused panel's link group. */
@@ -104,7 +105,9 @@ function useLine(history: ReturnType<typeof useHistory>) {
     setKeystrokes((k) => k + 1)
     setError(null)
     clearMessage('error')
-    if (history.history.cursor !== null) history.setHistory({ entries: history.history.entries, cursor: null })
+    // Functional update (D07): a plain value here would race the functional update `remember` queues
+    // when Enter re-runs a recalled line, overwriting its newest entry with this render's stale copy.
+    history.setHistory((prev) => (prev.cursor === null ? prev : { entries: prev.entries, cursor: null }))
   }
   const walk = (up: boolean) => {
     const step = up ? older(history.history, line) : newer(history.history)

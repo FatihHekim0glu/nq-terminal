@@ -214,7 +214,7 @@ export function pScatterTable(input: PScatterInput): ChartTable {
     caption: input.name,
     columns: [
       { key: 'rank', label: P_SCATTER.colRank, numeric: true },
-      { key: 'label', label: P_SCATTER.colName },
+      { key: 'label', label: P_SCATTER.colName, rowHeader: true },
       { key: 'p', label: P_SCATTER.colP, numeric: true },
       { key: 'bonferroni', label: P_SCATTER.colBonferroni, numeric: true },
       { key: 'holm', label: P_SCATTER.colHolm, numeric: true },

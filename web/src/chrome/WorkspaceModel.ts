@@ -137,7 +137,11 @@ function loadLayout(api: DockApiLike, layout: ScreenLayout): void {
 
 function addPanel(api: DockApiLike, params: PanelParams, ref: string | undefined): void {
   const known = ref !== undefined && api.panels.some((p) => p.id === ref)
-  const position = known ? { referencePanel: ref, direction: 'right' as const } : undefined
+  // dockview opens a panel with no position as a hidden tab in whatever group is active; when the
+  // requested reference is missing (or there was none), anchor to the last panel instead, so the new
+  // panel always gets its own visible group.
+  const fallback = known ? ref : api.panels.at(-1)?.id
+  const position = fallback ? { referencePanel: fallback, direction: 'right' as const } : undefined
   api.addPanel({ id: freshId(api), component: PANEL_COMPONENT, title: panelTitle(params), params, position })
 }
 

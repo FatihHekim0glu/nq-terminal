@@ -10,6 +10,7 @@ export const SEAS = {
   empty: 'Give an instrument or a registered hypothesis: {NQ SEAS <GO>} or {volmanaged_v0 SEAS <GO>}.',
   loading: 'Loading the seasonality of {name}.',
   failed: 'The seasonality of {name} could not be read: {detail}',
+  noSeries: 'No return series is recorded for {name}, so seasonality cannot be read.',
   paramLabel: 'Seasonality settings',
   from: 'From',
   to: 'To',

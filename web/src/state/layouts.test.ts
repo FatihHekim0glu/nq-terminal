@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { LAYOUTS_KEY, MAX_LAYOUT_CHARS, createLayoutsStore, layoutFor } from './layouts'
 import { createSafeStorage, memoryStorage } from './safeStorage'
@@ -73,5 +74,48 @@ describe('user layouts (UI_SPEC section 2: localStorage, default layout when sto
     )
     expect(store.getState().saveLayout('HOME', dock)).toBe(true)
     expect(layoutFor(store.getState(), 'HOME')).toEqual(dock)
+  })
+
+  it('born failing (D05): two windows saving different screens do not lose each other\'s layout (lost update)', () => {
+    const backing = memoryStorage()
+    const a = createLayoutsStore(createSafeStorage(() => backing))
+    // B "loaded earlier" than A's save, so its in-memory map is still empty when it saves REG.
+    const b = createLayoutsStore(createSafeStorage(() => backing))
+    expect(a.getState().saveLayout('HOME', dock)).toBe(true)
+    expect(b.getState().saveLayout('REG', dock)).toBe(true)
+    const fresh = createLayoutsStore(createSafeStorage(() => backing))
+    expect(Object.keys(fresh.getState().layouts).sort()).toEqual(['HOME', 'REG'])
+  })
+
+  it('born failing (D05): a window still open refreshes from a storage event fired by another window', () => {
+    const backing = memoryStorage()
+    const a = createLayoutsStore(createSafeStorage(() => backing))
+    const b = createLayoutsStore(createSafeStorage(() => backing))
+    a.getState().saveLayout('HOME', dock)
+    const raw = backing.getItem(LAYOUTS_KEY)
+    window.dispatchEvent(new StorageEvent('storage', { key: LAYOUTS_KEY, newValue: raw, storageArea: window.localStorage }))
+    expect(Object.keys(b.getState().layouts)).toEqual(['HOME'])
+  })
+
+  it('D05: a save does not drop another screen already held in memory when storage is blocked', () => {
+    const store = createLayoutsStore(
+      createSafeStorage(() => {
+        throw new Error('blocked')
+      }),
+    )
+    store.getState().saveLayout('HOME', dock)
+    store.getState().saveLayout('REG', dock)
+    expect(Object.keys(store.getState().layouts).sort()).toEqual(['HOME', 'REG'])
+  })
+
+  it('D05: a reset is not a no-op when storage is blocked (it must not just read back what it wrote)', () => {
+    const store = createLayoutsStore(
+      createSafeStorage(() => {
+        throw new Error('blocked')
+      }),
+    )
+    store.getState().saveLayout('REG', dock)
+    store.getState().resetLayout('REG')
+    expect(layoutFor(store.getState(), 'REG')).toBeNull()
   })
 })

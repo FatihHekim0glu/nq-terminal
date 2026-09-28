@@ -17,7 +17,7 @@ import ChartA11y, { type ChartTable } from './ChartA11y'
 import type { CandleEngine } from './CandleChart.engine'
 import { useCandleCursor, useCandleEngine, useSettledShown } from './CandleChart.hooks'
 import {
-  barEvents, barStep, candleSummary, candleTable, isIntraday, legendStats, readoutParts,
+  barEvents, barStep, candleSummary, candleTable, isIntraday, legendStats, readoutParts, stepIndex,
   type BarEvents, type CandleBars, type CandleFill, type CandleIndicator, type CandleRoll,
 } from './CandleChart.model'
 import { DataTip, Legends, PaneSplitters, Readout, TimeStripView } from './CandleChart.overlays'
@@ -111,14 +111,27 @@ export default function CandleChart(props: CandleChartProps) {
     onCursor: cursor.onCursor, ...(props.onRendered ? { onRendered: props.onRendered } : {}),
   })
   const shown = useSettledShown(view)
+  const n = bars.t.length
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     const act = KEYS[e.key]
     if (!act || !engine.current || e.altKey || e.ctrlKey || e.metaKey) return
+    // D35: Left and Right must not be consumed once the crosshair is already at that edge, or GP and
+    // GIP's range buttons, fields and toggles become unreachable by keyboard (the chart would keep the
+    // panel's one Tab stop forever). stepIndex returns null exactly when the step would not move.
+    // D36: only a fresh press gives the key back; an auto-repeat at the edge (still held from before
+    // the edge was reached) is swallowed instead, or holding the key walks focus on through every
+    // other roving control in the panel once dockview hands focus off the chart.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const delta = e.key === 'ArrowLeft' ? -1 : 1
+      if (stepIndex(engine.current.cursor(), delta, n, null) === null) {
+        if (e.repeat) e.preventDefault()
+        return
+      }
+    }
     e.preventDefault()
     const eng = engine.current
     cursor.onKey(e.repeat, () => act(eng))
   }
-  const n = bars.t.length
   const { summary, table } = useCandleA11y({ name, bars, step, precision, timeZone, events, fills: fills.length, rolls: rolls.length, ...ind })
   const parts = readoutParts(bars, cursor.readout ?? n - 1, { precision, intraday, timeZone, events, ...ind })
   return (

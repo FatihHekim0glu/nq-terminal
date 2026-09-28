@@ -204,8 +204,11 @@ export default function DqScreen({ context }: ScreenProps) {
             {index.data && known.length === 0 ? <p className="mkt-status">{DQ.noSymbols}</p> : null}
             {calendar.data ? (
               <CalendarView key={calendar.data.symbol.symbol} calendar={calendar.data} />
-            ) : (
-              <QueryStatus loading={index.isPending || calendar.isPending} error={index.error ?? calendar.error} loadingText={DQ.loading} failedText={DQ.failed} />
+            ) : index.data && known.length === 0 ? null : (
+              // A disabled calendar query (no symbol to ask for, symbol === '') is idle, not loading:
+              // in react-query v5 a disabled query with no data reports isPending true forever, which
+              // would otherwise show a permanent aria-busy Loading line beside "No symbols" (D31).
+              <QueryStatus loading={index.isPending || (symbol !== '' && calendar.isPending)} error={index.error ?? calendar.error} loadingText={DQ.loading} failedText={DQ.failed} />
             )}
           </>
         ) : guards.data ? (

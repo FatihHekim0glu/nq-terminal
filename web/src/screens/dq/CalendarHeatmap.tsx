@@ -36,7 +36,13 @@ export default function CalendarHeatmap({ symbol, days, counts, fence, selected 
   const [hover, setHover] = useState<DqDay | null>(null)
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     const next = keyStep(dates, hover?.date ?? null, event.key)
-    if (next === null) return
+    // D36: at an edge (next === null), an arrow key held down (auto-repeat) is swallowed instead of
+    // handed back to the panel every time, or holding it walks focus on through the panel's other
+    // controls once the first repeat hands focus off. A fresh press still hands it back.
+    if (next === null) {
+      if (event.repeat && event.key.startsWith('Arrow')) event.preventDefault()
+      return
+    }
     event.preventDefault()
     setHover(byDate.get(next) ?? null)
   }

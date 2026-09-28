@@ -64,4 +64,17 @@ describe('instrumentReport: the instrument description as Markdown', () => {
     expect(text).toContain('- Fence: Prices end at 2021-12-31. (nq_lab.oos_gate)')
     expect(text).toContain('trading hours are not recorded in nq-lab')
   })
+
+  it('prints the tick value and cost per side exactly, not rounded to cents (D24)', () => {
+    const zn: Schemas['InstrumentDes'] = {
+      ...nq,
+      root: 'ZN', symbol: 'ZN.V.0',
+      contract: { ...nq.contract!, root: 'ZN', symbol: 'ZN.V.0', tick: 0.015625, tick_usd: 15.625, point_value_usd: 1000, cost_per_side_1tick_usd: 18.125 },
+    }
+    const text = instrumentReport(zn, 'TY1 Comdty')
+    expect(text).toContain('15.625 USD')
+    expect(text).toContain('18.125 USD')
+    expect(text).not.toContain('15.63 USD')
+    expect(text).not.toContain('18.13 USD')
+  })
 })

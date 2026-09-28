@@ -90,10 +90,20 @@ describe('keyStep (keyboard walk over the calendar)', () => {
     expect(keyStep(dates, '2011-01-04', 'ArrowDown')).toBe('2011-01-05')
     expect(keyStep(dates, '2011-01-05', 'ArrowLeft')).toBe('2011-01-04')
     expect(keyStep(dates, '2011-01-04', 'ArrowUp')).toBe('2011-01-03')
-    expect(keyStep(dates, '2011-01-03', 'ArrowLeft')).toBe('2011-01-03')
-    expect(keyStep(dates, '2011-01-11', 'ArrowRight')).toBe('2011-01-11')
     expect(keyStep(dates, '2011-01-04', 'Home')).toBe('2011-01-03')
     expect(keyStep(dates, '2011-01-04', 'End')).toBe('2011-01-11')
+  })
+
+  // D37: null (not the clamped, unchanged date) at the first or last date, so a caller that only
+  // prevents default on a real move gives the key back to the panel there (the flagged grid, the
+  // Table toggle and other roving items become reachable by arrows from the calendar).
+  it('releases the edges: null for Left/Up at the first date and Right/Down at the last', () => {
+    expect(keyStep(dates, dates[0]!, 'ArrowLeft')).toBeNull()
+    expect(keyStep(dates, dates[0]!, 'ArrowUp')).toBeNull()
+    expect(keyStep(dates, dates.at(-1)!, 'ArrowRight')).toBeNull()
+    expect(keyStep(dates, dates.at(-1)!, 'ArrowDown')).toBeNull()
+    // Not at an edge: still steps.
+    expect(keyStep(dates, dates[1]!, 'ArrowLeft')).toBe(dates[0])
   })
   it('moves a week with Page Up and Page Down, to the nearest session', () => {
     expect(keyStep(dates, '2011-01-03', 'PageDown')).toBe('2011-01-10')

@@ -186,6 +186,20 @@ describe('applyPlan against a dockview-like api', () => {
     expect(api.calls.some((c) => c.startsWith('replace'))).toBe(false)
     expect(api.store.map((p) => p.params.code)).toEqual(['OOS'])
   })
+
+  it('never opens a panel with no position once others exist, so dockview cannot hide it as a tab (D02)', () => {
+    const api = fakeApi([{ id: 'p1', params: paramsFromCommand(command('REG'), '-'), title: 'REG', position: undefined }])
+    applyPlan(api, { kind: 'add', ref: undefined, params: paramsFromCommand(command('OOS'), '-') })
+    const added = api.store[1]
+    expect(added?.position).toEqual({ referencePanel: 'p1', direction: 'right' })
+  })
+
+  it('falls back to the last panel when the requested reference no longer exists (D02)', () => {
+    const api = fakeApi([{ id: 'p1', params: paramsFromCommand(command('REG'), '-'), title: 'REG', position: undefined }])
+    applyPlan(api, { kind: 'add', ref: 'gone', params: paramsFromCommand(command('OOS'), '-') })
+    const added = api.store[1]
+    expect(added?.position).toEqual({ referencePanel: 'p1', direction: 'right' })
+  })
 })
 
 describe('sanitiseParams: stored layouts are untrusted input', () => {

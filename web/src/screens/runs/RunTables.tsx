@@ -71,6 +71,11 @@ function Paged<T>({ query, offset, onOffset, children }: { readonly query: Loada
   )
 }
 
+/** No tone for a P&L (pts) value that prints as zero at this precision (never contradicts its own text). */
+function ptsTone(v: number | null | undefined, decimals: number): ReturnType<typeof signTone> {
+  return Number(formatExact(v, decimals)) === 0 ? undefined : signTone(v)
+}
+
 function tradeColumns(priceDecimals: number): MonitorColumn<Trade>[] {
   const T = RUN.trades
   const px = (v: number | null) => formatExact(v, priceDecimals)
@@ -82,7 +87,7 @@ function tradeColumns(priceDecimals: number): MonitorColumn<Trade>[] {
     { id: 'exit', header: T.exitTs, width: 210, kind: 'text', value: (r) => r.exit_ts_epoch_s, format: (r) => r.exit_ts ?? '--' },
     { id: 'exitPx', header: T.exitPx, width: 110, kind: 'num', value: (r) => r.exit_px, format: (r) => px(r.exit_px) },
     { id: 'reason', header: T.reason, width: 80, kind: 'text', value: (r) => r.reason },
-    { id: 'pts', header: T.pnlPts, width: 90, kind: 'num', value: (r) => r.pnl_pts, format: (r) => formatRatio(r.pnl_pts, 2), tone: (r) => signTone(r.pnl_pts) },
+    { id: 'pts', header: T.pnlPts, width: 90, kind: 'num', value: (r) => r.pnl_pts, format: (r) => formatExact(r.pnl_pts, priceDecimals), tone: (r) => ptsTone(r.pnl_pts, priceDecimals) },
     { id: 'usd', header: T.pnlUsd, width: 116, kind: 'num', value: (r) => r.pnl_usd, format: (r) => formatUsd(r.pnl_usd, true), tone: (r) => signTone(r.pnl_usd) },
     { id: 'costs', header: T.commission, width: 96, kind: 'num', value: (r) => r.commissions_usd, format: (r) => formatUsd(r.commissions_usd) },
     { id: 'netR', header: T.netR, width: 80, kind: 'num', value: (r) => r.net_r, format: (r) => formatRatio(r.net_r, 3), tone: (r) => signTone(r.net_r) },
@@ -91,7 +96,7 @@ function tradeColumns(priceDecimals: number): MonitorColumn<Trade>[] {
 
 const tradeId = (r: Trade) => `${r.entry_ts ?? ''}|${r.exit_ts ?? ''}|${r.entry_px ?? ''}|${r.direction ?? ''}|${r.pnl_usd ?? ''}`
 
-function TradesGrid({ run, items, total }: { readonly run: string; readonly items: readonly Trade[]; readonly total: number }) {
+export function TradesGrid({ run, items, total }: { readonly run: string; readonly items: readonly Trade[]; readonly total: number }) {
   const decimals = decimalsFor(items.flatMap((t) => [t.entry_px, t.exit_px]))
   const columns = useMemo(() => tradeColumns(decimals), [decimals])
   useGridExport(run, 'trades', columns, items)

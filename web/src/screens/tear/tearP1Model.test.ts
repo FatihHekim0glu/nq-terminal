@@ -137,10 +137,24 @@ describe('RR additions', () => {
   })
 
   it('shows up and down capture with the sessions behind each', () => {
-    expect(captureRows(HYP_EXTENDED).map((r) => [r.id, r.value])).toEqual([
-      ['up', '0.991'], ['down', '1.002'], ['upN', '17'], ['downN', '22'],
+    expect(captureRows(HYP_EXTENDED).map((r) => [r.id, r.label, r.value])).toEqual([
+      ['up', 'Up capture', '0.991'], ['down', 'Down capture', '1.002'],
+      ['upN', 'Benchmark-up sessions', '17'], ['downN', 'Benchmark-down sessions', '22'],
     ])
     expect(captureRows(RUN_EXTENDED)).toEqual([])
+  })
+
+  it('counts months, not sessions, on a monthly series (D25)', () => {
+    const monthly = { ...HYP_EXTENDED, periods_per_year: 12 }
+    expect(captureRows(monthly).map((r) => [r.id, r.label])).toEqual([
+      ['up', 'Up capture'], ['down', 'Down capture'],
+      ['upN', 'Benchmark-up months'], ['downN', 'Benchmark-down months'],
+    ])
+  })
+
+  it('also counts months when rolling_relative names a monthly window, even off P = 12', () => {
+    const monthlyWindow = { ...HYP_EXTENDED, rolling_relative: { ...HYP_EXTENDED.rolling_relative!, window_unit: 'months' } }
+    expect(captureRows(monthlyWindow).map((r) => r.label)).toContain('Benchmark-up months')
   })
 
   it('scatters strategy against benchmark with BR1 line in display units', () => {

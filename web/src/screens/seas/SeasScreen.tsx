@@ -7,6 +7,7 @@
 // red bar holds the amber context field (Enter runs `<text> SEAS`), 96) Actions, 98) Export (the
 // shown tab as CSV) and 99) Help.
 import { useId, useMemo, useRef, useState } from 'react'
+import { useHypothesis } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import { requestLine } from '../../chrome/CommandLine.bus'
@@ -25,10 +26,11 @@ import { gateText } from '../mon/model'
 import QueryStatus from '../mon/QueryStatus'
 import '../mon/market.css'
 import {
-  COSTS,
   FIRST_YEAR,
   LAST_YEAR,
   TABS,
+  costOptions,
+  defaultCost,
   excludedText,
   formatHit,
   formatPlain,
@@ -68,7 +70,6 @@ const VARIANTS = [
 ]
 /** Tabs are 81) to 85): the grid rows hold 1) to 13) for Number <GO> (the latest registration would win a clash). */
 const TAB_START = 81
-const COST_OPTIONS = COSTS.map((n) => ({ value: String(n), label: fillCopy(SEAS.costOption, { n }) }))
 
 function columnsFor(s: Scale): MonitorColumn<GridRow>[] {
   const c = SEAS.cols
@@ -93,8 +94,14 @@ function columnsFor(s: Scale): MonitorColumn<GridRow>[] {
   ]
 }
 
-function Params({ s, set, data }: { readonly s: Settings; readonly set: (next: Settings) => void; readonly data: Seasonality | undefined }) {
-  const instrument = data?.kind !== 'hypothesis'
+function Params({ s, set, data, isHypothesis, costs }: {
+  readonly s: Settings
+  readonly set: (next: Settings) => void
+  readonly data: Seasonality | undefined
+  readonly isHypothesis: boolean
+  readonly costs: readonly number[]
+}) {
+  const cost = costs.includes(s.cost) ? s.cost : defaultCost(costs)
   const pickYear = (which: 'startYear' | 'endYear', v: string) => {
     const year = Number(v)
     const next = { ...s, [which]: year }
@@ -105,11 +112,11 @@ function Params({ s, set, data }: { readonly s: Settings; readonly set: (next: S
       <ParamRow label={SEAS.paramLabel}>
         <DropdownField label={SEAS.from} value={String(s.startYear)} options={YEARS} onChange={(v) => pickYear('startYear', v)} />
         <DropdownField label={SEAS.to} value={String(s.endYear)} options={YEARS} onChange={(v) => pickYear('endYear', v)} />
-        {instrument ? (
+        {!isHypothesis ? (
           <DropdownField label={SEAS.variant} value={s.variant ?? 'auto'} options={VARIANTS} onChange={(v) => set({ ...s, variant: v === 'auto' ? null : (v as SeasVariant) })} />
-        ) : (
-          <DropdownField label={SEAS.cost} value={String(s.cost)} options={COST_OPTIONS} onChange={(v) => set({ ...s, cost: Number(v) })} />
-        )}
+        ) : costs.length > 0 && cost !== null ? (
+          <DropdownField label={SEAS.cost} value={String(cost)} options={costOptions(costs)} onChange={(v) => set({ ...s, cost: Number(v) })} />
+        ) : null}
         {data ? <ReadOnlyValue label={SEAS.sessions}>{data.first && data.last ? `${data.sessions} (${fillCopy(SEAS.span, { first: data.first, last: data.last })})` : SEAS.noSpan}</ReadOnlyValue> : null}
       </ParamRow>
     </div>
@@ -190,7 +197,16 @@ function Body({ query, s, set, page, subject }: {
   readonly subject: string
 }) {
   const actions = usePanelActions()
-  const result = useSeasonality(query)
+  const isHypothesis = query.kind === 'hypothesis'
+  const card = useHypothesis(isHypothesis ? subject : '')
+  const recordedCosts = isHypothesis ? (card.data?.card.series_costs ?? null) : null
+  const noSeries = recordedCosts !== null && recordedCosts.length === 0
+  const cost = recordedCosts !== null ? (recordedCosts.includes(s.cost) ? s.cost : defaultCost(recordedCosts)) : s.cost
+  // A hypothesis subject is asked only once its card's recorded costs are known and non-empty: COSTS that
+  // were never recorded 404 (D19), and an empty list has nothing to draw.
+  const canQuery = !isHypothesis || (recordedCosts !== null && !noSeries) || card.error !== null
+  const effectiveQuery: SeasQuery | null = canQuery ? (isHypothesis && cost !== null ? { ...query, cost } : query) : null
+  const result = useSeasonality(effectiveQuery)
   const data = result.data
   const pageId = useId()
   const related = query.kind === 'instrument'
@@ -202,8 +218,10 @@ function Body({ query, s, set, page, subject }: {
         helpLine={SEAS.helpLine} page={page} onExport={data ? () => exportTab(data, s.tab) : undefined} actions={related} />
       <TabStrip panelId={actions.panelId} label={SEAS.tabsLabel} tabs={TABS.map((id) => ({ id, label: SEAS.tabs[id] }))}
         selected={s.tab} onSelect={(id) => set({ ...s, tab: id as SeasTab })} controls={pageId} start={TAB_START} />
-      <Params s={s} set={set} data={data} />
-      {data ? (
+      <Params s={s} set={set} data={data} isHypothesis={isHypothesis} costs={recordedCosts ?? []} />
+      {noSeries ? (
+        <p className="seas-line mkt-warn-text" role="status">{fillCopy(SEAS.noSeries, { name: subject })}</p>
+      ) : data ? (
         <div id={pageId} role="tabpanel" aria-label={SEAS.tabs[s.tab]}>
           {s.tab === 'heatmap' ? <HeatView data={data} /> : <PanelView key={s.tab} data={data} tab={s.tab} />}
           <Notes data={data} />
