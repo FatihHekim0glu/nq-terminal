@@ -302,6 +302,28 @@ describe('tear sheet of a hypothesis', () => {
     expect(tile(/^Alpha\b(?! t)/).textContent).toContain('[PRE-REG]')
     expect(screen.getAllByText('[PRE-REG]').length).toBeGreaterThan(1)
   })
+
+  it('RET draws the SV7 Sharpe difference ladder from the analytics response, with no request of its own', async () => {
+    show('RET', HYP)
+    await screen.findByText('volmanaged_v0 return distribution')
+    const sv7 = chartsOf('barladder').map((c) => c.props.data as { name: string; bars: Array<{ label: string; value: number | null }> })
+      .find((d) => d.name.includes('Sharpe difference (m - BH)'))!
+    expect(sv7.name).toBe('volmanaged_v0 Sharpe difference (m - BH) by cost, Ledoit-Wolf, annualised')
+    expect(sv7.bars.map((b) => [b.label, b.value])).toEqual([['1 tick', -0.0032012791246315434], ['2 ticks', -0.006124067750212914]])
+    expect(screen.getByRole('group', { name: 'Sharpe difference tests' })).toBeTruthy()
+    expect(urls().filter((u) => !u.startsWith('/api/analytics/hypothesis/volmanaged_v0/extended'))).toEqual([
+      '/api/hypotheses/volmanaged_v0', '/api/analytics/hypothesis/volmanaged_v0?cost=1',
+    ])
+  })
+})
+
+describe('SV7 on the tear sheet of a run', () => {
+  it('RET says the Sharpe difference tests are not recorded and draws no ladder for them', async () => {
+    show('RET', RUN)
+    await screen.findByText('nt_volmanaged_v0_fixture_m1 return distribution')
+    expect(screen.getByText('Sharpe difference (m - BH): not recorded for this series.')).toBeTruthy()
+    expect(chartsOf('barladder').some((c) => (c.props.data as { name: string }).name.includes('Sharpe difference'))).toBe(false)
+  })
 })
 
 describe('context', () => {

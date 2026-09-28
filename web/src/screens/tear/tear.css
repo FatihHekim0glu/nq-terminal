@@ -100,6 +100,16 @@
   overflow: auto;
 }
 
+/* The SV7 card sits inside the statistics' own scroll box (finding 7/8): one grid track, the card under
+   the statistics, until the tear container has room for it beside them (below, at 1180px). */
+.tear-stats-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-content: start;
+}
+.tear-sv7 { min-width: 0; }
+
 /* The top drawdowns keep room for their caption, header and 5 rows (the rest scroll in the table);
    the chart above takes what is left. */
 .tear-table {
@@ -215,6 +225,9 @@
 /* The Cornish-Fisher table has six columns: two grid tracks where the panel has room for three or more. */
 @container tear (min-width: 1180px) {
   .tear-card-span2 { grid-column: span 2; }
+  /* Room for the SV7 card beside the statistics rather than under them (finding 7/8). */
+  .tear-stats.tear-stats-sv7 { flex-basis: 728px; }
+  .tear-stats-sv7 > .tear-stats-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .tear-spent { color: var(--warn); font-weight: 700; }
 .tear-scroll { max-width: 100%; overflow: auto; }

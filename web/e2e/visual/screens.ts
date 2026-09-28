@@ -35,7 +35,8 @@ export interface ScreenCase {
   readonly code: string
   /** The charts the screen draws with the fixture data (the audit checks the count, so it is never empty). From P1
    *  the counts include the P1 figures: the cone (EQ), the QQ plot (RET), the BR4 scatter (RR), the DSR ladder (MT, and
-   *  REG through its MT panel) and a run's trade paths (MAE, MFE, holding times). */
+   *  REG through its MT panel) and a run's trade paths (MAE, MFE, holding times); a hypothesis RET also draws its SV7
+   *  Sharpe difference ladder. */
   readonly charts: number
 }
 
@@ -63,7 +64,7 @@ export const SCREENS: readonly ScreenCase[] = [
   { name: 'EQ-run', line: 'smoke_2015_01 EQ', code: 'EQ', charts: 4 },
   { name: 'EQ', line: `${HYP} EQ`, code: 'EQ', charts: 2 },
   { name: 'DD', line: `${HYP} DD`, code: 'DD', charts: 1 },
-  { name: 'RET', line: `${HYP} RET`, code: 'RET', charts: 2 },
+  { name: 'RET', line: `${HYP} RET`, code: 'RET', charts: 3 },
   { name: 'RR', line: `${HYP} RR`, code: 'RR', charts: 1 },
   { name: 'RR-run', line: 'nt_dtsmom_v0_fixture_ts1 RR', code: 'RR', charts: 4 },
   { name: 'MRET', line: `${HYP} MRET`, code: 'MRET', charts: 2 },

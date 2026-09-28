@@ -1,17 +1,18 @@
 // The five tab views (look spec 7.5). Each names its basis and unit on a line above its chart, from
 // the API section it draws. EQ: equity against the benchmark. DD: equity over the underwater curve,
-// then the top drawdowns. RET: the return histogram with its normal fit and VaR lines, beside the
-// statistics panel. RR: rolling Sharpe over rolling volatility. MRET: the year by month heat map,
-// then the yearly totals (a house addition, labelled so).
+// then the top drawdowns. RET: the return histogram with its normal fit and VaR lines, beside the one
+// statistics scroll box, which also holds the SV7 Sharpe difference card. RR: rolling Sharpe over rolling volatility.
+// MRET: the year by month heat map, then the yearly totals (a house addition, labelled so).
 import { Fragment, useId, useMemo, type JSX, type ReactNode } from 'react'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Distribution } from '../../charts/echarts/Distribution'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import LineStack from '../../charts/LineStack'
 import { ROVING_ATTR, ROVING_SCROLL_ATTR } from '../../chrome/WorkspaceFocus'
-import { TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
+import { TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
+import { Card } from './TearCard'
 import type { TearCode } from './TearSheet'
 import {
   basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, yearlyLadder,
@@ -19,6 +20,7 @@ import {
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
 import type { Analytics } from './tearKpis'
+import { readSv7, sv7Empty, sv7Ladder, sv7Notes, sv7Table, sv7Title, type Sv7 } from './tearSv7Model'
 import '../../grids/grid.css'
 
 interface ViewProps {
@@ -125,38 +127,118 @@ function DdView({ data, name, link }: ViewProps) {
   )
 }
 
-function StatsTable({ data }: { readonly data: Analytics }) {
+/**
+ * `note`: SV7's line when the series has no Sharpe difference card, under the validity notes. `children`:
+ * the SV7 card (Sv7Card), placed beside the statistics inside the same scroll box, so RET keeps exactly one
+ * scrolling region and one keyboard Tab stop (WCAG 2.1.1; axe scrollable-region-focusable). With no children
+ * this renders exactly as it did before the card existed.
+ */
+function StatsTable({ data, note, children }: { readonly data: Analytics; readonly note: string | null; readonly children?: ReactNode }) {
   const sections = useMemo(() => statsSections(data), [data])
-  return (
-    <ScrollRegion className="tear-stats" label={TEAR_RET.statsLabel}>
-      <table className="nqt-grid">
-        <caption className="sr-only">{TEAR_RET.statsLabel}</caption>
-        <colgroup>
-          <col />
-          <col className="tear-col-value" />
-        </colgroup>
-        {sections.map((s) => (
-          <tbody key={s.id}>
-            <tr className="band-row"><th scope="colgroup" colSpan={2} className="tear-band">{s.title}</th></tr>
-            {s.rows.map((r) => (
-              <tr key={r.id}>
-                <th scope="row" className="name tear-rowhead">{r.label}</th>
-                <td className="num tear-value">{r.value}</td>
-              </tr>
-            ))}
-          </tbody>
-        ))}
-      </table>
+  const table = (
+    <table className="nqt-grid">
+      <caption className="sr-only">{TEAR_RET.statsLabel}</caption>
+      <colgroup>
+        <col />
+        <col className="tear-col-value" />
+      </colgroup>
+      {sections.map((s) => (
+        <tbody key={s.id}>
+          <tr className="band-row"><th scope="colgroup" colSpan={2} className="tear-band">{s.title}</th></tr>
+          {s.rows.map((r) => (
+            <tr key={r.id}>
+              <th scope="row" className="name tear-rowhead">{r.label}</th>
+              <td className="num tear-value">{r.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
+  )
+  const notes = (
+    <>
       {statsNotes(data).map((note) => <p key={note} className="tear-note">{note}</p>)}
       {data.validity.psr.at_benchmark_note ? (
         <p className="tear-note">{fillCopy(TEAR_RET.psrBenchNote, { note: data.validity.psr.at_benchmark_note })}</p>
       ) : null}
+      {note ? <p className="tear-note">{note}</p> : null}
+    </>
+  )
+  if (!children) {
+    return (
+      <ScrollRegion className="tear-stats" label={TEAR_RET.statsLabel}>
+        {table}
+        {notes}
+      </ScrollRegion>
+    )
+  }
+  return (
+    <ScrollRegion className="tear-stats tear-stats-sv7" label={TEAR_RET.statsLabel}>
+      <div className="tear-stats-cols">
+        <div className="tear-stats-main">
+          {table}
+          {notes}
+        </div>
+        {children}
+      </div>
     </ScrollRegion>
+  )
+}
+
+/**
+ * SV7 (ANALYTICS_CATALOG SV7 and C4): the screen file's Sharpe difference tests per cost. It sits in the
+ * statistics' own scroll box (StatsTable), under the statistics in a narrow sheet and beside them where
+ * the sheet is at least 1180px wide (tear.css @container tear (min-width: 1180px)), so RET stays one
+ * scrolling region with one keyboard Tab stop. It is a group, not a region: the statistics' ScrollRegion
+ * is the panel's only landmark and its only roving scroll stop. The Ledoit-Wolf points are bars with their
+ * 90% intervals as whiskers; the table under them has every measure per cost. The tag is the one the API
+ * gives the validity rows (PSR, MinTRL): the series tag.
+ */
+function Sv7Card({ sv7, tag, name }: { readonly sv7: Sv7; readonly tag: string; readonly name: string }) {
+  const ladder = useMemo(() => sv7Ladder(sv7, name), [sv7, name])
+  const table = useMemo(() => sv7Table(sv7), [sv7])
+  const chartId = useChartId('tear-sv7')
+  const title = sv7Title(sv7)
+  const span = table.columns.length + 1
+  return (
+    <div className="tear-sv7" role="group" aria-label={TEAR_SV7.regionLabel}>
+      <Card title={title} tag={tag}>
+        <p className="tear-basis">{TEAR_SV7.basis}</p>
+        <div className="tear-chart tear-chart-short"><BarLadder data={ladder} chartId={chartId} /></div>
+        <table className="nqt-grid">
+          <caption className="sr-only">{fillCopy(TEAR_SV7.caption, { label: title })}</caption>
+          <colgroup>
+            <col />
+            {table.columns.map((c) => <col key={c.id} className="tear-col-value" />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">{TEAR_SV7.measure}</th>
+              {table.columns.map((c) => <th key={c.id} scope="col" className="num">{c.label}</th>)}
+            </tr>
+          </thead>
+          {table.sections.map((s) => (
+            <tbody key={s.id}>
+              {s.title ? <tr className="band-row"><th scope="colgroup" colSpan={span} className="tear-band">{s.title}</th></tr> : null}
+              {s.rows.map((r) => (
+                <tr key={r.id}>
+                  <th scope="row" className="name tear-rowhead">{r.label}</th>
+                  {r.values.map((v, i) => <td key={table.columns[i]?.id ?? i} className="num tear-value">{v}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+        <p className="tear-note">{TEAR_SV7.pNote}</p>
+        {sv7Notes(sv7).map((note) => <p key={note} className="tear-note">{note}</p>)}
+      </Card>
+    </div>
   )
 }
 
 function RetView({ data, name }: ViewProps) {
   const input = useMemo(() => distributionInput(data, name), [data, name])
+  const sv7 = useMemo(() => readSv7(data.validity.sharpe_difference_tests), [data])
   const chartId = useChartId('tear-dist')
   const h = data.distribution.histogram
   return (
@@ -165,7 +247,9 @@ function RetView({ data, name }: ViewProps) {
       {data.distribution.series.t.length > 0 ? <p className="tear-basis">{fillCopy(TEAR_RET.seriesNote, { unit: displayUnit(data.distribution.series.unit) })}</p> : null}
       <div className="tear-split">
         <div className="tear-chart">{input ? <Distribution data={input} chartId={chartId} /> : null}</div>
-        <StatsTable data={data} />
+        <StatsTable data={data} note={sv7Empty(sv7)}>
+          {sv7.rows.length > 0 ? <Sv7Card sv7={sv7} tag={data.tag} name={name} /> : null}
+        </StatsTable>
       </div>
     </>
   )

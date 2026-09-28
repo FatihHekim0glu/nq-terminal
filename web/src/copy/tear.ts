@@ -165,6 +165,49 @@ export const TEAR_RET = {
   psrBenchNote: 'Note: {note}.',
 } as const
 
+/**
+ * SV7 on RET (ANALYTICS_CATALOG SV7 and C4): the Ledoit-Wolf and Memmel tests of the Sharpe difference
+ * against buy and hold, read from the screen file per cost and never recomputed. `title` is the fallback
+ * when the rows do not share the file's own label.
+ */
+export const TEAR_SV7 = {
+  title: 'Sharpe difference (m - BH)',
+  regionLabel: 'Sharpe difference tests',
+  basis: "Read from the screen file, never recomputed: the annualised Sharpe of the strategy minus buy and hold's, per cost in ticks per side, on the file's own sample (Observations below).",
+  chartName: '{name} {label} by cost, Ledoit-Wolf, annualised',
+  ci: '90% interval (Ledoit-Wolf bootstrap)',
+  caption: '{label} by cost, as the screen file records it',
+  cost: '{n} tick',
+  costPlural: '{n} ticks',
+  measure: 'Measure',
+  bands: {
+    lw: 'Ledoit-Wolf, annualised',
+    memmel: 'Memmel',
+    provenance: 'Provenance (Ledoit-Wolf bootstrap)',
+  },
+  rows: {
+    headline: 'Screen headline',
+    point: 'Difference',
+    se: 'Standard error',
+    lo: '90% low',
+    hi: '90% high',
+    lwP: 'Ledoit-Wolf p',
+    z: 'Memmel z',
+    rho: 'Memmel rho',
+    memmelP: 'Memmel p',
+    block: 'Block length',
+    reps: 'Replications',
+    seed: 'Seed',
+    n: 'Observations',
+  },
+  pNote: "Both p-values are one-sided, on the file's whole sample, never on a slice.",
+  notRecorded: 'Sharpe difference (m - BH): not recorded for this series.',
+  droppedOne: '1 entry in another shape was left out.',
+  dropped: '{n} entries in another shape were left out.',
+  allDroppedOne: 'Sharpe difference (m - BH): 1 entry in another shape was left out, so nothing is drawn.',
+  allDropped: 'Sharpe difference (m - BH): {n} entries in another shape were left out, so nothing is drawn.',
+} as const
+
 export const TEAR_BOOKS = {
   heading: 'Run books',
   headingLabel: 'Run books of {run}',
@@ -231,4 +274,5 @@ export const TEAR_GALLERY = {
   runTitle: 'Tear sheet of a run',
   hypothesisTitle: 'Tear sheet of a hypothesis',
   unusableTitle: 'Tear sheet of an unusable run',
+  sv7Title: 'Returns tab of a hypothesis with its Sharpe difference card',
 } as const
