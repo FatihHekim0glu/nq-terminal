@@ -40,7 +40,7 @@ const REFERENCES = path.join(NQ_LAB, 'design_refs', ['b', 'bg'].join(''))
 
 // Build output, installed packages and test output: generated, never committed.
 const SKIP_DIRS = new Set([
-  'node_modules', 'dist', 'dist-gallery', '.venv', '__pycache__', '.pytest_cache', '.ruff_cache', '.vite',
+  'node_modules', 'dist', 'dist-gallery', 'dist-demo', '.venv', '__pycache__', '.pytest_cache', '.ruff_cache', '.vite',
   'test-results', 'playwright-report', 'blob-report', '.results', 'coverage', 'htmlcov', '.dumps', '.git',
 ])
 const BINARY = /\.(woff2?|ttf|otf|eot|png|jpe?g|gif|webp|ico|pdf|parquet|zip|gz|pyc)$/i

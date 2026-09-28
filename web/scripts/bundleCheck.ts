@@ -5,9 +5,10 @@
 //   3. each library's code sits in exactly one chunk, named after its group in vite.config.ts;
 //   4. each library chunk stays under its gzip budget (ECharts must stay tree-shaken);
 //   5. a production build holds no gallery code at all (a gallery build must hold it);
-//   6. React's code sits in the react chunk, so no library chunk is needed to boot the shell.
+//   6. React's code sits in the react chunk, so no library chunk is needed to boot the shell;
+//   7. a production build holds no demo code and no fixture data (a demo build must hold both).
 // Library code is found by strings only the library itself contains.
-// Usage: node scripts/bundleCheck.ts <dist dir> [--gallery]
+// Usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -42,6 +43,19 @@ export const REACT_MARKER = 'react.transitional.element'
 
 export const GALLERY_MARKERS: readonly string[] = ['__gallery', 'data-gallery-state', 'nqt-gallery']
 
+/**
+ * The demo boot's marker (src/demo/boot.tsx), and a run id found only in the fixture captures the demo
+ * serves (runs, tear and home fixtures; absent from the production dist when this rule was added). The
+ * captures say "test files only": the demo chunk is the one place outside tests allowed to hold them.
+ */
+export const DEMO_MARKERS: readonly string[] = ['nqt-demo', 'nt_volmanaged_v0_fixture_m1']
+
+export interface BundleOptions {
+  readonly gallery: boolean
+  /** A demo build (`vite build --mode demo`): it must hold every demo marker. */
+  readonly demo?: boolean
+}
+
 export interface BundleReport {
   /** JS files that load with the page, before any dynamic import. */
   readonly initial: readonly string[]
@@ -50,6 +64,8 @@ export interface BundleReport {
   readonly libraries: Readonly<Partial<Record<LibraryName, readonly string[]>>>
   readonly libraryGzip: Readonly<Partial<Record<LibraryName, number>>>
   readonly galleryFiles: readonly string[]
+  /** Files holding any demo marker. */
+  readonly demoFiles: readonly string[]
   readonly violations: readonly string[]
 }
 
@@ -98,7 +114,20 @@ function checkLibraries(js: ReadonlyMap<string, string>, initial: ReadonlySet<st
   return { libraries, libraryGzip, violations }
 }
 
-export function analyseBundle(distDir: string, opts: { readonly gallery: boolean }): BundleReport {
+/** Rule 7: none of the demo markers in production; each of them somewhere in a demo build. */
+function checkDemo(files: ReadonlyArray<readonly [string, string]>, opts: BundleOptions) {
+  const demoFiles = files.filter(([, t]) => DEMO_MARKERS.some((m) => t.includes(m))).map(([f]) => f)
+  const violations: string[] = []
+  if (opts.demo) {
+    const missing = DEMO_MARKERS.filter((m) => !files.some(([, t]) => t.includes(m)))
+    if (missing.length > 0) violations.push(`demo build lacks ${missing.join(', ')}`)
+  } else if (!opts.gallery && demoFiles.length > 0) {
+    violations.push(`production bundle holds demo code or fixture data: ${demoFiles.join(', ')}`)
+  }
+  return { demoFiles, violations }
+}
+
+export function analyseBundle(distDir: string, opts: BundleOptions): BundleReport {
   const assets = path.join(distDir, 'assets')
   const names = readdirSync(assets)
   const text = new Map(names.filter((n) => /\.(js|css)$/.test(n)).map((n) => [n, readFileSync(path.join(assets, n), 'utf-8')]))
@@ -107,26 +136,26 @@ export function analyseBundle(distDir: string, opts: { readonly gallery: boolean
   const initial = initialGraph((f) => js.get(f) ?? '', entryFiles(html))
   const shellGzip = initial.reduce((sum, f) => sum + gzipSize(js.get(f) ?? ''), 0)
   const libs = checkLibraries(js, new Set(initial))
-  const galleryFiles = [...text.entries(), ['index.html', html] as const]
-    .filter(([, t]) => GALLERY_MARKERS.some((m) => t.includes(m)))
-    .map(([f]) => f)
-  const violations = [...libs.violations]
+  const files = [...text.entries(), ['index.html', html] as const]
+  const galleryFiles = files.filter(([, t]) => GALLERY_MARKERS.some((m) => t.includes(m))).map(([f]) => f)
+  const demo = checkDemo(files, opts)
+  const violations = [...libs.violations, ...demo.violations]
   for (const [f, t] of js) {
     if (t.includes(REACT_MARKER) && !f.startsWith('react-')) violations.push(`react code is in ${f}, outside its own react-*.js chunk`)
   }
   if (shellGzip > BUNDLE_BUDGET.shellGzip) violations.push(`shell JS is ${shellGzip} bytes gzip, over its ${BUNDLE_BUDGET.shellGzip} budget`)
   if (!opts.gallery && galleryFiles.length > 0) violations.push(`production bundle holds gallery code: ${galleryFiles.join(', ')}`)
   if (opts.gallery && galleryFiles.length === 0) violations.push('gallery build holds no gallery code')
-  return { initial, shellGzip, libraries: libs.libraries, libraryGzip: libs.libraryGzip, galleryFiles, violations }
+  return { initial, shellGzip, libraries: libs.libraries, libraryGzip: libs.libraryGzip, galleryFiles, demoFiles: demo.demoFiles, violations }
 }
 
 function main(argv: readonly string[]): number {
   const dir = argv[0]
   if (dir === undefined) {
-    process.stderr.write('usage: node scripts/bundleCheck.ts <dist dir> [--gallery]\n')
+    process.stderr.write('usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]\n')
     return 2
   }
-  const report = analyseBundle(path.resolve(dir), { gallery: argv.includes('--gallery') })
+  const report = analyseBundle(path.resolve(dir), { gallery: argv.includes('--gallery'), demo: argv.includes('--demo') })
   const kb = (n: number) => `${(n / 1000).toFixed(1)} kB`
   process.stdout.write(`bundle check: shell ${kb(report.shellGzip)} gzip of ${kb(BUNDLE_BUDGET.shellGzip)} (${report.initial.join(', ')})\n`)
   for (const [lib, size] of Object.entries(report.libraryGzip)) {

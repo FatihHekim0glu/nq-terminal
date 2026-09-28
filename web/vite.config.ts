@@ -12,6 +12,18 @@ const API_ORIGIN = 'http://127.0.0.1:8765'
 export const GALLERY_MODE = 'gallery'
 export const GALLERY_OUT_DIR = 'dist-gallery'
 
+// `vite --mode demo` (`pnpm demo`, on port 5174) and `vite build --mode demo` (`pnpm build:demo`) run the
+// terminal on fixture data answered in the browser (src/demo), with no backend, so the demo has no /api
+// proxy. It builds to dist-demo; a production build has no demo code (checked by scripts/bundleCheck.ts).
+export const DEMO_MODE = 'demo'
+export const DEMO_OUT_DIR = 'dist-demo'
+
+/** Each build writes to its own folder, so neither the gallery nor the demo can replace the production dist. */
+export function outDirFor(mode: string): string {
+  if (mode === GALLERY_MODE) return GALLERY_OUT_DIR
+  return mode === DEMO_MODE ? DEMO_OUT_DIR : 'dist'
+}
+
 /** Matches a file inside one of the named packages, in a flat or a pnpm node_modules. */
 function nodeModule(names: string): RegExp {
   return new RegExp(String.raw`[\\/]node_modules[\\/](\.pnpm[\\/])?(${names})[@\\/+]`)
@@ -51,7 +63,7 @@ export const CHUNK_GROUPS = [
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
   build: {
-    outDir: mode === GALLERY_MODE ? GALLERY_OUT_DIR : 'dist',
+    outDir: outDirFor(mode),
     emptyOutDir: true,
     // Never inline assets as data: URIs. The backend CSP falls back to default-src 'self' for fonts,
     // so an inlined woff2 would be blocked. Self-hosted files only.
@@ -72,7 +84,7 @@ export default defineConfig(({ mode }) => ({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
-    proxy: { '/api': API_ORIGIN },
+    proxy: mode === DEMO_MODE ? undefined : { '/api': API_ORIGIN },
   },
   preview: {
     host: '127.0.0.1',

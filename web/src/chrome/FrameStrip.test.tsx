@@ -53,6 +53,22 @@ describe('FrameStrip: the 37px frame and layout tab strip (spec 4.2)', () => {
     expect(within(safety).getByText('NO ORDER PATH')).toBeTruthy()
   })
 
+  it('shows DEMO DATA in the Safety group only when the demo marked the page (src/demo/boot.tsx)', () => {
+    setup()
+    const safety = screen.getByRole('group', { name: FRAME_STRIP.safetyLabel })
+    expect(within(safety).queryByText(FRAME_STRIP.demoData)).toBeNull()
+    expect(within(safety).getAllByText(/./).map((f) => f.textContent)).toEqual(['READ ONLY', 'NO ORDER PATH'])
+    cleanup()
+    document.documentElement.dataset.demo = 'on'
+    try {
+      setup()
+      const demo = screen.getByRole('group', { name: FRAME_STRIP.safetyLabel })
+      expect(within(demo).getAllByText(/./).map((f) => f.textContent)).toEqual(['READ ONLY', 'NO ORDER PATH', 'DEMO DATA'])
+    } finally {
+      delete document.documentElement.dataset.demo
+    }
+  })
+
   it('Options opens the tape switch and the colour schemes', () => {
     const { onTape, onScheme } = setup()
     const options = screen.getByRole('button', { name: FRAME_STRIP.options })

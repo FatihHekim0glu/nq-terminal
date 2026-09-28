@@ -37,6 +37,11 @@ if (import.meta.env.MODE === 'gallery') {
       throw err
     },
   )
+} else if (import.meta.env.MODE === 'demo') {
+  // The demo (`pnpm demo`, `pnpm build:demo`): the terminal on fixture data answered in the browser, with no
+  // backend (src/demo/boot.tsx). Folded away like the gallery in a production build. If the demo chunk fails
+  // to load, nothing renders: the terminal without its demo layer would look live with no backend behind it.
+  void import('./demo/boot').then((demo) => demo.bootDemo(() => renderApp(root)))
 } else {
   renderApp(root)
 }

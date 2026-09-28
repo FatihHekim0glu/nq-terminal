@@ -1,8 +1,8 @@
 // FrameStrip (spec 4.1 and 4.2): the 37px light-grey frame strip at the top of the window. An 8px top
 // margin, then one 29px tab per layout (HOME, RESEARCH, LIVE, +); the active tab is dark and merges into
 // the key toolbar, with a bold mnemonic then its title. On the right the READ ONLY and NO ORDER PATH
-// chips, always shown, and `≡ Options` (event tape, colour scheme). No window glyphs: the browser tab
-// has its own.
+// chips, always shown, then DEMO DATA in the demo only (src/demo/boot.tsx marks the page), and
+// `≡ Options` (event tape, colour scheme). No window glyphs: the browser tab has its own.
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import { FRAME_STRIP } from '../copy/chrome'
@@ -55,6 +55,11 @@ function Tab({ id, label, title, active, onClick }: TabProps) {
 
 const SCHEMES: readonly ColourScheme[] = ['standard', 'deut', 'prot']
 
+/** Whether the demo boot marked the page (data-demo="on"): every answer is then fixture data. */
+function isDemo(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.demo === 'on'
+}
+
 function Options({ tapeOn, scheme, onTape, onScheme }: Pick<FrameStripProps, 'tapeOn' | 'scheme' | 'onTape' | 'onScheme'>) {
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
@@ -103,6 +108,7 @@ export function FrameStrip(props: FrameStripProps) {
         <div className="frame-flags" role="group" aria-label={FRAME_STRIP.safetyLabel}>
           <span className="frame-flag">{FRAME_STRIP.readOnly}</span>
           <span className="frame-flag">{FRAME_STRIP.noOrderPath}</span>
+          {isDemo() ? <span className="frame-flag" data-flag="demo">{FRAME_STRIP.demoData}</span> : null}
         </div>
         <Options tapeOn={props.tapeOn} scheme={props.scheme} onTape={props.onTape} onScheme={props.onScheme} />
       </div>

@@ -13,6 +13,8 @@ export const FRAME_STRIP = {
   safetyLabel: 'Safety',
   readOnly: 'READ ONLY',
   noOrderPath: 'NO ORDER PATH',
+  /** Shown only in the demo (`pnpm demo`), where every answer is fixture data served in the browser. */
+  demoData: 'DEMO DATA',
   options: 'Options',
   optionsGlyph: '≡',
   tape: 'Event tape',

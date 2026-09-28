@@ -178,6 +178,8 @@ describe('GET only (PRD G6, DL5)', () => {
     expect(files).toContain('/src/api/client.ts')
     expect(files).toContain('/src/App.tsx')
     expect(files.some((f) => f.startsWith('/src/chrome/'))).toBe(true)
+    // The demo replaces the page's fetch and EventSource (src/demo/boot.tsx): its modules are scanned too.
+    expect(files).toEqual(expect.arrayContaining(['/src/demo/boot.tsx', '/src/demo/fetch.ts', '/src/demo/stream.ts']))
     const findings = Object.entries(sources).flatMap(([file, text]) => findWriteRequests(file, text))
     expect(findings).toEqual([])
   })
@@ -215,6 +217,41 @@ describe('GET only (PRD G6, DL5)', () => {
   it('lets the client open the one event stream (a GET), and flags it anywhere else', () => {
     expect(findWriteRequests('/src/api/client.ts', "new EventSource(url)")).toEqual([])
     expect(findWriteRequests('/src/api/liveStream.ts', "new EventSource(url)")).toEqual([expect.stringMatching(/EventSource/)])
+  })
+})
+
+describe('the demo import boundary', () => {
+  /** Every module specifier a file imports or re-exports, relative ones resolved against `file`, kept only
+   * when they resolve under /src/demo/ (a static import that would carry demo code past the lazy MODE gate). */
+  function demoImports(file: string, text: string): string[] {
+    const specs: string[] = []
+    for (const m of text.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) specs.push(m[1]!)
+    for (const m of text.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) specs.push(m[1]!)
+    for (const m of text.matchAll(/(^|[\n;{}])\s*import\s+['"]([^'"]+)['"]/g)) specs.push(m[2]!)
+    return specs
+      .filter((spec) => spec.startsWith('.'))
+      .map((spec) => new URL(spec, `file://${file}`).pathname)
+      .filter((resolved) => resolved.startsWith('/src/demo/'))
+  }
+
+  it('is never imported by app code outside src/demo, except the lazy boot in main.tsx', () => {
+    for (const [file, text] of Object.entries(sources)) {
+      if (file.startsWith('/src/demo/') || file === '/src/main.tsx') continue
+      expect(demoImports(file, text), file).toEqual([])
+    }
+  })
+
+  it("main.tsx reaches the demo only through the dynamic import('./demo/boot'), never a static import", () => {
+    const text = sources['/src/main.tsx']!
+    expect(demoImports('/src/main.tsx', text)).toEqual(['/src/demo/boot'])
+    expect(text).not.toMatch(/\bfrom\s+['"]\.\/demo/)
+  })
+
+  it('born failing: flags a static import and a re-export that reach into src/demo from elsewhere', () => {
+    expect(demoImports('/src/screens/x/Screen.tsx', "import { DemoEventSource } from '../../demo/stream'"))
+      .toEqual(['/src/demo/stream'])
+    expect(demoImports('/src/chrome/X.ts', "export { bars } from '../demo/data/market'"))
+      .toEqual(['/src/demo/data/market'])
   })
 })
 

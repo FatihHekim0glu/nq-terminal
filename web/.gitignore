@@ -3,3 +3,4 @@ dist
 *.tsbuildinfo
 e2e/.results
 dist-gallery
+dist-demo
