@@ -148,16 +148,27 @@ describe('chart CSS (ChartA11y.css and theme/chart.css)', () => {
   })
 
   it('styles the table view like a grid: 20px header on --th-bg with a --th-rule top, amber labels, --text numbers', () => {
-    expect(a11yCss).toMatch(/\.chart-a11y-table th\s*\{[^}]*background:\s*var\(--th-bg\)/)
-    expect(a11yCss).toMatch(/\.chart-a11y-table th\s*\{[^}]*border-top:\s*1px solid var\(--th-rule\)/)
-    expect(a11yCss).toMatch(/\.chart-a11y-table td\s*\{[^}]*color:\s*var\(--data\)/)
-    expect(a11yCss).toMatch(/\.chart-a11y-table td\.num\s*\{[^}]*color:\s*var\(--text\)/)
+    // D38: the sticky background and border are the column headers' alone (thead), not a row header
+    // in the body, which is styled like the data cell it replaces (the next two assertions).
+    expect(a11yCss).toMatch(/\.chart-a11y-table thead th\s*\{[^}]*background:\s*var\(--th-bg\)/)
+    expect(a11yCss).toMatch(/\.chart-a11y-table thead th\s*\{[^}]*border-top:\s*1px solid var\(--th-rule\)/)
+    // A row header (<th scope="row">, D38) shares the plain cell's declaration block (one comma-separated
+    // selector list), so it always carries the same amber and --text-on-numeric colours a td does.
+    expect(a11yCss).toMatch(/\.chart-a11y-table td\s*[,{][^}]*color:\s*var\(--data\)/)
+    expect(a11yCss).toMatch(/\.chart-a11y-table td\.num\s*[,{][^}]*color:\s*var\(--text\)/)
     expect(a11yCss).toMatch(/font-variant-numeric:\s*tabular-nums lining-nums/)
   })
 
+  it('right-aligns a numeric row header the same as a numeric data cell (D38)', () => {
+    // tbody th[scope="row"] alone beats .num on specificity, so a numeric first column (a rowheader
+    // cell carrying both classes) must have its own, more specific right-align rule.
+    expect(a11yCss).toMatch(/tbody th\[scope="row"\]\.num[^{]*\{[^}]*text-align:\s*right/)
+  })
+
   it('lifts muted and down text inside a hovered table cell (4.12)', () => {
-    expect(a11yCss).toMatch(/\.chart-a11y-table tbody td:hover\s*\{[^}]*--muted:\s*var\(--muted-hover\)/)
-    expect(a11yCss).toMatch(/\.chart-a11y-table tbody td:hover\s*\{[^}]*--c-down:\s*var\(--c-down-hover\)/)
+    // Shared with a hovered row header (D38), same comma-separated rule.
+    expect(a11yCss).toMatch(/\.chart-a11y-table tbody td:hover\s*[,{][^}]*--muted:\s*var\(--muted-hover\)/)
+    expect(a11yCss).toMatch(/\.chart-a11y-table tbody td:hover\s*[,{][^}]*--c-down:\s*var\(--c-down-hover\)/)
   })
 
   it('gives the legend its dark box, 13px swatch column and 3px corner', () => {

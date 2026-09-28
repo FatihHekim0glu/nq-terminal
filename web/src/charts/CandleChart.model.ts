@@ -128,10 +128,16 @@ export function scrollIntoView(range: LogicalRange, index: number, margin = 0.5)
   return range
 }
 
-/** The keyboard crosshair after a step: the first press lands on the last visible bar. */
+/**
+ * The keyboard crosshair after a step: the first press lands on the last visible bar. Null both when
+ * there is nothing to step over and when the crosshair is already at the edge the step would clamp
+ * to (D35): a caller that only prevents default when this moved gives Left and Right back to the
+ * panel at the ends, the way LineStack does.
+ */
 export function stepIndex(current: number | null, delta: number, count: number, range: LogicalRange | null): number | null {
   if (count === 0) return null
   if (current === null) return clamp(Math.floor(range?.to ?? count - 1), 0, count - 1)
+  if ((delta < 0 && current === 0) || (delta > 0 && current === count - 1)) return null
   return clamp(current + delta, 0, count - 1)
 }
 

@@ -155,7 +155,7 @@ export function xyScatterTable(input: XyScatterInput): ChartTable {
   const points = cleanPoints(input.points)
   const labelled = points.some((p) => p.label !== undefined)
   const columns: ChartColumn[] = [
-    ...(labelled ? [{ key: 'label', label: XY_SCATTER.colPoint }] : []),
+    ...(labelled ? [{ key: 'label', label: XY_SCATTER.colPoint, rowHeader: true }] : []),
     { key: 'x', label: input.x.label, numeric: true },
     { key: 'y', label: input.y.label, numeric: true },
     ...(input.kinds ? [{ key: 'kind', label: XY_SCATTER.colKind }] : []),

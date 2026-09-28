@@ -144,4 +144,10 @@ describe('describePScatter and pScatterTable', () => {
     expect(table.rows[0]).toEqual({ rank: 1, label: 'overnight_v0', p: '0.0010', bonferroni: '0.0100', holm: '0.0100', bh: '0.0100', passes: 'Bonferroni, Holm, BH' })
     expect(table.rows[4]!.passes).toBe('none')
   })
+
+  it('flags the hypothesis name column as the row header, not the numeric rank column (D38)', () => {
+    const table = pScatterTable(input)
+    expect(table.columns.find((c) => c.key === 'rank')?.rowHeader).toBeFalsy()
+    expect(table.columns.find((c) => c.key === 'label')?.rowHeader).toBe(true)
+  })
 })

@@ -81,14 +81,19 @@ const WEEK_KEYS: Readonly<Record<string, number>> = { PageUp: -1, PageDown: 1 }
 const STEP_KEYS: Readonly<Record<string, number>> = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }
 
 /** The date a key moves the calendar's readout to (`dates` ascending): arrows one session, Page Up and Page Down
- *  one week (the nearest session on or after, or on or before), Home and End the ends; null for other keys. */
+ *  one week (the nearest session on or after, or on or before), Home and End the ends; null for other keys, and
+ *  (D37) for an arrow that would step past the first or last date, so the panel's roving focus can take the key. */
 export function keyStep(dates: readonly string[], current: string | null, key: string): string | null {
   if (dates.length === 0) return null
   const last = dates.length - 1
   if (key === 'Home') return dates[0]!
   if (key === 'End') return dates[last]!
   const at = current === null ? -1 : dates.indexOf(current)
-  if (key in STEP_KEYS) return at < 0 ? dates[0]! : dates[Math.min(last, Math.max(0, at + STEP_KEYS[key]!))]!
+  if (key in STEP_KEYS) {
+    if (at < 0) return dates[0]!
+    const next = at + STEP_KEYS[key]!
+    return next < 0 || next > last ? null : dates[next]!
+  }
   if (!(key in WEEK_KEYS)) return null
   if (at < 0) return dates[0]!
   const sign = WEEK_KEYS[key]!

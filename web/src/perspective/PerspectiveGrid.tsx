@@ -13,7 +13,7 @@ import type { PivotPreset } from './datasets'
 import { loadPerspective } from './engine'
 import { mountViewer, releaseViewer, withTimeout, type MountViewerElement, type PivotTiming, type TableHandle } from './mount'
 import type { PspColumnar, PspSchema } from './schema'
-import { applyScroll, deepQuery, scrollStep } from './scroll'
+import { applyScroll, canScrollHorizontally, deepQuery, scrollStep } from './scroll'
 import '@perspective-dev/viewer/dist/css/pro-dark.css'
 import './perspective.css'
 
@@ -109,7 +109,15 @@ export default function PerspectiveGrid(props: PerspectiveGridProps) {
     if (e.target !== e.currentTarget) return
     const table = host.current ? deepQuery(host.current, 'regular-table') : null
     const step = scrollStep(e.key, table?.clientHeight ?? 0, e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
+    // D36: ArrowLeft and ArrowRight already at their horizontal end are left to usePanelRoving, so
+    // the Show as [Table | Pivot grid] toggle (the accessible alternative) is reachable by keyboard.
+    // Only a fresh press gives the key back; an auto-repeat at the edge is swallowed instead, or
+    // holding the key walks focus on through every other roving control once focus first hands off.
     if (!table || !step) return
+    if (!canScrollHorizontally(e.key, table)) {
+      if (e.repeat) e.preventDefault()
+      return
+    }
     e.preventDefault()
     applyScroll(table, step)
   }

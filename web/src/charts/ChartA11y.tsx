@@ -18,6 +18,15 @@ export interface ChartColumn {
   readonly label: string
   /** Numbers are right-aligned in tabular figures. */
   readonly numeric?: boolean
+  /**
+   * Renders as `<th scope="row">` instead of `<td>` in the table view, so a screen reader moving
+   * down a column also announces the row it is in (WCAG 1.3.1). The first column is the row header
+   * only as a default, when no column sets this explicitly (heatmapTable's `row`, stackTable's and
+   * candleTable's `time`). A table whose naming column is not first (a numeric column leads, e.g.
+   * pScatterModel's rank, coneModel's step) flags that naming column instead (D38), so the row header
+   * is always the column that identifies the row, not whichever one happens to be first.
+   */
+  readonly rowHeader?: boolean
 }
 
 export interface ChartTable {
@@ -50,7 +59,15 @@ const TOGGLE_KEY = 't'
 const roving = { [ROVING_ATTR]: '' }
 const rovingDefault = { ...roving, [ROVING_DEFAULT_ATTR]: '' }
 
+/** The columns rendered as `<th scope="row">` in the body: the ones flagged, or else the first. */
+function rowHeaderKeys(columns: readonly ChartColumn[]): ReadonlySet<string> {
+  const flagged = columns.filter((c) => c.rowHeader === true)
+  if (flagged.length > 0) return new Set(flagged.map((c) => c.key))
+  return new Set(columns.length > 0 ? [columns[0]!.key] : [])
+}
+
 function DataTable({ table }: { readonly table: ChartTable }) {
+  const headerKeys = rowHeaderKeys(table.columns)
   return (
     <table className="chart-a11y-table">
       <caption>{table.caption}</caption>
@@ -64,9 +81,13 @@ function DataTable({ table }: { readonly table: ChartTable }) {
       <tbody>
         {table.rows.map((row, i) => (
           <tr key={i}>
-            {table.columns.map((c) => (
-              <td key={c.key} className={c.numeric ? 'num' : undefined}>{row[c.key] ?? ''}</td>
-            ))}
+            {table.columns.map((c) =>
+              headerKeys.has(c.key) ? (
+                <th key={c.key} scope="row" className={c.numeric ? 'num' : undefined}>{row[c.key] ?? ''}</th>
+              ) : (
+                <td key={c.key} className={c.numeric ? 'num' : undefined}>{row[c.key] ?? ''}</td>
+              ),
+            )}
           </tr>
         ))}
       </tbody>

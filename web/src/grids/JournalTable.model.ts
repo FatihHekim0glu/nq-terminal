@@ -23,7 +23,9 @@ export interface JournalLine {
 
 type Data = Readonly<Record<string, unknown>>
 
-const MISSING = '--'
+/** The display placeholder for a missing field (also etClock's, for a missing decision time). Sorts
+ *  last, not first (D39): compare against this before handing a line's field to a sortable column. */
+export const MISSING = '--'
 const FALLBACK_FIELDS = 3
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)

@@ -26,8 +26,12 @@ export interface PlotsArgs {
   readonly log: boolean
   readonly uid: string
   readonly view: () => readonly [number, number]
-  readonly paneEls: { readonly current: (HTMLDivElement | null)[] }
-  readonly container: { readonly current: HTMLDivElement | null }
+  /**
+   * The pane hosts, kept in state (not a mutable ref): ChartA11y unmounts them while the table view
+   * is open, and a fresh identity on remount is what makes the build effect below rerun (D33, D34).
+   */
+  readonly paneEls: readonly (HTMLDivElement | null)[]
+  readonly container: HTMLDivElement | null
   readonly onPointer: (idx: number | null) => void
   readonly onRender?: (ms: number) => void
   /** Milliseconds spent before the build (cleaning the data), added to the first report. */
@@ -151,11 +155,15 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
   useLayoutEffect(() => {
     args.current = a
   })
-  const { lib, t, panes, data, link, fence, log, uid } = a
+  const { lib, t, panes, data, link, fence, log, uid, paneEls } = a
 
   useEffect(() => {
     if (lib === null) return
     const cur = args.current
+    // ChartA11y unmounts the pane hosts while the table view is open (D33): a build dependency (the
+    // Log toggle, a refetch) can change while every host is null. Bail without building rather than
+    // throw; the hosts coming back (D34, this effect's `paneEls` dep) rebuilds once they are real.
+    if (panes.some((_, i) => !cur.paneEls[i])) return undefined
     const tokens = readChartTokens()
     const start = performance.now()
     const waiting = new Set(panes.map((_, i) => i))
@@ -166,8 +174,7 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
       queueMicrotask(() => plots.current.forEach((u, k) => k !== from && u.redraw(false, true)))
     })
     const built = panes.map((_, i) => {
-      const el = cur.paneEls.current[i]
-      if (!el) throw new Error(`LineStack pane ${i} has no element`)
+      const el = cur.paneEls[i]!
       const onFirstDraw = () => {
         if (!waiting.delete(i) || waiting.size > 0) return
         cur.onRender?.(performance.now() - start + cur.takeExtraMs())
@@ -183,24 +190,25 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
       }
       plots.current = []
     }
-  }, [lib, t, panes, data, link, fence, log, uid])
+  }, [lib, t, panes, data, link, fence, log, uid, paneEls])
 
-  useResizePanes(plots, args)
+  useResizePanes(plots, args, a.container)
   return { plots, drawn }
 }
 
 /** Resizes every pane to its host when the stack's box changes size. */
-function useResizePanes(plots: { readonly current: uPlot[] }, args: { readonly current: PlotsArgs }): void {
+function useResizePanes(plots: { readonly current: uPlot[] }, args: { readonly current: PlotsArgs }, container: HTMLDivElement | null): void {
   useEffect(() => {
-    const box = args.current.container.current
+    const box = container
     if (box === null || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => {
       plots.current.forEach((u, i) => {
-        const el = args.current.paneEls.current[i]
+        const el = args.current.paneEls[i]
         if (el) u.setSize({ width: el.clientWidth, height: el.clientHeight })
       })
     })
     observer.observe(box)
     return () => observer.disconnect()
-  }, [plots, args])
+    // container is the identity that must retrigger this (D34: a table round trip mounts a new box).
+  }, [plots, args, container])
 }

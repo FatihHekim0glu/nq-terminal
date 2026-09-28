@@ -109,8 +109,64 @@ describe('ChartA11y (UI_SPEC section 9: axe cannot see into canvas)', () => {
   it('right-aligns numeric columns', () => {
     renderChart({ tableView: true, onTableViewChange: () => {} })
     const cells = screen.getAllByRole('cell')
-    expect(cells[1]?.className).toContain('num')
-    expect(cells[0]?.className).not.toContain('num')
+    expect(cells[0]?.className).toContain('num')
+    const headers = screen.getAllByRole('rowheader')
+    expect(headers[0]?.className).not.toContain('num')
+  })
+
+  // D38: without a row header, a screen reader moving down a column announces only the value, with no
+  // row context (WCAG 1.3.1). The first column is the row label in every DataTable caller today
+  // (heatmapTable's 'row', stackTable's and candleTable's 'time').
+  it('D38: gives each row a row header, so a screen reader announces the row it is in', () => {
+    renderChart({ tableView: true, onTableViewChange: () => {} })
+    const table = screen.getByRole('table', { name: 'Equity, basis B' })
+    const headers = within(table).getAllByRole('rowheader')
+    expect(headers.map((h) => h.textContent)).toEqual(['2019-01-02', '2019-01-03'])
+    // The row header is not also a plain data cell.
+    expect(within(table).getAllByRole('cell').map((c) => c.textContent)).toEqual(['1.000', '0.987'])
+    // Row headers are announced by row, the way column headers are announced by column: the
+    // Equity cell of the first row points back at its row header.
+    const rows = within(table).getAllByRole('row')
+    const firstBodyRow = rows[1]!
+    expect(within(firstBodyRow).getByRole('rowheader').textContent).toBe('2019-01-02')
+  })
+
+  it('D38: a numeric first column still becomes the row header, styled numeric like the data cell it replaces', () => {
+    const table: ChartTable = {
+      caption: 'Cone, basis B',
+      columns: [
+        { key: 'step', label: 'Step', numeric: true },
+        { key: 'label', label: 'Label' },
+      ],
+      rows: [{ step: 1, label: 'a' }, { step: 2, label: 'b' }],
+    }
+    render(
+      <ChartA11y label={LABEL} table={table} tableView onTableViewChange={() => {}}>
+        <canvas data-testid="canvas" />
+      </ChartA11y>,
+    )
+    const header = screen.getAllByRole('rowheader')[0]!
+    expect(header.className).toContain('num')
+    expect(header.textContent).toBe('1')
+  })
+
+  it('D38: a column flagged rowHeader becomes the row header instead of the first column', () => {
+    const table: ChartTable = {
+      caption: 'P-scatter, basis B',
+      columns: [
+        { key: 'rank', label: 'Rank', numeric: true },
+        { key: 'label', label: 'Label', rowHeader: true },
+      ],
+      rows: [{ rank: 1, label: 'a' }, { rank: 2, label: 'b' }],
+    }
+    render(
+      <ChartA11y label={LABEL} table={table} tableView onTableViewChange={() => {}}>
+        <canvas data-testid="canvas" />
+      </ChartA11y>,
+    )
+    const headers = screen.getAllByRole('rowheader')
+    expect(headers.map((h) => h.textContent)).toEqual(['a', 'b'])
+    expect(screen.getAllByRole('cell').map((c) => c.textContent)).toEqual(['1', '2'])
   })
 })
 

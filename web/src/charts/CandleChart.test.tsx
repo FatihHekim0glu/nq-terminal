@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useRef, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CHART } from '../copy/workspace'
+import { usePanelRoving } from '../chrome/WorkspaceFocus'
 import { FAKE_DAY, FAKE_T0, fakeBars, fakeLib } from './CandleChart.fake'
 
 const state = vi.hoisted(() => ({ fake: null as ReturnType<typeof import('./CandleChart.fake').fakeLib> | null }))
@@ -19,6 +22,19 @@ afterEach(cleanup)
 
 /** The pointer entering the chart (the engine passes move events on only then). */
 const enter = () => document.querySelector('.candle-host')!.dispatchEvent(new Event('pointerenter'))
+
+/** A panel using the real roving-focus hook, so D35 can be tested end to end. */
+function Panel({ children }: { readonly children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const onKeyDown = usePanelRoving(ref)
+  return (
+    <div ref={ref} onKeyDown={onKeyDown}>
+      <button data-roving="">Prev</button>
+      {children}
+      <button data-roving="">Next</button>
+    </div>
+  )
+}
 
 const BARS = fakeBars(30)
 const FILLS = [{ t: FAKE_T0 + 27 * FAKE_DAY + 3600, side: 'sell' as const, qty: 2, price: 127.25 }]
@@ -190,5 +206,59 @@ describe('CandleChart', () => {
     await renderChart()
     cleanup()
     expect(state.fake!.chart.removed).toBe(true)
+  })
+
+  // D35: the chart must give Left and Right back once the crosshair is already at that edge, or GP
+  // and GIP's range buttons, fields and toggles are unreachable by keyboard once the chart holds the
+  // panel's one Tab stop.
+  it('D35: releases Left and Right at the crosshair edges, without a roving panel', async () => {
+    const { figure, readout } = await renderChart()
+    fireEvent.keyDown(figure, { key: 'Home' })
+    expect(readout()).toMatch(/^T 2021-12-01/)
+    // At bar 0: another Left cannot move the crosshair, so it must not be prevented.
+    expect(fireEvent.keyDown(figure, { key: 'ArrowLeft' })).toBe(true)
+    fireEvent.keyDown(figure, { key: 'End' })
+    expect(readout()).toMatch(/^T 2021-12-30/)
+    // At the last bar: same for Right.
+    expect(fireEvent.keyDown(figure, { key: 'ArrowRight' })).toBe(true)
+  })
+
+  it('D35: releases Left and Right to a real roving panel, so focus reaches the Table toggle and beyond', async () => {
+    render(
+      <Panel>
+        <CandleChart name="NQ1 Index" bars={BARS} />
+      </Panel>,
+    )
+    const figure = await screen.findByRole('img')
+    await waitFor(() => expect(document.querySelector('[aria-busy="false"]')).not.toBeNull())
+    figure.focus()
+    fireEvent.keyDown(figure, { key: 'Home' })
+    fireEvent.keyDown(figure, { key: 'ArrowLeft' })
+    expect(document.activeElement?.textContent).toBe(CHART.tableToggle)
+
+    figure.focus()
+    fireEvent.keyDown(figure, { key: 'End' })
+    fireEvent.keyDown(figure, { key: 'ArrowRight' })
+    expect(document.activeElement?.textContent).toBe('Next')
+  })
+
+  // D35/D36: holding the key at the edge (auto-repeat) must not keep giving it back to the panel on
+  // every repeat, or focus walks on through the panel's other controls while the key is still held.
+  // Only a fresh press releases the key.
+  it('D35/D36: gives Left/Right back to the panel only on a fresh press, not on every auto-repeat at the edge', async () => {
+    render(
+      <Panel>
+        <CandleChart name="NQ1 Index" bars={BARS} />
+      </Panel>,
+    )
+    const figure = await screen.findByRole('img')
+    await waitFor(() => expect(document.querySelector('[aria-busy="false"]')).not.toBeNull())
+    figure.focus()
+    fireEvent.keyDown(figure, { key: 'End' })
+    expect(fireEvent.keyDown(figure, { key: 'ArrowRight', repeat: true })).toBe(false)
+    expect(document.activeElement).toBe(figure)
+    // A fresh (non-repeat) press still moves focus, same as the existing D35 roving-panel test.
+    fireEvent.keyDown(figure, { key: 'ArrowRight' })
+    expect(document.activeElement?.textContent).toBe('Next')
   })
 })

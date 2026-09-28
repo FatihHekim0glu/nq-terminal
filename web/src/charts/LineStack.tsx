@@ -4,7 +4,7 @@
 // zero line where the pane asks for one, last-value tags and an HTML legend; the crosshair is synced
 // across the link group; range buttons, + and - zoom, and the keyboard crosshair move the view; and
 // the whole stack is one role="img" with a data summary and a table view (ChartA11y).
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import 'uplot/dist/uPlot.min.css'
 import { LINE_STACK } from '../copy/lineStack'
 import { fillCopy } from '../copy/workspace'
@@ -85,10 +85,12 @@ function useCleanData(panes: readonly LineStackPane[]): { data: Values[][]; take
   return { data, takeMs }
 }
 
-function PaneHosts({ panes, hosts, container, drawn }: {
+function PaneHosts({ panes, hostRef, container, drawn }: {
   readonly panes: readonly LineStackPane[]
-  readonly hosts: { readonly current: (HTMLDivElement | null)[] }
-  readonly container: RefObject<HTMLDivElement | null>
+  /** A stable (per index) callback ref, so ChartA11y remounting the hosts (table view) is the only
+   *  thing that changes their state identity; a fresh function every render would too (D34). */
+  readonly hostRef: (i: number) => (el: HTMLDivElement | null) => void
+  readonly container: (el: HTMLDivElement | null) => void
   readonly drawn: boolean
 }) {
   return (
@@ -97,9 +99,7 @@ function PaneHosts({ panes, hosts, container, drawn }: {
         <Fragment key={p.id}>
           {i > 0 ? <div className="chart-splitter" /> : null}
           <div
-            ref={(el) => {
-              hosts.current[i] = el
-            }}
+            ref={hostRef(i)}
             className="linestack-pane"
             data-pane={p.id}
             style={{ flex: `${p.weight ?? 1} 1 ${i === panes.length - 1 ? TIME_AXIS_PX : 0}px` }}
@@ -108,6 +108,33 @@ function PaneHosts({ panes, hosts, container, drawn }: {
       ))}
     </div>
   )
+}
+
+/**
+ * The pane hosts as state (D33, D34): ChartA11y unmounts them while the table view is open and
+ * remounts fresh elements when it closes, and only a state (not a mutable ref) identity change
+ * reruns the plot build effect. Each index keeps the same callback ref across renders, so a re-render
+ * that does not remount the DOM (a readout key press, a range button) never re-fires the refs.
+ */
+function usePaneHosts(): { readonly hosts: readonly (HTMLDivElement | null)[]; readonly hostRef: (i: number) => (el: HTMLDivElement | null) => void } {
+  const [hosts, setHosts] = useState<(HTMLDivElement | null)[]>([])
+  const callbacks = useRef(new Map<number, (el: HTMLDivElement | null) => void>())
+  const hostRef = useCallback((i: number) => {
+    let fn = callbacks.current.get(i)
+    if (!fn) {
+      fn = (el: HTMLDivElement | null) => {
+        setHosts((prev) => {
+          if (prev[i] === el && prev.length > i) return prev
+          const next = prev.slice()
+          next[i] = el
+          return next
+        })
+      }
+      callbacks.current.set(i, fn)
+    }
+    return fn
+  }, [])
+  return { hosts, hostRef }
 }
 
 export default function LineStack(props: LineStackProps) {
@@ -119,8 +146,8 @@ export default function LineStack(props: LineStackProps) {
   const [log, setLog] = useState(false)
   const [readoutIdx, onKeyReadout, onPointer] = useReadoutIndex()
   const cursorIdx = useRef<number | null>(null)
-  const hosts = useRef<(HTMLDivElement | null)[]>([])
-  const container = useRef<HTMLDivElement>(null)
+  const { hosts, hostRef } = usePaneHosts()
+  const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null)
   const { data, takeMs } = useCleanData(panes)
   const summary = useMemo(() => stackSummary(t, panes), [t, panes])
   const table = useMemo(() => stackTable(title, t, panes), [title, t, panes])
@@ -133,7 +160,7 @@ export default function LineStack(props: LineStackProps) {
     lib: lib.status === 'ready' ? lib.lib : null,
     t, panes, data, link, fence, log: log && logAvailable, uid,
     view: () => view.current,
-    paneEls: hosts, container, onPointer: pointer, onRender, takeExtraMs: takeMs,
+    paneEls: hosts, container: containerEl, onPointer: pointer, onRender, takeExtraMs: takeMs,
   })
   const controls = useStackControls({ t, data, fence, initialRange, plots, view, cursorIdx, onReadout: onKeyReadout })
   return (
@@ -155,7 +182,7 @@ export default function LineStack(props: LineStackProps) {
         }
       >
         {lib.status === 'error' ? <p className="chart-refusal" role="alert">{fillCopy(LINE_STACK.failed, { error: lib.error.message })}</p> : null}
-        <PaneHosts panes={panes} hosts={hosts} container={container} drawn={drawn} />
+        <PaneHosts panes={panes} hostRef={hostRef} container={setContainerEl} drawn={drawn} />
       </ChartA11y>
     </div>
   )

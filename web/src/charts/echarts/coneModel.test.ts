@@ -57,4 +57,10 @@ describe('cone model', () => {
     expect(table.caption).toBe('volmanaged_v0 cone, pointwise percentiles of the resampled paths at each step, not a band that whole paths stay inside')
     expect(table.rows[2]).toEqual({ step: '3', date: '2011-04-27', p5: '-3.20%', p25: '-1.60%', p50: '-0.50%', p75: '+0.50%', p95: '+1.70%', realised: '+1.50%' })
   })
+
+  it('flags the realised-date column as the row header, not the numeric step column (D38)', () => {
+    const table = coneTable(INPUT)
+    expect(table.columns.find((c) => c.key === 'step')?.rowHeader).toBeFalsy()
+    expect(table.columns.find((c) => c.key === 'date')?.rowHeader).toBe(true)
+  })
 })

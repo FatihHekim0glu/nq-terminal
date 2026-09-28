@@ -60,7 +60,7 @@
   line-height: var(--row-h);
 }
 .chart-a11y-table caption { text-align: left; color: var(--data); padding: 0 5px; }
-.chart-a11y-table th {
+.chart-a11y-table thead th {
   position: sticky;
   top: 0;
   height: var(--row-h);
@@ -73,19 +73,31 @@
   border-top: 1px solid var(--th-rule);
   border-right: 1px solid var(--bg);
 }
-.chart-a11y-table th:last-child { border-right: 0; }
-.chart-a11y-table td {
+.chart-a11y-table thead th:last-child { border-right: 0; }
+/* A row header (<th scope="row">, WCAG 1.3.1) is styled like the plain data cell it replaces, not
+   like the sticky column headers above: same box, same weight, same left alignment, same amber. */
+.chart-a11y-table td,
+.chart-a11y-table tbody th[scope="row"] {
   height: var(--row-h);
   padding: 0 5px;
   color: var(--data);
+  font-weight: 400;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .chart-a11y-table .num { text-align: right; font-variant-numeric: tabular-nums lining-nums; }
-.chart-a11y-table td.num { color: var(--text); }
-.chart-a11y-table tbody tr:hover td { background: var(--hover-row); }
-.chart-a11y-table tbody td:hover { --muted: var(--muted-hover); --c-down: var(--c-down-hover); background: var(--hover-cell); }
+.chart-a11y-table td.num,
+.chart-a11y-table tbody th[scope="row"].num { color: var(--text); }
+/* tbody th[scope="row"] alone (specificity 0,2,2) beats .num (0,2,0), so a numeric first column (D38:
+   cone's step, distribution's from, p-scatter's rank, an unlabelled xy scatter's x) needs its own,
+   more specific right-align rule instead of inheriting the row header's left alignment. */
+.chart-a11y-table tbody th[scope="row"].num { text-align: right; }
+.chart-a11y-table tbody tr:hover td,
+.chart-a11y-table tbody tr:hover th[scope="row"] { background: var(--hover-row); }
+.chart-a11y-table tbody td:hover,
+.chart-a11y-table tbody th[scope="row"]:hover { --muted: var(--muted-hover); --c-down: var(--c-down-hover); background: var(--hover-cell); }
 
 /* Crosshair readout under the chart: kept only as the table-view fallback (6.1). */
 .chart-a11y-readout {
