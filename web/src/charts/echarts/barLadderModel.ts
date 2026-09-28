@@ -18,6 +18,8 @@ export interface LadderBar {
   readonly hi?: number | null
   /** Observations behind the bar (shown in the table view). */
   readonly n?: number
+  /** Outlined with the chartS1 token (the spec curve's headline row, the placebo's actual bar). */
+  readonly emphasis?: boolean
 }
 
 export interface BarLadderInput {
@@ -93,7 +95,10 @@ function barSeries(input: BarLadderInput, tokens: ChartTokens): BarSeriesOption 
     barMaxWidth: BAR_MAX_WIDTH,
     data: input.bars.map((b) => ({
       value: isFiniteNumber(b.value) ? b.value : '-',
-      itemStyle: { color: isFiniteNumber(b.value) && b.value < 0 ? p.neg : p.pos },
+      itemStyle: {
+        color: isFiniteNumber(b.value) && b.value < 0 ? p.neg : p.pos,
+        ...(b.emphasis ? { borderColor: tokens.color.chartS1, borderWidth: 2 } : {}),
+      },
     })),
     markLine: markLine(lines, tokens),
   }

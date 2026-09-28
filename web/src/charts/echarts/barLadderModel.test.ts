@@ -111,6 +111,23 @@ describe('barLadderOption (look spec 6.3 BarLadder)', () => {
   })
 })
 
+describe('emphasis (an outlined bar, the spec curve headline or the placebo actual)', () => {
+  it('outlines an emphasised bar with the chartS1 token, leaving its fill colour unchanged', () => {
+    const emphasised: BarLadderInput = { ...blocks, bars: [{ ...blocks.bars[0]!, emphasis: true }, blocks.bars[1]!, blocks.bars[2]!] }
+    const bars = byId(barLadderOption(emphasised, T), 'bars')
+    expect(bars.data[0].itemStyle).toEqual({ color: T.color.barNeg, borderColor: T.color.chartS1, borderWidth: 2 })
+    expect(bars.data[1].itemStyle).toEqual({ color: T.color.barPos })
+    expect(bars.data[2].itemStyle).toEqual({ color: T.color.barPos })
+  })
+
+  it('adds no key to itemStyle for a bar without emphasis, so the option stays deep-equal to today\'s', () => {
+    const bars = byId(barLadderOption(blocks, T), 'bars')
+    for (const d of bars.data as { itemStyle: Record<string, unknown> }[]) expect(Object.keys(d.itemStyle)).toEqual(['color'])
+    const explicitlyFalse = byId(barLadderOption({ ...blocks, bars: blocks.bars.map((b) => ({ ...b, emphasis: false })) }, T), 'bars')
+    for (const d of explicitlyFalse.data as { itemStyle: Record<string, unknown> }[]) expect(Object.keys(d.itemStyle)).toEqual(['color'])
+  })
+})
+
 describe('describeBarLadder and barLadderTable', () => {
   it('summarises signs, extremes and the interval', () => {
     expect(describeBarLadder(blocks)).toBe(
