@@ -4,3 +4,4 @@ dist
 e2e/.results
 dist-gallery
 dist-demo
+.vitest/
