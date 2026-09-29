@@ -16,14 +16,19 @@ vi.mock('../../charts/lazy', async (importOriginal) => {
 })
 
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
-import { numberedItems, resetNumbered } from '../../chrome/NumberedActions'
+import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
+import { describeGlyphScatter } from '../../charts/echarts/glyphScatterModel'
 import { describePScatter } from '../../charts/echarts/pScatterModel'
 import { stubLayout } from '../../grids/testing'
 import { mtScatterInput } from './mtModel'
 import { DEFLATED } from '../../copy/deflated'
+import { MT } from '../../copy/reg'
+import { REPLICATION } from '../../copy/replication'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import MtScreen from './MtScreen'
-import { MULTIPLE_TESTING } from './regFixtures'
+import { ReplicationBody } from './MtReplication'
+import { MULTIPLE_TESTING, REGISTRY } from './regFixtures'
+import { buildReplication, replicationScatter } from './replicationModel'
 import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
 
 beforeAll(() => stubLayout(1200))
@@ -148,5 +153,253 @@ describe('MT: multiple-testing view', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('stub 503 for /api/multiple-testing')
     expect(screen.queryByRole('img')).toBeNull()
+  })
+})
+
+// MT gets a sub tab strip from 85 (roadmap R8): 85) Family is today's content plus SV3, unchanged;
+// 86) Replication draws each sealed confirmation against its parent's registered in-sample p.
+function tabs(): HTMLElement {
+  return screen.getByRole('tablist', { name: MT.views.label })
+}
+
+function pairs(): HTMLElement {
+  return screen.getByRole('grid', { name: REPLICATION.gridLabel })
+}
+
+function pairRows(): HTMLElement[] {
+  return within(pairs()).getAllByRole('row').filter((r) => r.closest('tbody'))
+}
+
+function pairCells(): string[] {
+  return within(pairRows()[0]!).getAllByRole('gridcell').map((c) => c.textContent ?? '')
+}
+
+/** The replication chart's summary, from the fixtures the harness serves. */
+function replicationSummary(): string {
+  return describeGlyphScatter(replicationScatter(buildReplication(MULTIPLE_TESTING, REGISTRY)))
+}
+
+/** Mounts MT, waits for the family, then selects 86) Replication and waits for the registry verdicts. */
+async function openReplication(): Promise<void> {
+  await ready()
+  fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+  await screen.findByRole('region', { name: REPLICATION.label })
+  await waitFor(() => expect(pairCells()[4]).toBe('[FAIL]'))
+}
+
+describe('MT: 85) Family and 86) Replication tabs', () => {
+  it('shows the sub tab strip with 85) Family selected and 86) Replication beside it', async () => {
+    stubApi()
+    await ready()
+    const strip = within(tabs())
+    expect(strip.getAllByRole('tab').map((t) => t.textContent)).toEqual(['85) Family', '86) Replication'])
+    expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-selected')).toBe('true')
+    expect(strip.getByRole('tab', { name: '86) Replication' }).getAttribute('aria-selected')).toBe('false')
+    const panel = screen.getByRole('tabpanel', { name: '85) Family' })
+    expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-controls')).toBe(panel.id)
+  })
+
+  it('registers 85 and 86 for Number <GO> beside the red bar and the family rows', async () => {
+    stubApi()
+    await ready()
+    const numbers = numberedItems(PANEL_ID).map((i) => i.n)
+    expect(numbers).toEqual(expect.arrayContaining([1, 21, 85, 86, 96, 97]))
+    expect(numberedItems(PANEL_ID).find((i) => i.n === 86)!.label).toBe('Replication')
+  })
+
+  it('keeps the family view whole under 85: the family line, the scatter, the table, the confirmations and SV3', async () => {
+    stubApi()
+    await ready()
+    const panel = screen.getByRole('tabpanel', { name: '85) Family' })
+    expect(within(panel).getByRole('region', { name: 'Multiple-testing family' })).toBeTruthy()
+    expect(within(panel).getByRole('grid', { name: /Adjusted p-values/ })).toBeTruthy()
+    expect(within(panel).getByRole('region', { name: /Sealed confirmations/ })).toBeTruthy()
+    await within(panel).findByRole('region', { name: DEFLATED.label })
+    expect(screen.queryByRole('region', { name: REPLICATION.label })).toBeNull()
+  })
+
+  it('asks for /api/registry only once 86 is selected, and only with GET', async () => {
+    const seen = stubApi()
+    await ready()
+    await screen.findByRole('region', { name: DEFLATED.label })
+    expect(seen.map((s) => s.url)).not.toContain('/api/registry')
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    await waitFor(() => expect(seen.map((s) => s.url)).toContain('/api/registry'))
+    expect(seen.filter((s) => s.url === '/api/registry')).toHaveLength(1)
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('opens 86 from the tab and from Number <GO> 86, and 85 brings the family back', async () => {
+    stubApi()
+    await ready()
+    act(() => {
+      expect(activateNumbered(PANEL_ID, 86)).toBe(true)
+    })
+    await screen.findByRole('region', { name: REPLICATION.label })
+    expect(screen.getByRole('tab', { name: '86) Replication' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel', { name: '86) Replication' })).toBeTruthy()
+    expect(screen.queryByRole('grid', { name: /Adjusted p-values/ })).toBeNull()
+    expect(screen.queryByRole('region', { name: DEFLATED.label })).toBeNull()
+    act(() => {
+      expect(activateNumbered(PANEL_ID, 85)).toBe(true)
+    })
+    await waitFor(() => expect(table()).toBeTruthy())
+    expect(screen.queryByRole('region', { name: REPLICATION.label })).toBeNull()
+  })
+
+  it('keeps the p axis choice across the tabs', async () => {
+    stubApi()
+    await ready()
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Linear p axis' }))
+    await waitFor(() => expect(lastOption().yAxis.type).toBe('value'))
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    await screen.findByRole('region', { name: REPLICATION.label })
+    fireEvent.click(screen.getByRole('tab', { name: '85) Family' }))
+    await waitFor(() => expect(table()).toBeTruthy())
+    await waitFor(() => expect(lastOption().yAxis.type).toBe('value'))
+  })
+
+  it('disables 97) Settings on 86) Replication, where the p axis choice changes nothing, and enables it again on 85', async () => {
+    stubApi()
+    await ready()
+    const settings = () => screen.getByRole('button', { name: /97\) Settings/ })
+    expect(settings().getAttribute('aria-disabled')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    await screen.findByRole('region', { name: REPLICATION.label })
+    expect(settings().getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(settings())
+    expect(screen.queryByRole('menuitem', { name: 'Linear p axis' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: '85) Family' }))
+    await waitFor(() => expect(table()).toBeTruthy())
+    expect(settings().getAttribute('aria-disabled')).toBeNull()
+    fireEvent.click(settings())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Linear p axis' }))
+    await waitFor(() => expect(lastOption().yAxis.type).toBe('value'))
+  })
+
+  it('names the failure when the family cannot be read, with no alert from the tabs', async () => {
+    stubApi({ '/api/multiple-testing': 503 })
+    mountScreen(<MtScreen params={panelParams('MT')} context={null} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('stub 503 for /api/multiple-testing')
+    expect(screen.queryAllByRole('alert')).toHaveLength(1)
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+  })
+})
+
+describe('MT: 86) Replication', () => {
+  it('tags the view [SPENT] with the stored-only note, and draws no alert', async () => {
+    stubApi()
+    await openReplication()
+    const view = screen.getByRole('region', { name: REPLICATION.label })
+    expect(within(view).getByText('[SPENT]')).toBeTruthy()
+    expect(within(view).getByText(REPLICATION.note)).toBeTruthy()
+    expect(within(view).getByText(REPLICATION.legend)).toBeTruthy()
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+
+  it('draws one chart named by its data summary: one down triangle for rebal_v0', async () => {
+    stubApi()
+    await openReplication()
+    const img = screen.getByRole('img', { name: replicationSummary() })
+    expect(img.getAttribute('aria-label')).toContain('Replication: 1 point')
+    expect(img.getAttribute('aria-label')).toContain('1 [FAIL] (triangle down)')
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    const drawn = fake.chart.setOption.mock.calls
+      .map((c) => c[0] as { series?: Array<{ id?: string; data?: Array<{ value?: number[]; symbol?: string; symbolRotate?: number }> }> })
+      .filter((o) => o.series?.some((s) => s.id === 'diagonal'))
+    const option = drawn[drawn.length - 1]!
+    expect(option.series!.map((s) => s.id)).toEqual(['diagonal', 'refs', 'points'])
+    const point = option.series!.find((s) => s.id === 'points')!.data![0]!
+    expect(point.value).toEqual([0.13004898713256266, 0.3374637034513802])
+    expect(point.symbol).toBe('triangle')
+    expect(point.symbolRotate).toBe(180)
+  })
+
+  it('lists the pair in a numbered grid with the stored p-values, verdicts and window', async () => {
+    stubApi()
+    await openReplication()
+    expect(pairRows()).toHaveLength(1)
+    expect(pairCells()).toEqual([
+      '1)', 'rebal_v0', 'rebal_v1_confirm', '0.1300', '[FAIL]', '0.3375', '0.05', '[FAIL]', 'spent window, opened 2026-09-26, descriptive only',
+    ])
+    expect(numberedItems(PANEL_ID).find((i) => i.n === 1)).toBeTruthy()
+  })
+
+  it('names the 20 hypotheses never tested in the sealed window, in rank order', async () => {
+    stubApi()
+    await openReplication()
+    const line = screen.getByText(/^Never tested in the sealed window \(20\): /)
+    expect(line.textContent).toMatch(/^Never tested in the sealed window \(20\): vt_har_v0, eomtsy_v0, overnight_v0, /)
+    expect(line.textContent).toMatch(/, carry_v0, mim_v0\.$/)
+    expect(line.textContent).not.toContain('rebal_v0')
+    expect(screen.queryByText(/^Not drawn/)).toBeNull()
+  })
+
+  it('opens DES for the parent on Enter and on Number <GO> 1', async () => {
+    stubApi()
+    await openReplication()
+    const lines: LineRequest[] = []
+    const stop = onLineRequest((r) => lines.push(r))
+    try {
+      act(() => pairs().focus())
+      fireEvent.keyDown(pairs(), { key: 'Enter' })
+      expect(lines.at(-1)).toEqual({ line: 'rebal_v0 DES', newPanel: false })
+      lines.length = 0
+      act(() => {
+        expect(activateNumbered(PANEL_ID, 1)).toBe(true)
+      })
+      expect(lines).toEqual([{ line: 'rebal_v0 DES', newPanel: false }])
+    } finally {
+      stop()
+    }
+  })
+
+  it('says the in-sample verdicts are unavailable when the registry cannot be read, without an alert', async () => {
+    stubApi({ '/api/registry': 503 })
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    const view = await screen.findByRole('region', { name: REPLICATION.label })
+    await waitFor(() => expect(view.textContent).toContain('In-sample verdicts are not available: stub 503 for /api/registry'))
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+    expect(pairCells()[4]).toBe('--')
+    expect(pairCells()[3]).toBe('0.1300')
+    expect(pairCells()[7]).toBe('[FAIL]')
+  })
+})
+
+describe('MT: ReplicationBody', () => {
+  const VIEW = buildReplication(MULTIPLE_TESTING, REGISTRY)
+
+  it('says no confirmation tests a registered hypothesis, and draws no chart', () => {
+    mountScreen(<ReplicationBody view={buildReplication({ ...MULTIPLE_TESTING, confirmations: [] }, REGISTRY)} registryError={null} />)
+    expect(screen.getByText(REPLICATION.empty)).toBeTruthy()
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(screen.getByText(/^Never tested in the sealed window \(21\): /)).toBeTruthy()
+  })
+
+  it('lists the confirmations it could not draw, with each reason', () => {
+    const list = [
+      { ...MULTIPLE_TESTING.confirmations[0]!, name: 'orphan_confirm', parent: null },
+      { ...MULTIPLE_TESTING.confirmations[0]!, name: 'ghost_confirm', parent: 'ghost_v0' },
+    ]
+    mountScreen(<ReplicationBody view={buildReplication({ ...MULTIPLE_TESTING, confirmations: list }, REGISTRY)} registryError={null} />)
+    expect(screen.getByText('Not drawn (2): orphan_confirm: no parent recorded; ghost_confirm: parent ghost_v0 is not in the family.')).toBeTruthy()
+  })
+
+  it('says which reference lines fall off the axes', () => {
+    mountScreen(<ReplicationBody view={{ ...VIEW, alpha: 0 }} registryError={null} />)
+    expect(screen.getByText(/^Off the axes: family alpha 0/)).toBeTruthy()
+  })
+
+  it('says every hypothesis has a confirmation when none is untested', () => {
+    const all = MULTIPLE_TESTING.rows.map((r) => ({ ...MULTIPLE_TESTING.confirmations[0]!, name: `${r.name}_confirm`, parent: r.name }))
+    mountScreen(<ReplicationBody view={buildReplication({ ...MULTIPLE_TESTING, confirmations: all }, REGISTRY)} registryError={null} />)
+    expect(screen.getByText(REPLICATION.untestedNone)).toBeTruthy()
+    expect(pairRows()).toHaveLength(MULTIPLE_TESTING.k)
   })
 })

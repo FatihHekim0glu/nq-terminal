@@ -141,12 +141,20 @@
 .mt-confirm-list { margin: 0; padding: 0 5px; list-style: none; }
 .mt-confirm-list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* The open MT view (85 Family, 86 Replication) sits in one tabpanel wrapper under the screen root, so the
+   sub tab strip's aria-controls has one element to point at. */
+.reg-screen[data-screen="MT"] > .mt-view { display: flex; flex-direction: column; flex: 0 0 auto; min-width: 0; }
+
 /* SV3 on MT: a band, the facts, the DSR ladder (fixed height) and the table. MT's own view (family, scatter,
    adjusted table, confirmations) stays exactly one screen of the panel body, as before; SV3 follows it in the
    body's scroll, so the scatter and the adjusted table keep their room. */
 /* min-height, not height (G02): the body stays free to grow past one screen when the grid renders every
    row, so the confirmations and SV3 follow it in the panel body's scroll instead of being drawn over. */
-.reg-screen[data-screen="MT"] > .mt-body { flex: 0 0 auto; min-height: 100cqh; }
+.reg-screen[data-screen="MT"] .mt-view > .mt-body { flex: 0 0 auto; min-height: 100cqh; }
+
+/* 86) Replication: a band, the legend, the scatter (fixed height), the pairs grid and the notes below it. */
+.mt-replication { flex: 0 0 auto; }
+.mt-replication-chart { position: relative; height: 360px; min-width: 0; }
 .mt-deflated { flex: 0 0 auto; }
 .mt-deflated-chart { position: relative; height: 200px; min-width: 0; }
 .reg-caption {

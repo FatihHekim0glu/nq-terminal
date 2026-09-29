@@ -61,10 +61,14 @@ describe('.mt-body: stays free to grow while panelScroll.css lets .mt-grid overf
   })
 
   it('the MT body rule sets no fixed height, only a min-height, so the grid can grow past one screen', () => {
-    const body = ruleFor(stripped, '.reg-screen[data-screen="MT"] > .mt-body')
+    const body = ruleFor(stripped, '.reg-screen[data-screen="MT"] .mt-view > .mt-body')
     expect(body, '.mt-body rule').toBeTruthy()
     expect(body ?? '').not.toMatch(/(?<!min-)(?<!max-)height\s*:/)
     expect(body ?? '').toMatch(/min-height\s*:\s*100cqh/)
+  })
+
+  it('keeps no rule for the body as a direct child of the screen root: it renders only inside .mt-view', () => {
+    expect(ruleFor(stripped, '.reg-screen[data-screen="MT"] > .mt-body')).toBeUndefined()
   })
 
   it('.mt-grid takes its content height (flex: 0 0 auto), never a flex-grow share of the body', () => {
