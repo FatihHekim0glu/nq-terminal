@@ -45,3 +45,32 @@ describe('per-panel history (look spec 5.2)', () => {
     expect(recordVisit({ back: ['a'], fwd: [] }, 'a')).toEqual({ back: ['a'], fwd: [] })
   })
 })
+
+describe('per-panel history: entries that would change nothing are passed over (U21)', () => {
+  const noop = (entry: string): boolean => entry.startsWith('!')
+
+  it('steps back over trailing no-op entries to the first real one, and does not put them on the forward list', () => {
+    const out = stepBack({ back: ['a', 'b', '!c', '!d'], fwd: ['z'] }, 'e', noop)
+    expect(out).toEqual({ target: 'b', history: { back: ['a'], fwd: ['z', 'e'] } })
+  })
+
+  it('steps forward over no-op entries the same way', () => {
+    const out = stepForward({ back: ['a'], fwd: ['b', '!c'] }, 'd', noop)
+    expect(out).toEqual({ target: 'b', history: { back: ['a', 'd'], fwd: [] } })
+  })
+
+  it('returns null when only no-op entries are left', () => {
+    expect(stepBack({ back: ['!a', '!b'], fwd: [] }, 'c', noop)).toBeNull()
+    expect(stepForward({ back: [], fwd: ['!a'] }, 'c', noop)).toBeNull()
+  })
+
+  it('leaves a no-op entry in the middle of the list alone: only the ones in the way are dropped', () => {
+    const out = stepBack({ back: ['a', '!b', 'c'], fwd: [] }, 'd', noop)
+    expect(out).toEqual({ target: 'c', history: { back: ['a', '!b'], fwd: ['d'] } })
+  })
+
+  it('steps to every entry when no test is given', () => {
+    expect(stepBack({ back: ['!a'], fwd: [] }, 'b')).toEqual({ target: '!a', history: { back: [], fwd: ['b'] } })
+  })
+})
+

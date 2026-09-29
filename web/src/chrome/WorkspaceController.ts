@@ -2,7 +2,8 @@
 // what a command, a layout load, a focus change, back and forward, and the related functions menu do
 // to dockview and to the stores. Workspace.tsx is the thin React shell around it.
 // - run(): Enter replaces the panel the user last focused (a multi-panel screen, or no focused
-//   panel, loads the screen's layout); Shift+Enter opens a new panel (WorkspaceModel.planOpen).
+//   panel, loads the screen's layout); Shift+Enter opens a new panel (WorkspaceModel.planOpen). A line
+//   a numbered item asks for (Number <GO>) is planned in that item's own panel (G03, NumberedActions).
 // - A layout is saved only after a command changes it (replace, new panel, back, forward), never on
 //   load, so an untouched default is never stored and a changed default reaches every viewer.
 // - A screen's mnemonic always restores its saved layout, on the screen it is typed from and on the
@@ -11,6 +12,9 @@
 //   can bring back what RESET, or a stale saved layout dropped for an old default, took away.
 // - Each panel keeps its own history: a replace records what the panel showed; goBack and
 //   goForward walk it (WorkspaceHistory), retargeting the panel's link group to what comes back.
+//   A link group retargeted from outside run() (a context-only line) is a step too, in the panel the
+//   command line addresses and in each panel of the group that visibly changed (U21): walking it puts
+//   the group's context back, so End undoes what the line did even from a panel that did not change.
 // - The focused panel and its context are read when asked (focusedContext), never cached, so a
 //   command that replaced the panel or retargeted its link group is seen by the next command.
 // - The command line always addresses one panel (look spec 4.2, 4.3): the panel the user last focused,
@@ -36,8 +40,10 @@ import type { ResolvedContext } from '../commands/types'
 import { WORKSPACES } from '../copy/workspaces'
 import { WORKSPACE, fillCopy } from '../copy/workspace'
 import { layoutFor as savedLayoutFor, type LayoutsStore } from '../state/layouts'
-import { LINK_GROUPS, type GroupRecord, type LinkContext, type LinkGroupsStore } from '../state/linkGroups'
+import { LINK_GROUPS, isLinkContext, type GroupRecord, type LinkContext, type LinkGroupsStore } from '../state/linkGroups'
 import { MAX_WORKSPACES, isWorkspaceName, type WorkspacesStore } from '../state/workspaces'
+import { reportOpened } from './CommandLine.bus'
+import { runningPanel } from './NumberedActions'
 import { syncRoving } from './WorkspaceFocus'
 import { EMPTY_HISTORY, recordVisit, stepBack, stepForward, type HistoryStep, type PanelHistory } from './WorkspaceHistory'
 import { layoutFor } from './WorkspaceLayouts'
@@ -244,6 +250,9 @@ interface ControllerState {
   /** True while the controller itself moves link group contexts (a load, an undo), which are not edits. */
   applying: boolean
   histories: ReadonlyMap<string, PanelHistory>
+  /** The link group contexts as of the last change the controller has looked at (U21): what a retarget from
+   * outside run() is measured against. */
+  seen: GroupRecord<LinkContext | null>
   undo: UndoRing
   readonly view: WorkspaceView
 }
@@ -272,6 +281,22 @@ function paramsOf(st: ControllerState, id: string): PanelParams | null {
 function targetId(st: ControllerState, order: readonly string[] = st.view.getState().order): string | null {
   const alive = (id: string | null) => (id && st.api?.getPanel(id) ? id : null)
   return visibleId(st, alive(st.lastFocused) ?? alive(st.ranIn) ?? order[0] ?? null)
+}
+
+/** The panel whose numbered item is running (Number <GO>), when it is still there: its own line belongs to it
+ * (G03), whatever holds real focus. Null for a typed line, which names no panel. */
+function numberedId(st: ControllerState): string | null {
+  const id = runningPanel()
+  return visibleId(st, id && st.api?.getPanel(id) ? id : null)
+}
+
+/** The panel a run plans against. A numbered item's own panel, else real focus (UI_SPEC section 5), not the
+ * display target: replace or load follows real focus. A new panel still anchors to the panel the command line
+ * addresses (the focus line) when nothing has real DOM focus, so it opens beside that panel instead of hidden
+ * as a tab of whatever group dockview left active. */
+function anchorOf(st: ControllerState, target: RunTarget): string | null {
+  const real = focusedId(st)
+  return numberedId(st) ?? (target === 'new-panel' ? (real ?? targetId(st)) : real)
 }
 
 function focusedPanel(st: ControllerState, env: ControllerEnv): FocusedPanel | null {
@@ -371,7 +396,7 @@ function loadScreen(st: ControllerState, env: ControllerEnv, dock: DockviewApi, 
   if (!restored) applyPlan(adapt(dock), plan)
   st.histories = new Map()
   prepareAll(st, dock)
-  seedLinkGroups(dock, linkGroups)
+  moveContexts(st, env, () => seedLinkGroups(dock, linkGroups))
   st.shown = code
   st.owner = SCREEN_OWNER
   if (dropped && stored && droppedDock) {
@@ -402,6 +427,11 @@ function shownParams(st: ControllerState, env: ControllerEnv, id: string): Panel
   return { ...params, context: effectiveContext(params, params.group === '-' ? null : env.linkGroups.getState().contexts[params.group]) }
 }
 
+function recordStep(st: ControllerState, id: string, entry: string): void {
+  const history = st.histories.get(id) ?? EMPTY_HISTORY
+  st.histories = new Map([...st.histories, [id, recordVisit(history, entry)]])
+}
+
 /** Remember what panel `id` shows before it changes to `next`: what it actually displayed, not its raw
  * stored params (see shownParams). */
 function remember(st: ControllerState, env: ControllerEnv, id: string, next: PanelParams): void {
@@ -409,8 +439,69 @@ function remember(st: ControllerState, env: ControllerEnv, id: string, next: Pan
   if (!shown) return
   const was = JSON.stringify(shown)
   if (was === JSON.stringify(next)) return
-  const history = st.histories.get(id) ?? EMPTY_HISTORY
-  st.histories = new Map([...st.histories, [id, recordVisit(history, was)]])
+  recordStep(st, id, was)
+}
+
+/** The context of link group `group` now; null for an unlinked panel or an empty group. */
+function groupContextOf(env: ControllerEnv, group: PanelParams['group']): LinkContext | null {
+  return group === '-' ? null : env.linkGroups.getState().contexts[group]
+}
+
+function sameLinkContext(a: LinkContext | null, b: LinkContext | null): boolean {
+  return a === b || (a !== null && b !== null && a.kind === b.kind && a.value === b.value)
+}
+
+/** Runs `move`, a change the controller itself makes to link group contexts (a load, an undo, a step back). It
+ * is not an edit of any workspace and not a retarget from outside: no panel history records it (U21). */
+function moveContexts(st: ControllerState, env: ControllerEnv, move: () => void): void {
+  const was = st.applying
+  st.applying = true
+  try {
+    move()
+  } finally {
+    st.applying = was
+  }
+  st.seen = env.linkGroups.getState().contexts
+}
+
+/** A history entry for a link group retarget: the panel as it showed then (the same JSON as any entry), and in
+ * `g` the group's context to put back with it. An ordinary entry has no `g`. */
+function retargetEntry(shown: PanelParams, group: LinkContext | null): string {
+  return JSON.stringify({ ...shown, g: group })
+}
+
+/** The group context an entry puts back: undefined for an ordinary entry, null for a group that was empty. */
+function entryGroup(entry: string): LinkContext | null | undefined {
+  try {
+    const raw: unknown = JSON.parse(entry)
+    if (typeof raw !== 'object' || raw === null || !('g' in raw)) return undefined
+    return isLinkContext(raw.g) ? { kind: raw.g.kind, value: raw.g.value } : null
+  } catch {
+    return undefined
+  }
+}
+
+/** A link group was retargeted by something other than run() or the controller (a context-only line). Every
+ * panel of the group whose shown params changed, and the panel the command line addresses even when it did
+ * not change (a MON panel takes no instrument, yet End there must undo the line), gets a step that puts the
+ * group's context back (U21). */
+function noteRetarget(st: ControllerState, env: ControllerEnv): void {
+  const before = st.seen
+  const now = env.linkGroups.getState().contexts
+  st.seen = now
+  if (st.applying || before === now || !st.api) return
+  const addressed = targetId(st)
+  for (const panel of st.api.panels) {
+    const params = sanitiseParams(panel.params)
+    if (!params || params.group === '-') continue
+    const was = before[params.group]
+    const next = now[params.group]
+    if (sameLinkContext(was, next)) continue
+    const shownBefore: PanelParams = { ...params, context: effectiveContext(params, was) }
+    const shownNow: PanelParams = { ...params, context: effectiveContext(params, next) }
+    if (panel.id !== addressed && JSON.stringify(shownBefore) === JSON.stringify(shownNow)) continue
+    recordStep(st, panel.id, retargetEntry(shownBefore, was))
+  }
 }
 
 function applyToPanel(st: ControllerState, env: ControllerEnv, plan: Exclude<OpenPlan, LoadPlan>, command: ParsedCommand): void {
@@ -421,7 +512,8 @@ function applyToPanel(st: ControllerState, env: ControllerEnv, plan: Exclude<Ope
   saveShown(st, env, dock)
   const group = plan.params.group
   if (command.contextSource === 'typed' && command.context && group !== '-') {
-    env.linkGroups.getState().setContext(group, command.context)
+    const { context } = command
+    moveContexts(st, env, () => env.linkGroups.getState().setContext(group, context))
   }
 }
 
@@ -466,17 +558,22 @@ function unchanged(st: ControllerState, env: ControllerEnv, e: UndoEntry): boole
   )
 }
 
+/** What the panel a command opened shows, in the command line's words, when that differs from the line as parsed
+ * (G14): a bare DES typed where the link group holds a hypothesis opens as that hypothesis's DES, because a panel
+ * shows its group's context. Null after a layout load, or when the panel shows exactly the line. */
+function openedLine(st: ControllerState, env: ControllerEnv, command: ParsedCommand): string | null {
+  const shown = st.ranIn ? shownParams(st, env, st.ranIn) : null
+  const title = shown ? panelTitle(shown) : null
+  return title !== null && title !== command.canonical ? title : null
+}
+
 function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): boolean {
   const api = st.api
   if (!api) return false
   const ringBefore = st.undo
   snapshot(st, env, 'change')
   const pushed = st.undo === ringBefore ? null : (st.undo.at(-1) ?? null)
-  // Replace or load follows real focus (UI_SPEC section 5), not the display target; a new panel still
-  // anchors to the panel the command line addresses (the focus line) when nothing has real DOM focus,
-  // so it opens beside that panel instead of hidden as a tab of whatever group dockview left active.
-  const real = focusedId(st)
-  const anchor = target === 'new-panel' ? (real ?? targetId(st)) : real
+  const anchor = anchorOf(st, target)
   const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
   const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
   // G12: only genuine DOM focus still inside the panel being replaced (a grid-row Enter drill, not a
@@ -488,6 +585,7 @@ function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, ta
   if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command))
   else applyToPanel(st, env, plan, command)
   st.ranIn = ranInAfter(plan, before, api)
+  reportOpened(openedLine(st, env, command))
   if (!focusedId(st)) st.lastFocused = null
   announce(st, env)
   reportShown(st, env)
@@ -528,8 +626,7 @@ function refocusAfterReplace(env: ControllerEnv, panelId: string, focusedBefore:
 function preview(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): RunPreview | null {
   const api = st.api
   if (!api) return null
-  const real = focusedId(st)
-  const anchor = target === 'new-panel' ? (real ?? targetId(st)) : real
+  const anchor = anchorOf(st, target)
   const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
   const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
   const input: PreviewInput = {
@@ -543,21 +640,37 @@ function preview(st: ControllerState, env: ControllerEnv, command: ParsedCommand
   return describePlan(input)
 }
 
-/** Replace panel `id` with `params` without recording history (back, forward). */
-function showInPanel(st: ControllerState, env: ControllerEnv, id: string, params: PanelParams): void {
+/** Replace panel `id` with `params` without recording history (back, forward). Its link group goes with it:
+ * to the context `restore` names (a step over a retarget: null is an empty group), else to the panel's own. */
+function showInPanel(st: ControllerState, env: ControllerEnv, id: string, params: PanelParams, restore?: LinkContext | null): void {
   const dock = st.api as DockviewApi
   adapt(dock).replacePanel(id, params, panelTitle(params))
   prepareAll(st, dock)
   saveShown(st, env, dock)
-  if (params.group !== '-' && params.context) env.linkGroups.getState().setContext(params.group, params.context)
+  const { group } = params
+  const put = restore === undefined ? params.context : restore
+  if (group !== '-' && (restore !== undefined || params.context)) moveContexts(st, env, () => env.linkGroups.getState().setContext(group, put))
   reportShown(st, env)
   if (targetId(st) === id) announce(st, env)
 }
 
-function walk(st: ControllerState, env: ControllerEnv, id: string, step: (h: PanelHistory, current: string) => HistoryStep | null): boolean {
+type Step = (h: PanelHistory, current: string, isNoop: (entry: string) => boolean) => HistoryStep | null
+
+function walk(st: ControllerState, env: ControllerEnv, id: string, step: Step): boolean {
   const current = shownParams(st, env, id)
   if (!current) return false
-  const result = step(st.histories.get(id) ?? EMPTY_HISTORY, JSON.stringify(current))
+  const history = st.histories.get(id) ?? EMPTY_HISTORY
+  const groupNow = groupContextOf(env, current.group)
+  const plain = JSON.stringify(current)
+  // A retarget step another panel of the group has taken already (the group and this panel are as the step
+  // would leave them) is passed over, not spent as a step that shows nothing.
+  const isNoop = (entry: string): boolean => {
+    const group = entryGroup(entry)
+    return group !== undefined && sameLinkContext(group, groupNow) && JSON.stringify(sanitiseParams(JSON.parse(entry))) === plain
+  }
+  let result = step(history, plain, isNoop)
+  // Walking over a retarget leaves a retarget entry behind, carrying the group's context as it is now.
+  if (result && entryGroup(result.target) !== undefined) result = step(history, retargetEntry(current, groupNow), isNoop)
   if (!result) return false
   let target: PanelParams | null = null
   try {
@@ -568,7 +681,7 @@ function walk(st: ControllerState, env: ControllerEnv, id: string, step: (h: Pan
   st.histories = new Map([...st.histories, [id, result.history]])
   if (!target) return false
   snapshot(st, env, 'change')
-  showInPanel(st, env, id, target)
+  showInPanel(st, env, id, target, entryGroup(result.target))
   return true
 }
 
@@ -725,12 +838,9 @@ function undo(st: ControllerState, env: ControllerEnv): MnemonicCode | null {
 
 /** Set every link group's context without reporting each one as an edit of a workspace. */
 function setGroupContexts(st: ControllerState, env: ControllerEnv, contexts: GroupRecord<LinkContext | null>): void {
-  st.applying = true
-  try {
+  moveContexts(st, env, () => {
     for (const group of LINK_GROUPS) env.linkGroups.getState().setContext(group, contexts[group])
-  } finally {
-    st.applying = false
-  }
+  })
 }
 
 function saveRecipe(st: ControllerState, env: ControllerEnv, name: string): Recipe | null {
@@ -768,7 +878,7 @@ function loadRecipe(st: ControllerState, env: ControllerEnv, name: string, recip
   setGroupContexts(st, env, recipe.groups)
   st.histories = new Map()
   prepareAll(st, api)
-  seedLinkGroups(api, env.linkGroups)
+  moveContexts(st, env, () => seedLinkGroups(api, env.linkGroups))
   st.shown = first.mnemonic.code
   // The base is what the panels give now, not the recipe as stored: they are compared like with like.
   const loaded = deriveRecipe(st, env)
@@ -854,6 +964,7 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     ranIn: null,
     shown: env().initialScreen,
     histories: new Map(),
+    seen: env().linkGroups.getState().contexts,
     undo: EMPTY_RING,
     owner: SCREEN_OWNER,
     owners: new WeakMap(),
@@ -866,6 +977,7 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     run: (command, target) => run(st, env(), command, target),
     preview: (command, target) => preview(st, env(), command, target),
     refreshFocused: () => {
+      noteRetarget(st, env())
       announce(st, env())
       // A link group retarget changes the lines and groups a workspace would be saved as.
       if (st.owner.kind === 'workspace' && !st.applying) reportShown(st, env())

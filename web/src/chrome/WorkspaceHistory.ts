@@ -25,16 +25,31 @@ export function recordVisit(history: PanelHistory, current: string): PanelHistor
   return { back: capped([...history.back, current]), fwd: [] }
 }
 
-/** Back one step from `current`, or null when there is nothing behind it. */
-export function stepBack(history: PanelHistory, current: string): HistoryStep | null {
-  const target = history.back.at(-1)
-  if (target === undefined) return null
-  return { target, history: { back: history.back.slice(0, -1), fwd: capped([...history.fwd, current]) } }
+/** An entry `isNoop` calls redundant is dropped from the end of `list`, so no step is spent on it. */
+function withoutNoops(list: readonly string[], isNoop: (entry: string) => boolean): readonly string[] {
+  let end = list.length
+  while (end > 0 && isNoop(list[end - 1] as string)) end -= 1
+  return end === list.length ? list : list.slice(0, end)
 }
 
-/** Forward one step from `current`, or null when nothing was stepped back from. */
-export function stepForward(history: PanelHistory, current: string): HistoryStep | null {
-  const target = history.fwd.at(-1)
+const KEEP_ALL = (): boolean => false
+
+/**
+ * Back one step from `current`, or null when there is nothing behind it. `isNoop` marks entries that would
+ * change nothing now (a link group step another panel of the group has already taken back): they are passed
+ * over, not stepped to, and not put on the forward list.
+ */
+export function stepBack(history: PanelHistory, current: string, isNoop: (entry: string) => boolean = KEEP_ALL): HistoryStep | null {
+  const back = withoutNoops(history.back, isNoop)
+  const target = back.at(-1)
   if (target === undefined) return null
-  return { target, history: { back: capped([...history.back, current]), fwd: history.fwd.slice(0, -1) } }
+  return { target, history: { back: back.slice(0, -1), fwd: capped([...history.fwd, current]) } }
+}
+
+/** Forward one step from `current`, or null when nothing was stepped back from. `isNoop` as for stepBack. */
+export function stepForward(history: PanelHistory, current: string, isNoop: (entry: string) => boolean = KEEP_ALL): HistoryStep | null {
+  const fwd = withoutNoops(history.fwd, isNoop)
+  const target = fwd.at(-1)
+  if (target === undefined) return null
+  return { target, history: { back: capped([...history.back, current]), fwd: fwd.slice(0, -1) } }
 }

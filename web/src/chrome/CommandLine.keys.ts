@@ -8,9 +8,13 @@
 // none of them reload the terminal, leave it or cover the command line): the browser never gets them,
 // and the message line says what to type instead. Alt+F4 and Ctrl+F4 stay the system's and the browser's.
 // No single printable character is bound (WCAG 2.1.4). A key a panel control already handled
-// (defaultPrevented) is left alone, so a chart's Home and End or a grid's PgUp keep working.
+// (defaultPrevented) is left alone, so a chart's Home and End or a grid's PgUp keep working. A printable
+// character that lands where nothing takes it (a panel, the page) is not bound either: it only earns a hint
+// on the message line, once in a while, saying where typing goes (U05).
 import { useEffect, useRef, type RefObject } from 'react'
 import type { KeyedSector } from '../commands/sectors'
+import { TYPE_HINT } from '../copy/typeHint'
+import { postMessage } from './MessageLine.store'
 
 /** The fields of a KeyboardEvent the maps read. */
 export interface KeyLike {
@@ -22,6 +26,8 @@ export interface KeyLike {
   readonly shiftKey: boolean
   readonly isComposing: boolean
   readonly defaultPrevented: boolean
+  /** A held key repeating (absent in the maps' own tests: not a repeat). */
+  readonly repeat?: boolean
 }
 
 export interface KeyWhere {
@@ -29,6 +35,8 @@ export interface KeyWhere {
   readonly lineEmpty: boolean
   /** Focus is in a text field (the command line or an amber field), where Home and End move the caret. */
   readonly inTextField: boolean
+  /** Focus is inside a dialog, menu, list or grid, which take letters of their own (typeahead, mnemonics; absent: not in one). */
+  readonly inPopup?: boolean
 }
 
 export type GlobalKeyAction =
@@ -104,6 +112,21 @@ export function globalKeyAction(e: KeyLike, where: KeyWhere): GlobalKeyAction | 
   return plainKey(e, where)
 }
 
+/**
+ * A plain printable character that lands where nothing takes it: focus is on a panel or the page, not in a
+ * text field or a popup, and no control handled the key. Space is left out (it presses a focused button), as
+ * are held keys, composition and every chord with Ctrl, Alt or Meta. Pure.
+ */
+export function strayLetter(e: KeyLike, where: KeyWhere): boolean {
+  if (e.isComposing || e.defaultPrevented || e.repeat === true) return false
+  if (e.ctrlKey || e.metaKey || e.altKey) return false
+  if (e.key === ' ' || [...e.key].length !== 1) return false
+  return !where.inTextField && where.inPopup !== true
+}
+
+/** The least time between two hints, so a line typed into a panel says it once, not once per letter. */
+export const HINT_EVERY_MS = 5000
+
 function isPlain(e: KeyboardEvent): boolean {
   return !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey
 }
@@ -153,8 +176,14 @@ export function useTerminalKeys(where: () => KeyWhere, run: (action: GlobalKeyAc
   const latest = useRef({ where, run })
   latest.current = { where, run }
   useEffect(() => {
+    let hintedAt = -HINT_EVERY_MS
     function onKeyDown(e: KeyboardEvent) {
-      const action = globalKeyAction(e, latest.current.where())
+      const here = latest.current.where()
+      const action = globalKeyAction(e, here)
+      if (!action && strayLetter(e, here) && Date.now() - hintedAt >= HINT_EVERY_MS) {
+        hintedAt = Date.now()
+        postMessage(TYPE_HINT)
+      }
       if (!action || action.kind === 'focus-command') return
       // A held or repeated F1 (U20) still must not reach the browser's own help page, but must not
       // run help again either: help() itself has no key-repeat guard (it reads a real clock for the

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { activateNumbered, numberedItems, registerNumbered, resetNumbered } from './NumberedActions'
+import { activateNumbered, numberedItems, registerNumbered, resetNumbered, runningPanel } from './NumberedActions'
 
 afterEach(resetNumbered)
 
@@ -57,5 +57,35 @@ describe('NumberedActions: the per-panel registry behind Number <GO> (spec 5.1 i
     expect(activateNumbered('p1', 0)).toBe(false)
     expect(activateNumbered('p1', 1.5)).toBe(false)
     expect(activateNumbered('p1', Number.NaN)).toBe(false)
+  })
+})
+
+describe('NumberedActions: the panel whose item is running (G03)', () => {
+  it('names the panel while its item runs, and nobody before or after', () => {
+    const seen: Array<string | null> = []
+    registerNumbered('p1', [{ n: 1, label: 'x', run: () => seen.push(runningPanel()) }])
+    expect(runningPanel()).toBeNull()
+    activateNumbered('p1', 1)
+    expect(seen).toEqual(['p1'])
+    expect(runningPanel()).toBeNull()
+  })
+
+  it('is not set for a number that runs nothing', () => {
+    expect(activateNumbered('p1', 1)).toBe(false)
+    expect(runningPanel()).toBeNull()
+  })
+
+  it('is cleared again when the item throws', () => {
+    registerNumbered('p1', [{ n: 1, label: 'x', run: () => { throw new Error('boom') } }])
+    expect(() => activateNumbered('p1', 1)).toThrow('boom')
+    expect(runningPanel()).toBeNull()
+  })
+
+  it('gives an item that activates another panel its own panel, and hands the first one back afterwards', () => {
+    const seen: Array<string | null> = []
+    registerNumbered('p2', [{ n: 2, label: 'inner', run: () => seen.push(runningPanel()) }])
+    registerNumbered('p1', [{ n: 1, label: 'outer', run: () => { seen.push(runningPanel()); activateNumbered('p2', 2); seen.push(runningPanel()) } }])
+    activateNumbered('p1', 1)
+    expect(seen).toEqual(['p1', 'p2', 'p1'])
   })
 })

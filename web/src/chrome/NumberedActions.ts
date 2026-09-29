@@ -42,12 +42,29 @@ export function numberedItems(panelId: string): ReadonlyArray<NumberedItem> {
   return [...byNumber.values()].sort((a, b) => a.n - b.n)
 }
 
+// The panel whose numbered item is running right now (G03). An item is a known panel's own action, so the
+// line it asks the command line to run belongs to that panel, and the workspace plans it there (replace, or
+// a new panel beside it) even when no panel has real focus, as after a layout load. Set for the length of
+// one run() only, so a typed line never sees it.
+let running: string | null = null
+
+/** The panel whose numbered item is running now, or null (always null outside `activateNumbered`). */
+export function runningPanel(): string | null {
+  return running
+}
+
 /** Runs item `n` of the panel; false (and nothing run) when the panel has no such item. */
 export function activateNumbered(panelId: string, n: number): boolean {
   if (!Number.isInteger(n) || n < 1) return false
   const item = numberedItems(panelId).find((i) => i.n === n)
   if (!item) return false
-  item.run()
+  const outer = running
+  running = panelId
+  try {
+    item.run()
+  } finally {
+    running = outer
+  }
   return true
 }
 

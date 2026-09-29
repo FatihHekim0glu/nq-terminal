@@ -10,6 +10,7 @@ import { COMMAND_LINE } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
 import { WORKSPACE } from '../copy/workspace'
 import { requestHelpTopic } from '../screens/help/helpTopic.store'
+import { takeOpened } from './CommandLine.bus'
 import { functionMenu, helpMenu, lastMenu, relatedMenu, searchMenu, sectorMenu, type MenuItem } from './CommandLine.menus'
 import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
 import { postMessage } from './MessageLine.store'
@@ -88,6 +89,7 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
       // A plain stub (most tests) returns undefined, which reads as having run; the real Workspace
       // answers `false` when it has no dockview api yet (its own lazy chunk still loading, or mounted
       // but not past onReady), meaning nothing opened.
+      takeOpened()
       const ran = p.options.onRun(action.command, panel ? 'new-panel' : 'replace')
       if (ran === false) {
         p.menus.close()
@@ -96,9 +98,11 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
         // press Enter again once the Workspace is ready, instead of retyping the whole command (D18).
         return action.command.canonical
       }
+      // G14: the words of the panel that opened, when its link group made it show something else than the line.
+      const opened = takeOpened() ?? action.command.canonical
       p.history.remember(action.command.canonical)
       p.menus.close()
-      postMessage(withValue(panel ? COMMAND_LINE.ranNewPanel : COMMAND_LINE.ran, action.command.canonical))
+      postMessage(withValue(panel ? COMMAND_LINE.ranNewPanel : COMMAND_LINE.ran, opened))
       return ''
     }
     case 'context':

@@ -2,7 +2,9 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import type { RefObject } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { globalKeyAction, isFocusKey, useCommandLineKeys, useTerminalKeys, type KeyLike, type KeyWhere } from './CommandLine.keys'
+import { HINT_EVERY_MS, globalKeyAction, isFocusKey, strayLetter, useCommandLineKeys, useTerminalKeys, type KeyLike, type KeyWhere } from './CommandLine.keys'
+import { resetMessage, useMessage } from './MessageLine.store'
+import { TYPE_HINT } from '../copy/typeHint'
 
 const key = (k: string, extra: Partial<KeyLike> = {}): KeyLike => ({
   key: k,
@@ -175,3 +177,87 @@ describe('useTerminalKeys: a held or repeated F1 never piles up HELP panels (U20
     expect(run).toHaveBeenCalledWith({ kind: 'help' })
   })
 })
+
+describe('strayLetter: a printable key that lands where nothing takes it (U05)', () => {
+  it('is any plain character or digit on a panel or the page, with or without Shift', () => {
+    for (const k of ['e', 'E', '9', '/', '?', 'é']) expect(strayLetter(key(k), inPanel)).toBe(true)
+    expect(strayLetter(key('E', { shiftKey: true }), inPanel)).toBe(true)
+  })
+
+  it('is not one in a text field (the command line, an amber field) or a popup', () => {
+    expect(strayLetter(key('e'), inLine)).toBe(false)
+    expect(strayLetter(key('e'), inTypedLine)).toBe(false)
+    expect(strayLetter(key('e'), { ...inPanel, inTextField: true })).toBe(false)
+    expect(strayLetter(key('e'), { ...inPanel, inPopup: true })).toBe(false)
+    expect(strayLetter(key('e'), { ...inPanel, inPopup: false })).toBe(true)
+  })
+
+  it('is not one for keys that do something else: Space, named keys, chords, held keys, composition, handled keys', () => {
+    expect(strayLetter(key(' '), inPanel)).toBe(false)
+    for (const k of ['Enter', 'Tab', 'Escape', 'Home', 'End', 'ArrowUp', 'F1', 'Dead', 'Shift']) expect(strayLetter(key(k), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { ctrlKey: true }), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { metaKey: true }), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { altKey: true }), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { repeat: true }), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { isComposing: true }), inPanel)).toBe(false)
+    expect(strayLetter(key('e', { defaultPrevented: true }), inPanel)).toBe(false)
+  })
+})
+
+describe('useTerminalKeys: the hint for a letter typed on a panel (U05)', () => {
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    resetMessage()
+  })
+
+  const where: KeyWhere = { inCommandLine: false, lineEmpty: true, inTextField: false }
+  const press = (init: KeyboardEventInit) =>
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }))
+    })
+
+  it('posts the hint, runs nothing and leaves the key to the browser', () => {
+    const run = vi.fn()
+    renderHook(() => useTerminalKeys(() => where, run))
+    let notPrevented = false
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', bubbles: true, cancelable: true }))
+    })
+    expect(notPrevented).toBe(true)
+    expect(run).not.toHaveBeenCalled()
+    expect(useMessage.getState().text).toBe(TYPE_HINT)
+    expect(TYPE_HINT).toBe('Type in the command line: <Esc> or <Home>')
+  })
+
+  it('posts nothing for a letter typed in the command line', () => {
+    renderHook(() => useTerminalKeys(() => ({ inCommandLine: true, lineEmpty: true, inTextField: true }), vi.fn()))
+    press({ key: 'e' })
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('says it once for a line typed into a panel, and again only after a while', () => {
+    let now = 1_000_000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    renderHook(() => useTerminalKeys(() => where, vi.fn()))
+    press({ key: 'r' })
+    const first = useMessage.getState().id
+    expect(useMessage.getState().text).toBe(TYPE_HINT)
+    now += 400
+    press({ key: 'e' })
+    press({ key: 'g' })
+    expect(useMessage.getState().id).toBe(first)
+    now += HINT_EVERY_MS
+    press({ key: 'x' })
+    expect(useMessage.getState().id).toBe(first + 1)
+  })
+
+  it('does not replace another message with the hint for a key that is not a letter', () => {
+    renderHook(() => useTerminalKeys(() => where, vi.fn()))
+    press({ key: 'Enter' })
+    press({ key: ' ' })
+    press({ key: 'e', ctrlKey: true })
+    expect(useMessage.getState().text).toBe('')
+  })
+})
+
