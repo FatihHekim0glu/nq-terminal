@@ -41,6 +41,18 @@ export interface CommandLineOptions {
   /** The focused panel's mnemonic, for MENU and F1. */
   readonly focusedCode?: () => MnemonicCode | null
   readonly historyStorage?: HistoryStorage | null
+  /** RESET <GO>: put the shown layout back to its default. Text to post, or null when not ready. */
+  readonly onReset?: () => string | null
+  /** UNDO <GO>: undo the last layout change. Text to post, or null when not ready. */
+  readonly onUndo?: () => string | null
+  /** The <GO> preview row: what `command` would do, alone or (newPanel) opened in a new panel; null when there is nothing to show. */
+  readonly previewRun?: (command: ParsedCommand, newPanel: boolean) => string | null
+  /** WATCH <GO>: what changed since the records were marked seen, as a menu; null when not ready. */
+  readonly watchMenu?: () => MenuModel | null
+  /** WATCH SEEN <GO>: mark the records seen. Text to post, or null when not ready. */
+  readonly onWatchSeen?: () => string | null
+  /** GRAB <GO>: save the focused panel as an image; false when no panel is focused. */
+  readonly onGrab?: () => boolean
 }
 
 function useHistory(storage: HistoryStorage | null | undefined) {

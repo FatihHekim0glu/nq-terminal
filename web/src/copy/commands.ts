@@ -55,6 +55,10 @@ export const CHROME_WORDS = {
   LAST: 'The last 8 commands',
   MAIN: 'The home screen (the same as HOME)',
   NXTW: 'Open the command after it in a new panel',
+  RESET: 'Put the shown layout back to its default (UNDO restores yours)',
+  UNDO: 'Undo the last layout change (the last 10 are kept)',
+  WATCH: 'What changed in the research records since you marked them seen',
+  GRAB: 'Save the focused panel as an image, with its labels and source',
 } as const
 
 export const CONTEXT_KIND_NAMES = {
@@ -168,6 +172,9 @@ export const COMMAND_LINE = {
   menuCancelLabel: 'Close the menu',
   menuLabel: 'Menu',
   categoryMark: ' >',
+  layoutUnavailable: 'The workspace is not ready yet.',
+  watchUnavailable: 'The change watch has not read the records yet.',
+  grabUnavailable: 'No panel is focused: click a panel or press Alt+1, then GRAB <GO>.',
 } as const
 
 /** Sector menus (spec 5.1 item 4): COMDTY opens these categories. */

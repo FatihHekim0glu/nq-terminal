@@ -19,13 +19,25 @@ export type LineAction =
   | { readonly kind: 'last' }
   | { readonly kind: 'tape' }
   | { readonly kind: 'menu' }
+  | { readonly kind: 'reset' }
+  | { readonly kind: 'undo' }
+  | { readonly kind: 'watch' }
+  | { readonly kind: 'watch-seen' }
+  | { readonly kind: 'grab' }
 
 export type LineResult = { readonly ok: true; readonly action: LineAction } | { readonly ok: false; readonly error: ParseError }
 
 export type ChromeWord = keyof typeof CHROME_WORDS
 
 const DIGITS = /^\d{1,3}$/
-const BARE_WORDS: Readonly<Record<string, LineAction>> = { LAST: { kind: 'last' }, NO: { kind: 'tape' }, MENU: { kind: 'menu' } }
+const BARE_WORDS: Readonly<Record<string, LineAction>> = {
+  LAST: { kind: 'last' },
+  NO: { kind: 'tape' },
+  MENU: { kind: 'menu' },
+  RESET: { kind: 'reset' },
+  UNDO: { kind: 'undo' },
+  GRAB: { kind: 'grab' },
+}
 const ALIASES: Readonly<Record<string, string>> = { MAIN: 'HOME' }
 
 const ok = (action: LineAction): LineResult => ({ ok: true, action })
@@ -44,6 +56,11 @@ function chromeAction(tokens: readonly string[]): LineResult | null {
   const word = first.toUpperCase()
   if (tokens.length === 1 && DIGITS.test(first)) return ok({ kind: 'number', n: Number(first) })
   if (word === 'HL') return ok({ kind: 'search', query: rest.join(' ') })
+  if (word === 'WATCH') {
+    if (rest.length === 0) return ok({ kind: 'watch' })
+    if (rest.length === 1 && rest[0]?.toUpperCase() === 'SEEN') return ok({ kind: 'watch-seen' })
+    return fail('extra-after-word', word)
+  }
   const bare = BARE_WORDS[word]
   if (bare) return rest.length === 0 ? ok(bare) : fail('extra-after-word', word)
   const sector = tokens.length === 1 ? sectorWord(first) : null

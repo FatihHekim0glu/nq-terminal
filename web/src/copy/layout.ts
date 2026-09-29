@@ -3,6 +3,10 @@
 // layout instead of losing it. UK spelling, no em or en dashes. `{name}` slots are filled by
 // fillCopy() (copy/workspace.ts).
 
+/** Joins two preview clauses. Its own export so the shell's <GO> preview row (chrome/CommandLine.preview.tsx)
+ *  imports only this string, not the whole LAYOUT object (about 350 B gzip of shell budget). */
+export const LAYOUT_SEPARATOR = ' | '
+
 export const LAYOUT = {
   replace: '<GO> replaces {panel} with {code}',
   add: '<Shift+GO> adds {code} in a new panel right of {panel}',
@@ -11,7 +15,7 @@ export const LAYOUT = {
   loadDefault: '<GO> loads the {screen} layout ({n} panels)',
   loadContext: '<GO> loads {screen} for this context ({n} panels)',
   retarget: 'retargets [{group}]: {panels}',
-  separator: ' | ',
+  separator: LAYOUT_SEPARATOR,
   editedMark: '*',
   editedLabel: 'edited',
   reset: '{screen} is back to its default layout. UNDO restores yours.',

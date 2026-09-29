@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { CHROME_WORDS } from '../copy/commands'
 import { describeError } from './messages'
 import { displayLine, parseLine, type LineResult } from './line'
+import { MNEMONICS } from './registry'
+import { sectorWord } from './sectors'
 import type { CommandIndexData } from './types'
 
 const INDEX: CommandIndexData = {
@@ -135,6 +138,38 @@ describe('spec 8.4 parser cases', () => {
     expect(failure(parse('')).code).toBe('empty')
     const a = action(parse('GP', 'ES'))
     expect(a.kind === 'run' && a.command.canonical).toBe('ES GP')
+  })
+})
+
+describe('chrome words RESET, UNDO, WATCH, WATCH SEEN and GRAB (roadmap #15, #16)', () => {
+  it('parse in any case', () => {
+    expect(action(parse('reset'))).toEqual({ kind: 'reset' })
+    expect(action(parse('RESET'))).toEqual({ kind: 'reset' })
+    expect(action(parse('undo'))).toEqual({ kind: 'undo' })
+    expect(action(parse('Undo'))).toEqual({ kind: 'undo' })
+    expect(action(parse('grab'))).toEqual({ kind: 'grab' })
+    expect(action(parse('GrAb'))).toEqual({ kind: 'grab' })
+    expect(action(parse('watch'))).toEqual({ kind: 'watch' })
+    expect(action(parse('WATCH'))).toEqual({ kind: 'watch' })
+    expect(action(parse('watch seen'))).toEqual({ kind: 'watch-seen' })
+    expect(action(parse('WATCH SEEN'))).toEqual({ kind: 'watch-seen' })
+    expect(action(parse('Watch Seen'))).toEqual({ kind: 'watch-seen' })
+  })
+
+  it("RESET X, GRAB X, UNDO X and WATCH NOW fail with 'extra-after-word'", () => {
+    expect(failure(parse('RESET X')).code).toBe('extra-after-word')
+    expect(failure(parse('GRAB X')).code).toBe('extra-after-word')
+    expect(failure(parse('UNDO X')).code).toBe('extra-after-word')
+    expect(failure(parse('WATCH NOW')).code).toBe('extra-after-word')
+    expect(failure(parse('WATCH SEEN NOW')).code).toBe('extra-after-word')
+  })
+
+  it('collision guard: no chrome word equals a mnemonic code or a sector word', () => {
+    const mnemonicCodes = new Set<string>(MNEMONICS.map((m) => m.code))
+    for (const word of Object.keys(CHROME_WORDS)) {
+      expect(mnemonicCodes.has(word), word).toBe(false)
+      expect(sectorWord(word), word).toBeNull()
+    }
   })
 })
 

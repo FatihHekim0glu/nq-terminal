@@ -97,6 +97,26 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
     case 'tape':
       postMessage(p.options.onTape?.() ? MESSAGES.tapeOn : MESSAGES.tapeOff)
       return ''
+    case 'reset':
+    case 'undo': {
+      const callback = action.kind === 'reset' ? p.options.onReset : p.options.onUndo
+      postMessage(callback?.() ?? COMMAND_LINE.layoutUnavailable)
+      p.history.remember(action.kind === 'reset' ? 'RESET' : 'UNDO')
+      return ''
+    }
+    case 'watch': {
+      const menu = p.options.watchMenu?.()
+      if (menu) p.menus.open(menu)
+      else postMessage(COMMAND_LINE.watchUnavailable)
+      return ''
+    }
+    case 'watch-seen':
+      postMessage(p.options.onWatchSeen?.() ?? COMMAND_LINE.watchUnavailable)
+      return ''
+    case 'grab':
+      if (!p.options.onGrab?.()) postMessage(COMMAND_LINE.grabUnavailable)
+      p.menus.close()
+      return ''
     default:
       openMenuAction(p, action)
       return ''

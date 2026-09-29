@@ -3,9 +3,11 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { createRef } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { HistoryStorage } from '../commands/history'
+import type { ParsedCommand } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
 import { COMMAND_LINE, PARSE_MESSAGES } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
+import { LAYOUT } from '../copy/layout'
 import { CommandLine, type CommandLineHandle, type CommandLineProps } from './CommandLine'
 import { resetMessage } from './MessageLine.store'
 
@@ -58,7 +60,14 @@ function setup(props: Partial<CommandLineProps> = {}) {
   const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
   const type = (text: string) => fireEvent.change(input, { target: { value: text } })
   const key = (k: string, init: Partial<KeyboardEventInit> = {}) => fireEvent.keyDown(input, { key: k, ...init })
-  const message = () => screen.getByRole('status')
+  // Scoped to .msg-line: PreviewAnnouncer (CommandLine.preview.tsx) mounts another role='status'
+  // region beside it whenever the caller offers previewRun, for the preview row instead of prompts
+  // and errors.
+  const message = () => {
+    const el = screen.getAllByRole('status').find((n) => n.classList.contains('msg-line'))
+    expect(el).toBeDefined()
+    return el as HTMLElement
+  }
   return { onRun, input, type, key, ref, message, panel: screen.getByRole('button', { name: 'panel' }) }
 }
 
@@ -385,6 +394,157 @@ describe('CommandLine: suggestions (spec 4.2 autocomplete)', () => {
     type('re')
     expect(within(screen.getByRole('listbox')).getAllByRole('option')[0]?.textContent).toContain('REG')
     expect(screen.getByText(COMMAND_LINE.indexError)).toBeTruthy()
+  })
+})
+
+describe('CommandLine: RESET, UNDO, WATCH and GRAB (roadmap #15, #16)', () => {
+  it('RESET and UNDO post the callback text and remember the word in history', () => {
+    const onReset = vi.fn(() => 'Home is back to its default layout. UNDO restores yours.')
+    const onUndo = vi.fn(() => 'Undone: Home is back as it was.')
+    const { type, key, message, input } = setup({ onReset, onUndo })
+    type('RESET')
+    key('Enter')
+    expect(onReset).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe('Home is back to its default layout. UNDO restores yours.')
+    expect(input.value).toBe('')
+    type('UNDO')
+    key('Enter')
+    expect(onUndo).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe('Undone: Home is back as it was.')
+    type('LAST')
+    key('Enter')
+    const last = within(screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle }))
+    expect(last.getAllByRole('option').map((o) => o.textContent)).toEqual(['1)UNDO', '2)RESET'])
+  })
+
+  it('RESET and UNDO post the unavailable message without a callback', () => {
+    const { type, key, message } = setup()
+    type('RESET')
+    key('Enter')
+    expect(message().textContent).toBe(COMMAND_LINE.layoutUnavailable)
+    type('UNDO')
+    key('Enter')
+    expect(message().textContent).toBe(COMMAND_LINE.layoutUnavailable)
+  })
+
+  it('WATCH opens the menu it is given; WATCH SEEN posts the callback text', () => {
+    const watchMenu = vi.fn(() => ({
+      key: 'watch',
+      title: 'Since you last looked',
+      breadcrumb: ['Since you last looked'],
+      intro: [],
+      items: [{ n: 1, label: 'za_v0', detail: 'DES', category: false, act: { kind: 'run' as const, line: 'za_v0 DES' } }],
+    }))
+    const onWatchSeen = vi.fn(() => 'Marked seen.')
+    const { type, key, message } = setup({ watchMenu, onWatchSeen })
+    type('WATCH')
+    key('Enter')
+    expect(watchMenu).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('listbox', { name: 'Since you last looked' })).toBeTruthy()
+    type('WATCH SEEN')
+    key('Enter')
+    expect(onWatchSeen).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe('Marked seen.')
+  })
+
+  it('WATCH and WATCH SEEN post the unavailable message without a callback (a null watchMenu counts as none)', () => {
+    const { type, key, message } = setup({ watchMenu: () => null })
+    type('WATCH')
+    key('Enter')
+    expect(message().textContent).toBe(COMMAND_LINE.watchUnavailable)
+    type('WATCH SEEN')
+    key('Enter')
+    expect(message().textContent).toBe(COMMAND_LINE.watchUnavailable)
+  })
+
+  it('GRAB posts grabUnavailable when onGrab is absent', () => {
+    const { type, key, message } = setup()
+    type('GRAB')
+    key('Enter')
+    expect(message().textContent).toBe(COMMAND_LINE.grabUnavailable)
+  })
+
+  it('GRAB posts grabUnavailable when onGrab returns false', () => {
+    const onGrab = vi.fn(() => false)
+    const { type, key, message } = setup({ onGrab })
+    type('GRAB')
+    key('Enter')
+    expect(onGrab).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe(COMMAND_LINE.grabUnavailable)
+  })
+
+  it('GRAB posts nothing when onGrab returns true', () => {
+    const onGrab = vi.fn(() => true)
+    const { type, key, message } = setup({ onGrab })
+    type('GRAB')
+    key('Enter')
+    expect(onGrab).toHaveBeenCalledTimes(1)
+    expect(message().textContent).toBe('')
+  })
+})
+
+describe('CommandLine: the <GO> preview row (roadmap #6 slice 2)', () => {
+  function preview(command: ParsedCommand, newPanel: boolean) {
+    return `${newPanel ? 'Shift' : 'Enter'}: ${command.canonical}`
+  }
+
+  it('renders the preview row from previewRun, aria-hidden, under the suggestions', () => {
+    // 'NQ GP' still fuzzy-suggests GIP, so the sheet and a valid preview for the typed line show together.
+    const { type, input } = setup({ previewRun: preview })
+    type('NQ GP')
+    const list = screen.getByRole('listbox')
+    const row = list.parentElement?.querySelector('.cmd-preview')
+    expect(row?.getAttribute('aria-hidden')).toBe('true')
+    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT.separator}Shift: NQ GP`)
+    expect(input.getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('renders its own popup row when the sheet is dismissed', () => {
+    const { type, key, input } = setup({ previewRun: preview })
+    input.focus()
+    type('NQ GP')
+    key('Escape')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    const row = document.querySelector('.cmd-pop .cmd-preview')
+    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT.separator}Shift: NQ GP`)
+  })
+
+  it('hides the standalone preview popup once the line loses focus', () => {
+    const { type, key, input } = setup({ previewRun: preview })
+    act(() => input.focus())
+    type('NQ GP')
+    key('Escape')
+    expect(document.querySelector('.cmd-pop .cmd-preview')).not.toBeNull()
+    fireEvent.blur(input)
+    expect(document.querySelector('.cmd-preview')).toBeNull()
+  })
+
+  it('never renders while a menu is open, even with a valid line underneath it', () => {
+    const { type, ref } = setup({ previewRun: preview })
+    type('NQ GP')
+    act(() => ref.current?.showMenu({ key: 'x', title: 'X', breadcrumb: ['X'], intro: [], items: [] }))
+    expect(document.querySelector('.cmd-menu')).toBeTruthy()
+    expect(document.querySelector('.cmd-preview')).toBeNull()
+  })
+
+  it('renders nothing without previewRun', () => {
+    const { type } = setup()
+    type('NQ GP')
+    expect(document.querySelector('.cmd-preview')).toBeNull()
+  })
+
+  it('without previewRun the line mounts exactly one role=status region (the message line)', () => {
+    setup()
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+  })
+
+  it('with previewRun the announcer region is mounted before any text', () => {
+    setup({ previewRun: preview })
+    const statuses = screen.getAllByRole('status')
+    expect(statuses).toHaveLength(2)
+    const announcer = statuses.find((n) => !n.classList.contains('msg-line'))
+    expect(announcer).toBeDefined()
+    expect(announcer?.textContent).toBe('')
   })
 })
 

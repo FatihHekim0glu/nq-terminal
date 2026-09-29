@@ -22,6 +22,7 @@ import { useCommandLineKeys } from './CommandLine.keys'
 import { handleLineKey } from './CommandLine.lineKeys'
 import { MenuSheet, menuOptionId } from './CommandLine.menu'
 import { helpMenu, relatedMenu, type MenuModel } from './CommandLine.menus'
+import { PreviewAnnouncer, usePreviewText } from './CommandLine.preview'
 import { Sheet } from './CommandLine.sheet'
 import { NO_OPTION, useCommandLineParts, type CommandLineOptions, type CommandLineParts, type Fallback } from './CommandLine.state'
 import { MessageLine } from './MessageLine'
@@ -164,6 +165,7 @@ function useInputHandlers(p: CommandLineParts, rootRef: RefObject<HTMLDivElement
 export function CommandLine(props: CommandLineProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const [focused, setFocused] = useState(false)
   const [listId, setListId] = useState<string | undefined>()
   const listRef = useCallback((node: HTMLDivElement | null) => setListId(node?.id), [])
   const [caret, setCaret] = useState({ column: 0, scroll: 0 })
@@ -181,6 +183,14 @@ export function CommandLine(props: CommandLineProps) {
   const popupId = menu ? (menu.items.length > 0 ? menuId : undefined) : p.sheetOpen ? listId : undefined
   const activeMenuItem = menu && p.menus.row !== null ? menu.items[p.menus.row] : undefined
   const typed = p.s.line.split(/\s+/).at(-1) ?? ''
+  // Hooks run unconditionally; the row itself is withheld below while a menu is open.
+  const rawPreviewText = usePreviewText(p)
+  const previewText = menu ? null : rawPreviewText
+  const previewRow = previewText !== null ? (
+    <p className="cmd-preview" aria-hidden="true">
+      {previewText}
+    </p>
+  ) : null
   return (
     <div className="cmdline" ref={rootRef}>
       <div className="cmd-row">
@@ -197,8 +207,14 @@ export function CommandLine(props: CommandLineProps) {
               describedBy={p.s.error ? `${hintId} ${msgId}` : hintId}
               onChange={handlers.onChange}
               onKeyDown={handlers.onKeyDown}
-              onFocus={handlers.onFocus}
-              onBlur={handlers.onBlur}
+              onFocus={(e) => {
+                setFocused(true)
+                handlers.onFocus(e)
+              }}
+              onBlur={() => {
+                setFocused(false)
+                handlers.onBlur()
+              }}
               onCaret={(column, scroll) => setCaret({ column, scroll })}
             />
             <BlockCursor column={Math.min(caret.column, p.s.line.length)} scrollLeft={caret.scroll} restart={p.s.keystrokes} />
@@ -207,6 +223,7 @@ export function CommandLine(props: CommandLineProps) {
             <div className="cmd-pop">
               <Sheet groups={p.groups} typed={typed} onChoose={(value) => chooseSuggestion(p, value)} listRef={listRef} />
               {note ? <p className="cmd-note">{note}</p> : null}
+              {previewRow}
             </div>
           ) : null}
           {menu ? (
@@ -214,10 +231,12 @@ export function CommandLine(props: CommandLineProps) {
               <MenuSheet id={menuId} menu={menu} row={p.menus.row} onChoose={(item) => chooseItem(p, item)} onClose={p.menus.close} />
             </div>
           ) : null}
+          {focused && !p.sheetOpen && !menu && previewRow ? <div className="cmd-pop">{previewRow}</div> : null}
         </Command>
         {props.aside}
       </div>
       <MessageLine id={msgId} />
+      {p.options.previewRun ? <PreviewAnnouncer text={previewText} /> : null}
       <span id={hintId} className="sr-only">{COMMAND_LINE.hint}</span>
     </div>
   )

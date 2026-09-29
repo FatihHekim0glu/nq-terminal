@@ -65,6 +65,8 @@
 /* The arrowed-to row: a white bar as well as the fill, so the state is not shade alone. */
 .cmdline [cmdk-item][data-selected="true"] { box-shadow: inset 2px 0 0 var(--focus); }
 .cmdline .cmd-note { padding: 0 8px; line-height: var(--row-h); font-size: var(--fs-small); color: var(--muted); }
+/* The <GO> preview row: aria-hidden (PreviewAnnouncer tells assistive technology instead). */
+.cmdline .cmd-preview { padding: 0 8px; line-height: var(--row-h); font-size: var(--fs-small); color: var(--muted); border-top: 1px solid var(--cmd-border); }
 
 /* Numbered menus (spec 4.7): breadcrumb, <Cancel> X, `N) MNEM  Title` rows. */
 .cmd-menu { padding: 4px 0; }
