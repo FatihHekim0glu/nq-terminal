@@ -31,6 +31,9 @@
 .frame-right { display: flex; align-items: center; gap: 6px; height: 29px; padding-right: 8px; flex: 0 0 auto; }
 .frame-flags { display: flex; gap: 4px; }
 .frame-flag { padding: 1px 6px; background: var(--flag-bg); color: var(--flag-fg); font-weight: 700; white-space: nowrap; }
+/* The DEMO DATA key is a button drawn as the .frame-flag span beside it. The longhand font properties, not the font
+   shorthand: this rule outranks .frame-flag, and the shorthand would reset its bold. The focus ring is the strip's own. */
+button.frame-flag { margin: 0; border: 0; border-radius: 0; font-family: inherit; font-size: inherit; line-height: inherit; cursor: pointer; }
 .frame-btn { min-height: 24px; padding: 0 6px; background: transparent; border: 0; border-radius: 0; color: var(--frame-fg); font: inherit; cursor: pointer; }
 .frame-options { position: relative; }
 /* Drops from the frame strip's lower edge at the window's right edge and covers the key and nav rows

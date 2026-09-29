@@ -61,7 +61,8 @@ describe('desDossier: head, flags and registration', () => {
     expect(desDossier(bare(ZA_C3), CTX).flags).toEqual(['[CHECK]', '[POST HOC]'])
     const overlay = { ...VOLMANAGED, card: { ...VOLMANAGED.card, tag: 'overlay' as const } }
     expect(desDossier(bare(overlay), CTX).flags).toEqual(['[FAIL]', '[PRE-REG]', '[OVERLAY]'])
-    expect(desDossier(bare(overlay), { ...CTX, demo: true, fixture: true }).flags).toEqual(['[FAIL]', '[PRE-REG]', '[OVERLAY]', 'DEMO DATA', 'FIXTURE DATA'])
+    expect(desDossier(bare(overlay), { ...CTX, demo: true, fixture: true }).flags).toEqual(['[FAIL]', '[PRE-REG]', '[OVERLAY]', 'DEMO DATA'])
+    expect(desDossier(bare(overlay), { ...CTX, fixture: true }).flags).toEqual(['[FAIL]', '[PRE-REG]', '[OVERLAY]', 'FIXTURE DATA'])
     expect(desDossier(bare(VOLMANAGED), { ...CTX, demo: true }).flags).toEqual(['[FAIL]', '[PRE-REG]', 'DEMO DATA'])
   })
 

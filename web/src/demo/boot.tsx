@@ -4,8 +4,10 @@
 // The demo is the real terminal on fixture data with no backend: before the terminal renders, the page's
 // fetch and EventSource are replaced by assignment with the demo's (src/demo/fetch.ts, src/demo/stream.ts),
 // which answer every /api GET and the live stream in the browser. The terminal's own code runs unchanged and
-// still sends every request through src/api/client.ts, GET only. The root element carries data-demo="on" for
-// the frame strip's DEMO DATA flag, and the demo's /api/health says fixture_mode for the status line.
+// still sends every request through src/api/client.ts, GET only. The root element carries data-demo="on", the
+// page's one demo mark (copy/chrome.ts isDemoPage): the frame strip's DEMO DATA key (it opens About this demo on the
+// HELP page), the status line's data segment (the same term and tooltip) and REG's provenance line (copy/reg.ts)
+// read it. The demo's /api/health says fixture_mode, which is what puts that segment on the status line.
 import { createDemoFetch } from './fetch'
 import { DemoEventSource } from './stream'
 

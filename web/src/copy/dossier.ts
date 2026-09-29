@@ -3,6 +3,7 @@
 // (chrome/panelExport.ts): nothing in the shell imports this file, so the words stay out of the first load.
 // UK spelling, no em or en dashes. `{name}` slots are filled by fillCopy() (copy/workspace.ts). Words that
 // already exist in DES, DES_REPORT, TEAR and TEAR_SV7 are reused from there, not repeated here.
+import { DEMO_DATA } from './chrome'
 
 export const DOSSIER = {
   menuPack: 'Evidence pack (HTML)',
@@ -24,7 +25,8 @@ export const DOSSIER = {
   generated: 'Made {time} ET from GET answers already in this browser; nothing was recomputed.',
   /** The server clock the last health answer carried; left out when there is none. */
   serverClock: 'Server clock {time} ET at the last status check.',
-  demoNote: 'DEMO DATA: fixture captures and synthetic prices, not research results.',
+  /** The frame's own words for DEMO DATA (copy/chrome.ts), so the printed page says what the flag on screen says. */
+  demoNote: `${DEMO_DATA.term}: ${DEMO_DATA.note}`,
   figureNote: 'Charts are images of the panel as it was on screen, in its screen colours.',
   /** One source line: the GET the answer came from. */
   sourceLine: 'GET {path}',

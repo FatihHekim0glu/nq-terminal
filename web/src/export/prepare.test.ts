@@ -228,6 +228,15 @@ describe('prepareExport: the dossier', () => {
     expect(off.footer).not.toContain(DOSSIER.demoNote)
   })
 
+  it('prints the one demo term, not FIXTURE DATA as well, when the demo health answer also says fixture', () => {
+    mountPanel([])
+    registerTear()
+    document.documentElement.dataset.demo = 'on'
+    const flagged = job(prepare({ health: { ...HEALTH, fixture_mode: true } })).dossier.flags
+    expect(flagged).toContain(FRAME_STRIP.demoData)
+    expect(flagged).not.toContain(STATUS_BAR.fixture)
+  })
+
   it('marks FIXTURE DATA when the health answer says the backend serves fixtures, and not otherwise', () => {
     mountPanel([])
     registerTear()

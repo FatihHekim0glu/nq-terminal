@@ -59,7 +59,7 @@ corepack pnpm install
 corepack pnpm demo
 ```
 
-Open http://127.0.0.1:5174. The terminal opens on HOME, with DEMO DATA in the frame strip and FIXTURE DATA on the
+Open http://127.0.0.1:5174. The terminal opens on HOME, with DEMO DATA in the frame strip and on the
 status line.
 
 > [!NOTE]
@@ -102,7 +102,7 @@ here, is the fixture backend's. Run and analytics bodies come from the fixture b
 seeded generator, and never pass through the gate, and the market views (`MON`, `CORR`, `VCONE`, `SEAS`, `EVT`) are
 seeded or hand-built fillers on the backend's scale, not statistics of real prices.
 
-Six of the eight images keep the full 1920x1080 viewport, so the DEMO DATA flag and the FIXTURE DATA status stay in
+Six of the eight images keep the full 1920x1080 viewport, so the DEMO DATA flag and the status line stay in
 frame. OOS and LIVE + JRNL are cropped to their filled upper part, which keeps the DEMO DATA flag. Click an image to
 open it at full size.
 
@@ -354,7 +354,7 @@ The research rules of nq-lab (the nq-lab project rules) bind the backend, and th
 break them.
 
 <p align="center"><img src="docs/media/status-line.webp" width="725" alt="Part of the status line: the served data window 2010-01-01..2021-12-31, FIXTURE DATA, TWS not monitored, KILL off, gate reads 0, READ ONLY and NO ORDER PATH"></p>
-<p align="center"><em>The status line on every screen: the served window, FIXTURE DATA in demo mode, gate reads, READ ONLY and NO ORDER PATH.</em></p>
+<p align="center"><em>The status line on every screen: the served window, the data source, gate reads, READ ONLY and NO ORDER PATH.</em></p>
 
 - **Read only.** Every route is GET; a test pins the route set and fails on any other method. A syntax-tree scan
   bans write calls anywhere in the backend. The ledger is never written: for an eligible run, RUN shows the

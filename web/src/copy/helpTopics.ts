@@ -2,6 +2,7 @@
 // its numbers come from, the honesty rule that applies, runnable examples and related functions. Our
 // own text, written from this project's specs; nothing is taken from any vendor manual. UK spelling,
 // no em or en dashes. Examples are `{<line> <GO>}` command links; every one parses (helpTopics.test).
+import { DEMO_DATA, isDemoPage } from './chrome'
 
 export const HELP_TOPIC = {
   crumb: 'Getting started > Help > Help for {code}',
@@ -77,8 +78,8 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
   { term: 'Sealed', meaning: 'The window from 2022-01-01 that research does not read. A sealed confirmation tests one hypothesis on it, with its own alpha and outside the family.' },
   { term: 'Basis A', meaning: "A hypothesis's screen series at 0, 1 or 2 ticks per side: the research view of a registered test." },
   { term: 'Basis B', meaning: 'The account of a Nautilus run or of the paper book: its own balances and trades.' },
-  { term: 'DEMO DATA', meaning: 'The demo build: every answer is fixture data served in the browser, fixture captures and synthetic prices, not research results.' },
-  { term: 'FIXTURE DATA', meaning: 'The backend is reading a fixture folder instead of the research files, so the numbers are test data, not research results.' },
+  { term: DEMO_DATA.term, meaning: 'The demo build: captured fixtures, research file snapshots and seeded prices served in the browser, and nothing live. The frame strip flag and the status line use this one term. In the demo, About this demo leads this page and says which is which.' },
+  { term: 'FIXTURE DATA', meaning: `The backend is reading a fixture folder instead of the research files, so the numbers are test data, not research results. The demo shows ${DEMO_DATA.term} in its place.` },
   { term: 'KILL', meaning: "The paper book's kill switch. KILL ON means the live/KILL file is present and the paper book will not trade. The terminal only reads it and never toggles it." },
   { term: 'TWS', meaning: 'The Interactive Brokers Trader Workstation behind the paper book. The terminal never talks to it, so the status line says TWS not monitored.' },
   { term: 'Gate reads', meaning: 'The number of price reads the gate has served since the backend started. It rises with every price a screen reads.' },
@@ -89,6 +90,39 @@ export const GLOSSARY: readonly GlossaryEntry[] = [
 ]
 
 const glossaryLine = (g: GlossaryEntry): string => `${g.term}: ${g.meaning}`
+
+/**
+ * About this demo (U01): what the DEMO DATA flag and the demo's status segment mean. The lines lead the HELP page in
+ * the demo only (HELP_TOPICS.HELP.shows below adds them when the demo boot has marked the page): they say the
+ * terminal runs on captured data with no backend behind it, which is false of the real terminal, whose HELP page and
+ * HL index must not carry them. The DEMO DATA key opens the page and HL reads it, so 'demo', 'synthetic' or
+ * 'snapshot' find the lines there. A topic has to be a registry mnemonic (helpTopics.test), and the demo has no code
+ * of its own. The run names of the demo dataset are not spelled out: one of them is a marker the bundle check keeps
+ * out of a production build (scripts/bundleCheck.ts DEMO_MARKERS), and this copy ships in every build. The demo's own
+ * refusal names them. The DES cards split by where each answer came from (demo/data/research.ts): volmanaged_v0 and
+ * overnight_v0 are the fixture backend's, and rebal_v0, za_v0 and its check are real answers of the API
+ * (helpTopics.demo.test guards the five names).
+ */
+export const DEMO_TOPIC = {
+  title: 'About this demo',
+  lines: [
+    `About this demo: the ${DEMO_DATA.term} flag and status segment mark the real terminal, running in your browser on captured data with no backend behind it. Nothing in it is live.`,
+    'Synthetic prices: every price comes from a seeded generator, so it is not market data and does not pass through the OOS gate. The market views (MON, CORR, VCONE, SEAS) are seeded or hand-built fillers on the real scale, not statistics of real prices.',
+    'Captured fixtures: the DES cards of volmanaged_v0 and overnight_v0, the tear sheets, the runs, the ledger and the paper book are answers captured from the fixture backend. The LIVE screen replays a recorded journal instead of reading a live one.',
+    "Research files: REG, MT and the deflated Sharpe view are the API's answers on the real research files, captured on 2026-09-27. The DES cards of rebal_v0 and za_v0 (with its check) are real answers of the API too. They are a snapshot, so their verdicts are the real ones as of that day and they do not change.",
+    'Full evidence: volmanaged_v0 has DES, EQ and RET at 1 tick per side. Two runs have tear sheets: the fixture run of volmanaged_v0 and smoke_2015_01. Other hypotheses open a DES card only where one was captured, and have no tear sheet.',
+    'Not in the demo dataset: the answer a screen gives when the demo holds no captured answer for what you asked, such as intraday bars, run comparison or sealed file bodies. It is a gap in the demo, not a fault and not a finding. For a tear sheet it goes on to name the evidence the demo does hold.',
+    'Read only: the demo answers GET requests in the page, refuses any other and never reaches a real backend, so it cannot write, order or send anything.',
+  ],
+} as const
+
+/** What the HELP page shows in every build; the demo adds DEMO_TOPIC.lines in front (see HELP_TOPICS.HELP.shows). */
+const HELP_SHOWS: readonly string[] = [
+  'The numbered mnemonic index; a number and <GO> opens that function\'s help here.',
+  'MNEM HELP or F1 shows one function\'s help; HL searches functions, metrics, instruments, help text, hypotheses and runs.',
+  'The glossary below defines the labels the terminal prints: the honesty tags, the verdict words, the gate and the safety segments of the status line. HL finds each term.',
+  ...GLOSSARY.map(glossaryLine),
+]
 
 export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   HOME: {
@@ -325,12 +359,11 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   },
   HELP: {
     summary: 'This help: every function, the keys, the keyboard, link groups, licences and a glossary of the labels.',
-    shows: [
-      'The numbered mnemonic index; a number and <GO> opens that function\'s help here.',
-      'MNEM HELP or F1 shows one function\'s help; HL searches functions, metrics, instruments, help text, hypotheses and runs.',
-      'The glossary below defines the labels the terminal prints: the honesty tags, the verdict words, the gate and the safety segments of the status line. HL finds each term.',
-      ...GLOSSARY.map(glossaryLine),
-    ],
+    // Read each time the page or the HL index is built, like REG.criteriaSource: the demo boot marks the page before
+    // anything renders (src/demo/boot.tsx), and the HL index is built lazily after first paint.
+    get shows(): readonly string[] {
+      return [...(isDemoPage() ? DEMO_TOPIC.lines : []), ...HELP_SHOWS]
+    },
     data: 'GET /api/commands for the hypotheses and runs the command line knows.',
     examples: ['{HELP <GO>}', '{GP HELP <GO>}'],
     related: ['HOME'],

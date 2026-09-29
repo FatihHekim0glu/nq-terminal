@@ -48,16 +48,29 @@ describe('grabCaption', () => {
   it('writes three lines for a panel with provenance: panel, provenance, fence and source', () => {
     const lines = grabCaption(facts({ demo: true, fixture: true, provenance: FULL, asOfUtc: AS_OF }))
     expect(lines).toEqual([
-      '1-EQ [A] | volmanaged_v0 EQ | DEMO DATA | FIXTURE DATA',
+      '1-EQ [A] | volmanaged_v0 EQ | DEMO DATA',
       '[PRE-REG] [POST HOC] | Basis net: after costs | ticks | 2010-01-01..2021-12-31, n 3021 | spec 0123456789ab',
       `${FENCE.label} | GET /api/analytics?run=nt_x | as of 13:59:30 ET | grabbed 14:02:11 ET | ${CHROME.appTitle}`,
     ])
   })
 
   it('uses the copy module for the flags, so the words are not repeated here', () => {
+    const [demo] = grabCaption(facts({ demo: true }))
+    expect(demo).toContain(FRAME_STRIP.demoData)
+    const [fixture] = grabCaption(facts({ fixture: true }))
+    expect(fixture).toContain(STATUS_BAR.fixture)
+  })
+
+  // The screen shows one term in the demo (the frame strip flag and the status segment: DEMO DATA), and so does the image.
+  it('prints the one demo term in the demo, even when the backend health answer also says fixture', () => {
     const [first] = grabCaption(facts({ demo: true, fixture: true }))
     expect(first).toContain(FRAME_STRIP.demoData)
-    expect(first).toContain(STATUS_BAR.fixture)
+    expect(first).not.toContain(STATUS_BAR.fixture)
+  })
+
+  it('keeps FIXTURE DATA for fixture data outside the demo, and prints neither flag for a live answer', () => {
+    expect(grabCaption(facts({ fixture: true }))[0]).toBe('1-EQ [A] | volmanaged_v0 EQ | FIXTURE DATA')
+    expect(grabCaption(facts())[0]).toBe('1-EQ [A] | volmanaged_v0 EQ')
   })
 
   it('writes two lines when there is no provenance: the panel line and the fence line', () => {

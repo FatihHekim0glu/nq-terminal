@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { resetConnection } from './api/connection'
@@ -13,10 +14,12 @@ import deepLinksSource from './chrome/useDeepLinks.ts?raw'
 import lineSource from './commands/line.ts?raw'
 import { COMMAND_LINE, PARSE_MESSAGES } from './copy/commands'
 import { CONNECTION } from './copy/connection'
-import { FRAME_STRIP, KEY_TOOLBAR, MESSAGES, NAV_TOOLBAR, STATUS_BAR } from './copy/chrome'
+import { DEMO_DATA, FRAME_STRIP, KEY_TOOLBAR, MESSAGES, NAV_TOOLBAR, STATUS_BAR } from './copy/chrome'
 import { TAPE } from './copy/tape'
 import { HOME_ORIENTATION } from './copy/home'
 import { LAYOUT } from './copy/layout'
+import { REG } from './copy/reg'
+import { TYPE_HINT } from './copy/typeHint'
 import { WATCH } from './copy/watch'
 import { WATCH_DETAIL } from './copy/watchDetail'
 import { WORKSPACES } from './copy/workspaces'
@@ -28,8 +31,11 @@ import { useRecordWatchStore } from './state/recordWatch.store'
 import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
 import { ORIENTATION_KEY } from './screens/home/HomeOrientation'
+import { useHelpTopic } from './screens/help/helpTopic.store'
 import { useWorkspaces, type Recipe } from './state/workspaces'
 import { resetMessage, useMessage } from './chrome/MessageLine.store'
+import { numberedItems } from './chrome/NumberedActions'
+import { ANSWERS as REG_ANSWERS } from './screens/reg/testHarness'
 
 // GRAB itself (src/export/grab/run.ts) is reached through a dynamic import from the Workspace chunk; the
 // tests below check what the frame hands it, so the runner is replaced by a spy.
@@ -168,10 +174,10 @@ async function focusPanel(main: HTMLElement, n: number): Promise<void> {
 }
 
 async function homeLoaded(): Promise<HTMLElement> {
-  const main = screen.getByRole('main', { name: 'Workspace' })
-  await waitFor(() => expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS))
+  // Looked up again on every poll: while the Workspace chunk loads, the <main> on screen is the loading one, which the real one replaces.
+  await waitFor(() => expect(within(screen.getByRole('main', { name: 'Workspace' })).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS))
   await waitFor(() => expect(fetchSpy.mock.calls.some(([u]) => String(u) === '/api/commands')).toBe(true))
-  return main
+  return screen.getByRole('main', { name: 'Workspace' })
 }
 
 describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, command zone)', { timeout: 15_000 }, () => {
@@ -1096,5 +1102,249 @@ describe('the HOME orientation strip (N03)', { timeout: 30_000 }, () => {
     await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
     await new Promise((resolve) => setTimeout(resolve, 150))
     expect(strip()).toBeNull()
+  })
+})
+
+// Wave 10 chrome polish: Number <GO> in the addressed panel (G03), what a bare DES says it opened (G14), the
+// command line focused on load (U05) and End after a link group retarget (U21).
+describe('chrome navigation polish', { timeout: 30_000 }, () => {
+  beforeEach(() => {
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const body = REG_ANSWERS[url]
+      return body === undefined ? reply(url) : new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+  })
+
+  const commandInput = () => screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+  const titles = () => Array.from(document.querySelectorAll('[data-nqt-title]')).map((h) => h.getAttribute('data-nqt-title') ?? '')
+
+  it('G03: right after REG loads, 9 <GO> replaces REG in panel 1, MT stays and End returns to REG', async () => {
+    render(<App />)
+    await homeLoaded()
+    await runLine('REG')
+    await waitFor(() => expect(titles()).toEqual(['REG', 'MT']))
+    const reg = document.querySelector('[data-nqt-panel]')?.getAttribute('data-nqt-panel') ?? ''
+    await waitFor(() => expect(numberedItems(reg).find((i) => i.n === 9)?.label).toBe('volmanaged_v0'))
+    await runLine('9')
+    await waitFor(() => expect(titles()).toEqual(['volmanaged_v0 DES', 'MT']))
+    fireEvent.keyDown(commandInput(), { key: 'End' })
+    await waitFor(() => expect(titles()).toEqual(['REG', 'MT']))
+    expect(useMessage.getState().text).not.toBe(MESSAGES.backNone)
+  })
+
+  it('G14: a bare DES after a hypothesis is loaded into link group A says what the panel shows', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    act(() => {
+      useLinkGroups.getState().setContext('A', { kind: 'hypothesis', value: 'volmanaged_v0' })
+    })
+    await focusPanel(main, 1)
+    expect(titles()[0]).toBe('NQ GP 1d')
+    await runLine('DES')
+    await waitFor(() => expect(titles()[0]).toBe('volmanaged_v0 DES'))
+    expect(useMessage.getState().text).toBe('Opened volmanaged_v0 DES.')
+    expect(screen.getByText('Opened volmanaged_v0 DES.')).toBeTruthy()
+  })
+
+  it('G14: a bare DES where the group holds nothing the screen takes still says the line it ran', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 1)
+    await runLine('DES')
+    await waitFor(() => expect(titles()[0]).toBe('NQ DES'))
+    expect(useMessage.getState().text).toBe('Opened NQ DES.')
+  })
+
+  it('U05: the command line has focus on load', async () => {
+    render(<App />)
+    expect(document.activeElement).toBe(commandInput())
+    await homeLoaded()
+    expect(document.activeElement).toBe(commandInput())
+  })
+
+  it('U05: the first Esc on the empty line keeps focus in it, so "Esc, reg, Enter" is not lost; the second one goes to the panel', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    fireEvent.keyDown(commandInput(), { key: 'Escape' })
+    expect(document.activeElement).toBe(commandInput())
+    await runLine('REG')
+    await waitFor(() => expect(titles()).toEqual(['REG', 'MT']))
+    fireEvent.keyDown(commandInput(), { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  it('U05: under StrictMode (which runs the mount effect twice) it still focuses the line, holds the first Esc, and lets go once focus has been anywhere else', async () => {
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    )
+    const main = await homeLoaded()
+    expect(document.activeElement).toBe(commandInput())
+    const gp = within(main).getByRole('group', { name: 'NQ GP 1d content' })
+    act(() => gp.focus())
+    act(() => gp.blur())
+    act(() => commandInput().focus())
+    // Nothing to return to: focus was on a panel since load, so this Esc gives the panel back as it always did.
+    fireEvent.keyDown(commandInput(), { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  // The hold is for an Esc pressed before any other key since load. A line that never reached onRun (a parse error, a
+  // context only line) or a menu used to leave it armed, so a much later Esc on the empty line did nothing at all.
+  it('U05: a line that fails to parse ends the hold: after it is cleared with Esc, the next Esc goes to the panel', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const input = commandInput()
+    fireEvent.change(input, { target: { value: 'zzzz' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    // The line keeps what was typed (in capitals) beside the error.
+    expect(input.value).toBe('ZZZZ')
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input.value).toBe('')
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(input, { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  it('U05: a context only line ends the hold: after its menu is closed with Esc, the next Esc on the empty line goes to the panel', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const input = commandInput()
+    await runLine('ES')
+    // The first Esc closes the function menu the context opened; it has nothing to do with the boot focus.
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(document.activeElement).toBe(input)
+    fireEvent.keyDown(input, { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  it('U05: a bare modifier key does not end the hold (Shift or Alt pressed on the way to Esc), any other key does', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const input = commandInput()
+    for (const key of ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']) fireEvent.keyDown(input, { key })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(document.activeElement).toBe(input)
+    // The hold is spent by that Esc, as it always was: the next one goes to the panel.
+    fireEvent.keyDown(input, { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  it('U05: a key other than Esc typed before the first Esc ends the hold, so that Esc goes to the panel', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const input = commandInput()
+    fireEvent.keyDown(input, { key: 'a' })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    const first = main.querySelectorAll('[data-nqt-panel]')[0]
+    await waitFor(() => expect(first?.contains(document.activeElement)).toBe(true))
+  })
+
+  it('U05: it takes focus from nothing that already has it', async () => {
+    const other = document.createElement('button')
+    document.body.append(other)
+    other.focus()
+    render(<App />)
+    expect(document.activeElement).toBe(other)
+    other.remove()
+  })
+
+  it('U05: a letter typed on a panel is not lost silently: the message line says where typing goes, and the key is left alone', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const gp = within(main).getByRole('group', { name: 'NQ GP 1d content' })
+    act(() => gp.focus())
+    expect(fireEvent.keyDown(gp, { key: 'e' })).toBe(true)
+    expect(useMessage.getState().text).toBe(TYPE_HINT)
+  })
+
+  it('U05: a letter no grid row starts with is the grid\'s own typeahead miss: it reaches the global handler unprevented and earns no hint', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('REG')
+    await waitFor(() => expect(titles()).toEqual(['REG', 'MT']))
+    const grid = await within(main).findByRole('grid', { name: REG.gridLabel })
+    act(() => grid.focus())
+    expect(document.activeElement).toBe(grid)
+    resetMessage()
+    // No registry name starts with q: the grid finds no row and leaves the key alone, so the global handler sees it.
+    expect(fireEvent.keyDown(grid, { key: 'q' })).toBe(true)
+    expect(useMessage.getState().text).not.toBe(TYPE_HINT)
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('U05: a letter a grid row starts with is taken by the grid (its typeahead moves the row), and earns no hint either', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('REG')
+    await waitFor(() => expect(titles()).toEqual(['REG', 'MT']))
+    const grid = await within(main).findByRole('grid', { name: REG.gridLabel })
+    act(() => grid.focus())
+    resetMessage()
+    expect(fireEvent.keyDown(grid, { key: 'z' })).toBe(false)
+    expect(useMessage.getState().text).not.toBe(TYPE_HINT)
+  })
+
+  it('U05: it stays quiet in the command line itself', async () => {
+    render(<App />)
+    await homeLoaded()
+    resetMessage()
+    fireEvent.keyDown(commandInput(), { key: 'e' })
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('U21: End after a context-only line put the link group and its panels back', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 2)
+    expect(titles()[0]).toBe('NQ GP 1d')
+    await runLine('ES')
+    await waitFor(() => expect(titles()[0]).toBe('ES GP 1d'))
+    fireEvent.keyDown(commandInput(), { key: 'End' })
+    await waitFor(() => expect(titles()[0]).toBe('NQ GP 1d'))
+    expect(useLinkGroups.getState().contexts.A?.value).toBe('NQ')
+    expect(useMessage.getState().text).not.toBe(MESSAGES.backNone)
+  })
+})
+
+// U01 and the frame strip: the DEMO DATA key is a frame strip action like the tabs and Options, so it ends with the command
+// line focused (actions.runAndFocus) instead of leaving focus on the button it was pressed on. That the HELP panel then shows
+// the About this demo lines needs the HELP chunk to share its stores with App, which the vi.resetModules tests above break:
+// App.demoKey.test.tsx checks that whole path.
+describe('the DEMO DATA key', { timeout: 30_000 }, () => {
+  beforeEach(() => {
+    document.documentElement.dataset.demo = 'on'
+  })
+  afterEach(() => {
+    delete document.documentElement.dataset.demo
+    useHelpTopic.setState({ request: null })
+  })
+
+  it('opens the HELP screen and leaves the command line focused, not the button', async () => {
+    render(<App />)
+    await homeLoaded()
+    const key = frameStrip().getByRole('button', { name: DEMO_DATA.term })
+    act(() => key.focus())
+    expect(document.activeElement).toBe(key)
+    fireEvent.click(key)
+    await waitFor(() => expect(frameStrip().getByRole('button', { name: /HELP/, current: 'page' })).toBeTruthy())
+    expect(document.activeElement?.id).toBe('cmd')
+  })
+
+  it('is one key in the Safety group and is not on the real terminal', async () => {
+    render(<App />)
+    await homeLoaded()
+    expect(within(screen.getByRole('group', { name: FRAME_STRIP.safetyLabel })).getAllByRole('button')).toHaveLength(1)
+    cleanup()
+    delete document.documentElement.dataset.demo
+    render(<App />)
+    expect(within(screen.getByRole('group', { name: FRAME_STRIP.safetyLabel })).queryAllByRole('button')).toHaveLength(0)
   })
 })

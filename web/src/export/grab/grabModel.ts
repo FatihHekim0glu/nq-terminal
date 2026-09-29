@@ -63,7 +63,8 @@ function panelLine(f: GrabFacts): string {
     head || null,
     clean(f.title),
     f.demo ? FRAME_STRIP.demoData : null,
-    f.fixture ? STATUS_BAR.fixture : null,
+    // One term in the demo, as on screen: its health answer says fixture too, and DEMO DATA already says what it is.
+    f.fixture && !f.demo ? STATUS_BAR.fixture : null,
   ]).join(GRAB.caption.separator)
 }
 

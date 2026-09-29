@@ -7,6 +7,7 @@
 // change or withdraw anything. The Workspace reports the layout owner (the screen whose layout the panels
 // are arranged under, and whether the viewer has edited it): the frame strip and the status line show it
 // with an edited mark, and RESET, UNDO and the <GO> preview row on the command line act on it.
+// The command line has focus from the first paint (U05), so a line typed straight after load is not lost to <body>.
 // The provider supervises the backend connection (roadmap 7): the API DOWN strip sits under the header and
 // the status line names the time the backend went quiet. The research-record watch (roadmap 16) reads its
 // six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
@@ -42,6 +43,7 @@ import type { previewText } from './chrome/WorkspacePreview'
 import { CHROME, MESSAGES } from './copy/chrome'
 import { LAYOUT } from './copy/layout'
 import { WORKSPACE, fillCopy } from './copy/workspace'
+import { requestHelpTopic } from './screens/help/helpTopic.store'
 import { useLinkGroups } from './state/linkGroups'
 import type { WorkspacesStore } from './state/workspaces'
 import { applyScheme, loadScheme, saveScheme } from './chrome/FrameStrip.scheme'
@@ -119,10 +121,62 @@ function isTextField(el: Element | null): boolean {
   return el instanceof HTMLElement && (el.isContentEditable || el.matches('input, textarea, select'))
 }
 
+// Dialogs, menus, lists and grids take letters of their own (typeahead, mnemonics): a letter typed in one is no stray
+// letter. A grid that finds no row for a letter leaves the key alone, and Home is the grid's own key there.
+const TAKES_LETTERS = '[role="dialog"], [role="menu"], [role="listbox"], [role="grid"], [role="treegrid"]'
+
 /** Where focus is, for the global keys: the command line, and whether its line is empty. */
 function keyWhere(cmd: CommandLineHandle | null): KeyWhere {
   const active = document.activeElement
-  return { inCommandLine: active?.id === 'cmd', lineEmpty: (cmd?.lineText() ?? '') === '', inTextField: isTextField(active) }
+  return {
+    inCommandLine: active?.id === 'cmd',
+    lineEmpty: (cmd?.lineText() ?? '') === '',
+    inTextField: isTextField(active),
+    inPopup: active?.closest(TAKES_LETTERS) != null,
+  }
+}
+
+// Keys that are only a modifier on the way to another key: pressing one is not typing.
+const MODIFIERS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock']
+
+/**
+ * U05: focus the command line once the terminal has mounted, unless something already has focus. While that
+ * boot focus is all there is (`fresh`), the first Esc on the empty line stays in the line: it has nothing to
+ * cancel and nowhere to go back to, and moving to a panel would drop the reflexive "Esc, reg, Enter" typed
+ * next (the hint on the message line covers the rest). The guard holds only an Esc pressed before any other key
+ * since load: any other key (a bare modifier aside), any focus elsewhere and a line run all end it, so a parse
+ * error, a context only line, End, a menu or HL never leave it armed for a much later Esc.
+ */
+function useBootFocus(cmd: RefObject<CommandLineHandle | null>): RefObject<boolean> {
+  const fresh = useRef(false)
+  useEffect(() => {
+    const active = document.activeElement
+    // The command line itself counts as nothing yet: StrictMode runs this effect twice, and the second run finds it focused.
+    if (active && active !== document.body && active.id !== 'cmd') return undefined
+    cmd.current?.focus()
+    fresh.current = document.activeElement?.id === 'cmd'
+    const leave = (e: FocusEvent) => {
+      if ((e.target as Element | null)?.id !== 'cmd') fresh.current = false
+    }
+    // Capture phase, so it sees the key before a control that stops it; Esc itself is judged by holdBootFocus.
+    const typed = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' && !MODIFIERS.includes(e.key)) fresh.current = false
+    }
+    document.addEventListener('focusin', leave)
+    document.addEventListener('keydown', typed, true)
+    return () => {
+      document.removeEventListener('focusin', leave)
+      document.removeEventListener('keydown', typed, true)
+    }
+  }, [cmd])
+  return fresh
+}
+
+/** True (once) for an Esc that only has the boot focus to give back; see useBootFocus. */
+function holdBootFocus(fresh: RefObject<boolean>): boolean {
+  const hold = fresh.current
+  fresh.current = false
+  return hold
 }
 
 function useScheme() {
@@ -141,6 +195,8 @@ interface ChromeRefs {
   readonly workspace: RefObject<ChromeWorkspaceHandle | null>
   readonly panelId: RefObject<string | null>
   readonly focused: RefObject<FocusedPanel | null>
+  /** True while the command line still has only its boot focus (useBootFocus). */
+  readonly fresh: RefObject<boolean>
 }
 
 function chromeEnv(refs: ChromeRefs, toggleKeymap: () => void): ChromeEnv {
@@ -236,6 +292,11 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         workspaces={saved}
         workspace={shown.workspace}
         onOpenWorkspace={(name) => actions.runAndFocus(`LOAD ${name}`)}
+        onDemo={() => {
+          // The DEMO DATA key (demo only): the HELP panel shows its own page, where About this demo comes first.
+          requestHelpTopic('HELP')
+          actions.runAndFocus('HELP')
+        }}
       />
       <KeyToolbar onKey={(key) => runKey(actions, env, key)} />
       <NavToolbar focused={nav} kill={killState(health)} onAction={(a) => runNav(actions, env, a)} />
@@ -244,8 +305,11 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         focusedGroup={group}
         panelNumber={panel.number}
         resolveFallback={() => refs.workspace.current?.focusedContext() ?? null}
-        onRun={(command, target) => refs.workspace.current?.run(command, target) ?? false}
-        onReturnFocus={() => refs.workspace.current?.focusPanel() ?? false}
+        onRun={(command, target) => {
+          refs.fresh.current = false
+          return refs.workspace.current?.run(command, target) ?? false
+        }}
+        onReturnFocus={() => holdBootFocus(refs.fresh) || (refs.workspace.current?.focusPanel() ?? false)}
         onContext={loadContext}
         onNumber={(n) => (panel.id ? activateNumbered(panel.id, n) : false)}
         onTape={() => toggleTape()}
@@ -275,11 +339,13 @@ function Terminal() {
   // never compete with HOME's first render. The reader renders nothing; its view is read with useRecordWatch.
   const idle = useIdleReady()
   const watch = useRecordWatch()
+  const cmd = useRef<CommandLineHandle>(null)
   const refs: ChromeRefs = {
-    cmd: useRef<CommandLineHandle>(null),
+    cmd,
     workspace: useRef<ChromeWorkspaceHandle>(null),
     panelId: useRef<string | null>(null),
     focused: useRef<FocusedPanel | null>(null),
+    fresh: useBootFocus(cmd),
   }
   refs.panelId.current = panel.id
   refs.focused.current = focused

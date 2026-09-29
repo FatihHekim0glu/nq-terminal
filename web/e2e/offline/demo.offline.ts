@@ -57,7 +57,8 @@ test.describe('in-page demo build', () => {
     await expect(alerts(page)).toHaveCount(0)
     // The demo says what it is, twice: the frame strip's flag, and the status line's data source.
     await expect(page.getByRole('group', { name: 'Safety' })).toContainText('DEMO DATA')
-    await expect(status(page)).toContainText('FIXTURE DATA')
+    await expect(status(page)).toContainText('DEMO DATA')
+    await expect(status(page)).not.toContainText('FIXTURE DATA')
     await expect(status(page)).toContainText('READ ONLY')
     await expect(status(page)).toContainText('NO ORDER PATH')
     await expectDemoClean(page, watch)

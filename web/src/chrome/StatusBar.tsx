@@ -6,6 +6,9 @@
 // down (roadmap 7), the amber HEALTH unavailable segment reads `API DOWN since 10:05:07 ET` instead. The
 // research-record watch (roadmap 16) adds `WATCH no change` (or from now, N new, N changed) right after
 // the context segments; it stays out of the way until the six record reads have settled.
+// The amber data source segment follows the health poll's fixture_mode: FIXTURE DATA on a backend that reads a
+// fixture folder, and in the demo (src/demo/boot.tsx marks the page) the same DEMO DATA term as the frame
+// strip's flag, with the same tooltip (U01).
 // The safety segments (TWS, KILL, gate reads, READ ONLY, NO ORDER PATH) never shrink; contexts and
 // the data window give way first. The kill and health segments sit in one live region (assertive
 // while the kill switch is on), so a change of safety state is announced; the clock stays outside it.
@@ -17,7 +20,7 @@ import type { MnemonicCode } from '../commands/registry'
 import { displayContext } from '../commands/sectors'
 import type { ConnectionState } from '../api/connection'
 import type { CommandIndexData } from '../commands/types'
-import { STATUS_BAR } from '../copy/chrome'
+import { DEMO_DATA, STATUS_BAR, isDemoPage } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
 import { fillCopy } from '../copy/workspace'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
@@ -110,6 +113,16 @@ function ContextSegments({ contexts, index }: { readonly contexts: LinkContexts;
   })
 }
 
+/** The amber data source segment (U01): the demo's one term with the flag's tooltip, else FIXTURE DATA with its own. */
+function DataSourceSegment() {
+  const demo = isDemoPage()
+  return (
+    <span className="seg keep warn" title={demo ? DEMO_DATA.note : STATUS_BAR.fixtureNote}>
+      {demo ? DEMO_DATA.term : STATUS_BAR.fixture}
+    </span>
+  )
+}
+
 export function StatusBar({ screen, edited, contexts, health, index = null, connection, watch }: StatusBarProps) {
   const clock = useEtClock()
   const data = health.status === 'ok' ? health.data : null
@@ -128,7 +141,7 @@ export function StatusBar({ screen, edited, contexts, health, index = null, conn
       <ContextSegments contexts={contexts} index={index} />
       {watch ? <WatchSegment view={watch} /> : null}
       <Seg k={STATUS_BAR.data} kind="shrink">{range}</Seg>
-      {data?.fixture_mode ? <span className="seg keep warn">{STATUS_BAR.fixture}</span> : null}
+      {data?.fixture_mode ? <DataSourceSegment /> : null}
       <Seg k={STATUS_BAR.tws}>{STATUS_BAR.twsValue}</Seg>
       <SafetySegments health={health} connection={connection} />
       <Seg k={STATUS_BAR.gateReads}>{data ? String(data.gate_reads_this_process) : STATUS_BAR.missing}</Seg>

@@ -52,9 +52,13 @@ export const cell = (value: string): string => (value.trim() === '' ? MISSING : 
 
 // ---------------------------------------------------------------- flags, footer, sources
 
-/** The lead flags of the dossier, then DEMO DATA in the demo and FIXTURE DATA on fixture data. */
+/**
+ * The lead flags of the dossier, then DEMO DATA in the demo, or FIXTURE DATA on fixture data outside it. The demo's
+ * health answer says fixture too, but the screen shows the one term there (chrome StatusBar and FrameStrip), so the
+ * printed page does the same.
+ */
 export function flags(ctx: DossierContext, lead: readonly string[]): string[] {
-  return [...lead, ...(ctx.demo ? [FRAME_STRIP.demoData] : []), ...(ctx.fixture ? [STATUS_BAR.fixture] : [])]
+  return [...lead, ...(ctx.demo ? [FRAME_STRIP.demoData] : []), ...(ctx.fixture && !ctx.demo ? [STATUS_BAR.fixture] : [])]
 }
 
 /** New York time of day, or null when the date does not parse (an invalid Date would throw). */

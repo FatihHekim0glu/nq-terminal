@@ -6,11 +6,12 @@
 // the saved workspaces (roadmap #14; SAVE NAME, LOAD NAME): a workspace on screen owns the layout, so its
 // tab is the active one and carries the mark. On the right the READ ONLY and
 // NO ORDER PATH chips, always shown, then DEMO DATA in the demo only (src/demo/boot.tsx marks the
-// page), and `≡ Options` (event tape, colour scheme, Undo layout change, Reset this layout). No window
-// glyphs: the browser tab has its own.
+// page), and `≡ Options` (event tape, colour scheme, Undo layout change, Reset this layout). The two chips
+// are plain text; DEMO DATA is a key with a tooltip that opens the About this demo lines on the HELP page
+// (U01). No window glyphs: the browser tab has its own.
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
-import { FRAME_STRIP } from '../copy/chrome'
+import { DEMO_DATA, FRAME_STRIP, isDemoPage } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
 import './FrameStrip.css'
 
@@ -40,6 +41,8 @@ export interface FrameStripProps {
   readonly workspace?: string | null
   /** A workspace tab: open it by name (the LOAD word). */
   readonly onOpenWorkspace?: (name: string) => void
+  /** The DEMO DATA key (demo only): show the About this demo lines. The frame runs HELP for it, like any other strip action. */
+  readonly onDemo: () => void
 }
 
 type TabId = keyof typeof FRAME_STRIP.tabs
@@ -85,9 +88,17 @@ function Tab({ id, label, title, active, edited, workspace, onClick }: TabProps)
 
 const SCHEMES: readonly ColourScheme[] = ['standard', 'deut', 'prot']
 
-/** Whether the demo boot marked the page (data-demo="on"): every answer is then fixture data. */
-function isDemo(): boolean {
-  return typeof document !== 'undefined' && document.documentElement.dataset.demo === 'on'
+/**
+ * The DEMO DATA key (U01): it asks the frame to open the HELP panel on its own page, where the About this demo lines are
+ * first (App.tsx onDemo), and that ends with the command line focused like every other strip action. What makes a
+ * button look like the .frame-flag span it replaces is in FrameStrip.css (button.frame-flag).
+ */
+function DemoKey({ onDemo }: { readonly onDemo: () => void }) {
+  return (
+    <button type="button" className="frame-flag" data-flag="demo" title={`${DEMO_DATA.note} ${DEMO_DATA.flagHint}`} onClick={onDemo}>
+      {DEMO_DATA.term}
+    </button>
+  )
 }
 
 function Options({ tapeOn, scheme, onTape, onScheme, onUndo, onReset }: Pick<FrameStripProps, 'tapeOn' | 'scheme' | 'onTape' | 'onScheme' | 'onUndo' | 'onReset'>) {
@@ -155,7 +166,7 @@ export function FrameStrip(props: FrameStripProps) {
         <div className="frame-flags" role="group" aria-label={FRAME_STRIP.safetyLabel}>
           <span className="frame-flag">{FRAME_STRIP.readOnly}</span>
           <span className="frame-flag">{FRAME_STRIP.noOrderPath}</span>
-          {isDemo() ? <span className="frame-flag" data-flag="demo">{FRAME_STRIP.demoData}</span> : null}
+          {isDemoPage() ? <DemoKey onDemo={props.onDemo} /> : null}
         </div>
         <Options tapeOn={props.tapeOn} scheme={props.scheme} onTape={props.onTape} onScheme={props.onScheme} onUndo={props.onUndo} onReset={props.onReset} />
       </div>

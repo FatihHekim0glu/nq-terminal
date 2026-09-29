@@ -8,6 +8,22 @@ export const CHROME = {
   chromeLabel: 'Terminal controls',
 } as const
 
+/**
+ * The demo's one term and its one tooltip (U01). The frame strip's flag and, in the demo, the status line's data
+ * segment both show them; the flag adds `flagHint` because it is the key that opens the About this demo lines on
+ * the HELP page (copy/helpTopics.ts DEMO_TOPIC). The demo boot (src/demo/boot.tsx) marks the page with data-demo.
+ */
+export const DEMO_DATA = {
+  term: 'DEMO DATA',
+  note: 'Captured fixtures, research file snapshots and seeded prices, served in your browser. Nothing here is live.',
+  flagHint: 'Select for About this demo.',
+} as const
+
+/** Whether the demo boot marked the page (data-demo="on"): every answer is then demo data. */
+export function isDemoPage(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.demo === 'on'
+}
+
 export const FRAME_STRIP = {
   label: 'Layouts',
   newTab: 'New layout: type a screen mnemonic',
@@ -15,7 +31,7 @@ export const FRAME_STRIP = {
   readOnly: 'READ ONLY',
   noOrderPath: 'NO ORDER PATH',
   /** Shown only in the demo (`pnpm demo`), where every answer is fixture data served in the browser. */
-  demoData: 'DEMO DATA',
+  demoData: DEMO_DATA.term,
   /** The title on the active tab of a saved workspace (a workspace owns the layout on screen). */
   workspaceTitle: 'Saved workspace',
   options: 'Options',
@@ -138,7 +154,9 @@ export const STATUS_BAR = {
   apiDown: 'API DOWN since {value} ET',
   gateReads: 'Gate reads',
   missing: '--',
+  /** The backend runs on a fixture folder; in the demo the segment reads DEMO_DATA.term instead. */
   fixture: 'FIXTURE DATA',
+  fixtureNote: 'The backend is reading a fixture folder instead of the research files: test data, not research results.',
   readOnly: 'READ ONLY',
   noOrderPath: 'NO ORDER PATH',
   clock: '{value} ET',

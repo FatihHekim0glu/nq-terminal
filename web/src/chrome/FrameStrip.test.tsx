@@ -15,8 +15,9 @@ function setup(props: Partial<FrameStripProps> = {}) {
   const onUndo = vi.fn()
   const onReset = vi.fn()
   const onOpenWorkspace = vi.fn()
-  render(<FrameStrip screen="HOME" edited={false} tapeOn={false} scheme="standard" onOpen={onOpen} onNew={onNew} onTape={onTape} onScheme={onScheme} onUndo={onUndo} onReset={onReset} onOpenWorkspace={onOpenWorkspace} {...props} />)
-  return { onOpen, onNew, onTape, onScheme, onUndo, onReset, onOpenWorkspace, nav: screen.getByRole('navigation', { name: FRAME_STRIP.label }) }
+  const onDemo = vi.fn()
+  render(<FrameStrip screen="HOME" edited={false} tapeOn={false} scheme="standard" onOpen={onOpen} onNew={onNew} onTape={onTape} onScheme={onScheme} onUndo={onUndo} onReset={onReset} onOpenWorkspace={onOpenWorkspace} onDemo={onDemo} {...props} />)
+  return { onOpen, onNew, onTape, onScheme, onUndo, onReset, onOpenWorkspace, onDemo, nav: screen.getByRole('navigation', { name: FRAME_STRIP.label }) }
 }
 
 describe('FrameStrip: the 37px frame and layout tab strip (spec 4.2)', () => {

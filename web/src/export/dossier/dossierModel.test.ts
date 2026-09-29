@@ -2,6 +2,7 @@
 // footer is the part most likely to print a stray word, so it is pinned line for line, and probed with
 // clocks that do not parse.
 import { describe, expect, it } from 'vitest'
+import { DEMO_DATA } from '../../copy/chrome'
 import { DOSSIER } from '../../copy/dossier'
 import { TEAR_SV7 } from '../../copy/tear'
 import { VOLMANAGED } from '../../screens/des/desTestData'
@@ -62,6 +63,13 @@ describe('footer', () => {
     expect(footer(CTX)).not.toContain(DOSSIER.demoNote)
   })
 
+  // The note is the frame's own tooltip (copy/chrome.ts DEMO_DATA), so the screen and the printed page say one thing. The
+  // old note said the data was 'not research results', which is false of the REG and MT snapshots and two of the DES cards.
+  it('says the demo note in the words of the DEMO DATA flag', () => {
+    expect(DOSSIER.demoNote).toBe(`${DEMO_DATA.term}: ${DEMO_DATA.note}`)
+    expect(DOSSIER.demoNote).not.toMatch(/not research results/)
+  })
+
   it('drops the server clock when there is none', () => {
     const lines = footer({ ...CTX, asOfUtc: null })
     expect(lines).toHaveLength(3)
@@ -95,11 +103,14 @@ describe('footer', () => {
 })
 
 describe('flags', () => {
-  it('keeps the lead flags, then DEMO DATA, then FIXTURE DATA', () => {
+  it('keeps the lead flags, then DEMO DATA in the demo, or FIXTURE DATA on fixture data outside it', () => {
     expect(flags(CTX, ['[PASS]'])).toEqual(['[PASS]'])
     expect(flags({ ...CTX, demo: true }, ['[PASS]'])).toEqual(['[PASS]', 'DEMO DATA'])
     expect(flags({ ...CTX, fixture: true }, [])).toEqual(['FIXTURE DATA'])
-    expect(flags({ ...CTX, demo: true, fixture: true }, ['[A]', '[B]'])).toEqual(['[A]', '[B]', 'DEMO DATA', 'FIXTURE DATA'])
+  })
+
+  it('prints the one demo term in the demo, as the screen does, even when the health answer also says fixture', () => {
+    expect(flags({ ...CTX, demo: true, fixture: true }, ['[A]', '[B]'])).toEqual(['[A]', '[B]', 'DEMO DATA'])
   })
 })
 

@@ -106,11 +106,14 @@ describe('tearDossier: head and series', () => {
 })
 
 describe('tearDossier: flags', () => {
-  it('flags the series tags, and DEMO DATA and FIXTURE DATA only when the context says so', () => {
+  it('flags the series tags, and DEMO DATA or FIXTURE DATA only when the context says so', () => {
     expect(tearDossier(HYP, CTX).flags).toEqual(['[POST HOC]', '[PRE-REG]'])
     expect(tearDossier(HYP, { ...CTX, demo: true }).flags).toEqual(['[POST HOC]', '[PRE-REG]', 'DEMO DATA'])
     expect(tearDossier(HYP, { ...CTX, fixture: true }).flags).toEqual(['[POST HOC]', '[PRE-REG]', 'FIXTURE DATA'])
-    expect(tearDossier(HYP, { ...CTX, demo: true, fixture: true }).flags).toEqual(['[POST HOC]', '[PRE-REG]', 'DEMO DATA', 'FIXTURE DATA'])
+  })
+
+  it('prints the one demo term in the demo, even when the health answer also says fixture', () => {
+    expect(tearDossier(HYP, { ...CTX, demo: true, fixture: true }).flags).toEqual(['[POST HOC]', '[PRE-REG]', 'DEMO DATA'])
   })
 })
 

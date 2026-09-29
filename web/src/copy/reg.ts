@@ -1,5 +1,6 @@
 // Copy for the REG (registry board) and MT (multiple-testing) screens (UI_SPEC 7 and 10; look spec 7.2).
 // UK spelling, no em or en dashes, sentence case; tags and verdict badges keep their upper case.
+import { isDemoPage } from './chrome'
 
 // U02 (polish 3): the family of the adjusted columns, and the rule that a verdict is each hypothesis's own bar.
 const FAMILY_NOTE = 'Bonf, Holm and BH q are adjusted over the registry family (its size k is on MT).'
@@ -22,7 +23,14 @@ export const REG = {
   railItem: '{label} ({count})',
   criteriaLabel: 'Screening criteria',
   criteriaHeading: 'Selected screening criteria',
-  criteriaSource: 'values read from results/registry.csv through the API',
+  /**
+   * Where the criteria counts come from. In the demo (src/demo/boot.tsx marks the page) nothing is read through the
+   * API: the registry is a snapshot of the real file served in the page (U01), so the line names the snapshot. It
+   * is read each time the block is drawn, so RegParts needs no demo branch.
+   */
+  get criteriaSource(): string {
+    return isDemoPage() ? 'values from the demo snapshot of results/registry.csv, served in this page' : 'values read from results/registry.csv through the API'
+  },
   matches: 'Matches',
   criteria: {
     rows: 'Registry rows',

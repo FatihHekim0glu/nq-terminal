@@ -7,6 +7,7 @@ import { saveBlob } from '../../chrome/download'
 import { panelElement } from '../../chrome/KeyToolbar.panels'
 import { postMessage, type MessageTone } from '../../chrome/MessageLine.store'
 import { panelSource } from '../../chrome/panelSources'
+import { isDemoPage } from '../../copy/chrome'
 import { GRAB } from '../../copy/grab'
 import { PANEL, fillCopy } from '../../copy/workspace'
 import { collectFigures } from './collect'
@@ -62,7 +63,7 @@ function factsFor(req: GrabRequest, title: string, now: Date): GrabFacts {
     panelLabel: panelLabel(req),
     title,
     group: req.group,
-    demo: document.documentElement.dataset.demo === 'on',
+    demo: isDemoPage(),
     fixture: req.health?.fixture_mode === true,
     provenance: panelSource(req.panelId)?.provenance ?? null,
     asOfUtc: req.health?.now_utc ?? null,

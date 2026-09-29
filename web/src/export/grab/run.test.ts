@@ -372,13 +372,21 @@ describe('the caption', () => {
     expect(caption.join('\n')).not.toMatch(/null|undefined|NaN/)
   })
 
-  it('flags fixture data from the health answer and demo data from the page', async () => {
+  it('flags fixture data from the health answer, outside the demo', async () => {
+    mountPanel([{ summary: 'one' }])
+    await grabPanel(request({ health: { now_utc: HEALTH.now_utc, fixture_mode: true } }))
+    const first = drawn.texts.find((t) => t.startsWith('1-EQ'))
+    expect(first).toContain(STATUS_BAR.fixture)
+    expect(first).not.toContain(FRAME_STRIP.demoData)
+  })
+
+  it('flags demo data from the page and prints that one term alone, though the demo health answer also says fixture', async () => {
     mountPanel([{ summary: 'one' }])
     document.documentElement.dataset.demo = 'on'
     await grabPanel(request({ health: { now_utc: HEALTH.now_utc, fixture_mode: true } }))
     const first = drawn.texts.find((t) => t.startsWith('1-EQ'))
     expect(first).toContain(FRAME_STRIP.demoData)
-    expect(first).toContain(STATUS_BAR.fixture)
+    expect(first).not.toContain(STATUS_BAR.fixture)
   })
 
   it('leaves the flags out for a live answer, and copes with no health answer at all', async () => {
