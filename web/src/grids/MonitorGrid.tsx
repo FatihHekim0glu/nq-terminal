@@ -7,6 +7,8 @@
 // Down, Home and End (with Control for the grid ends) move the active cell; Left and Right on the
 // edge cells are left to the panel. Enter on a header sorts; Enter or a double click on a row drills
 // down (onOpen). Rows carry their `N)` numbers and register them for Number <GO> in the panel.
+// Marking is opt-in: with onMark, Space on the active data row asks the screen to mark it, and rows the
+// screen lists in `marked` are drawn with a fill, a plus and a screen reader word.
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { RowData } from '@tanstack/react-table'
 import { GRID } from '../copy/grids'
@@ -55,6 +57,14 @@ export interface MonitorGridProps<Row extends RowData> {
   /** Label of a row in the Number <GO> registry; defaults to its first column. */
   readonly rowLabel?: (row: Row) => string
   readonly rowClassName?: (row: Row) => string | undefined
+  /**
+   * Row marking, opt-in (the RUNS and REG compare baskets). `marked` holds the ids (`rowId`) of the
+   * marked rows, which are drawn with a fill, an ASCII plus and the word `marked` for screen readers.
+   * Space on the active data row calls `onMark`; the screen owns the set. Without `onMark` Space is
+   * left alone and the description adds no hint.
+   */
+  readonly marked?: ReadonlySet<string>
+  readonly onMark?: (row: Row) => void
   readonly initialSort?: SortSpec
   /** Panel whose Number <GO> the rows answer; defaults to the enclosing panel. */
   readonly panelId?: string
@@ -189,6 +199,17 @@ function GridHeader<Row extends RowData>({ columns, numbered, ids, active, sort,
   )
 }
 
+/** What a marked row shows besides its fill, so colour is never the only cue: an ASCII plus for the
+ * eye (hidden from screen readers) and the word for them. */
+function MarkCue() {
+  return (
+    <>
+      <span className="mark-glyph" aria-hidden="true">{GRID.markGlyph}</span>
+      <span className="sr-only">{GRID.marked}</span>
+    </>
+  )
+}
+
 interface RowProps<Row extends RowData> {
   readonly d: DisplayRow<Row>
   readonly index: number
@@ -196,12 +217,13 @@ interface RowProps<Row extends RowData> {
   readonly numbered: boolean
   readonly ids: Ids
   readonly active: GridPos
+  readonly marked: boolean
   readonly rowClassName?: (row: Row) => string | undefined
   readonly onPick: (pos: GridPos) => void
   readonly onOpen: (row: Row) => void
 }
 
-function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active, rowClassName, onPick, onOpen }: RowProps<Row>) {
+function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active, marked, rowClassName, onPick, onOpen }: RowProps<Row>) {
   const colCount = columns.length + (numbered ? 1 : 0)
   const onRow = active.row === index
   if (d.kind === 'group') {
@@ -218,14 +240,18 @@ function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active
   const row = d.row
   const pick = (col: number) => () => onPick({ row: index, col })
   return (
-    <tr role="row" className={rowClassName?.(row)} aria-rowindex={index + 2} aria-selected={onRow} onDoubleClick={() => onOpen(row)}>
+    <tr role="row" className={rowClassName?.(row)} aria-rowindex={index + 2} aria-selected={onRow} data-marked={marked ? 'true' : undefined} onDoubleClick={() => onOpen(row)}>
       {numbered ? (
         <td role="gridcell" id={ids.cell(index, 0)} className={`hot${onRow && active.col === 0 ? ' is-active' : ''}`} onMouseDown={pick(0)}>
-          <span>{d.n === null ? '' : fillCopy(GRID.number, { n: d.n })}</span>
+          <span>
+            {marked ? <MarkCue /> : null}
+            {d.n === null ? '' : fillCopy(GRID.number, { n: d.n })}
+          </span>
         </td>
       ) : null}
       {columns.map((c, i) => (
         <td role="gridcell" key={c.id} id={ids.cell(index, i + offset)} className={cellClass(c, row, onRow && active.col === i + offset) || undefined} onMouseDown={pick(i + offset)}>
+          {marked && !numbered && i === 0 ? <MarkCue /> : null}
           {c.render ? c.render(row) : cellText(c, row)}
         </td>
       ))}
@@ -254,7 +280,7 @@ function clampPos(pos: GridPos, rows: number, cols: number): GridPos {
 }
 
 export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps<Row>) {
-  const { label, rows, columns, rowId, groupOf, numbered = true, onOpen, rowClassName, initialSort, emptyText } = props
+  const { label, rows, columns, rowId, groupOf, numbered = true, onOpen, rowClassName, initialSort, emptyText, marked, onMark } = props
   const base = useId()
   const ids = useMemo(() => makeIds(base), [base])
   const hintId = `${base}-hint`
@@ -294,6 +320,16 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
       }
       return
     }
+    // Space marks only when the screen listens, on a data row, and only a plain press: Control and Shift
+    // with Space belong to the browser and the input method. A held key repeats keydown and must not
+    // flip the mark back and forth, though the page still must not scroll.
+    if (e.key === ' ' && onMark && !e.ctrlKey && !e.shiftKey) {
+      const d = active.row === HEADER_ROW ? undefined : display[active.row]
+      if (d?.kind !== 'data') return
+      e.preventDefault()
+      if (!e.repeat) onMark(d.row)
+      return
+    }
     const next = moveActive(active, { key: e.key, ctrl: e.ctrlKey }, { rows: display.length, cols: colCount, page: win.pageRows() })
     if (!next) return
     e.preventDefault()
@@ -314,7 +350,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
 
   return (
     <div className="nqt-grid-wrap">
-      <span id={hintId} className="sr-only">{GRID.keysHint}</span>
+      <span id={hintId} className="sr-only">{onMark ? `${GRID.keysHint} ${GRID.markHint}` : GRID.keysHint}</span>
       <div ref={win.scrollRef} className={props.scroll === 'panel' ? 'nqt-grid-scroll nqt-grid-scroll--panel' : 'nqt-grid-scroll'}>
         <table
           className="nqt-grid"
@@ -341,7 +377,8 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
             {win.items.map((item) => {
               const d = display[item.index]
               if (!d) return null
-              return <GridRow key={d.key} d={d} index={item.index} columns={columns} numbered={numbered} ids={ids} active={active} rowClassName={rowClassName} onPick={setActive} onOpen={open} />
+              const isMarked = d.kind === 'data' && marked?.has(rowId(d.row)) === true
+              return <GridRow key={d.key} d={d} index={item.index} columns={columns} numbered={numbered} ids={ids} active={active} marked={isMarked} rowClassName={rowClassName} onPick={setActive} onOpen={open} />
             })}
             {win.spacer.bottom > 0 ? <tr aria-hidden="true" className="nqt-grid-spacer"><td colSpan={colCount} style={{ height: `${win.spacer.bottom}px` }} /></tr> : null}
           </tbody>

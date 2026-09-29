@@ -6,8 +6,19 @@ import type { Callout } from './LineStack.draw'
 import type { UplotConstructor } from './lazy'
 import type { RANGE_TOOLBAR } from './theme'
 
-/** Series styles from the charts theme (lineStackSeries): colour, width and fill come from tokens. */
-export type LineStyleKey = 'primary' | 'benchmark' | 'underwater' | 'perfDiff' | 'rollShort' | 'rollLong' | 'rollVol' | 'ciBound'
+/**
+ * Series styles from the charts theme (lineStackSeries): colour, width and fill come from tokens.
+ * compare1 to compare8 are the lines of a compare basket (RUNS and REG): colour by position in the
+ * series palette, and the last four dashed.
+ */
+export type LineStyleKey =
+  | 'primary' | 'benchmark' | 'underwater' | 'perfDiff' | 'rollShort' | 'rollLong' | 'rollVol' | 'ciBound'
+  | 'compare1' | 'compare2' | 'compare3' | 'compare4' | 'compare5' | 'compare6' | 'compare7' | 'compare8'
+
+/** The compare styles in basket order: line i of a compare pane takes COMPARE_STYLES[i]. */
+export const COMPARE_STYLES: readonly LineStyleKey[] = [
+  'compare1', 'compare2', 'compare3', 'compare4', 'compare5', 'compare6', 'compare7', 'compare8',
+]
 
 export interface LineStackSeries {
   readonly name: string

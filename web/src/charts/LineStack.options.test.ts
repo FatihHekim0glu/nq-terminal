@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { FENCE_TIME } from './fence'
 import { paneOptions, paneUplotData, type PaneBuild } from './LineStack.options'
 import { fakePlot } from './LineStack.testUtil'
-import { DEFAULT_CHART_TOKENS, canvasFont, makeUplotTheme } from './theme'
-import type { LineStackPane } from './LineStack.types'
+import { DEFAULT_CHART_TOKENS, canvasFont, lineStackSeries, makeUplotTheme, seriesColor } from './theme'
+import { COMPARE_STYLES, type LineStackPane } from './LineStack.types'
 
 const DAY = 86_400
 const t = Array.from({ length: 10 }, (_, i) => FENCE_TIME - (10 - i) * DAY)
@@ -226,5 +226,61 @@ describe('pane options from the charts theme (look spec 6.3)', () => {
     const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME, yMin: 0, yMax: 2 })
     const values = o.axes![1]!.values as (u: unknown, splits: number[]) => (string | null)[]
     expect(values(u, [0, 0.5, 1, 1.5, 2])).toEqual(['0.0', '0.5', null, null, '2.0'])
+  })
+})
+
+// Compare lines (roadmap 9): a basket of up to eight runs or hypotheses on one pane.
+describe('compare line styles in a pane', () => {
+  const COMPARE: LineStackPane = {
+    id: 'compare',
+    series: COMPARE_STYLES.map((style, i) => ({ name: `Run ${i + 1}`, style, values: [] })),
+  }
+
+  it('exports eight compare styles, compare1 to compare8, all known to the charts theme', () => {
+    expect(COMPARE_STYLES).toEqual(['compare1', 'compare2', 'compare3', 'compare4', 'compare5', 'compare6', 'compare7', 'compare8'])
+    const known = Object.keys(lineStackSeries())
+    for (const style of COMPARE_STYLES) expect(known, style).toContain(style)
+  })
+
+  it('strokes series i in seriesColor(i) at the primary width, in the order given, with no area', () => {
+    const series = build({ pane: COMPARE }).series.slice(1)
+    expect(series.map((s) => s.label)).toEqual(COMPARE.series.map((s) => s.name))
+    series.forEach((s, i) => {
+      expect(s.stroke, `series ${i}`).toBe(seriesColor(i, DEFAULT_CHART_TOKENS))
+      expect(s.width).toBe(1.5)
+      expect(s.spanGaps).toBe(false)
+      expect(s.fill).toBeUndefined()
+    })
+    expect(paneUplotData([10], COMPARE, COMPARE.series.map((_, i) => [i]))).toEqual([[10], ...COMPARE.series.map((_, i) => [i])])
+  })
+
+  it('passes a 6 on, 3 off dash for compare5 to compare8 and none for compare1 to compare4', () => {
+    const series = build({ pane: COMPARE }).series.slice(1)
+    series.slice(0, 4).forEach((s, i) => expect(s.dash, `compare${i + 1}`).toBeUndefined())
+    series.slice(4).forEach((s, i) => expect(s.dash, `compare${i + 5}`).toEqual([6, 3]))
+  })
+
+  it('gives every build its own dash arrays', () => {
+    const a = build({ pane: COMPARE }).series[5]!
+    const b = build({ pane: COMPARE }).series[5]!
+    expect(a.dash).not.toBe(b.dash)
+    a.dash!.push(99)
+    expect(b.dash).toEqual([6, 3])
+    expect(build({ pane: COMPARE }).series[5]!.dash).toEqual([6, 3])
+  })
+
+  it('leaves the existing styles as they were: no dash on the benchmark or rolling lines, the interval band still dashed', () => {
+    for (const s of build({ pane: RR }).series.slice(1)) expect(s.dash).toBeUndefined()
+    const bench = build().series.find((s) => s.label === 'Benchmark')!
+    expect(bench.dash).toBeUndefined()
+    const band: LineStackPane = { id: 'band', series: [{ name: 'Low', style: 'ciBound', values: [] }] }
+    expect(build({ pane: band, data: [t.map(() => 0.5)] }).series[1]!.dash).toEqual([4, 3])
+  })
+
+  it('takes a compare pane with a single series (a basket of one) as a plain line', () => {
+    const one: LineStackPane = { id: 'one', series: [{ name: 'Only', style: 'compare1', values: [] }] }
+    const s = build({ pane: one, data: [t.map(() => 1)] }).series
+    expect(s).toHaveLength(2)
+    expect(s[1]).toMatchObject({ label: 'Only', stroke: '#FFFFFF', width: 1.5 })
   })
 })

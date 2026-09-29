@@ -13,6 +13,13 @@ export const GRID = {
   headingNumberEmpty: '{n}) {label} is a heading.',
   keysHint:
     'Arrow keys move between cells, Page Up and Page Down by a page, Home and End along the row, Control with Home or End to the first or last row. Enter on a column header sorts by it; Enter on a row opens it.',
+  /** Row marking (roadmap 9). The glyph is ASCII on purpose: the fonts' cover of a triangle is unverified,
+   * and a fallback glyph would shift the number column. */
+  markGlyph: '+',
+  /** Read by screen readers beside the glyph of a marked row. */
+  marked: 'marked',
+  /** Added to the grid's description only when the screen lets rows be marked. */
+  markHint: 'Space marks the row for 95) Compare.',
   empty: 'No rows.',
   sortAscending: 'sorted ascending',
   sortDescending: 'sorted descending',

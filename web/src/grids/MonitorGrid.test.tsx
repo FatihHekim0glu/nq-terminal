@@ -9,6 +9,7 @@ import { resetMessage, useMessage } from '../chrome/MessageLine.store'
 import { activateNumbered, numberedItems, registerNumbered, resetNumbered } from '../chrome/NumberedActions'
 import { PanelActionsContext, type PanelActions } from '../chrome/PanelChrome.actions'
 import { NumberingContext } from '../chrome/PanelChrome.numbers'
+import { GRID } from '../copy/grids'
 import MonitorGrid, { signTone, type MonitorColumn } from './MonitorGrid'
 import { stubLayout } from './testing'
 
@@ -314,5 +315,139 @@ describe('signTone', () => {
     expect(signTone(0)).toBeUndefined()
     expect(signTone(null)).toBeUndefined()
     expect(signTone(Number.NaN)).toBeUndefined()
+  })
+})
+
+// Row marking (roadmap 9): opt-in through onMark. Space on the active data row asks the screen to mark
+// it; the grid only draws what `marked` says (a fill, an ASCII plus and a screen reader word).
+describe('MonitorGrid row marking (opt-in)', () => {
+  const SPACE = ' '
+
+  function hintText(): string {
+    const id = grid().getAttribute('aria-describedby')
+    const el = id ? document.getElementById(id) : null
+    if (!el) throw new Error('no hint element')
+    return el.textContent ?? ''
+  }
+
+  const numberCell = (row: HTMLElement | undefined) => within(row!).getAllByRole('gridcell')[0]!
+
+  it('Space on the active data row calls onMark with that row and stops the page scrolling', () => {
+    const onMark = vi.fn()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={onMark} />)
+    key('ArrowDown')
+    const notPrevented = fireEvent.keyDown(grid(), { key: SPACE })
+    expect(onMark).toHaveBeenCalledTimes(1)
+    expect(onMark).toHaveBeenCalledWith(QUOTES[1])
+    expect(notPrevented).toBe(false)
+  })
+
+  it('marks the row it is on after a sort, not the row at that position in the source', () => {
+    const onMark = vi.fn()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={onMark} initialSort={{ id: 'last', desc: true }} />)
+    key(SPACE)
+    expect(onMark).toHaveBeenLastCalledWith(QUOTES[3])
+  })
+
+  it('does not mark from a header cell or a section row', () => {
+    const onMark = vi.fn()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} groupOf={(r) => r.sector} onMark={onMark} />)
+    expect(activeCell().textContent).toBe('1) Equity')
+    expect(fireEvent.keyDown(grid(), { key: SPACE })).toBe(true)
+    key('ArrowUp')
+    expect(activeCell().tagName).toBe('TH')
+    expect(fireEvent.keyDown(grid(), { key: SPACE })).toBe(true)
+    expect(onMark).not.toHaveBeenCalled()
+  })
+
+  it('leaves Space alone without onMark: the default is not prevented and nothing is marked', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} />)
+    expect(fireEvent.keyDown(grid(), { key: SPACE })).toBe(true)
+    expect(document.querySelectorAll('tr[data-marked], .mark-glyph')).toHaveLength(0)
+  })
+
+  it('leaves Control+Space and Shift+Space to the browser and ignores a held key', () => {
+    const onMark = vi.fn()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={onMark} />)
+    expect(fireEvent.keyDown(grid(), { key: SPACE, ctrlKey: true })).toBe(true)
+    expect(fireEvent.keyDown(grid(), { key: SPACE, shiftKey: true })).toBe(true)
+    expect(fireEvent.keyDown(grid(), { key: SPACE, metaKey: true })).toBe(true)
+    expect(fireEvent.keyDown(grid(), { key: SPACE, altKey: true })).toBe(true)
+    expect(onMark).not.toHaveBeenCalled()
+    // A held Space repeats keydown: only the first press toggles, and the page still does not scroll.
+    fireEvent.keyDown(grid(), { key: SPACE })
+    expect(fireEvent.keyDown(grid(), { key: SPACE, repeat: true })).toBe(false)
+    expect(onMark).toHaveBeenCalledTimes(1)
+  })
+
+  it('draws a marked row with data-marked, an ASCII plus and the word marked for screen readers', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set(['ES', 'YM'])} />)
+    const rows = bodyRows()
+    expect(rows.map((r) => r.getAttribute('data-marked'))).toEqual([null, 'true', null, 'true'])
+    const cell = numberCell(rows[1])
+    const glyph = cell.querySelector('.mark-glyph')
+    expect(glyph?.textContent).toBe('+')
+    expect(glyph?.textContent).toBe(GRID.markGlyph)
+    expect(GRID.markGlyph).toMatch(/^[\x21-\x7e]$/)
+    expect(glyph?.getAttribute('aria-hidden')).toBe('true')
+    expect(cell.querySelector('.sr-only')?.textContent).toBe(GRID.marked)
+    expect(cell.textContent).toContain('2)')
+  })
+
+  it('draws nothing extra on unmarked rows: same number text, no glyph, no sr word', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set(['ES'])} />)
+    const plain = numberCell(bodyRows()[0])
+    expect(plain.textContent).toBe('1)')
+    expect(plain.querySelector('.mark-glyph')).toBeNull()
+    expect(plain.querySelector('.sr-only')).toBeNull()
+    expect(document.querySelectorAll('.mark-glyph')).toHaveLength(1)
+  })
+
+  it('marks by row id, so a marked row keeps its mark when the sort moves it', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set(['NQ'])} initialSort={{ id: 'last', desc: true }} />)
+    const marked = bodyRows().filter((r) => r.hasAttribute('data-marked'))
+    expect(marked).toHaveLength(1)
+    expect(within(marked[0]!).getAllByRole('gridcell')[1]?.textContent).toBe('NQ')
+  })
+
+  it('keeps aria-selected for the active row only: marking never changes it', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set(['ES', 'NQ'])} />)
+    expect(bodyRows().map((r) => r.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false'])
+    key('ArrowDown')
+    key('ArrowDown')
+    expect(bodyRows().map((r) => r.getAttribute('aria-selected'))).toEqual(['false', 'false', 'true', 'false'])
+  })
+
+  it('marks data rows only: a section row never carries data-marked', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} groupOf={(r) => r.sector} onMark={() => {}} marked={new Set(['Equity', 'NQ'])} />)
+    expect(bodyRows().map((r) => r.hasAttribute('data-marked'))).toEqual([false, true, false, false, false, false])
+  })
+
+  it('updates the marks when the set changes and clears them when it empties', () => {
+    const { rerender } = render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set(['ZN'])} />)
+    expect(document.querySelectorAll('tr[data-marked]')).toHaveLength(1)
+    rerender(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} marked={new Set()} />)
+    expect(document.querySelectorAll('tr[data-marked]')).toHaveLength(0)
+    expect(document.querySelectorAll('.mark-glyph')).toHaveLength(0)
+  })
+
+  it('still shows the glyph and the word without a number column (numbered false), in the first cell', () => {
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} numbered={false} onMark={() => {}} marked={new Set(['ES'])} />)
+    const row = bodyRows()[1]!
+    expect(row.getAttribute('data-marked')).toBe('true')
+    const first = within(row).getAllByRole('gridcell')[0]!
+    expect(first.querySelector('.mark-glyph')?.textContent).toBe(GRID.markGlyph)
+    expect(first.querySelector('.sr-only')?.textContent).toBe(GRID.marked)
+    expect(first.textContent).toContain('ES')
+  })
+
+  it('adds the marking hint to the grid description only when onMark is given', () => {
+    const { unmount } = render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} />)
+    expect(hintText()).toBe(GRID.keysHint)
+    expect(hintText()).not.toContain(GRID.markHint)
+    unmount()
+    render(<MonitorGrid label="Futures monitor" rows={QUOTES} columns={COLUMNS} rowId={(r) => r.sym} onMark={() => {}} />)
+    expect(hintText()).toBe(`${GRID.keysHint} ${GRID.markHint}`)
+    expect(GRID.markHint).toBe('Space marks the row for 95) Compare.')
   })
 })

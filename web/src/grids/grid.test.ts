@@ -191,3 +191,40 @@ describe('grid.css: journal source codes stay readable in every row state', () =
     expect(contrastRatio(TAPE_SRC, '#191919')).toBeGreaterThanOrEqual(4.5)
   })
 })
+
+// Row marking (roadmap 9): a marked row takes the selection fill, and the glyph makes it more than colour.
+describe('grid.css: marked rows (Space marks a row for Compare)', () => {
+  it('fills the cells of a marked row with --sel-bg, a token and no literal', () => {
+    const decls = rule('.nqt-grid tbody tr[data-marked="true"] td')
+    expect(decls).toMatch(/background:\s*var\(--sel-bg\)/)
+    expect(decls).not.toMatch(/#[0-9A-Fa-f]{3,8}\b|\b(rgb|rgba|hsl|hsla)\(/)
+  })
+
+  it('draws the mark glyph in --white', () => {
+    expect(rule('.nqt-grid .mark-glyph')).toMatch(/color:\s*var\(--white\)/)
+    expect(contrastRatio('#FFFFFF', SPEC['sel-bg'])).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('lifts down text and journal source codes on a marked row, as on the selected row (same fill)', () => {
+    const decls = rule('.nqt-grid tr[data-marked="true"]')
+    expect(tokenOverride(decls, 'c-down')).toBe('var(--c-down-raised)')
+    expect(tokenOverride(decls, 'tape-src')).toBe('var(--tape-fg)')
+    expect(contrastRatio(SPEC['c-down-raised'], SPEC['sel-bg'])).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('wins over row hover as the selection does, but a hovered cell and the focus ring still win over it', () => {
+    const at = (needle: string) => {
+      const i = css.indexOf(needle)
+      if (i < 0) throw new Error(`no ${needle}`)
+      return i
+    }
+    const marked = at('tr[data-marked="true"] td')
+    expect(marked).toBeGreaterThan(at('.nqt-grid tbody tr:hover td'))
+    expect(marked).toBeLessThan(at('.nqt-grid tbody tr td:hover'))
+    expect(marked).toBeLessThan(at('.nqt-grid[role="grid"]:focus-visible .is-active'))
+  })
+
+  it('adds no transition: marking is a hard cut like every other state', () => {
+    expect(rule('.nqt-grid tbody tr[data-marked="true"] td')).not.toMatch(/transition/)
+  })
+})

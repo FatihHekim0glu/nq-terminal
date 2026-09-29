@@ -2,7 +2,7 @@
 // Plain objects with no library import. uPlot writes into the options it is given, so build a fresh
 // theme per chart with makeUplotTheme(readChartTokens(), linkGroup); `uplotTheme` is the default
 // snapshot for reference and tests.
-import { DEFAULT_CHART_TOKENS, canvasFont, type ChartTokens } from './chartTokens'
+import { DEFAULT_CHART_TOKENS, canvasFont, seriesColor, type ChartTokens } from './chartTokens'
 import { CHART_GEOMETRY as G } from './geometry'
 
 export interface UplotGrid {
@@ -101,5 +101,22 @@ export function lineStackSeries(tokens: ChartTokens = DEFAULT_CHART_TOKENS) {
     /** RR: the ends of the full-sample bootstrap interval (SV5), thin amber dashes. */
     ciBound: { stroke: c.data, width: w, dash: [...G.fenceDash] },
     fence: { stroke: c.fence, width: w, dash: [...G.fenceDash] },
+    /** Compare baskets (RUNS, REG): line N in seriesColor(N - 1); 5 to 8 also dashed, so colour is not the only cue. */
+    compare1: compareSolid(0, tokens),
+    compare2: compareSolid(1, tokens),
+    compare3: compareSolid(2, tokens),
+    compare4: compareSolid(3, tokens),
+    compare5: compareDashed(4, tokens),
+    compare6: compareDashed(5, tokens),
+    compare7: compareDashed(6, tokens),
+    compare8: compareDashed(7, tokens),
   } as const
+}
+
+function compareSolid(index: number, tokens: ChartTokens) {
+  return { stroke: seriesColor(index, tokens), width: G.primaryWidth }
+}
+
+function compareDashed(index: number, tokens: ChartTokens) {
+  return { ...compareSolid(index, tokens), dash: [...G.compareDash] }
 }

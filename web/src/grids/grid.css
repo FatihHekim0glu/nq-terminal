@@ -109,6 +109,12 @@
 .nqt-grid tbody tr:hover td { background: var(--hover-row); }
 .nqt-grid tr[aria-selected="true"] { --c-down: var(--c-down-raised); --tape-src: var(--tape-fg); }
 .nqt-grid tbody tr[aria-selected="true"] td { background: var(--sel-bg); }
+/* Marked rows (Space, opt-in through MonitorGrid onMark) take the selection fill, with the same lifts for
+   the text that fails on it. The fill is never the only cue: the row also shows a white plus and a
+   screen reader word. It sits before the cell hover and the focus ring, which still win. */
+.nqt-grid tr[data-marked="true"] { --c-down: var(--c-down-raised); --tape-src: var(--tape-fg); }
+.nqt-grid tbody tr[data-marked="true"] td { background: var(--sel-bg); }
+.nqt-grid .mark-glyph { color: var(--white); }
 .nqt-grid tbody tr td:hover {
   --muted: var(--muted-hover);
   --c-down: var(--c-down-hover);

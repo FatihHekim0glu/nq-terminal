@@ -137,8 +137,10 @@ function seriesOptions(s: LineStackSeries, styles: Styles, part: SeriesPart = 'w
       return { ...base, stroke, width, dash: [...dash] }
     }
     default: {
-      const { stroke, width } = styles[s.style]
-      return { ...base, stroke, width }
+      const style = styles[s.style]
+      const { stroke, width } = style
+      // The compare lines 5 to 8 are dashed; a fresh array each build, since uPlot writes into its options.
+      return 'dash' in style ? { ...base, stroke, width, dash: [...style.dash] } : { ...base, stroke, width }
     }
   }
 }
