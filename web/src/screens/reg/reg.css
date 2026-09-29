@@ -157,6 +157,10 @@
 .mt-replication-chart { position: relative; height: 360px; min-width: 0; }
 .mt-deflated { flex: 0 0 auto; }
 .mt-deflated-chart { position: relative; height: 200px; min-width: 0; }
+/* 87) Effective trials: a band, the note, the estimates, the correlation heatmap (a fixed, positioned box tall enough
+   for the 15 daily trials at the house row height) and the DSR table; the panel body scrolls all of it. */
+.mt-neff { flex: 0 0 auto; }
+.mt-neff-chart { position: relative; height: 440px; min-width: 0; }
 .reg-caption {
   height: var(--row-h);
   padding: 0 5px;

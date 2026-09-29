@@ -23,12 +23,14 @@ import { describePScatter } from '../../charts/echarts/pScatterModel'
 import { stubLayout } from '../../grids/testing'
 import { mtScatterInput } from './mtModel'
 import { DEFLATED } from '../../copy/deflated'
+import { EFFECTIVE_N } from '../../copy/effectiveN'
 import { MT } from '../../copy/reg'
 import { REPLICATION } from '../../copy/replication'
 import { fillCopy } from '../../copy/workspace'
 import { ReplicationBody } from './MtReplication'
 import MtScreen from './MtScreen'
 import { DEFLATED_REAL } from './deflatedFixtures'
+import { dailyTrialNames } from './effectiveNModel'
 import { MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import { buildReplication, replicationScatter } from './replicationModel'
 import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi } from './testHarness'
@@ -211,7 +213,8 @@ describe('MT: multiple-testing view', () => {
 })
 
 // MT gets a sub tab strip from 85 (roadmap R8): 85) Family is today's content plus SV3, unchanged;
-// 86) Replication draws each sealed confirmation against its parent's registered in-sample p.
+// 86) Replication draws each sealed confirmation against its parent's registered in-sample p;
+// 87) Effective trials reads the daily trials' series and refuses unless it reproduces SV3 (roadmap #19).
 function tabs(): HTMLElement {
   return screen.getByRole('tablist', { name: MT.views.label })
 }
@@ -242,23 +245,25 @@ async function openReplication(): Promise<void> {
 }
 
 describe('MT: 85) Family and 86) Replication tabs', () => {
-  it('shows the sub tab strip with 85) Family selected and 86) Replication beside it', async () => {
+  it('shows the sub tab strip with 85) Family selected, 86) Replication and 87) Effective trials beside it', async () => {
     stubApi()
     await ready()
     const strip = within(tabs())
-    expect(strip.getAllByRole('tab').map((t) => t.textContent)).toEqual(['85) Family', '86) Replication'])
+    expect(strip.getAllByRole('tab').map((t) => t.textContent)).toEqual(['85) Family', '86) Replication', '87) Effective trials'])
     expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-selected')).toBe('true')
     expect(strip.getByRole('tab', { name: '86) Replication' }).getAttribute('aria-selected')).toBe('false')
+    expect(strip.getByRole('tab', { name: '87) Effective trials' }).getAttribute('aria-selected')).toBe('false')
     const panel = screen.getByRole('tabpanel', { name: '85) Family' })
     expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-controls')).toBe(panel.id)
   })
 
-  it('registers 85 and 86 for Number <GO> beside the red bar and the family rows', async () => {
+  it('registers 85, 86 and 87 for Number <GO> beside the red bar and the family rows', async () => {
     stubApi()
     await ready()
     const numbers = numberedItems(PANEL_ID).map((i) => i.n)
-    expect(numbers).toEqual(expect.arrayContaining([1, 21, 85, 86, 96, 97]))
+    expect(numbers).toEqual(expect.arrayContaining([1, 21, 85, 86, 87, 96, 97]))
     expect(numberedItems(PANEL_ID).find((i) => i.n === 86)!.label).toBe('Replication')
+    expect(numberedItems(PANEL_ID).find((i) => i.n === 87)!.label).toBe(EFFECTIVE_N.tab)
   })
 
   it('keeps the family view whole under 85: the family line, the scatter, the table, the confirmations and SV3', async () => {
@@ -455,5 +460,112 @@ describe('MT: ReplicationBody', () => {
     mountScreen(<ReplicationBody view={buildReplication({ ...MULTIPLE_TESTING, confirmations: all }, REGISTRY)} registryError={null} />)
     expect(screen.getByText(REPLICATION.untestedNone)).toBeTruthy()
     expect(pairRows()).toHaveLength(MULTIPLE_TESTING.k)
+  })
+})
+
+// 87) Effective trials (roadmap #19 slice 2): the trials' own correlations, refused unless the browser formula
+// reproduces the served SV3 numbers. The shared harness answers no analytics GET, so every series is a 404 there.
+const HYPOTHESIS_PREFIX = '/api/analytics/hypothesis/'
+const DAILY = dailyTrialNames(DEFLATED_REAL)
+
+function neffPanel(): HTMLElement {
+  return screen.getByRole('tabpanel', { name: '87) Effective trials' })
+}
+
+async function openEffectiveTrials(): Promise<void> {
+  await ready()
+  await screen.findByRole('region', { name: DEFLATED.label })
+  fireEvent.click(screen.getByRole('tab', { name: '87) Effective trials' }))
+  await screen.findByRole('region', { name: EFFECTIVE_N.label })
+}
+
+describe('MT: 87) Effective trials', () => {
+  it('has 15 daily trials on the served view, the ones the series GETs are asked for', () => {
+    expect(DAILY).toHaveLength(15)
+  })
+
+  it('asks for no daily series before 87 is selected, on 85 or on 86', async () => {
+    const seen = stubApi()
+    await ready()
+    await screen.findByRole('region', { name: DEFLATED.label })
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    await screen.findByRole('region', { name: REPLICATION.label })
+    expect(seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX))).toEqual([])
+  })
+
+  it('asks for each daily trial once at cost 1 when 87 is selected, and only with GET', async () => {
+    const seen = stubApi()
+    await openEffectiveTrials()
+    await waitFor(() => expect(seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX))).toHaveLength(15))
+    const asked = seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX)).map((s) => s.url)
+    expect(new Set(asked)).toEqual(new Set(DAILY.map((name) => `${HYPOTHESIS_PREFIX}${name}?cost=1`)))
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('gives the unavailable line as a status, with no alert, when the series answer 404', async () => {
+    stubApi()
+    await openEffectiveTrials()
+    const line = fillCopy(EFFECTIVE_N.refused.unavailable, { n: 15, total: 15, name: 'za_v0', detail: 'not found' })
+    const status = await within(neffPanel()).findByText(line)
+    expect(status.getAttribute('role')).toBe('status')
+    expect(line).toBe('Not computed: 15 of 15 daily trials series could not be read (first za_v0: not found). Every trial is needed, as in SV3.')
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+    expect(within(neffPanel()).queryByRole('img')).toBeNull()
+  })
+
+  it('gives 14 of 15 when only volmanaged_v0 answers, as the demo does', async () => {
+    stubApi()
+    const spy = vi.mocked(globalThis.fetch)
+    const answer = spy.getMockImplementation()!
+    spy.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === `${HYPOTHESIS_PREFIX}volmanaged_v0?cost=1`) {
+        const body = { distribution: { series: { date: ['2020-01-02', '2020-01-03'], r: [0.01, -0.01], t: [0, 1], unit: 'x' } } }
+        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
+      }
+      if (url.startsWith(HYPOTHESIS_PREFIX)) {
+        return Promise.resolve(new Response(JSON.stringify({ detail: 'not in the demo dataset' }), { status: 404, headers: { 'content-type': 'application/json' } }))
+      }
+      return answer(input, init)
+    })
+    await openEffectiveTrials()
+    const status = await within(neffPanel()).findByText(/^Not computed: 14 of 15 daily trials series could not be read/)
+    expect(status.textContent).toContain('(first za_v0: not in the demo dataset)')
+    expect(status.getAttribute('role')).toBe('status')
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+
+  it('opens from the tab and from Number <GO> 87, names its panel, and 85 brings the family back', async () => {
+    stubApi()
+    await ready()
+    act(() => {
+      expect(activateNumbered(PANEL_ID, 87)).toBe(true)
+    })
+    await screen.findByRole('region', { name: EFFECTIVE_N.label })
+    expect(screen.getByRole('tab', { name: '87) Effective trials' }).getAttribute('aria-selected')).toBe('true')
+    expect(neffPanel()).toBeTruthy()
+    expect(screen.queryByRole('grid', { name: /Adjusted p-values/ })).toBeNull()
+    expect(screen.queryByRole('region', { name: DEFLATED.label })).toBeNull()
+    act(() => {
+      expect(activateNumbered(PANEL_ID, 85)).toBe(true)
+    })
+    await waitFor(() => expect(table()).toBeTruthy())
+    expect(screen.queryByRole('region', { name: EFFECTIVE_N.label })).toBeNull()
+  })
+
+  it('disables 97) Settings on 87, where the p axis choice changes nothing', async () => {
+    stubApi()
+    await openEffectiveTrials()
+    const settings = screen.getByRole('button', { name: /97\) Settings/ })
+    expect(settings.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('tags the view [POST HOC] and says it is computed in the browser', async () => {
+    stubApi()
+    await openEffectiveTrials()
+    const view = screen.getByRole('region', { name: EFFECTIVE_N.label })
+    expect(within(view).getByText('[POST HOC]')).toBeTruthy()
+    expect(within(view).getByText(EFFECTIVE_N.computed)).toBeTruthy()
+    expect(view.textContent).toContain('the 15 daily trials in the matrix; the 6 monthly books counted as independent trials.')
   })
 })
