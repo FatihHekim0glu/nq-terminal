@@ -289,7 +289,7 @@ describe('METRIC_ENTRIES', () => {
       EX1: 'EXPO', EX2: 'EXPO', EX3: 'COST', EX4: 'COST',
       MV1: 'GP', MV2: 'ROLL', MV3: 'GP', MV4: 'MON', MV5: 'CORR', MV7: 'SEAS', MV8: 'EVT', MV9: 'VCONE', MV10: 'ROLL',
       RI1: 'REG', RI2: 'OOS', RI3: 'LEDG', RI4: 'DQ', RI5: 'DQ',
-      LV1: 'JRNL', LV2: 'LIVE', LV3: 'LIVE', LV4: 'JRNL', LV5: 'LIVE',
+      LV1: 'JRNL', LV2: 'LIVE', LV3: 'LIVE', LV4: 'JRNL', LV5: 'LIVE', LV6: 'LIVE',
     })
   })
 
