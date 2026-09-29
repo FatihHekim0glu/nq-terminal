@@ -24,6 +24,9 @@ export type LineAction =
   | { readonly kind: 'watch' }
   | { readonly kind: 'watch-seen' }
   | { readonly kind: 'grab' }
+  | { readonly kind: 'save'; readonly name: string }
+  | { readonly kind: 'load'; readonly name: string | null }
+  | { readonly kind: 'forget'; readonly name: string }
 
 export type LineResult = { readonly ok: true; readonly action: LineAction } | { readonly ok: false; readonly error: ParseError }
 
@@ -50,6 +53,31 @@ export function displayLine(text: string): string {
   })
 }
 
+const WORKSPACE_NAME = /^[A-Z][A-Z0-9_]{1,15}$/
+/** An order ticket word at the start of a name or of a part after an underscore: a workspace has a tab in the frame
+ * strip, and BUY, SELL, ORDER, SUBMIT, CANCEL, MODIFY or TRANSMIT there would read as an order control on a terminal
+ * that has no order path. The same pattern is in state/workspaces.ts; a test keeps the two in step. */
+const TICKET_NAME = /(^|_)(ORDER|SUBMIT|CANCEL|MODIF|TRANSMIT|BUY|SELL)/
+
+/** The store's name rule (isWorkspaceName in state/workspaces.ts) without the store, which is not part of the first
+ * paint: 2 to 16 of A-Z, 0-9 and _, starting with a letter, and no function, chrome word (SAVE, LOAD and FORGET are
+ * ones), sector word or order ticket word. A test keeps the two in step. */
+export function isSavableName(word: string): boolean {
+  return WORKSPACE_NAME.test(word) && !TICKET_NAME.test(word) && !findMnemonic(word) && !Object.hasOwn(CHROME_WORDS, word) && sectorWord(word) === null
+}
+
+/** SAVE NAME, LOAD NAME, LOAD (alone: the menu) and FORGET NAME. The name is read in capitals, the way the command
+ * line shows it. SAVE holds it to the name rule, since it makes the name; LOAD and FORGET take any word of the command
+ * alphabet and the store answers "no workspace named ..." for one it does not hold. */
+function workspaceAction(word: 'SAVE' | 'LOAD' | 'FORGET', rest: readonly string[]): LineResult {
+  const [typed, ...more] = rest
+  if (typed === undefined) return word === 'LOAD' ? ok({ kind: 'load', name: null }) : fail('missing-name', word)
+  if (more.length > 0) return fail('extra-after-word', word)
+  const name = typed.toUpperCase()
+  if (word === 'SAVE') return isSavableName(name) ? ok({ kind: 'save', name }) : fail('bad-name', name)
+  return ok(word === 'LOAD' ? { kind: 'load', name } : { kind: 'forget', name })
+}
+
 /** Digits, a chrome word, a bare sector or a `MNEM HELP` line; null when the line is none of these. */
 function chromeAction(tokens: readonly string[]): LineResult | null {
   const [first = '', ...rest] = tokens
@@ -61,6 +89,7 @@ function chromeAction(tokens: readonly string[]): LineResult | null {
     if (rest.length === 1 && rest[0]?.toUpperCase() === 'SEEN') return ok({ kind: 'watch-seen' })
     return fail('extra-after-word', word)
   }
+  if (word === 'SAVE' || word === 'LOAD' || word === 'FORGET') return workspaceAction(word, rest)
   const bare = BARE_WORDS[word]
   if (bare) return rest.length === 0 ? ok(bare) : fail('extra-after-word', word)
   const sector = tokens.length === 1 ? sectorWord(first) : null

@@ -7,7 +7,10 @@
 //   - is a link action: a screen, a context or help (LINK_ACTIONS).
 // Otherwise the whole link is refused: nothing runs and the message line says why. Lines then wait for the
 // workspace, which loads as its own chunk. Internal callers use requestLine directly; this is only the
-// address bar's way in.
+// address bar's way in. A link never saves, loads or forgets a workspace (SAVE, LOAD and FORGET are not link
+// actions). A page opened with no link at all restores the workspace that was saved or loaded last
+// (roadmap #14): once the index has settled and the workspace is ready it asks the command line for
+// `LOAD NAME` itself, which is an internal request, not a link. Any #go hash, even a refused one, wins.
 import { useCallback, useEffect, useRef } from 'react'
 import { useCommands } from '../api/queries'
 import { parseLine } from '../commands/line'
@@ -24,6 +27,10 @@ export interface DeepLinkEnv {
   readonly history: Pick<History, 'replaceState'>
   readonly target: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
 }
+
+// The workspaces store (state/workspaces.ts) is not part of the first paint: it is fetched beside the Workspace chunk,
+// which imports it too, and read only when the last workspace is restored. Null when the chunk cannot be fetched.
+const workspacesModule = import('../state/workspaces').catch(() => null)
 
 const browserEnv = (): DeepLinkEnv => ({ location: window.location, history: window.history, target: window })
 
@@ -83,6 +90,8 @@ export function useDeepLinks(env?: DeepLinkEnv): void {
   // Links read from the address bar that wait for the index (or for a better one, after it failed to load).
   const waiting = useRef<readonly Waiting[]>([])
   const source = useRef(env)
+  // The restore of the last workspace: waiting for the index and the workspace, or off (asked for once, or a link came).
+  const restore = useRef<'idle' | 'waiting' | 'off'>('idle')
 
   const drain = useCallback(() => {
     if (!now.current.settled) return
@@ -102,6 +111,18 @@ export function useDeepLinks(env?: DeepLinkEnv): void {
       }
     }
     waiting.current = kept
+    if (restore.current === 'idle') {
+      restore.current = 'waiting'
+      // The store is read again when the workspace is ready: the workspace may have been forgotten since, and a link
+      // that came meanwhile wins. Only a name the store could have saved is asked for; the line is never built from
+      // anything else.
+      void Promise.all([whenWorkspaceReady(), workspacesModule]).then(([, store]) => {
+        if (!mounted.current || restore.current !== 'waiting') return
+        restore.current = 'off'
+        const last = store?.useWorkspaces.getState().last ?? null
+        if (last !== null && store?.isWorkspaceName(last)) requestLine(`LOAD ${last}`)
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -116,6 +137,7 @@ export function useDeepLinks(env?: DeepLinkEnv): void {
     const take = () => {
       const lines = linesFromHash(at.location.hash)
       if (lines === null) return
+      restore.current = 'off'
       consume(at)
       if (lines.length === 0) postMessage(LINKS.refused, 'error')
       else waiting.current = [...waiting.current, { lines, told: false }]

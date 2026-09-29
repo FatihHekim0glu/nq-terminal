@@ -15,6 +15,8 @@ export const FRAME_STRIP = {
   noOrderPath: 'NO ORDER PATH',
   /** Shown only in the demo (`pnpm demo`), where every answer is fixture data served in the browser. */
   demoData: 'DEMO DATA',
+  /** The title on the active tab of a saved workspace (a workspace owns the layout on screen). */
+  workspaceTitle: 'Saved workspace',
   options: 'Options',
   optionsGlyph: '≡',
   tape: 'Event tape',
@@ -106,7 +108,7 @@ export const MESSAGES = {
   onePage: 'This screen has one page.',
   noExport: 'This screen has nothing to export yet.',
   theme: 'New theme applied. Rerun the screen to see the changes.',
-  newLayout: 'Type a screen mnemonic, for example REG, then <GO>.',
+  newLayout: 'Type a screen mnemonic, or SAVE NAME to keep this layout as a workspace.',
   keymapOpen: 'Key map open. <Alt+K> or <Esc> closes it.',
   /** The key map or the event tape is fetched on demand; when the fetch fails the terminal stays up and says so. */
   keymapFailed: 'The key map could not load. Reload the page to try again.',

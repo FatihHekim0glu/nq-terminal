@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { CHROME_WORDS } from '../copy/commands'
+import { findCopyViolations } from '../copy/copyRules'
 import { describeError } from './messages'
-import { displayLine, parseLine, type LineResult } from './line'
+import { displayLine, isSavableName, parseLine, type LineResult } from './line'
 import { MNEMONICS } from './registry'
 import { sectorWord } from './sectors'
+import { isWorkspaceName } from '../state/workspaces'
 import type { CommandIndexData } from './types'
 
 const INDEX: CommandIndexData = {
@@ -170,6 +172,114 @@ describe('chrome words RESET, UNDO, WATCH, WATCH SEEN and GRAB (roadmap #15, #16
       expect(mnemonicCodes.has(word), word).toBe(false)
       expect(sectorWord(word), word).toBeNull()
     }
+  })
+})
+
+describe('workspace words SAVE, LOAD and FORGET (roadmap #14)', () => {
+  it('SAVE NAME, LOAD NAME and FORGET NAME parse in any case, the name in capitals', () => {
+    expect(action(parse('SAVE VMREVIEW'))).toEqual({ kind: 'save', name: 'VMREVIEW' })
+    expect(action(parse('LOAD VMREVIEW'))).toEqual({ kind: 'load', name: 'VMREVIEW' })
+    expect(action(parse('FORGET VMREVIEW'))).toEqual({ kind: 'forget', name: 'VMREVIEW' })
+    expect(action(parse('save my_desk'))).toEqual({ kind: 'save', name: 'MY_DESK' })
+    expect(action(parse('Load my_desk'))).toEqual({ kind: 'load', name: 'MY_DESK' })
+    expect(action(parse('  forget   Ab  '))).toEqual({ kind: 'forget', name: 'AB' })
+  })
+
+  it('LOAD on its own opens the workspace menu (no name)', () => {
+    expect(action(parse('LOAD'))).toEqual({ kind: 'load', name: null })
+    expect(action(parse('load'))).toEqual({ kind: 'load', name: null })
+  })
+
+  it('reads the words without the commands index (the index is not needed for a name)', () => {
+    expect(action(parseLine('SAVE VMREVIEW', { index: null }))).toEqual({ kind: 'save', name: 'VMREVIEW' })
+    expect(action(parseLine('LOAD', { index: null }))).toEqual({ kind: 'load', name: null })
+    expect(action(parseLine('FORGET VMREVIEW', { index: null, fallbackContext: null }))).toEqual({ kind: 'forget', name: 'VMREVIEW' })
+  })
+
+  it("SAVE with a name that is a function, a chrome word or a sector key fails with 'bad-name' and names the token", () => {
+    for (const bad of ['REG', 'GP', 'RESET', 'UNDO', 'HOME', 'INDEX', 'SAVE', 'LOAD', 'FORGET']) {
+      expect(failure(parse(`SAVE ${bad}`)), `SAVE ${bad}`).toEqual({ code: 'bad-name', token: bad })
+    }
+  })
+
+  it("SAVE with a name outside the rule fails with 'bad-name': one letter, a leading digit or underscore, a hyphen or dot, 17 characters", () => {
+    expect(failure(parse('SAVE a-b'))).toEqual({ code: 'bad-name', token: 'A-B' })
+    expect(failure(parse('SAVE X'))).toEqual({ code: 'bad-name', token: 'X' })
+    expect(failure(parse('SAVE 2FAST')).code).toBe('bad-name')
+    expect(failure(parse('SAVE _KEEP')).code).toBe('bad-name')
+    expect(failure(parse('SAVE MY.DESK')).code).toBe('bad-name')
+    expect(failure(parse('SAVE ABCDEFGHIJKLMNOPQ')).code).toBe('bad-name')
+    expect(action(parse('SAVE ABCDEFGHIJKLMNOP'))).toEqual({ kind: 'save', name: 'ABCDEFGHIJKLMNOP' })
+  })
+
+  it("SAVE with an order ticket word fails with 'bad-name': a workspace tab must never read as an order control", () => {
+    for (const bad of ['BUY', 'SELL', 'ORDER', 'ORDERS', 'SUBMIT', 'CANCEL', 'MODIFY', 'TRANSMIT', 'MY_ORDER', 'SELL_PLAN']) {
+      expect(failure(parse(`SAVE ${bad}`)), `SAVE ${bad}`).toEqual({ code: 'bad-name', token: bad })
+      expect(isSavableName(bad), bad).toBe(false)
+    }
+    // Words that only contain those letters inside are fine.
+    for (const good of ['REVIEW', 'VMREVIEW', 'BORDER', 'WORDER']) expect(action(parse(`SAVE ${good}`)), good).toEqual({ kind: 'save', name: good })
+  })
+
+  it("SAVE's name rule (line.ts, without the store) is the store's isWorkspaceName on every word tried", () => {
+    const words = [
+      ...MNEMONICS.map((m) => m.code),
+      ...Object.keys(CHROME_WORDS),
+      'INDEX', 'COMDTY', 'CURNCY', 'EQUITY', 'GOVT', 'CORP',
+      'A', 'AB', 'A_', 'A1', '1A', '_A', 'A-B', 'A.B', 'ABCDEFGHIJKLMNOP', 'ABCDEFGHIJKLMNOPQ', 'VMREVIEW', 'MY_DESK', 'my_desk', 'Mixed', '', ' ', 'NQ1', 'NQ', 'ES1', 'REGX', 'LOADX', 'SAVEX',
+      'BUY', 'SELL', 'ORDER', 'ORDERS', 'SUBMIT', 'CANCEL', 'MODIFY', 'TRANSMIT', 'MY_ORDER', 'SELL_PLAN', 'REVIEW', 'BORDER', 'MODIF', 'XBUY', 'A_BUY',
+    ]
+    for (const word of words) expect(isSavableName(word), JSON.stringify(word)).toBe(isWorkspaceName(word))
+  })
+
+  it('LOAD and FORGET take any word of the command alphabet as the name: the store says when there is no such workspace', () => {
+    expect(action(parse('FORGET X'))).toEqual({ kind: 'forget', name: 'X' })
+    expect(action(parse('LOAD a-b'))).toEqual({ kind: 'load', name: 'A-B' })
+    expect(action(parse('LOAD REG'))).toEqual({ kind: 'load', name: 'REG' })
+    expect(action(parse('FORGET reset'))).toEqual({ kind: 'forget', name: 'RESET' })
+  })
+
+  it("SAVE and FORGET without a name fail with 'missing-name' naming the word", () => {
+    expect(failure(parse('SAVE'))).toEqual({ code: 'missing-name', token: 'SAVE' })
+    expect(failure(parse('  forget '))).toEqual({ code: 'missing-name', token: 'FORGET' })
+  })
+
+  it("more than one name fails with 'extra-after-word'", () => {
+    expect(failure(parse('SAVE ONE TWO'))).toEqual({ code: 'extra-after-word', token: 'SAVE' })
+    expect(failure(parse('LOAD ONE TWO'))).toEqual({ code: 'extra-after-word', token: 'LOAD' })
+    expect(failure(parse('FORGET ONE TWO'))).toEqual({ code: 'extra-after-word', token: 'FORGET' })
+  })
+
+  it('a character outside the command alphabet still fails first', () => {
+    expect(failure(parse('SAVE MY$DESK')).code).toBe('bad-character')
+  })
+
+  it('NXTW does not carry the words: they never open a panel', () => {
+    for (const line of ['NXTW SAVE VMREVIEW', 'NXTW LOAD', 'NXTW FORGET VMREVIEW']) {
+      expect(parse(line).ok, line).toBe(false)
+    }
+  })
+
+  it('the new errors read as full sentences with the token filled in and no copy-rule breach', () => {
+    const bad = describeError(failure(parse('SAVE REG')))
+    expect(bad).toBe('REG is not a workspace name: 2 to 16 letters, digits or _, starting with a letter, and not a function, command or trading word.')
+    const missing = describeError(failure(parse('SAVE')))
+    expect(missing).toBe('SAVE needs a workspace name, for example SAVE REVIEW.')
+    expect(describeError(failure(parse('FORGET')))).toBe('FORGET needs a workspace name, for example FORGET REVIEW.')
+    for (const text of [bad, missing]) {
+      expect(text).not.toMatch(/[{}]/)
+      expect(findCopyViolations({ text })).toEqual([])
+    }
+  })
+
+  it('the three words are chrome words with a description, and are no function or sector', () => {
+    for (const word of ['SAVE', 'LOAD', 'FORGET'] as const) {
+      expect(CHROME_WORDS[word].length, word).toBeGreaterThan(10)
+      expect(findCopyViolations({ text: CHROME_WORDS[word] }), word).toEqual([])
+    }
+    expect(CHROME_WORDS.SAVE).toBe('Keep the panels on screen as a named workspace')
+    expect(CHROME_WORDS.LOAD).toBe('Open a saved workspace (alone: list them)')
+    expect(CHROME_WORDS.FORGET).toBe('Remove a saved workspace')
   })
 })
 

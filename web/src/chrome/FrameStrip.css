@@ -13,6 +13,13 @@
   font: inherit; white-space: nowrap; cursor: pointer;
 }
 .frame-tab:hover { background: var(--tab-on); }
+/* Up to six workspace tabs with names of up to 16 characters can outgrow the strip, and .frame-tabs clips: a clipped
+   tab would still take focus (WCAG 2.4.11). The inactive workspace tabs give way with an ellipsis (their full name is
+   the tab's title); the active tab and the + tab keep their width. */
+.frame-tab[data-tab="workspace"]:not([aria-current="page"]) {
+  flex: 0 1 auto; min-width: 5ch; max-width: 18ch; overflow: hidden; text-overflow: ellipsis;
+}
+.frame-new { flex: 0 0 auto; }
 .frame-tab[aria-current="page"] {
   min-width: 225px; text-align: left;
   background: var(--frame-tab-on); color: var(--frame-tab-fg); box-shadow: inset -1px 0 0 var(--frame-tab-edge);

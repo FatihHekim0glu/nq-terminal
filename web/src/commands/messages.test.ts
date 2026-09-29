@@ -37,6 +37,8 @@ const CASES: Record<ParseErrorCode, string> = {
   'sector-not-taken': '27F INDEX CORR',
   'missing-command': 'NXTW',
   'extra-after-word': 'LAST 3',
+  'bad-name': 'SAVE REG',
+  'missing-name': 'SAVE',
 }
 
 describe('parse error messages', () => {

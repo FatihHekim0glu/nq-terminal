@@ -5,12 +5,20 @@ import App from './App'
 import { resetConnection } from './api/connection'
 import { resetRecordWatchBoot, resetRecordWatchView } from './chrome/RecordWatch.live'
 import { layoutFor } from './chrome/WorkspaceLayouts'
-import { COMMAND_LINE } from './copy/commands'
+import appSource from './App.tsx?raw'
+import dispatchSource from './chrome/CommandLine.dispatch.ts?raw'
+import frameStripSource from './chrome/FrameStrip.tsx?raw'
+import keyActionsSource from './chrome/KeyToolbar.actions.ts?raw'
+import deepLinksSource from './chrome/useDeepLinks.ts?raw'
+import lineSource from './commands/line.ts?raw'
+import { COMMAND_LINE, PARSE_MESSAGES } from './copy/commands'
 import { CONNECTION } from './copy/connection'
-import { FRAME_STRIP, KEY_TOOLBAR, NAV_TOOLBAR, STATUS_BAR, TAPE } from './copy/chrome'
+import { FRAME_STRIP, KEY_TOOLBAR, MESSAGES, NAV_TOOLBAR, STATUS_BAR, TAPE } from './copy/chrome'
+import { HOME_ORIENTATION } from './copy/home'
 import { LAYOUT } from './copy/layout'
 import { WATCH } from './copy/watch'
 import { WATCH_DETAIL } from './copy/watchDetail'
+import { WORKSPACES } from './copy/workspaces'
 import { WORKSPACE, fillCopy } from './copy/workspace'
 import { CONFIRMATIONS, REGISTRY } from './screens/reg/regFixtures'
 import { LEDGER, RUNS } from './screens/runs/runs.fixtures'
@@ -18,6 +26,8 @@ import type { WatchSnapshot } from './state/recordWatch.schema'
 import { useRecordWatchStore } from './state/recordWatch.store'
 import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
+import { ORIENTATION_KEY } from './screens/home/HomeOrientation'
+import { useWorkspaces, type Recipe } from './state/workspaces'
 import { resetMessage, useMessage } from './chrome/MessageLine.store'
 
 // GRAB itself (src/export/grab/run.ts) is reached through a dynamic import from the Workspace chunk; the
@@ -102,6 +112,8 @@ beforeEach(() => {
   useLinkGroups.getState().clearAll()
   useLayouts.getState().resetAll()
   localStorage.clear()
+  useWorkspaces.setState({ list: {}, last: null, persisted: true })
+  window.history.replaceState(null, '', '/')
   resetMessage()
   useRecordWatchStore.setState({ checkpoint: null })
   resetRecordWatchView()
@@ -757,5 +769,331 @@ describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
     await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH 1 new')).toBeTruthy())
     expect(useMessage.getState().text).toMatch(/^Since .+ ET: 1 run\. WATCH <GO> lists them\.$/)
     expect(WATCH.news).toBe('{n} new')
+  })
+})
+
+describe('named workspaces: SAVE, LOAD and FORGET (roadmap 14)', { timeout: 30_000 }, () => {
+  const tabOf = (name: string) => frameStrip().getByRole('button', { name: new RegExp(`^${name}`) })
+  const workspaceTabs = () => Array.from(document.querySelectorAll<HTMLElement>('[data-chrome="frame"] [data-tab="workspace"]')).map((t) => t.getAttribute('data-workspace'))
+  const stored = (): { readonly list: Readonly<Record<string, unknown>>; readonly last?: string } | null => {
+    const text = localStorage.getItem('nqt.workspaces')
+    return text === null ? null : (JSON.parse(text) as { list: Record<string, unknown>; last?: string })
+  }
+  const recipeOf = (...lines: string[]): Recipe => ({
+    version: 1,
+    panels: lines.map((line, i) => ({ line, group: '-' as const, ref: i === 0 ? null : 0, direction: 'right' as const })),
+    groups: { A: null, B: null, C: null },
+  })
+  /** A page reload: the memory of the store and of the layouts is gone, only localStorage is left. */
+  const reload = () => {
+    cleanup()
+    resetConnection()
+    useWorkspaces.setState({ list: {}, last: null, persisted: true })
+    useLinkGroups.getState().clearAll()
+    useLayouts.getState().resetAll()
+    resetMessage()
+    window.dispatchEvent(new StorageEvent('storage', { key: 'nqt.workspaces' }))
+  }
+
+  it('App reaches the workspaces only through the Workspace handle and the store: it never imports the recipe walker', () => {
+    expect(appSource).not.toMatch(/WorkspaceRecipe/)
+    expect(appSource).toMatch(/saveWorkspace/)
+    expect(appSource).toMatch(/loadWorkspace/)
+  })
+
+  it('the store and the workspace copy stay out of the shell: the chrome files import them as types or on demand only', () => {
+    const shellFiles = { 'App.tsx': appSource, 'CommandLine.dispatch.ts': dispatchSource, 'FrameStrip.tsx': frameStripSource, 'KeyToolbar.actions.ts': keyActionsSource, 'useDeepLinks.ts': deepLinksSource, 'line.ts': lineSource }
+    for (const [file, text] of Object.entries(shellFiles)) {
+      const staticImports = text.split('\n').filter((l) => /^import .*\/state\/workspaces'/.test(l) && !l.startsWith('import type '))
+      expect(staticImports, `${file} imports the store statically`).toEqual([])
+      expect(text, `${file} imports the workspace copy`).not.toMatch(/from '[./]+\/copy\/workspaces'/)
+    }
+    // ... and it is still fetched: beside the Workspace chunk, on demand.
+    expect(appSource).toMatch(/import\('\.\/state\/workspaces'\)/)
+    expect(deepLinksSource).toMatch(/import\('\.\.\/state\/workspaces'\)/)
+  })
+
+  it('SAVE VMREVIEW keeps the panels, adds an active tab after LIVE and remembers it as the last', async () => {
+    render(<App />)
+    await homeLoaded()
+    await runLine('SAVE VMREVIEW')
+    expect(screen.getByText(fillCopy(WORKSPACES.saved, { name: 'VMREVIEW', n: HOME_PANELS }))).toBeTruthy()
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    const nav = screen.getByRole('navigation', { name: FRAME_STRIP.label })
+    expect(within(nav).getAllByRole('button').map((t) => t.getAttribute('data-tab'))).toEqual(['HOME', 'RESEARCH', 'LIVE', 'workspace', 'new'])
+    expect(within(nav).getAllByRole('button')[0]?.getAttribute('aria-current')).toBeNull()
+    expect(Object.keys(stored()?.list ?? {})).toEqual(['VMREVIEW'])
+    expect(stored()?.last).toBe('VMREVIEW')
+    // A workspace owns its layout: nothing is written to the per-screen layouts.
+    expect(localStorage.getItem('nqt.layouts')).toBeNull()
+  })
+
+  it('SAVE with a name that is a function says so and stores nothing', async () => {
+    render(<App />)
+    await homeLoaded()
+    const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'SAVE REG' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(useMessage.getState().text).toBe(PARSE_MESSAGES['bad-name'].replace('{token}', 'REG'))
+    expect(workspaceTabs()).toEqual([])
+    expect(localStorage.getItem('nqt.workspaces')).toBeNull()
+  })
+
+  it('edits inside a workspace mark its tab; clicking the tab loads the recipe again and clears the mark', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('SAVE VMREVIEW')
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(tabOf('VMREVIEW').textContent).toContain(LAYOUT.editedLabel))
+    expect(localStorage.getItem('nqt.layouts')).toBeNull()
+    fireEvent.click(tabOf('VMREVIEW'))
+    await waitFor(() => expect(screen.getByText(fillCopy(WORKSPACES.loaded, { name: 'VMREVIEW' }))).toBeTruthy())
+    await waitFor(() => expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull())
+    expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS)
+    expect(tabOf('VMREVIEW').textContent).not.toContain(LAYOUT.editedLabel)
+    expect(document.activeElement?.id).toBe('cmd')
+  })
+
+  it('HOME <GO> hands the layout back to the screen; the workspace tab loads it again', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await runLine('SAVE VMREVIEW')
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    await runLine('RESET')
+    await runLine('HOME')
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBeNull())
+    useLayouts.getState().resetAll()
+    fireEvent.click(tabOf('VMREVIEW'))
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+  })
+
+  it('a fresh render restores the last workspace: its panels come back and its tab is active', async () => {
+    const first = render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await runLine('SAVE VMREVIEW')
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    first.unmount()
+    // The reload finds HOME's default layout again: only the workspace holds LEDG.
+    localStorage.removeItem('nqt.layouts')
+    reload()
+    expect(stored()?.last).toBe('VMREVIEW')
+    render(<App />)
+    const again = screen.getByRole('main', { name: 'Workspace' })
+    await waitFor(() => expect(within(again).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    expect(screen.getByText(fillCopy(WORKSPACES.loaded, { name: 'VMREVIEW' }))).toBeTruthy()
+  })
+
+  it('a #go link wins over the last workspace: the link runs and the workspace is not loaded', async () => {
+    useWorkspaces.getState().save('VMREVIEW', recipeOf('LEDG', 'RUNS'))
+    useWorkspaces.getState().setLast('VMREVIEW')
+    window.history.replaceState(null, '', '/#go=LEDG')
+    render(<App />)
+    const main = screen.getByRole('main', { name: 'Workspace' })
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(screen.queryByText(fillCopy(WORKSPACES.loaded, { name: 'VMREVIEW' }))).toBeNull()
+    expect(within(main).queryByRole('group', { name: 'RUNS content' })).toBeNull()
+    expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBeNull()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('a link that says SAVE, LOAD or FORGET is refused and touches no workspace', async () => {
+    useWorkspaces.getState().save('VMREVIEW', recipeOf('LEDG', 'RUNS'))
+    window.history.replaceState(null, '', '/#go=FORGET%20VMREVIEW')
+    render(<App />)
+    await homeLoaded()
+    await waitFor(() => expect(useMessage.getState().text).toContain('FORGET VMREVIEW'))
+    expect(useMessage.getState().tone).toBe('error')
+    expect(workspaceTabs()).toEqual(['VMREVIEW'])
+    expect(Object.keys(useWorkspaces.getState().list)).toEqual(['VMREVIEW'])
+  })
+
+  it('a recipe with a line that no longer parses is refused whole, naming the line; nothing changes', async () => {
+    useWorkspaces.getState().save('BROKEN', recipeOf('LEDG', 'nt_gone_run RUN'))
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('LOAD BROKEN')
+    const reason = PARSE_MESSAGES['unknown-context'].replace('{token}', 'nt_gone_run').replace(/\.$/, '')
+    expect(useMessage.getState().text).toBe(fillCopy(WORKSPACES.lineFailed, { name: 'BROKEN', line: 'nt_gone_run RUN', reason }))
+    expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS)
+    expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull()
+    expect(tabOf('BROKEN').getAttribute('aria-current')).toBeNull()
+    expect(useWorkspaces.getState().last).toBeNull()
+  })
+
+  it('a last workspace that no longer parses is refused at the reload too, and HOME stays', async () => {
+    useWorkspaces.getState().save('BROKEN', recipeOf('LEDG', 'nt_gone_run RUN'))
+    useWorkspaces.getState().setLast('BROKEN')
+    render(<App />)
+    const main = await homeLoaded()
+    await waitFor(() => expect(useMessage.getState().text).toContain('BROKEN could not load'))
+    expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS)
+    expect(tabOf('BROKEN').getAttribute('aria-current')).toBeNull()
+  })
+
+  it('LOAD on its own lists the saved workspaces; choosing one loads it', async () => {
+    useWorkspaces.getState().save('ALPHA', recipeOf('LEDG'))
+    useWorkspaces.getState().save('BRAVO', recipeOf('RUNS', 'LEDG'))
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('LOAD')
+    const list = await screen.findByRole('listbox', { name: WORKSPACES.menuTitle })
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('ALPHA'), expect.stringContaining('BRAVO')])
+    fireEvent.click(within(list).getAllByRole('option')[1]!)
+    await waitFor(() => expect(screen.getByText(fillCopy(WORKSPACES.loaded, { name: 'BRAVO' }))).toBeTruthy())
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'RUNS content' })).toBeTruthy())
+    await waitFor(() => expect(tabOf('BRAVO').getAttribute('aria-current')).toBe('page'))
+  })
+
+  it('LOAD on its own with nothing saved says how to save one', async () => {
+    render(<App />)
+    await homeLoaded()
+    await runLine('LOAD')
+    expect(await screen.findByText(WORKSPACES.none)).toBeTruthy()
+  })
+
+  it('LOAD of a name that was never saved says so', async () => {
+    render(<App />)
+    await homeLoaded()
+    await runLine('LOAD NOPE')
+    expect(screen.getByText(fillCopy(WORKSPACES.missing, { name: 'NOPE' }))).toBeTruthy()
+  })
+
+  it('FORGET removes the workspace and its tab; the panels on screen stay; a second FORGET says it is gone', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('SAVE VMREVIEW')
+    await waitFor(() => expect(tabOf('VMREVIEW').getAttribute('aria-current')).toBe('page'))
+    await runLine('FORGET VMREVIEW')
+    expect(screen.getByText(fillCopy(WORKSPACES.forgotten, { name: 'VMREVIEW' }))).toBeTruthy()
+    await waitFor(() => expect(workspaceTabs()).toEqual([]))
+    expect(localStorage.getItem('nqt.workspaces')).toBeNull()
+    expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS)
+    // With the workspace gone the screen's tab is the active one again.
+    expect(frameStrip().getAllByRole('button')[0]?.getAttribute('aria-current')).toBe('page')
+    await runLine('FORGET VMREVIEW')
+    expect(screen.getByText(fillCopy(WORKSPACES.missing, { name: 'VMREVIEW' }))).toBeTruthy()
+  })
+
+  it('a forgotten workspace is not restored at the next reload', async () => {
+    render(<App />)
+    await homeLoaded()
+    await runLine('SAVE VMREVIEW')
+    await runLine('FORGET VMREVIEW')
+    reload()
+    render(<App />)
+    await homeLoaded()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('the favourites menu lists the saved workspaces after the three layouts', async () => {
+    useWorkspaces.getState().save('ALPHA', recipeOf('LEDG'))
+    render(<App />)
+    await homeLoaded()
+    fireEvent.click(screen.getByRole('button', { name: NAV_TOOLBAR.favourites }))
+    const list = await screen.findByRole('listbox', { name: NAV_TOOLBAR.favouritesTitle })
+    const rows = within(list).getAllByRole('option').map((o) => o.textContent ?? '')
+    expect(rows).toHaveLength(4)
+    expect(rows[0]).toContain(FRAME_STRIP.tabs.HOME.label)
+    expect(rows[1]).toContain(FRAME_STRIP.tabs.RESEARCH.label)
+    expect(rows[2]).toContain(FRAME_STRIP.tabs.LIVE.label)
+    expect(rows[3]).toContain('ALPHA')
+  })
+
+  it('the + tab says how to keep a layout as a workspace', async () => {
+    render(<App />)
+    await homeLoaded()
+    fireEvent.click(frameStrip().getByRole('button', { name: FRAME_STRIP.newTab }))
+    expect(screen.getByText(MESSAGES.newLayout)).toBeTruthy()
+    expect(MESSAGES.newLayout).toBe('Type a screen mnemonic, or SAVE NAME to keep this layout as a workspace.')
+  })
+
+  it('before the Workspace has loaded, SAVE and LOAD NAME say the workspace is not ready', async () => {
+    vi.resetModules()
+    vi.doMock('./chrome/Workspace', () => new Promise(() => {}))
+    try {
+      const { default: FreshApp } = await import('./App')
+      render(<FreshApp />)
+      await runLine('SAVE VMREVIEW')
+      expect(screen.getByText(COMMAND_LINE.layoutUnavailable)).toBeTruthy()
+      resetMessage()
+      await runLine('LOAD VMREVIEW')
+      expect(screen.getByText(COMMAND_LINE.layoutUnavailable)).toBeTruthy()
+    } finally {
+      vi.doUnmock('./chrome/Workspace')
+      vi.resetModules()
+    }
+  })
+})
+
+describe('the HOME orientation strip (N03)', { timeout: 30_000 }, () => {
+  const strip = () => screen.queryByRole('note', { name: HOME_ORIENTATION.label })
+
+  it('App loads the strip on demand: it has no static import of screens/home/HomeOrientation', () => {
+    const staticImports = appSource.split('\n').filter((l) => /^import\b.*home\/HomeOrientation/.test(l) && !l.startsWith('import type '))
+    expect(staticImports).toEqual([])
+    expect(appSource).toMatch(/import\('\.\/screens\/home\/HomeOrientation'\)/)
+  })
+
+  it('shows on a first run while HOME owns the layout, with the command links and a Dismiss button', async () => {
+    render(<App />)
+    await homeLoaded()
+    const note = await screen.findByRole('note', { name: HOME_ORIENTATION.label })
+    expect(note.textContent).toContain(HOME_ORIENTATION.lead)
+    for (const line of ['REG', 'OOS', 'HELP']) expect(within(note).getByRole('button', { name: `${line} <GO>` })).toBeTruthy()
+    expect(within(note).getByRole('button', { name: HOME_ORIENTATION.dismissLabel })).toBeTruthy()
+    expect(localStorage.getItem(ORIENTATION_KEY)).toBeNull()
+  })
+
+  it('is gone once REG <GO> loads the layout of another screen', async () => {
+    render(<App />)
+    await homeLoaded()
+    await screen.findByRole('note', { name: HOME_ORIENTATION.label })
+    await runLine('REG')
+    await waitFor(() => expect(strip()).toBeNull())
+    // Nothing was dismissed: it is only not HOME's layout any more.
+    expect(localStorage.getItem(ORIENTATION_KEY)).toBeNull()
+    await runLine('HOME')
+    await screen.findByRole('note', { name: HOME_ORIENTATION.label })
+  })
+
+  it('stays hidden after it is dismissed and the page is rendered afresh', async () => {
+    const first = render(<App />)
+    await homeLoaded()
+    const note = await screen.findByRole('note', { name: HOME_ORIENTATION.label })
+    fireEvent.click(within(note).getByRole('button', { name: HOME_ORIENTATION.dismissLabel }))
+    expect(strip()).toBeNull()
+    expect(localStorage.getItem(ORIENTATION_KEY)).toBe('1')
+    first.unmount()
+    render(<App />)
+    await homeLoaded()
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(strip()).toBeNull()
+  })
+
+  it('does not show while a workspace owns the layout', async () => {
+    useWorkspaces.getState().save('DESK', {
+      version: 1,
+      panels: [{ line: 'LEDG', group: '-', ref: null, direction: 'right' }],
+      groups: { A: null, B: null, C: null },
+    })
+    useWorkspaces.getState().setLast('DESK')
+    render(<App />)
+    const main = screen.getByRole('main', { name: 'Workspace' })
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(strip()).toBeNull()
   })
 })

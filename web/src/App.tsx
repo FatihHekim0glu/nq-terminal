@@ -12,10 +12,13 @@
 // six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
 // through useRecordWatch. The diff and its long copy load with the reader, never with this file. GRAB <GO> asks
 // the Workspace handle to grab the focused panel; the image code and its copy load with the Workspace and on
-// demand, never through this file.
-import { Suspense, lazy, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+// demand, never through this file. SAVE, LOAD and FORGET (roadmap #14) go through the Workspace handle (saveWorkspace,
+// loadWorkspace, forgetWorkspace) and the workspaces store (the tab list and the menu): the recipe type and its walker stay in
+// the Workspace chunk, and the store loads beside it (see savedStore). The last workspace is restored by useDeepLinks.
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ApiProvider } from './api/ApiProvider'
 import CommandZone from './AppCommandBar'
+import type { LineResult } from './commands/line'
 import type { MnemonicCode } from './commands/registry'
 import { displayContext } from './commands/sectors'
 import type { ParsedCommand } from './commands/parser'
@@ -27,7 +30,7 @@ import { toggleTape, useTapeOn } from './chrome/EventTape.store'
 import { FrameStrip, type ColourScheme } from './chrome/FrameStrip'
 import { KeyToolbar } from './chrome/KeyToolbar'
 import { LazyBoundary } from './chrome/LazyBoundary'
-import { createChromeActions, runGlobalKey, runKey, runNav, type ChromeActions, type ChromeEnv, type ChromeWorkspace } from './chrome/KeyToolbar.actions'
+import { createChromeActions, runGlobalKey, runKey, runNav, workspaceMenu, type ChromeActions, type ChromeEnv, type ChromeWorkspace } from './chrome/KeyToolbar.actions'
 import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
@@ -40,6 +43,7 @@ import { CHROME, MESSAGES } from './copy/chrome'
 import { LAYOUT } from './copy/layout'
 import { WORKSPACE, fillCopy } from './copy/workspace'
 import { useLinkGroups } from './state/linkGroups'
+import type { WorkspacesStore } from './state/workspaces'
 import { applyScheme, loadScheme, saveScheme } from './chrome/FrameStrip.scheme'
 import './chrome/FrameStrip.frame.css'
 
@@ -56,6 +60,10 @@ let previewer: typeof previewText | null = null
 // a saved "tape on" is left alone so it works after a reload.
 const LiveEventTape = lazy(() => import('./chrome/EventTape.live').then((m) => ({ default: m.LiveEventTape })))
 const KeyMapOverlay = lazy(() => import('./chrome/KeyToolbar.overlay').then((m) => ({ default: m.KeyMapOverlay })))
+// The first-run orientation line (N03) shows under the connection strip while HOME owns the layout, and loads with
+// its own chunk beside the Workspace: the shell carries none of its words. A chunk that cannot be fetched is dropped
+// without a word, since the line is a courtesy and HELP says the same.
+const HomeOrientation = lazy(() => import('./screens/home/HomeOrientation'))
 
 const Workspace = lazy(async () => {
   const [workspace, preview] = await Promise.all([import('./chrome/Workspace'), import('./chrome/WorkspacePreview')])
@@ -63,7 +71,37 @@ const Workspace = lazy(async () => {
   return workspace
 })
 
+// The workspaces store (state/workspaces.ts: the saved recipes and the checks that rebuild them from storage) is not
+// needed for the first paint, and the Workspace chunk imports it anyway: it loads beside that chunk and stays out of the
+// shell (scripts/shellBudget.test.ts). Until it has arrived the tabs are empty, and FORGET, LOAD on its own and the
+// favourites list answer as the workspace does before it is ready. A chunk that cannot be fetched leaves it null.
+let savedStore: WorkspacesStore | null = null
+const storeLoaded: Promise<WorkspacesStore | null> = import('./state/workspaces').then(
+  (m) => (savedStore = m.useWorkspaces),
+  () => null,
+)
+
 type ChromeWorkspaceHandle = WorkspaceHandle & ChromeWorkspace
+
+/** The names of the saved workspaces, in the order they were saved, kept up to date once the store has loaded. */
+function useSavedNames(): readonly string[] {
+  const [names, setNames] = useState<readonly string[]>([])
+  useEffect(() => {
+    let live = true
+    let stop = () => {}
+    void storeLoaded.then((store) => {
+      if (!live || !store) return
+      const read = () => setNames(Object.keys(store.getState().list))
+      read()
+      stop = store.subscribe(read)
+    })
+    return () => {
+      live = false
+      stop()
+    }
+  }, [])
+  return names
+}
 
 function WorkspaceLoading() {
   return (
@@ -110,6 +148,7 @@ function chromeEnv(refs: ChromeRefs, toggleKeymap: () => void): ChromeEnv {
     focusedCode: () => refs.focused.current?.params.code ?? null,
     focusedContextLine: () => contextLine(refs.focused.current?.context),
     toggleKeymap,
+    savedWorkspaces: () => savedStore?.getState().list ?? {},
   }
 }
 
@@ -136,6 +175,22 @@ function layoutCallbacks(refs: ChromeRefs, screen: MnemonicCode) {
   }
 }
 
+/**
+ * SAVE, LOAD and FORGET (roadmap #14). SAVE, LOAD and FORGET are the Workspace handle's: it derives the recipe, reads every
+ * saved line again with the `parse` the command line hands it and refuses the whole load naming the failing line.
+ * Before the Workspace has loaded they answer null (the command line says the workspace is not ready). FORGET is the
+ * handle's too, since forgetting the workspace that owns the layout gives the layout back to the screen. The menu behind
+ * LOAD on its own reads the store, and answers null in the same way until it has loaded.
+ */
+function workspaceCallbacks(refs: ChromeRefs) {
+  return {
+    onSaveWorkspace: (name: string): string | null => refs.workspace.current?.saveWorkspace(name) ?? null,
+    onLoadWorkspace: (name: string, parse: (line: string) => LineResult): string | null => refs.workspace.current?.loadWorkspace(name, parse) ?? null,
+    onForgetWorkspace: (name: string): string | null => refs.workspace.current?.forgetWorkspace(name) ?? null,
+    workspaceMenu: () => savedStore && workspaceMenu(savedStore.getState().list),
+  }
+}
+
 interface ChromeHeaderProps {
   readonly shown: ShownLayout
   readonly focused: FocusedPanel | null
@@ -153,6 +208,7 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
   const health = useHealthState()
   const group = focused?.params.group ?? null
   const nav = focused ? { code: focused.params.code, group: focused.params.group, context: focused.context } : null
+  const saved = useSavedNames()
   const openNew = () => {
     refs.cmd.current?.focus()
     postMessage(MESSAGES.newLayout)
@@ -173,6 +229,9 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         onScheme={scheme.choose}
         onUndo={() => actions.runAndFocus('UNDO')}
         onReset={() => actions.runAndFocus('RESET')}
+        workspaces={saved}
+        workspace={shown.workspace}
+        onOpenWorkspace={(name) => actions.runAndFocus(`LOAD ${name}`)}
       />
       <KeyToolbar onKey={(key) => runKey(actions, env, key)} />
       <NavToolbar focused={nav} kill={killState(health)} onAction={(a) => runNav(actions, env, a)} />
@@ -193,6 +252,7 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         watchMenu={() => watch.menu()}
         onWatchSeen={() => watch.accept()}
         {...layoutCallbacks(refs, shown.code)}
+        {...workspaceCallbacks(refs)}
       />
     </header>
   )
@@ -228,6 +288,13 @@ function Terminal() {
       <h1 className="sr-only">{CHROME.appTitle}</h1>
       <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} env={env} actions={actions} watch={watch} />
       <ConnectionStrip />
+      {shown.code === 'HOME' && shown.workspace === null ? (
+        <LazyBoundary onError={() => {}}>
+          <Suspense fallback={null}>
+            <HomeOrientation />
+          </Suspense>
+        </LazyBoundary>
+      ) : null}
       <Suspense fallback={<WorkspaceLoading />}>
         <Workspace ref={refs.workspace} onLayoutChange={setShown} onLayoutDropped={(code) => postMessage(fillCopy(LAYOUT.dropped, { screen: code }))} onFocusedPanelChange={setFocused} />
       </Suspense>

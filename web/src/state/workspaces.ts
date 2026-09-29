@@ -46,6 +46,10 @@ export interface Recipe {
 }
 
 const NAME = /^[A-Z][A-Z0-9_]{1,15}$/
+/** An order ticket word at the start of a name or of a part after an underscore: the name becomes a tab in the frame
+ * strip, and BUY, SELL, ORDER, SUBMIT, CANCEL, MODIFY or TRANSMIT there would read as an order control on a terminal
+ * that has no order path. The same pattern is in commands/line.ts (isSavableName); a test keeps the two in step. */
+const TICKET_NAME = /(^|_)(ORDER|SUBMIT|CANCEL|MODIF|TRANSMIT|BUY|SELL)/
 /** Letters, digits, underscore, dot, hyphen and space: the command alphabet (chrome/deepLink.ts). */
 const LINE_ALPHABET = /^[A-Za-z0-9_. -]+$/
 /** Words of the workspace commands themselves: SAVE, LOAD and FORGET are chrome words from the command
@@ -55,10 +59,10 @@ const RECIPE_GROUPS: readonly string[] = ['-', ...LINK_GROUPS]
 
 /**
  * A workspace name: 2 to 16 characters of A-Z, 0-9 and underscore, starting with a letter, that is not a
- * mnemonic, a chrome word or a sector word (the command line would read those first).
+ * mnemonic, a chrome word or a sector word (the command line would read those first) and not an order ticket word.
  */
 export function isWorkspaceName(value: unknown): value is string {
-  if (typeof value !== 'string' || !NAME.test(value)) return false
+  if (typeof value !== 'string' || !NAME.test(value) || TICKET_NAME.test(value)) return false
   return !findMnemonic(value) && !Object.hasOwn(CHROME_WORDS, value) && sectorWord(value) === null && !COMMAND_WORDS.includes(value)
 }
 

@@ -2,7 +2,9 @@
 // margin, then one 29px tab per layout (HOME, RESEARCH, LIVE, +); the active tab is dark and merges into
 // the key toolbar, with a bold mnemonic then its title. The active tab is the layout owner: the screen
 // whose layout the panels are arranged under (a command that only replaces or adds a panel leaves it
-// alone), with an edited `*` when the viewer has a saved layout for it. On the right the READ ONLY and
+// alone), with an edited `*` when the viewer has a saved layout for it. After LIVE come up to six tabs for
+// the saved workspaces (roadmap #14; SAVE NAME, LOAD NAME): a workspace on screen owns the layout, so its
+// tab is the active one and carries the mark. On the right the READ ONLY and
 // NO ORDER PATH chips, always shown, then DEMO DATA in the demo only (src/demo/boot.tsx marks the
 // page), and `≡ Options` (event tape, colour scheme, Undo layout change, Reset this layout). No window
 // glyphs: the browser tab has its own.
@@ -31,9 +33,19 @@ export interface FrameStripProps {
   readonly onUndo?: () => void
   /** Options: put this screen's layout back to its default (the RESET word). */
   readonly onReset?: () => void
+  /** The saved workspaces, in the order they were first saved; up to MAX_WORKSPACE_TABS get a tab after LIVE. */
+  readonly workspaces?: readonly string[]
+  /** The workspace that owns the layout on screen, or null when a screen does. One that is not saved (it was
+   * forgotten while on screen) is ignored: the screen's tab is active again. */
+  readonly workspace?: string | null
+  /** A workspace tab: open it by name (the LOAD word). */
+  readonly onOpenWorkspace?: (name: string) => void
 }
 
 type TabId = keyof typeof FRAME_STRIP.tabs
+
+/** Workspace tabs beside the three layouts; LOAD lists them all. */
+export const MAX_WORKSPACE_TABS = 6
 
 const LAYOUT_TABS: ReadonlyArray<{ readonly id: TabId; readonly screen: MnemonicCode }> = [
   { id: 'HOME', screen: 'HOME' },
@@ -47,14 +59,16 @@ interface TabProps {
   readonly title: string
   readonly active: boolean
   readonly edited?: boolean
+  readonly workspace?: string
   readonly onClick: () => void
 }
 
 /** Only the active tab (the layout owner) can be edited: an aria-hidden `*` by the mnemonic, and the
- * word for a screen reader after the title. */
-function Tab({ id, label, title, active, edited, onClick }: TabProps) {
+ * word for a screen reader after the title. An inactive workspace tab may be shortened to fit the strip
+ * (FrameStrip.css), so its full name is its title; its accessible name stays the text. */
+function Tab({ id, label, title, active, edited, workspace, onClick }: TabProps) {
   return (
-    <button type="button" className="frame-tab" data-tab={id} aria-current={active ? 'page' : undefined} onClick={onClick}>
+    <button type="button" className="frame-tab" data-tab={id} data-workspace={workspace} title={workspace !== undefined && !active ? workspace : undefined} aria-current={active ? 'page' : undefined} onClick={onClick}>
       {active ? (
         <>
           <b>{label}</b>
@@ -112,17 +126,27 @@ function Options({ tapeOn, scheme, onTape, onScheme, onUndo, onReset }: Pick<Fra
   )
 }
 
+/** The names that get a tab: the first MAX_WORKSPACE_TABS, and the one on screen in the last place when it is beyond them. */
+function tabNames(names: readonly string[], active: string | null): readonly string[] {
+  const head = names.slice(0, MAX_WORKSPACE_TABS)
+  return active === null || head.includes(active) ? head : [...names.slice(0, MAX_WORKSPACE_TABS - 1), active]
+}
+
 export function FrameStrip(props: FrameStripProps) {
-  const { screen, edited, onOpen, onNew } = props
+  const { screen, edited, onOpen, onNew, onOpenWorkspace, workspaces = [], workspace = null } = props
+  const active = workspace !== null && workspaces.includes(workspace) ? workspace : null
   const inLayout = LAYOUT_TABS.some((t) => t.screen === screen)
   const def = findMnemonic(screen)
   return (
     <div className="frame-strip" data-chrome="frame">
       <nav className="frame-tabs" aria-label={FRAME_STRIP.label}>
         {LAYOUT_TABS.map((t) => (
-          <Tab key={t.id} id={t.id} label={FRAME_STRIP.tabs[t.id].label} title={FRAME_STRIP.tabs[t.id].title} active={t.screen === screen} edited={edited} onClick={() => onOpen(t.screen)} />
+          <Tab key={t.id} id={t.id} label={FRAME_STRIP.tabs[t.id].label} title={FRAME_STRIP.tabs[t.id].title} active={active === null && t.screen === screen} edited={edited} onClick={() => onOpen(t.screen)} />
         ))}
-        {!inLayout && def ? <Tab id={screen} label={screen} title={def.screen} active edited={edited} onClick={() => onOpen(screen)} /> : null}
+        {active === null && !inLayout && def ? <Tab id={screen} label={screen} title={def.screen} active edited={edited} onClick={() => onOpen(screen)} /> : null}
+        {tabNames(workspaces, active).map((name) => (
+          <Tab key={name} id="workspace" workspace={name} label={name} title={FRAME_STRIP.workspaceTitle} active={name === active} edited={edited} onClick={() => onOpenWorkspace?.(name)} />
+        ))}
         <button type="button" className="frame-tab frame-new" data-tab="new" aria-label={FRAME_STRIP.newTab} onClick={onNew}>
           <span aria-hidden="true">+</span>
         </button>

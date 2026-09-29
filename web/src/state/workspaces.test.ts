@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { CHROME_WORDS, SECTOR_TITLES } from '../copy/commands'
+import { CHROME_WORDS, PARSE_MESSAGES, SECTOR_TITLES } from '../copy/commands'
+import { findCopyViolations } from '../copy/copyRules'
+import { WORKSPACES } from '../copy/workspaces'
 import { MNEMONICS } from '../commands/registry'
 import {
   MAX_RECIPE_CHARS,
@@ -74,6 +76,23 @@ describe('workspace names', () => {
     for (const m of MNEMONICS) expect(isWorkspaceName(m.code), m.code).toBe(false)
     for (const word of Object.keys(CHROME_WORDS)) expect(isWorkspaceName(word), word).toBe(false)
     for (const word of [...Object.keys(SECTOR_TITLES), 'CMDTY', 'CRNCY']) expect(isWorkspaceName(word), word).toBe(false)
+  })
+
+  it.each(['BUY', 'SELL', 'ORDER', 'ORDERS', 'SUBMIT', 'CANCEL', 'MODIFY', 'TRANSMIT', 'MY_ORDER', 'SELL_PLAN'])(
+    'refuses %s: an order ticket word would put an order control in the frame strip',
+    (name) => {
+      expect(isWorkspaceName(name)).toBe(false)
+    },
+  )
+
+  it.each(['REVIEW', 'VMREVIEW', 'BORDER'])('still accepts %s, which only holds those letters inside a longer word', (name) => {
+    expect(isWorkspaceName(name)).toBe(true)
+  })
+
+  it('says in both refusal texts that a trading word is not a name, in the copy rules', () => {
+    expect(PARSE_MESSAGES['bad-name']).toContain('not a function, command or trading word')
+    expect(WORKSPACES.badName).toContain('not a function, command or trading word')
+    expect(findCopyViolations({ parse: PARSE_MESSAGES['bad-name'], badName: WORKSPACES.badName })).toEqual([])
   })
 
   it('refuses the words SAVE, LOAD and FORGET, so "LOAD LOAD" never has two readings', () => {

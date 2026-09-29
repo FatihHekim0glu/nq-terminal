@@ -4,7 +4,7 @@
 // onto it; CommandLine.dispatch.ts carries out what a line or a menu item asks for.
 import { useCallback, useMemo, useRef, useState, type RefObject } from 'react'
 import { loadHistory, newer, older, record, saveHistory, type HistoryStorage } from '../commands/history'
-import { displayLine } from '../commands/line'
+import { displayLine, type LineResult } from '../commands/line'
 import type { ParsedCommand } from '../commands/parser'
 import type { MnemonicCode } from '../commands/registry'
 import { sheetGroups, suggest, type SheetGroup, type Suggestion, type SuggestionGroup } from '../commands/suggest'
@@ -53,6 +53,14 @@ export interface CommandLineOptions {
   readonly onWatchSeen?: () => string | null
   /** GRAB <GO>: save the focused panel as an image; false when no panel is focused. */
   readonly onGrab?: () => boolean
+  /** SAVE NAME <GO>: keep the panels on screen as a workspace. Text to post, or null when not ready. */
+  readonly onSaveWorkspace?: (name: string) => string | null
+  /** LOAD NAME <GO>: rebuild the saved workspace; `parse` is the grammar its lines are read with again. Text to post, or null when not ready. */
+  readonly onLoadWorkspace?: (name: string, parse: (line: string) => LineResult) => string | null
+  /** LOAD <GO> on its own: the saved workspaces as a menu (its rows run LOAD NAME); null when not ready. */
+  readonly workspaceMenu?: () => MenuModel | null
+  /** FORGET NAME <GO>: remove a saved workspace. Text to post, or null when not ready. */
+  readonly onForgetWorkspace?: (name: string) => string | null
 }
 
 function useHistory(storage: HistoryStorage | null | undefined) {

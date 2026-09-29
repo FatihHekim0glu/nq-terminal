@@ -9,6 +9,7 @@ import type { ParseError } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
 import { LINKS } from '../copy/links'
 import { fillCopy } from '../copy/workspace'
+import { useWorkspaces, type Recipe } from '../state/workspaces'
 import { onLineRequest, type LineRequest } from './CommandLine.bus'
 import { markWorkspaceReady, resetWorkspaceReady } from './deepLink'
 import { resetMessage, useMessage } from './MessageLine.store'
@@ -43,6 +44,8 @@ beforeEach(() => {
   requests = []
   stopListening = onLineRequest((r) => requests.push(r))
   settle()
+  localStorage.clear()
+  useWorkspaces.setState({ list: {}, last: null, persisted: true })
 })
 
 afterEach(() => {
@@ -51,6 +54,8 @@ afterEach(() => {
   resetWorkspaceReady()
   resetMessage()
   commands.current = { status: 'pending', data: undefined }
+  localStorage.clear()
+  useWorkspaces.setState({ list: {}, last: null, persisted: true })
 })
 
 function makeEnv(hash: string) {
@@ -300,6 +305,15 @@ describe('useDeepLinks: what a link may run (the allowlist)', () => {
     ['#go=REG&go=RESET', 'RESET'],
     ['#go=RESET&go=REG', 'RESET'],
     ['#go=REG&go=LEDG&go=UNDO', 'UNDO'],
+    // Born failing (roadmap #14): SAVE, LOAD and FORGET parse now, and a link must still never run them.
+    ['#go=SAVE%20VMREVIEW', 'SAVE VMREVIEW'],
+    ['#go=LOAD%20VMREVIEW', 'LOAD VMREVIEW'],
+    ['#go=FORGET%20VMREVIEW', 'FORGET VMREVIEW'],
+    ['#go=FORGET%20X', 'FORGET X'],
+    ['#go=LOAD', 'LOAD'],
+    ['#go=save%20vmreview', 'save vmreview'],
+    ['#go=REG&go=FORGET%20VMREVIEW', 'FORGET VMREVIEW'],
+    ['#go=LOAD%20VMREVIEW&go=REG', 'LOAD VMREVIEW'],
   ])('%s runs nothing and posts the refusal for %j', async (hash, offending) => {
     const { env, location } = makeEnv(hash)
     render(<Probe env={env} />)
@@ -323,7 +337,8 @@ describe('useDeepLinks: what a link may run (the allowlist)', () => {
     ['#go=ZZZ', 'ZZZ'],
     ['#go=GP', 'GP'],
     ['#go=NQ%20ZZZ', 'NQ ZZZ'],
-    ['#go=SAVE%20one', 'SAVE one'],
+    ['#go=SAVE%20REG', 'SAVE REG'],
+    ['#go=SAVE', 'SAVE'],
   ])('%s posts the parse error in the command line\'s own words, and runs nothing', async (hash, text) => {
     const { env, location } = makeEnv(hash)
     render(<Probe env={env} />)
@@ -430,6 +445,216 @@ describe('useDeepLinks: what a link may run (the allowlist)', () => {
   })
 })
 
+/** The workspace is ready, and the store (loaded on demand by the hook) has had time to arrive. */
+const readyAndLoaded = async () => {
+  await ready()
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  })
+}
+
+const recipe = (...panelLines: string[]): Recipe => ({
+  version: 1,
+  panels: panelLines.map((line, i) => ({ line, group: '-' as const, ref: i === 0 ? null : 0, direction: 'right' as const })),
+  groups: { A: null, B: null, C: null },
+})
+
+/** A saved workspace, as the store holds it after a reload. */
+const keep = (name = 'VMREVIEW', last: string | null = name) => {
+  expect(useWorkspaces.getState().save(name, recipe('REG', 'LEDG'))).toBe(true)
+  useWorkspaces.getState().setLast(last)
+}
+
+describe('useDeepLinks: restoring the last workspace (roadmap #14)', () => {
+  it('asks the command line for LOAD NAME once, like Enter, when the page has no link', async () => {
+    keep()
+    const { env, replaceState } = makeEnv('')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+    expect(replaceState).not.toHaveBeenCalled()
+    expect(message().text).toBe('')
+  })
+
+  it('waits for the commands index to settle, because the saved lines are parsed with it', async () => {
+    keep()
+    commands.current = { status: 'pending', data: undefined }
+    const { env } = makeEnv('')
+    const view = render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([])
+    settle()
+    view.rerender(<Probe env={env} />)
+    await act(async () => {})
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+  })
+
+  it('waits for the workspace as well', async () => {
+    keep()
+    const { env } = makeEnv('')
+    render(<Probe env={env} />)
+    await act(async () => {})
+    expect(lines()).toEqual([])
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+  })
+
+  it('carries on when the index failed to load: LOAD then names any line it cannot read', async () => {
+    keep()
+    settle(null)
+    const { env } = makeEnv('')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+  })
+
+  it('does nothing when no workspace was saved or loaded last', async () => {
+    const { env } = makeEnv('')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([])
+    cleanup()
+    keep('VMREVIEW', null)
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([])
+  })
+
+  it.each([['reg'], ['REG'], ['HOME'], ['A'], ['LOAD'], ['SAVE'], ['FORGET'], ['9LIVES'], ['A B'], ['NQ1 Index'], ['A'.repeat(17)], ['x;y'], ['']])(
+    'does not restore a last value that fails the workspace name rule: %j',
+    async (bad) => {
+      // Storage is untrusted; whatever is in memory is asked for only when it is a workspace name.
+      useWorkspaces.setState({ list: {}, last: bad })
+      const { env } = makeEnv('')
+      render(<Probe env={env} />)
+      await readyAndLoaded()
+      expect(lines()).toEqual([])
+    },
+  )
+
+  it('the hash wins: a #go link runs and the last workspace is not asked for', async () => {
+    keep()
+    const { env } = makeEnv('#go=REG')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    await act(async () => {})
+    expect(lines()).toEqual([['REG', false]])
+  })
+
+  it('a refused link wins too: it posts its refusal and the last workspace is not asked for', async () => {
+    keep()
+    const { env } = makeEnv('#go=RESET')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    await act(async () => {})
+    expect(lines()).toEqual([])
+    expect(message().text).toBe(fillCopy(LINKS.refusedLine, { line: 'RESET' }))
+  })
+
+  it('a malformed link wins too', async () => {
+    keep()
+    const { env } = makeEnv('#go=NQ%3B')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    await act(async () => {})
+    expect(lines()).toEqual([])
+    expect(message().text).toBe(LINKS.refused)
+  })
+
+  it('a hash that is not a link leaves the restore alone', async () => {
+    keep()
+    const { env, replaceState } = makeEnv('#top')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+    expect(replaceState).not.toHaveBeenCalled()
+  })
+
+  it('a link pasted in before the workspace is ready cancels the restore', async () => {
+    keep()
+    const { env, change } = makeEnv('')
+    render(<Probe env={env} />)
+    await act(async () => change('#go=LEDG'))
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LEDG', false]])
+  })
+
+  it('restores once, however often the component renders', async () => {
+    keep()
+    const { env } = makeEnv('')
+    const view = render(<Probe env={env} />)
+    await readyAndLoaded()
+    view.rerender(<Probe env={env} />)
+    view.rerender(<Probe env={env} />)
+    await act(async () => {})
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+  })
+
+  it('restores once under StrictMode', async () => {
+    keep()
+    const { env } = makeEnv('')
+    render(
+      <StrictMode>
+        <Probe env={env} />
+      </StrictMode>,
+    )
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD VMREVIEW', false]])
+  })
+
+  it('under StrictMode a link still wins: the consumed hash does not bring the restore back', async () => {
+    keep()
+    const { env } = makeEnv('#go=REG')
+    render(
+      <StrictMode>
+        <Probe env={env} />
+      </StrictMode>,
+    )
+    await readyAndLoaded()
+    expect(lines()).toEqual([['REG', false]])
+  })
+
+  it('a link pasted in after the restore runs as a link and does not restore again', async () => {
+    keep()
+    const { env, change } = makeEnv('')
+    render(<Probe env={env} />)
+    await readyAndLoaded()
+    await act(async () => change('#go=LEDG'))
+    expect(lines()).toEqual([
+      ['LOAD VMREVIEW', false],
+      ['LEDG', false],
+    ])
+  })
+
+  it('asks for the workspace that is last when the workspace is ready, not the one that was last when the page opened', async () => {
+    keep('ALPHA')
+    const { env } = makeEnv('')
+    render(<Probe env={env} />)
+    await act(async () => {})
+    useWorkspaces.getState().forget('ALPHA')
+    await readyAndLoaded()
+    expect(lines()).toEqual([])
+    cleanup()
+    resetWorkspaceReady()
+    keep('BRAVO')
+    const again = makeEnv('')
+    render(<Probe env={again.env} />)
+    await act(async () => {})
+    keep('CHARLIE')
+    await readyAndLoaded()
+    expect(lines()).toEqual([['LOAD CHARLIE', false]])
+  })
+
+  it('runs nothing after the component has gone', async () => {
+    keep()
+    const { env } = makeEnv('')
+    const view = render(<Probe env={env} />)
+    view.unmount()
+    await readyAndLoaded()
+    expect(lines()).toEqual([])
+  })
+})
+
 describe('useDeepLinks: a link that is malformed', () => {
   it.each([
     ['script text', '#go=%3Cscript%3E'],
@@ -525,6 +750,48 @@ describe('CommandZone: a link in the address bar goes through the real command l
     await act(async () => {})
     expect(onRun).not.toHaveBeenCalled()
     expect(message().text).toContain('Loaded')
+  })
+
+  it.each([['SAVE%20VMREVIEW'], ['LOAD%20VMREVIEW'], ['FORGET%20VMREVIEW'], ['FORGET%20X'], ['LOAD'], ['REG&go=FORGET%20VMREVIEW']])(
+    'born failing: #go=%s stores and removes nothing and reaches no workspace callback',
+    async (line) => {
+      keep()
+      window.history.replaceState(null, '', `/#go=${line}`)
+      const onSaveWorkspace = vi.fn(() => 'saved')
+      const onLoadWorkspace = vi.fn(() => 'loaded')
+      const onForgetWorkspace = vi.fn(() => 'forgot')
+      const workspaceMenu = vi.fn(() => null)
+      const onRun = vi.fn(() => true)
+      render(
+        <CommandZone
+          commandRef={createRef()}
+          focusedGroup={null}
+          panelNumber={null}
+          onRun={onRun}
+          onSaveWorkspace={onSaveWorkspace}
+          onLoadWorkspace={onLoadWorkspace}
+          onForgetWorkspace={onForgetWorkspace}
+          workspaceMenu={workspaceMenu}
+        />,
+      )
+      await ready()
+      await act(async () => {})
+      for (const spy of [onRun, onSaveWorkspace, onLoadWorkspace, onForgetWorkspace, workspaceMenu]) expect(spy).not.toHaveBeenCalled()
+      expect(Object.keys(useWorkspaces.getState().list)).toEqual(['VMREVIEW'])
+      expect(useWorkspaces.getState().last).toBe('VMREVIEW')
+      expect(message().tone).toBe('error')
+      expect(message().text).toBe(fillCopy(LINKS.refusedLine, { line: decodeURIComponent(line).split('&go=').find((l) => /^(SAVE|LOAD|FORGET)\b/.test(l)) ?? '' }))
+    },
+  )
+
+  it('with no link, the real command line loads the last workspace through its callback, like typing LOAD NAME', async () => {
+    keep()
+    const onLoadWorkspace = vi.fn((name: string) => `Loaded ${name}.`)
+    render(<CommandZone commandRef={createRef()} focusedGroup={null} panelNumber={null} onRun={vi.fn(() => true)} onLoadWorkspace={onLoadWorkspace} />)
+    await readyAndLoaded()
+    expect(onLoadWorkspace).toHaveBeenCalledTimes(1)
+    expect(onLoadWorkspace.mock.calls[0]?.[0]).toBe('VMREVIEW')
+    expect(message().text).toBe('Loaded VMREVIEW.')
   })
 
   it.each([['RESET'], ['UNDO'], ['GRAB'], ['WATCH%20SEEN'], ['98'], ['REG&go=RESET']])(

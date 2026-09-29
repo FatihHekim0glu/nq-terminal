@@ -155,6 +155,10 @@ export interface WorkspaceController {
   /** LOAD: parse every line of the saved workspace `name` with `parse` and, when all are screen commands,
    * rebuild the panels from them. The message to show: loaded, or why not (nothing changes then). */
   loadWorkspace(name: string, parse: (line: string) => LineResult): string
+  /** FORGET: drop the saved workspace `name`. When it owns the layout on screen the layout goes back to the shown
+   * screen (the panels stay, and the next edit is saved for the screen as usual). The message to show: forgotten,
+   * or that no workspace has that name (nothing changes then). */
+  forgetWorkspace(name: string): string
 }
 
 function adapt(api: DockviewApi): DockApiLike {
@@ -436,8 +440,10 @@ function layoutKey(dock: Readonly<Record<string, unknown>>): string {
   return JSON.stringify({ grid, panels: sortedPanels(panels) })
 }
 
-function ownerOf(st: ControllerState, e: UndoEntry): Owner {
-  return st.owners.get(e) ?? SCREEN_OWNER
+/** The owner an undo entry gives back; a workspace that has been forgotten since is the screen's layout again. */
+function ownerOf(st: ControllerState, env: ControllerEnv, e: UndoEntry): Owner {
+  const owner = st.owners.get(e) ?? SCREEN_OWNER
+  return owner.kind === 'workspace' && !Object.hasOwn(env.workspaces.getState().list, owner.name) ? SCREEN_OWNER : owner
 }
 
 function sameOwner(a: Owner, b: Owner): boolean {
@@ -453,7 +459,7 @@ function unchanged(st: ControllerState, env: ControllerEnv, e: UndoEntry): boole
   if (!api) return false
   return (
     e.screen === st.shown &&
-    sameOwner(ownerOf(st, e), st.owner) &&
+    sameOwner(ownerOf(st, env, e), st.owner) &&
     layoutKey(e.dock) === layoutKey(api.toJSON() as unknown as Readonly<Record<string, unknown>>) &&
     JSON.stringify(e.contexts) === JSON.stringify(env.linkGroups.getState().contexts) &&
     JSON.stringify(e.stored) === JSON.stringify(savedLayoutFor(env.layouts.getState(), st.shown))
@@ -709,7 +715,7 @@ function undo(st: ControllerState, env: ControllerEnv): MnemonicCode | null {
   prepareAll(st, api)
   st.shown = entry.screen
   // A layout restored from the ring gives back its owner; the default fallback above is a screen's.
-  st.owner = ok ? ownerOf(st, entry) : SCREEN_OWNER
+  st.owner = ok ? ownerOf(st, env, entry) : SCREEN_OWNER
   st.ranIn = null
   st.lastFocused = null
   announce(st, env)
@@ -828,6 +834,18 @@ function loadWorkspace(st: ControllerState, env: ControllerEnv, text: string, pa
   return fillCopy(WORKSPACES.loaded, { name })
 }
 
+function forgetWorkspace(st: ControllerState, env: ControllerEnv, text: string): string {
+  const name = text.trim().toUpperCase()
+  if (!env.workspaces.getState().forget(name)) return fillCopy(WORKSPACES.missing, { name: name === '' ? text : name })
+  // The workspace that owned the layout no longer exists: the layout is the shown screen's again. Nothing is
+  // saved now (the panels are as they were); the next edit is saved for the screen like any other.
+  if (st.owner.kind === 'workspace' && st.owner.name === name) {
+    st.owner = SCREEN_OWNER
+    reportShown(st, env)
+  }
+  return fillCopy(WORKSPACES.forgotten, { name })
+}
+
 /** `env` is read on every call, so the controller always sees the Workspace's latest props. */
 export function createWorkspaceController(env: () => ControllerEnv): WorkspaceController {
   const st: ControllerState = {
@@ -890,5 +908,6 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     loadRecipe: (name, recipe, commands) => loadRecipe(st, env(), name, recipe, commands),
     saveWorkspace: (name) => saveWorkspace(st, env(), name),
     loadWorkspace: (name, parse) => loadWorkspace(st, env(), name, parse),
+    forgetWorkspace: (name) => forgetWorkspace(st, env(), name),
   }
 }

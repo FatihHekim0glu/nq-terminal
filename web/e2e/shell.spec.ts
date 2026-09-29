@@ -182,6 +182,9 @@ test.describe('terminal shell', () => {
 
   test('Tab visits every panel once, in reading order, with a visible focus ring', async ({ page }) => {
     await openApp(page)
+    // N03: the first-run orientation line sits between the command line and the panels with its own Tab stops (three
+    // command links and Dismiss). This walk is about the panels, so the line is dismissed first.
+    await page.getByRole('button', { name: 'Dismiss the orientation line' }).click()
     await page.keyboard.press('Control+k')
     const visited: string[] = []
     for (let i = 0; i < HOME_TITLES.length; i += 1) {
@@ -189,7 +192,10 @@ test.describe('terminal shell', () => {
       const info = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement | null
         const panel = el?.closest('[data-nqt-panel]')
-        const style = el ? getComputedStyle(el) : null
+        // A MonitorGrid keeps DOM focus on its table and draws the ring on the active cell (grid.css), and U09 makes
+        // REG's grid a Tab stop: the ring to check is the cell's then.
+        const ringed = el?.matches('[role="grid"]') ? el.querySelector<HTMLElement>('.is-active') : el
+        const style = ringed ? getComputedStyle(ringed) : null
         return {
           title: panel?.getAttribute('data-nqt-title') ?? null,
           focusVisible: el?.matches(':focus-visible') ?? false,

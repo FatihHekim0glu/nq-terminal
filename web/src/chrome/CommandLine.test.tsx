@@ -483,6 +483,142 @@ describe('CommandLine: RESET, UNDO, WATCH and GRAB (roadmap #15, #16)', () => {
   })
 })
 
+describe('CommandLine: SAVE, LOAD and FORGET (roadmap #14)', () => {
+  const menuOf = (names: readonly string[]) => ({
+    key: 'workspaces',
+    title: 'Workspaces',
+    breadcrumb: ['Workspaces'],
+    intro: [],
+    items: names.map((name, i) => ({ n: i + 1, label: name, detail: '2 panels', category: false, act: { kind: 'run' as const, line: `LOAD ${name}` } })),
+  })
+
+  it('SAVE NAME hands the name to onSaveWorkspace, posts its text and remembers the line', () => {
+    const onSaveWorkspace = vi.fn(() => 'Saved VMREVIEW (2 panels).')
+    const { type, key, message, input } = setup({ onSaveWorkspace })
+    type('save vmreview')
+    key('Enter')
+    expect(onSaveWorkspace).toHaveBeenCalledTimes(1)
+    expect(onSaveWorkspace).toHaveBeenCalledWith('VMREVIEW')
+    expect(message().textContent).toBe('Saved VMREVIEW (2 panels).')
+    expect(input.value).toBe('')
+    type('LAST')
+    key('Enter')
+    const last = within(screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle }))
+    expect(last.getAllByRole('option').map((o) => o.textContent)).toEqual(['1)SAVE VMREVIEW'])
+  })
+
+  it('FORGET NAME hands the name to onForgetWorkspace and posts its text', () => {
+    const onForgetWorkspace = vi.fn(() => 'Forgot VMREVIEW.')
+    const { type, key, message, input } = setup({ onForgetWorkspace })
+    type('FORGET VMREVIEW')
+    key('Enter')
+    expect(onForgetWorkspace).toHaveBeenCalledWith('VMREVIEW')
+    expect(message().textContent).toBe('Forgot VMREVIEW.')
+    expect(input.value).toBe('')
+  })
+
+  it('LOAD NAME hands the name and the grammar to onLoadWorkspace; the parse uses the index and no focused-panel context', () => {
+    const seen: Array<{ readonly line: string; readonly ok: boolean; readonly code?: string }> = []
+    const onLoadWorkspace = vi.fn((name: string, parse: (line: string) => import('../commands/line').LineResult) => {
+      for (const line of ['NQ GP', 'volmanaged_v0 DES', 'NOPE GP', 'GP']) {
+        const result = parse(line)
+        seen.push({ line, ok: result.ok, ...(result.ok ? {} : { code: result.error.code }) })
+      }
+      return `Loaded ${name}.`
+    })
+    const resolveFallback = () => ({ kind: 'instrument' as const, value: 'ES' })
+    const { type, key, message, input } = setup({ onLoadWorkspace, resolveFallback })
+    type('LOAD VMREVIEW')
+    key('Enter')
+    expect(onLoadWorkspace).toHaveBeenCalledTimes(1)
+    expect(onLoadWorkspace.mock.calls[0]?.[0]).toBe('VMREVIEW')
+    expect(seen).toEqual([
+      { line: 'NQ GP', ok: true },
+      { line: 'volmanaged_v0 DES', ok: true },
+      { line: 'NOPE GP', ok: false, code: 'unknown-context' },
+      { line: 'GP', ok: false, code: 'missing-context' },
+    ])
+    expect(message().textContent).toBe('Loaded VMREVIEW.')
+    expect(input.value).toBe('')
+  })
+
+  it('LOAD on its own opens the menu it is given and posts nothing', () => {
+    const workspaceMenu = vi.fn(() => menuOf(['ALPHA', 'BRAVO']))
+    const onLoadWorkspace = vi.fn(() => 'unused')
+    const { type, key, message } = setup({ workspaceMenu, onLoadWorkspace })
+    type('LOAD')
+    key('Enter')
+    expect(workspaceMenu).toHaveBeenCalledTimes(1)
+    expect(onLoadWorkspace).not.toHaveBeenCalled()
+    const list = screen.getByRole('listbox', { name: 'Workspaces' })
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['1)ALPHA2 panels', '2)BRAVO2 panels'])
+    expect(message().textContent).toBe('')
+  })
+
+  it('choosing a row of the workspace menu runs LOAD NAME', () => {
+    const onLoadWorkspace = vi.fn((name: string) => `Loaded ${name}.`)
+    const { type, key, message } = setup({ workspaceMenu: () => menuOf(['ALPHA', 'BRAVO']), onLoadWorkspace })
+    type('LOAD')
+    key('Enter')
+    type('2')
+    key('Enter')
+    expect(onLoadWorkspace).toHaveBeenCalledTimes(1)
+    expect(onLoadWorkspace.mock.calls[0]?.[0]).toBe('BRAVO')
+    expect(message().textContent).toBe('Loaded BRAVO.')
+    expect(screen.queryByRole('listbox', { name: 'Workspaces' })).toBeNull()
+  })
+
+  it('SAVE, LOAD NAME, LOAD and FORGET say the workspace is not ready without their callbacks (a null answer counts as none)', () => {
+    const { type, key, message } = setup({ workspaceMenu: () => null, onSaveWorkspace: () => null, onLoadWorkspace: () => null, onForgetWorkspace: () => null })
+    for (const line of ['SAVE ALPHA', 'LOAD ALPHA', 'LOAD', 'FORGET ALPHA']) {
+      resetMessage()
+      type(line)
+      key('Enter')
+      expect(message().textContent, line).toBe(COMMAND_LINE.layoutUnavailable)
+    }
+    cleanup()
+    resetMessage()
+    const bare = setup()
+    for (const line of ['SAVE ALPHA', 'LOAD ALPHA', 'LOAD', 'FORGET ALPHA']) {
+      resetMessage()
+      bare.type(line)
+      bare.key('Enter')
+      expect(bare.message().textContent, line).toBe(COMMAND_LINE.layoutUnavailable)
+    }
+  })
+
+  it('a bad or missing name keeps the line, explains it and calls nothing', () => {
+    const onSaveWorkspace = vi.fn(() => 'x')
+    const onLoadWorkspace = vi.fn(() => 'x')
+    const onForgetWorkspace = vi.fn(() => 'x')
+    const { type, key, message, input } = setup({ onSaveWorkspace, onLoadWorkspace, onForgetWorkspace })
+    type('SAVE REG')
+    key('Enter')
+    expect(message().textContent).toBe(PARSE_MESSAGES['bad-name'].replace('{token}', 'REG'))
+    expect(input.value).toBe('SAVE REG')
+    type('FORGET')
+    key('Enter')
+    expect(message().textContent).toBe(PARSE_MESSAGES['missing-name'].replaceAll('{token}', 'FORGET'))
+    expect(input.value).toBe('FORGET')
+    type('SAVE a-b')
+    key('Enter')
+    expect(message().textContent).toContain('A-B is not a workspace name')
+    expect(onSaveWorkspace).not.toHaveBeenCalled()
+    expect(onLoadWorkspace).not.toHaveBeenCalled()
+    expect(onForgetWorkspace).not.toHaveBeenCalled()
+  })
+
+  it('offers the three words in the suggestion sheet', () => {
+    const { type } = setup()
+    type('SAV')
+    expect(screen.getByRole('option', { name: /^SAVE/ })).toBeTruthy()
+    type('FORG')
+    expect(screen.getByRole('option', { name: /^FORGET/ })).toBeTruthy()
+    type('LOA')
+    expect(screen.getByRole('option', { name: /^LOAD/ })).toBeTruthy()
+  })
+})
+
 describe('CommandLine: the <GO> preview row (roadmap #6 slice 2)', () => {
   function preview(command: ParsedCommand, newPanel: boolean) {
     return `${newPanel ? 'Shift' : 'Enter'}: ${command.canonical}`

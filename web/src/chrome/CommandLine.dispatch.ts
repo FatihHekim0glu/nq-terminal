@@ -1,6 +1,7 @@
 // What the command line does (spec 5.1 and 5.2): run a typed line through parseLine and carry out the
 // action (a command, a context menu, Number <GO>, a menu, HELP, HL, LAST, NO); choose a suggestion or a
-// menu item; the Esc (CANCEL) cascade. Messages go to the message line.
+// menu item; the Esc (CANCEL) cascade. Messages go to the message line. SAVE, LOAD and FORGET (roadmap #14) hand
+// their name to the workspace callbacks of the options and post the text those answer.
 import { describeError, withValue } from '../commands/messages'
 import { parseLine, type LineAction } from '../commands/line'
 import { displayContext } from '../commands/sectors'
@@ -60,6 +61,25 @@ function openMenuAction(p: CommandLineParts, action: LineAction): void {
   }
 }
 
+/** SAVE, LOAD and FORGET (roadmap #14): the callbacks answer with the text to post, or null while the workspace is not ready. */
+function workspaceWord(p: CommandLineParts, action: Extract<LineAction, { kind: 'save' | 'load' | 'forget' }>): string {
+  p.menus.close()
+  if (action.kind === 'load' && action.name === null) {
+    const menu = p.options.workspaceMenu?.()
+    if (menu) p.menus.open(menu)
+    else postMessage(COMMAND_LINE.layoutUnavailable)
+    return ''
+  }
+  const name = action.name ?? ''
+  // The saved lines are read again with the plain grammar: the same index, and no focused panel to lean on.
+  const parse = (line: string) => parseLine(line, { index: p.options.index, fallbackContext: null })
+  const text =
+    action.kind === 'save' ? p.options.onSaveWorkspace?.(name) : action.kind === 'load' ? p.options.onLoadWorkspace?.(name, parse) : p.options.onForgetWorkspace?.(name)
+  postMessage(text ?? COMMAND_LINE.layoutUnavailable)
+  p.history.remember(`${action.kind.toUpperCase()} ${name}`)
+  return ''
+}
+
 /** Carries out a parsed line. Returns the line to keep in the box ('' clears it), or null to leave it. */
 function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): string | null {
   switch (action.kind) {
@@ -117,6 +137,10 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
       if (!p.options.onGrab?.()) postMessage(COMMAND_LINE.grabUnavailable)
       p.menus.close()
       return ''
+    case 'save':
+    case 'load':
+    case 'forget':
+      return workspaceWord(p, action)
     default:
       openMenuAction(p, action)
       return ''

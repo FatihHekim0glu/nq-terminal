@@ -17,7 +17,7 @@ export const WORKSPACES = {
   notScreen: 'it is not a screen command',
   menuTitle: 'Workspaces',
   none: 'No workspaces yet: SAVE NAME keeps the panels on screen.',
-  badName: 'That is not a workspace name.',
+  badName: 'That is not a workspace name: 2 to 16 letters, digits or _, starting with a letter, and not a function, command or trading word.',
   /** The panels on screen could not be written as a recipe (no workspace yet, an unreadable panel, too large). */
   notKept: 'The panels on screen cannot be kept as a workspace right now.',
   /** A panel that takes a subject shows none, so its line would read as a bare mnemonic and LOAD could not run it. */

@@ -7,11 +7,12 @@ import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import { displayContext, type KeyedSector } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { MESSAGES, NAV_TOOLBAR, FRAME_STRIP } from '../copy/chrome'
-import { SECTOR_TITLES } from '../copy/commands'
+import { SECTOR_TITLES, WORKSPACE_LINES } from '../copy/commands'
 import { NAV_MESSAGES, RESERVED_F_MESSAGES } from '../copy/navKeys'
+import type { Recipe } from '../state/workspaces'
 import type { CommandLineHandle } from './CommandLine'
 import type { GlobalKeyAction, ReservedFKey } from './CommandLine.keys'
-import type { MenuModel } from './CommandLine.menus'
+import type { MenuItem, MenuModel } from './CommandLine.menus'
 import { exportPanel, focusPanelAt, pagePanel } from './KeyToolbar.panels'
 import type { KeyId } from './KeyToolbar'
 import { postMessage } from './MessageLine.store'
@@ -41,8 +42,13 @@ export interface ChromeEnv {
   /** The focused panel's context as the command line writes it (`NQ1 Index`), or null. */
   readonly focusedContextLine: () => string | null
   readonly toggleKeymap: () => void
+  /** The saved workspaces (roadmap #14), for the favourites list; none when absent. */
+  readonly savedWorkspaces?: () => SavedWorkspaces
   readonly now?: () => number
 }
+
+/** Saved workspaces by name, as the menus need them: only the panels' lines are read. */
+export type SavedWorkspaces = Readonly<Record<string, Pick<Recipe, 'panels'>>>
 
 export const HELP_TWICE_MS = 500
 
@@ -57,14 +63,31 @@ const RESERVED_MESSAGES: Readonly<Record<ReservedFKey, string>> = {
   F7: RESERVED_F_MESSAGES.F7,
 }
 
-function favouritesMenu(): MenuModel {
+/** A saved workspace's row: LOAD NAME, with the lines of its first panels to tell it apart. */
+function workspaceRows(saved: SavedWorkspaces, first: number): MenuItem[] {
+  return Object.entries(saved).map(([name, recipe], i) => ({
+    n: first + i,
+    label: name,
+    detail: recipe.panels.slice(0, 4).map((p) => p.line).join(', '),
+    category: false,
+    act: { kind: 'run', line: `LOAD ${name}` } as const,
+  }))
+}
+
+/** LOAD on its own: the saved workspaces, each row running LOAD NAME. */
+export function workspaceMenu(saved: SavedWorkspaces): MenuModel {
+  const items = workspaceRows(saved, 1)
+  return { key: 'workspaces', title: WORKSPACE_LINES.menuTitle, breadcrumb: [WORKSPACE_LINES.menuTitle], intro: items.length === 0 ? [WORKSPACE_LINES.none] : [], items }
+}
+
+function favouritesMenu(saved: SavedWorkspaces): MenuModel {
   const tabs = [
     [FRAME_STRIP.tabs.HOME, 'HOME'],
     [FRAME_STRIP.tabs.RESEARCH, 'REG'],
     [FRAME_STRIP.tabs.LIVE, 'LIVE'],
   ] as const
-  const items = tabs.map(([tab, line], i) => ({ n: i + 1, label: tab.label, detail: tab.title, category: false, act: { kind: 'run', line } as const }))
-  return { key: 'favourites', title: NAV_TOOLBAR.favouritesTitle, breadcrumb: [NAV_TOOLBAR.favouritesTitle], intro: [], items }
+  const layouts = tabs.map(([tab, line], i) => ({ n: i + 1, label: tab.label, detail: tab.title, category: false, act: { kind: 'run', line } as const }))
+  return { key: 'favourites', title: NAV_TOOLBAR.favouritesTitle, breadcrumb: [NAV_TOOLBAR.favouritesTitle], intro: [], items: [...layouts, ...workspaceRows(saved, layouts.length + 1)] }
 }
 
 export function createChromeActions(env: ChromeEnv) {
@@ -154,7 +177,7 @@ export function runNav(a: ChromeActions, env: ChromeEnv, action: NavAction): voi
   else if (action === 'context') a.runAndFocus(env.focusedContextLine() ?? 'INDEX')
   else if (action === 'mnemonic' || action === 'help') a.help()
   else if (action === 'related') a.related()
-  else if (action === 'favourites') cmd?.showMenu(favouritesMenu())
+  else if (action === 'favourites') cmd?.showMenu(favouritesMenu(env.savedWorkspaces?.() ?? {}))
   else if (!exportPanel(env.focusedPanelId())) postMessage(MESSAGES.noExport)
 }
 

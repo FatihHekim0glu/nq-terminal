@@ -95,6 +95,10 @@ export interface WorkspaceHandle {
   /** LOAD NAME: parse every line of the saved workspace with `parse`; if all are screen commands rebuild
    * the panels, else change nothing. The message to show: WORKSPACES.loaded, missing or lineFailed. */
   loadWorkspace(name: string, parse: (line: string) => LineResult): string
+  /** FORGET NAME: drop the saved workspace. If it owns the layout on screen the layout goes back to the shown
+   * screen, the panels stay and later edits are saved for the screen again. The message to show: WORKSPACES.forgotten,
+   * or missing. */
+  forgetWorkspace(name: string): string
 }
 
 export interface WorkspaceProps {
@@ -291,6 +295,7 @@ export default function Workspace(props: WorkspaceProps) {
     loadRecipe: controller.loadRecipe,
     saveWorkspace: controller.saveWorkspace,
     loadWorkspace: controller.loadWorkspace,
+    forgetWorkspace: controller.forgetWorkspace,
   }))
   const env = { screens: props.screens ?? BUILT_SCREENS, linkGroups: props.linkGroups ?? useLinkGroups, controller, view: controller.view }
   return (

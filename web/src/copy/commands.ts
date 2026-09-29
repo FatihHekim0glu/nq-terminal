@@ -59,6 +59,19 @@ export const CHROME_WORDS = {
   UNDO: 'Undo the last layout change (the last 10 are kept)',
   WATCH: 'What changed in the research records since you marked them seen',
   GRAB: 'Save the focused panel as an image, with its labels and source',
+  SAVE: 'Keep the panels on screen as a named workspace',
+  LOAD: 'Open a saved workspace (alone: list them)',
+  FORGET: 'Remove a saved workspace',
+} as const
+
+/**
+ * Named workspaces (roadmap #14), the lines the shell posts itself: the menu behind LOAD. The rest of the workspace
+ * copy (copy/workspaces.ts) loads with the Workspace, so it stays out of the shell; a test keeps these two in step
+ * with it.
+ */
+export const WORKSPACE_LINES = {
+  menuTitle: 'Workspaces',
+  none: 'No workspaces yet: SAVE NAME keeps the panels on screen.',
 } as const
 
 export const CONTEXT_KIND_NAMES = {
@@ -106,6 +119,8 @@ export const PARSE_MESSAGES = {
   'sector-not-taken': '{token} takes no sector key: type it without {sector}.',
   'missing-command': '{token} needs a command after it, for example {token} NQ GP.',
   'extra-after-word': '{token} takes nothing after it.',
+  'bad-name': '{token} is not a workspace name: 2 to 16 letters, digits or _, starting with a letter, and not a function, command or trading word.',
+  'missing-name': '{token} needs a workspace name, for example {token} REVIEW.',
 } as const
 
 export const ARGUMENT_NAMES = {

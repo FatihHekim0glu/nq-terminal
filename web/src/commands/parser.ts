@@ -33,6 +33,8 @@ export type ParseErrorCode =
   | 'sector-not-taken'
   | 'missing-command'
   | 'extra-after-word'
+  | 'bad-name'
+  | 'missing-name'
 
 export interface ParseError {
   readonly code: ParseErrorCode

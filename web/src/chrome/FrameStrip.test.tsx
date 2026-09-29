@@ -14,8 +14,9 @@ function setup(props: Partial<FrameStripProps> = {}) {
   const onScheme = vi.fn()
   const onUndo = vi.fn()
   const onReset = vi.fn()
-  render(<FrameStrip screen="HOME" edited={false} tapeOn={false} scheme="standard" onOpen={onOpen} onNew={onNew} onTape={onTape} onScheme={onScheme} onUndo={onUndo} onReset={onReset} {...props} />)
-  return { onOpen, onNew, onTape, onScheme, onUndo, onReset, nav: screen.getByRole('navigation', { name: FRAME_STRIP.label }) }
+  const onOpenWorkspace = vi.fn()
+  render(<FrameStrip screen="HOME" edited={false} tapeOn={false} scheme="standard" onOpen={onOpen} onNew={onNew} onTape={onTape} onScheme={onScheme} onUndo={onUndo} onReset={onReset} onOpenWorkspace={onOpenWorkspace} {...props} />)
+  return { onOpen, onNew, onTape, onScheme, onUndo, onReset, onOpenWorkspace, nav: screen.getByRole('navigation', { name: FRAME_STRIP.label }) }
 }
 
 describe('FrameStrip: the 37px frame and layout tab strip (spec 4.2)', () => {
@@ -182,5 +183,106 @@ describe('FrameStrip: the layout on screen and its edited mark (roadmap #6)', ()
     fireEvent.keyDown(reset, { key: 'Escape' })
     expect(screen.queryByRole('button', { name: LAYOUT.resetOption })).toBeNull()
     expect(document.activeElement).toBe(options)
+  })
+})
+
+describe('FrameStrip: workspace tabs (roadmap #14)', () => {
+  const tabIds = (nav: HTMLElement) => within(nav).getAllByRole('button').map((t) => t.getAttribute('data-tab'))
+  const workspaceNames = (nav: HTMLElement) =>
+    Array.from(nav.querySelectorAll<HTMLElement>('[data-tab="workspace"]')).map((t) => t.getAttribute('data-workspace'))
+
+  it('shows a tab per saved workspace after LIVE and before +, in the order given', () => {
+    const { nav } = setup({ workspaces: ['ALPHA', 'BRAVO'], workspace: null })
+    expect(tabIds(nav)).toEqual(['HOME', 'RESEARCH', 'LIVE', 'workspace', 'workspace', 'new'])
+    expect(workspaceNames(nav)).toEqual(['ALPHA', 'BRAVO'])
+    expect(within(nav).getByRole('button', { name: 'ALPHA' }).getAttribute('aria-current')).toBeNull()
+    expect(within(nav).getAllByRole('button')[0]?.getAttribute('aria-current')).toBe('page')
+  })
+
+  it('an inactive workspace tab has its full name as its title, for when the strip shortens it; its accessible name stays the text', () => {
+    const long = 'A_LONG_DESK_NAME_'.slice(0, 16)
+    const { nav } = setup({ workspaces: [long, 'BRAVO'], workspace: 'BRAVO' })
+    const tab = within(nav).getByRole('button', { name: long })
+    expect(tab.getAttribute('title')).toBe(long)
+    expect(tab.textContent).toBe(long)
+  })
+
+  it('the active workspace tab and the layout tabs carry no title of their own', () => {
+    const { nav } = setup({ workspaces: ['ALPHA', 'BRAVO'], workspace: 'BRAVO' })
+    for (const tab of within(nav).getAllByRole('button')) {
+      if (tab.getAttribute('data-tab') === 'workspace' && tab.getAttribute('aria-current') !== 'page') continue
+      expect(tab.hasAttribute('title'), tab.textContent ?? '').toBe(false)
+    }
+  })
+
+  it('shows nothing extra without workspaces', () => {
+    const { nav } = setup({ workspaces: [] })
+    expect(tabIds(nav)).toEqual(['HOME', 'RESEARCH', 'LIVE', 'new'])
+  })
+
+  it('shows at most six workspace tabs: the first six', () => {
+    const names = ['AA', 'BB', 'CC', 'DD', 'EE', 'FF', 'GG', 'HH']
+    const { nav } = setup({ workspaces: names })
+    expect(workspaceNames(nav)).toEqual(['AA', 'BB', 'CC', 'DD', 'EE', 'FF'])
+    expect(within(nav).queryByRole('button', { name: 'GG' })).toBeNull()
+  })
+
+  it('the workspace on screen is always shown: past the sixth it takes the last place', () => {
+    const names = ['AA', 'BB', 'CC', 'DD', 'EE', 'FF', 'GG', 'HH']
+    const { nav } = setup({ workspaces: names, workspace: 'HH' })
+    expect(workspaceNames(nav)).toEqual(['AA', 'BB', 'CC', 'DD', 'EE', 'HH'])
+    expect(within(nav).getByRole('button', { name: /^HH/ }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('the active workspace tab carries a bold name then its title; no screen tab is active beside it', () => {
+    const { nav } = setup({ screen: 'EQ', workspaces: ['ALPHA', 'BRAVO'], workspace: 'BRAVO' })
+    const active = within(nav).getAllByRole('button').filter((t) => t.getAttribute('aria-current') === 'page')
+    expect(active).toHaveLength(1)
+    expect(active[0]?.getAttribute('data-workspace')).toBe('BRAVO')
+    expect(active[0]?.querySelector('b')?.textContent).toBe('BRAVO')
+    expect(active[0]?.textContent).toBe(`BRAVO ${FRAME_STRIP.workspaceTitle}`)
+    // EQ is not a layout tab, but the workspace owns the layout: no extra EQ tab.
+    expect(tabIds(nav)).toEqual(['HOME', 'RESEARCH', 'LIVE', 'workspace', 'workspace', 'new'])
+    expect(within(nav).getByRole('button', { name: 'ALPHA' }).textContent).toBe('ALPHA')
+  })
+
+  it('the edited mark and its word sit on the active workspace tab only, never on HOME', () => {
+    const { nav } = setup({ screen: 'HOME', edited: true, workspaces: ['ALPHA', 'BRAVO'], workspace: 'ALPHA' })
+    const marked = within(nav).getAllByRole('button').filter((t) => t.textContent?.includes(LAYOUT.editedMark) && t.getAttribute('data-tab') !== 'new')
+    expect(marked.map((t) => t.getAttribute('data-workspace'))).toEqual(['ALPHA'])
+    const alpha = marked[0]!
+    expect(alpha.querySelector('[aria-hidden="true"]')?.textContent).toBe(LAYOUT.editedMark)
+    expect(alpha.querySelector('.sr-only')?.textContent?.trim()).toBe(LAYOUT.editedLabel)
+    expect(within(nav).getByRole('button', { name: `ALPHA ${FRAME_STRIP.workspaceTitle} ${LAYOUT.editedLabel}` })).toBe(alpha)
+    expect(within(nav).getAllByRole('button')[0]?.getAttribute('aria-current')).toBeNull()
+  })
+
+  it('an unedited workspace tab has no mark and no word', () => {
+    const { nav } = setup({ edited: false, workspaces: ['ALPHA'], workspace: 'ALPHA' })
+    expect(within(nav).queryByText(LAYOUT.editedMark)).toBeNull()
+    expect(nav.querySelector('.sr-only')).toBeNull()
+  })
+
+  it('a workspace that is no longer saved (forgotten while on screen) leaves the screen tab active', () => {
+    const { nav } = setup({ screen: 'REG', workspaces: ['BRAVO'], workspace: 'ALPHA' })
+    expect(within(nav).getByRole('button', { name: /RESEARCH/ }).getAttribute('aria-current')).toBe('page')
+    expect(workspaceNames(nav)).toEqual(['BRAVO'])
+    expect(within(nav).queryByRole('button', { name: /ALPHA/ })).toBeNull()
+  })
+
+  it('clicking a workspace tab asks to open it by name, and opens no layout', () => {
+    const { nav, onOpen, onOpenWorkspace } = setup({ workspaces: ['ALPHA', 'BRAVO'] })
+    fireEvent.click(within(nav).getByRole('button', { name: 'BRAVO' }))
+    expect(onOpenWorkspace).toHaveBeenCalledTimes(1)
+    expect(onOpenWorkspace).toHaveBeenCalledWith('BRAVO')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('the + tab and the layout tabs still work beside the workspace tabs', () => {
+    const { nav, onOpen, onNew } = setup({ workspaces: ['ALPHA'] })
+    fireEvent.click(within(nav).getByRole('button', { name: /RESEARCH/ }))
+    expect(onOpen).toHaveBeenCalledWith('REG')
+    fireEvent.click(within(nav).getByRole('button', { name: FRAME_STRIP.newTab }))
+    expect(onNew).toHaveBeenCalledTimes(1)
   })
 })
