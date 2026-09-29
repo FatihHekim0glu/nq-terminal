@@ -11,6 +11,7 @@ import { useStore } from 'zustand'
 import { ApiError } from '../api/client'
 import { connectionStore, isOutage } from '../api/connection'
 import { CONNECTION } from '../copy/connection'
+import { CONNECTION_PANEL } from '../copy/connectionPanel'
 import { MARKET } from '../copy/market'
 import { fillCopy } from '../copy/workspace'
 import { ROVING_ATTR } from './WorkspaceFocus'
@@ -32,7 +33,7 @@ export function useWaitingForBackend(error: ApiError | null): boolean {
 export function waitingLine(error: ApiError): string {
   const path = error.path.split('?')[0]
   const answer = error.status !== 0 ? String(error.status) : CONNECTION.noAnswer
-  return fillCopy(CONNECTION.waiting, { request: `GET ${path}`, answer })
+  return fillCopy(CONNECTION_PANEL.waiting, { request: `GET ${path}`, answer })
 }
 
 function classes(...parts: ReadonlyArray<string | undefined>): string {
@@ -73,8 +74,8 @@ export default function PanelFault({ error, failedText, refusedText = MARKET.ref
     <p role="alert" className={classes('panel-fault', 'panel-fault-failed', className)}>
       {fillCopy(failedText, { detail })}
       {onRetry ? (
-        <button type="button" className="panel-fault-retry" aria-label={CONNECTION.retryLabel} onClick={() => onRetry()} {...roving}>
-          {CONNECTION.retry}
+        <button type="button" className="panel-fault-retry" aria-label={CONNECTION_PANEL.retryLabel} onClick={() => onRetry()} {...roving}>
+          {CONNECTION_PANEL.retry}
         </button>
       ) : null}
     </p>
@@ -91,7 +92,7 @@ export function PanelLoading({ text, className }: PanelLoadingProps) {
   if (waiting) {
     return (
       <p role="status" className={classes('panel-fault', 'panel-fault-waiting', className)}>
-        {CONNECTION.waitingLoad}
+        {CONNECTION_PANEL.waitingLoad}
       </p>
     )
   }

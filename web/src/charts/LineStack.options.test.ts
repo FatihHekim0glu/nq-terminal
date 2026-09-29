@@ -1,10 +1,11 @@
 import type uPlot from 'uplot'
 import { describe, expect, it } from 'vitest'
 import { FENCE_TIME } from './fence'
+import { yRange, yRangeClearOfLegend } from './LineStack.model'
 import { paneOptions, paneUplotData, type PaneBuild } from './LineStack.options'
-import { fakePlot } from './LineStack.testUtil'
-import { DEFAULT_CHART_TOKENS, canvasFont, lineStackSeries, makeUplotTheme, seriesColor } from './theme'
-import { COMPARE_STYLES, type LineStackPane } from './LineStack.types'
+import { fakePlot, type CtxCall, type FakePlot } from './LineStack.testUtil'
+import { CHART_GEOMETRY as G, DEFAULT_CHART_TOKENS, canvasFont, lineStackSeries, makeUplotTheme, seriesColor } from './theme'
+import { COMPARE_STYLES, type LaneEpisode, type LineStackPane, type RibbonSpec, type StackSpan } from './LineStack.types'
 
 const DAY = 86_400
 const t = Array.from({ length: 10 }, (_, i) => FENCE_TIME - (10 - i) * DAY)
@@ -282,5 +283,617 @@ describe('compare line styles in a pane', () => {
     const s = build({ pane: one, data: [t.map(() => 1)] }).series
     expect(s).toHaveLength(2)
     expect(s[1]).toMatchObject({ label: 'Only', stroke: '#FFFFFF', width: 1.5 })
+  })
+})
+
+// Without the context layer every option object is what it was before the layer existed (RR, RUN, LIVE
+// and HOME build panes with no spans, ribbon or lanes).
+describe('pane options without a context layer', () => {
+  const shape = (v: unknown): unknown => JSON.parse(JSON.stringify(v, (_key, x: unknown) => (typeof x === 'function' ? '[fn]' : x)))
+
+  it('keeps the bottom equity pane exactly as it was', () => {
+    expect(shape(build())).toMatchInlineSnapshot(`
+      {
+        "axes": [
+          {
+            "border": {
+              "show": true,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "font": "13px "Bergoom", "Source Sans 3", system-ui, sans-serif",
+            "grid": {
+              "dash": [
+                2,
+                2,
+              ],
+              "show": false,
+              "stroke": "#505050",
+              "width": 1,
+            },
+            "show": true,
+            "side": 2,
+            "size": 45,
+            "splits": "[fn]",
+            "stroke": "#FFFFFF",
+            "ticks": {
+              "show": true,
+              "size": 6,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "values": "[fn]",
+          },
+          {
+            "border": {
+              "show": true,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "font": "13px "Bergoom", "Source Sans 3", system-ui, sans-serif",
+            "gap": 2,
+            "grid": {
+              "dash": [
+                2,
+                2,
+              ],
+              "show": false,
+              "stroke": "#505050",
+              "width": 1,
+            },
+            "scale": "y",
+            "side": 1,
+            "size": "[fn]",
+            "splits": "[fn]",
+            "stroke": "#FFFFFF",
+            "ticks": {
+              "show": true,
+              "size": 6,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "values": "[fn]",
+          },
+        ],
+        "cursor": {
+          "drag": {
+            "setScale": false,
+            "x": false,
+            "y": false,
+          },
+          "points": {
+            "show": false,
+          },
+          "sync": {
+            "filters": {
+              "pub": "[fn]",
+              "sub": "[fn]",
+            },
+            "key": "nqt-link-A",
+            "scales": [
+              "x",
+              null,
+            ],
+          },
+        },
+        "height": 300,
+        "hooks": {
+          "draw": [
+            "[fn]",
+          ],
+          "setCursor": [],
+          "setScale": [],
+        },
+        "legend": {
+          "show": false,
+        },
+        "padding": [
+          8,
+          26,
+          0,
+          8,
+        ],
+        "plugins": [
+          {
+            "hooks": {},
+          },
+        ],
+        "scales": {
+          "x": {
+            "range": "[fn]",
+            "time": true,
+          },
+          "y": {
+            "auto": true,
+            "distr": 1,
+            "range": "[fn]",
+          },
+        },
+        "series": [
+          {},
+          {
+            "fill": "#031D38",
+            "fillTo": "[fn]",
+            "label": "Strategy",
+            "points": {
+              "show": false,
+            },
+            "spanGaps": false,
+            "stroke": "#FFFFFF",
+            "width": 0,
+          },
+          {
+            "label": "Benchmark",
+            "points": {
+              "show": false,
+            },
+            "spanGaps": false,
+            "stroke": "#F06000",
+            "width": 1.5,
+          },
+          {
+            "label": "Strategy",
+            "points": {
+              "show": false,
+            },
+            "spanGaps": false,
+            "stroke": "#FFFFFF",
+            "width": 1.5,
+          },
+        ],
+        "width": 800,
+      }
+    `)
+  })
+
+  it('keeps an upper drawdown pane exactly as it was', () => {
+    expect(shape(build({ pane: DD, isBottom: false, showFenceLabel: false }))).toMatchInlineSnapshot(`
+      {
+        "axes": [
+          {
+            "border": {
+              "show": true,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "font": "13px "Bergoom", "Source Sans 3", system-ui, sans-serif",
+            "grid": {
+              "dash": [
+                2,
+                2,
+              ],
+              "show": false,
+              "stroke": "#505050",
+              "width": 1,
+            },
+            "show": false,
+            "side": 2,
+            "size": 45,
+            "splits": "[fn]",
+            "stroke": "#FFFFFF",
+            "ticks": {
+              "show": true,
+              "size": 6,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "values": "[fn]",
+          },
+          {
+            "border": {
+              "show": true,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "font": "13px "Bergoom", "Source Sans 3", system-ui, sans-serif",
+            "gap": 2,
+            "grid": {
+              "dash": [
+                2,
+                2,
+              ],
+              "show": false,
+              "stroke": "#505050",
+              "width": 1,
+            },
+            "scale": "y",
+            "side": 1,
+            "size": "[fn]",
+            "splits": "[fn]",
+            "stroke": "#FFFFFF",
+            "ticks": {
+              "show": true,
+              "size": 6,
+              "stroke": "#FFFFFF",
+              "width": 1,
+            },
+            "values": "[fn]",
+          },
+        ],
+        "cursor": {
+          "drag": {
+            "setScale": false,
+            "x": false,
+            "y": false,
+          },
+          "points": {
+            "show": false,
+          },
+          "sync": {
+            "filters": {
+              "pub": "[fn]",
+              "sub": "[fn]",
+            },
+            "key": "nqt-link-A",
+            "scales": [
+              "x",
+              null,
+            ],
+          },
+        },
+        "height": 300,
+        "hooks": {
+          "draw": [
+            "[fn]",
+          ],
+          "setCursor": [],
+          "setScale": [],
+        },
+        "legend": {
+          "show": false,
+        },
+        "padding": [
+          8,
+          26,
+          0,
+          8,
+        ],
+        "plugins": [
+          {
+            "hooks": {},
+          },
+        ],
+        "scales": {
+          "x": {
+            "range": "[fn]",
+            "time": true,
+          },
+          "y": {
+            "auto": true,
+            "distr": 1,
+            "range": "[fn]",
+          },
+        },
+        "series": [
+          {},
+          {
+            "fill": "#6A1020",
+            "fillTo": 0,
+            "label": "Underwater",
+            "points": {
+              "show": false,
+            },
+            "spanGaps": false,
+            "stroke": "#FFFFFF",
+            "width": 1,
+          },
+        ],
+        "width": 800,
+      }
+    `)
+  })
+
+  it('draws the same canvas calls as before, on the bottom and on an upper pane', () => {
+    // cyrb53 over the recorded calls: a 53-bit fingerprint of every call and argument, in order.
+    const fingerprint = (text: string): string => {
+      let h1 = 0xdeadbeef
+      let h2 = 0x41c6ce57
+      for (let i = 0; i < text.length; i += 1) {
+        const ch = text.charCodeAt(i)
+        h1 = Math.imul(h1 ^ ch, 2654435761)
+        h2 = Math.imul(h2 ^ ch, 1597334677)
+      }
+      h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909)
+      h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909)
+      return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16)
+    }
+    const digest = (o: uPlot.Options, pane: LineStackPane): string => {
+      const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME, yMin: 0, yMax: 2, data: [t, ...pane.series.map(() => t.map((_, i) => 1 + i / 10))] })
+      for (const hook of o.hooks!.draw!) hook?.(u as unknown as uPlot)
+      return fingerprint(JSON.stringify(u.ctx.calls))
+    }
+    expect([digest(build(), EQ), digest(build({ pane: DD, isBottom: false, showFenceLabel: false }), DD)]).toEqual(['1c5fbae16cf7bc', '10608f74579d2a'])
+  })
+
+  it('takes empty context fields as absent ones', () => {
+    expect(shape(build({ spans: [], ribbon: undefined }))).toEqual(shape(build()))
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Context layer (roadmap 12): marked windows, the regime strip under the time axis, episode lanes.
+
+const TOK = {
+  ...DEFAULT_CHART_TOKENS,
+  // Distinct colours, so each drawing is shown to take its own token and no other.
+  color: {
+    ...DEFAULT_CHART_TOKENS.color,
+    chartS1: '#010101', legendBg: '#020202', text: '#030303',
+    regimeLow: '#040404', regimeMid: '#050505', regimeHigh: '#060606',
+    cDown: '#070707', chartVol: '#080808', data: '#090909',
+  },
+}
+const SPANS: StackSpan[] = [
+  { from: t[1]!, to: t[3]!, label: 'Early window' },
+  { from: t[8]!, to: t[9]!, label: 'Late window' },
+]
+const RIBBON: RibbonSpec = {
+  name: 'Regime',
+  values: ['low', 'low', 'mid', 'mid', 'mid', 'high', 'high', 'high', 'low', null],
+  states: { low: { label: 'low volatility', glyph: 'L' }, mid: { label: 'mid volatility', glyph: 'M' }, high: { label: 'high volatility', glyph: 'H' } },
+  missing: '--',
+}
+const EPISODES: LaneEpisode[] = [
+  { rank: 1, peak: t[0]!, trough: t[3]!, end: t[7]!, open: false, depth: '-20.0%' },
+  { rank: 2, peak: t[2]!, trough: t[5]!, end: t[9]!, open: true, depth: '-10.0%' },
+  { rank: 3, peak: t[4]!, trough: t[6]!, end: t[8]!, open: false, depth: '-5.0%' },
+]
+// A lanes pane ignores the fields a line pane uses: zero, logAllowed and any series.
+const LANES: LineStackPane = {
+  id: 'lanes', zero: 'white', logAllowed: true, series: [], lanes: { name: 'Episodes', episodes: EPISODES },
+}
+
+/** Runs every draw hook of `o` on a fake plot spanning the ten days to the fence (or to `xMax`); returns the plot. */
+function drawOn(o: uPlot.Options, pane: LineStackPane = EQ, xMax: number = FENCE_TIME): FakePlot {
+  const u = fakePlot({ xMin: t[0]!, xMax, yMin: 0, yMax: 2, data: [t, ...pane.series.map(() => t.map((_, i) => 1 + i / 10))] })
+  for (const hook of o.hooks!.draw!) hook?.(u as unknown as uPlot)
+  return u
+}
+const firstCall = (calls: readonly CtxCall[], pred: (c: CtxCall) => boolean) => calls.findIndex(pred)
+const setsTo = (prop: string, value: unknown) => (c: CtxCall) => c[0] === `set:${prop}` && c[1] === value
+const texts = (calls: readonly CtxCall[]) => calls.filter((c) => c[0] === 'fillText').map((c) => c[1])
+/** Every text is drawn on a box filled just before it (a chip, or the fence label): the box of each text. */
+const boxes = (calls: readonly CtxCall[]) =>
+  calls.flatMap((c, i) => {
+    if (c[0] !== 'fillText') return []
+    const rect = calls.slice(0, i).reverse().find((earlier) => earlier[0] === 'fillRect')
+    return rect === undefined ? [] : [{ text: String(c[1]), left: Number(rect[1]), right: Number(rect[1]) + Number(rect[3]) }]
+  })
+
+describe('a regime strip under the time axis', () => {
+  it('makes the bottom time axis 45 + 8 px tall: the strip and the gap above it', () => {
+    expect(G.ribbonHeight + G.ribbonGap).toBe(8)
+    expect(build({ ribbon: RIBBON }).axes![0]).toMatchObject({ show: true, size: 45 + 8 })
+    expect(build().axes![0]).toMatchObject({ size: 45 })
+  })
+
+  it('leaves an upper pane alone: the strip belongs to the bottom pane', () => {
+    const o = build({ isBottom: false, ribbon: RIBBON })
+    expect(o.axes![0]).toMatchObject({ show: false, size: 45 })
+    const calls = drawOn(o).ctx.calls
+    expect(firstCall(calls, setsTo('fillStyle', TOK.color.regimeLow))).toBe(-1)
+  })
+
+  it('counts the taller axis when it keeps the curve clear of the legend, before uPlot has laid out', () => {
+    // Nothing is laid out yet, so the plot height comes from the options: 300 - 8 padding - the axis.
+    const legendBox = () => ({ left: 8, top: 8, width: 200, height: 40 })
+    const data = [t.map((_, i) => (i === 0 ? 2 : 1)), t.map(() => 1)]
+    const unlaidOut = { bbox: { left: 0, top: 0, width: 0, height: 0 } }
+    const rangeOf = (o: uPlot.Options) => (o.scales!.y!.range as (u: unknown, lo: number, hi: number) => [number, number])(unlaidOut, 1, 2)
+    // The legend reaches 8 + 40 + 2 px down; the plot's top is the 8px padding.
+    const clear = (plotHeight: number) => yRangeClearOfLegend(yRange(1, 2, false), 2, (8 + 40 + 2 - 8) / plotHeight, false)
+    expect(rangeOf(build({ data, legendBox }))).toEqual(clear(300 - 8 - 45))
+    expect(rangeOf(build({ data, legendBox, ribbon: RIBBON }))).toEqual(clear(300 - 8 - 45 - 8))
+    expect(clear(300 - 8 - 45 - 8)[1]).toBeGreaterThan(clear(300 - 8 - 45)[1])
+  })
+
+  it('draws the strip after the time axis, one state colour per run and none at a gap', () => {
+    const calls = drawOn(build({ ribbon: RIBBON, tokens: TOK })).ctx.calls
+    const axis = firstCall(calls, setsTo('textAlign', 'center'))
+    const low = firstCall(calls, setsTo('fillStyle', TOK.color.regimeLow))
+    expect(axis).toBeGreaterThan(-1)
+    expect(low).toBeGreaterThan(axis)
+    const fills = calls.filter((c) => c[0] === 'set:fillStyle').map((c) => c[1])
+    for (const colour of [TOK.color.regimeLow, TOK.color.regimeMid, TOK.color.regimeHigh]) expect(fills).toContain(colour)
+    // Runs: low, mid, high, low (the last session is a gap): four rects of the strip's height.
+    const strip = calls.filter((c) => c[0] === 'fillRect' && c[4] === G.ribbonHeight)
+    expect(strip).toHaveLength(4)
+  })
+})
+
+describe('marked windows across the panes', () => {
+  it('draws the bands first, before the zero line and the fence, on every pane', () => {
+    for (const isBottom of [true, false]) {
+      const calls = drawOn(build({ pane: DD, data: [t.map(() => -1)], isBottom, spans: SPANS, tokens: TOK }), DD).ctx.calls
+      const band = firstCall(calls, setsTo('globalAlpha', G.spanAlpha))
+      // The DD pane's zero line strokes in the chart-series token, the fence in its own.
+      const zero = firstCall(calls, setsTo('strokeStyle', TOK.color.chartS1))
+      const fence = firstCall(calls, setsTo('strokeStyle', TOK.color.fence))
+      expect(band, `isBottom ${isBottom}`).toBeGreaterThan(-1)
+      expect(zero, `isBottom ${isBottom}`).toBeGreaterThan(band)
+      expect(fence, `isBottom ${isBottom}`).toBeGreaterThan(zero)
+    }
+  })
+
+  it('fills the band in the chart-series token, then draws the chip in the legend and text tokens', () => {
+    const calls = drawOn(build({ spans: SPANS, tokens: TOK })).ctx.calls
+    const band = firstCall(calls, setsTo('fillStyle', TOK.color.chartS1))
+    const chipBg = firstCall(calls, setsTo('fillStyle', TOK.color.legendBg))
+    const chipText = firstCall(calls, setsTo('fillStyle', TOK.color.text))
+    expect(band).toBeGreaterThan(-1)
+    expect(chipBg).toBeGreaterThan(band)
+    expect(chipText).toBeGreaterThan(chipBg)
+    expect(texts(calls)).toContain('Early window')
+  })
+
+  it('puts the chips on the top pane only, where the fence label is', () => {
+    const upper = drawOn(build({ spans: SPANS, showFenceLabel: false, tokens: TOK })).ctx.calls
+    expect(texts(upper)).not.toContain('Early window')
+    expect(firstCall(upper, setsTo('globalAlpha', G.spanAlpha))).toBeGreaterThan(-1)
+  })
+
+  it('keeps a chip out from under the fence label, which is drawn at the same spot', () => {
+    // 'Late window' starts 2 days before the fence, inside the label's box; 'Early window' is clear of it.
+    const calls = drawOn(build({ spans: SPANS, tokens: TOK })).ctx.calls
+    expect(texts(calls)).toContain('IS | 2022+ SPENT')
+    expect(texts(calls)).toContain('Early window')
+    expect(texts(calls)).not.toContain('Late window')
+    // The band itself is not dropped with its chip.
+    expect(calls.filter((c) => c[0] === 'fillRect' && Number(c[1]) > 500 && Number(c[3]) > 0 && Number(c[4]) > 300)).not.toHaveLength(0)
+  })
+
+  it('draws the chip of a window that starts after the fence', () => {
+    // The space right of the fence line is empty (the label sits left of it), so the chip fits there.
+    const after: StackSpan = { from: FENCE_TIME + DAY, to: FENCE_TIME + 2 * DAY, label: 'After fence' }
+    const u = drawOn(build({ spans: [after], tokens: TOK }), EQ, FENCE_TIME + 4 * DAY)
+    expect(texts(u.ctx.calls)).toContain('IS | 2022+ SPENT')
+    expect(texts(u.ctx.calls)).toContain('After fence')
+    const chip = boxes(u.ctx.calls).find((box) => box.text === 'After fence')!
+    expect(chip.left).toBeGreaterThanOrEqual(u.valToPos(FENCE_TIME, 'x', true))
+    // Its band is drawn once, not once for each group of windows.
+    const bands = u.ctx.calls.filter((c) => c[0] === 'fillRect' && Number(c[4]) === u.bbox.height)
+    expect(bands).toHaveLength(1)
+  })
+
+  it('draws windows either side of the fence, each band and each chip once', () => {
+    const spans: StackSpan[] = [
+      { from: t[1]!, to: t[3]!, label: 'Before fence' },
+      { from: FENCE_TIME - DAY, to: FENCE_TIME + DAY, label: 'Across fence' },
+      { from: FENCE_TIME + DAY, to: FENCE_TIME + 2 * DAY, label: 'After fence' },
+    ]
+    const u = drawOn(build({ spans, tokens: TOK }), EQ, FENCE_TIME + 4 * DAY)
+    const shown = texts(u.ctx.calls).filter((text) => spans.some((s) => s.label === text))
+    // The window across the fence starts under the label, so it keeps its band and loses its chip.
+    expect(shown.sort()).toEqual(['After fence', 'Before fence'])
+    expect(u.ctx.calls.filter((c) => c[0] === 'fillRect' && Number(c[4]) === u.bbox.height)).toHaveLength(3)
+  })
+
+  it('never lets a chip touch the fence label, wherever the window starts', () => {
+    // The plot runs four days past the fence, so the sweep starts windows before and after the label.
+    const xMax = FENCE_TIME + 4 * DAY
+    const steps = 52
+    let shown = 0
+    let dropped = 0
+    for (let step = 0; step <= steps; step += 1) {
+      const from = t[0]! + (step * DAY) / 4
+      const u = drawOn(build({ spans: [{ from, to: from + DAY / 2, label: 'Chip' }], tokens: TOK }), EQ, xMax)
+      const all = boxes(u.ctx.calls)
+      const label = all.find((box) => box.text === 'IS | 2022+ SPENT')!
+      const chips = all.filter((box) => box.text === 'Chip')
+      for (const chip of chips) {
+        shown += 1
+        // Clear of the label either side: entirely left of it, or entirely right of it.
+        expect(chip.right <= label.left || chip.left >= label.right, `window from step ${step}`).toBe(true)
+      }
+      // A chip is dropped only for the label: a window that starts after the fence always keeps its chip.
+      if (chips.length === 0) {
+        dropped += 1
+        expect(u.valToPos(from, 'x', true), `window from step ${step}`).toBeLessThan(u.valToPos(FENCE_TIME, 'x', true))
+      }
+    }
+    // Chips far from the label are still drawn; only the ones that would collide are dropped.
+    expect(shown).toBeGreaterThan(20)
+    expect(dropped).toBeGreaterThan(0)
+    expect(shown + dropped).toBe(steps + 1)
+  })
+
+  it('leaves the chip off a window that starts under the legend, and still draws its band', () => {
+    // The legend covers the top-left 200 x 60 CSS px, so 'Early window' (from the second day, 71px in) would be hidden but for its tail.
+    const legendBox = () => ({ left: 8, top: 8, width: 200, height: 60 })
+    const spans: StackSpan[] = [...SPANS, { from: t[5]!, to: t[6]!, label: 'Middle window' }]
+    const withLegend = drawOn(build({ spans, legendBox, tokens: TOK })).ctx.calls
+    expect(texts(withLegend)).not.toContain('Early window')
+    expect(texts(withLegend)).toContain('Middle window')
+    const bands = (calls: readonly CtxCall[]) => calls.filter((c) => c[0] === 'fillRect' && Number(c[2]) === 8 && Number(c[4]) === 347)
+    expect(bands(withLegend)).toHaveLength(3)
+    // Each band is drawn once: two passes must not double the opacity of any window.
+    expect(bands(withLegend).map((c) => c[1])).toEqual(expect.arrayContaining(bands(drawOn(build({ spans, tokens: TOK })).ctx.calls).map((c) => c[1])))
+    // Without a legend in the way, or on a pane that carries no chips, nothing changes.
+    expect(texts(drawOn(build({ spans, tokens: TOK })).ctx.calls)).toContain('Early window')
+    expect(texts(drawOn(build({ spans, legendBox, showFenceLabel: false, tokens: TOK })).ctx.calls)).not.toContain('Middle window')
+    // A legend that has no size yet (before layout) hides nothing.
+    expect(texts(drawOn(build({ spans, legendBox: () => ({ left: 0, top: 0, width: 0, height: 0 }), tokens: TOK })).ctx.calls)).toContain('Early window')
+  })
+
+  it('draws every chip when there is no fence label to keep clear', () => {
+    const calls = drawOn(build({ spans: SPANS, fence: null, tokens: TOK })).ctx.calls
+    expect(texts(calls)).toEqual(expect.arrayContaining(['Early window', 'Late window']))
+  })
+})
+
+describe('an episode-lanes pane', () => {
+  const laneBuild = (extra: Partial<PaneBuild> = {}) => build({ pane: LANES, data: [], isBottom: false, showFenceLabel: false, ...extra })
+
+  it('has a fixed value scale of one unit per episode, not fitted to any data', () => {
+    const y = laneBuild().scales!.y!
+    expect(y.auto).toBe(false)
+    expect((y.range as (u: unknown, lo: number, hi: number) => [number, number])(null, 5, 9)).toEqual([0, 3])
+    expect((laneBuild({ pane: { ...LANES, lanes: { name: 'x', episodes: EPISODES.slice(0, 1) } } }).scales!.y!.range as () => [number, number])()).toEqual([0, 1])
+  })
+
+  it('keeps a valid scale when there are no episodes', () => {
+    const empty = { ...LANES, lanes: { name: 'x', episodes: [] } }
+    const [lo, hi] = (laneBuild({ pane: empty }).scales!.y!.range as unknown as () => [number, number])()
+    expect(hi).toBeGreaterThan(lo)
+  })
+
+  it('draws no value ticks or labels, and no tags', () => {
+    const y = laneBuild().axes![1]!
+    const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME, yMin: 0, yMax: 3 })
+    expect((y.splits as (u: unknown, i: number, lo: number, hi: number) => number[])(u, 1, 0, 3)).toEqual([])
+    expect((y.values as (u: unknown, splits: number[]) => unknown[])(u, [])).toEqual([])
+    const calls = drawOn(laneBuild(), LANES).ctx.calls
+    // A tag is a filled pentagon: beginPath, five points, closePath, fill.
+    expect(calls.some((c) => c[0] === 'closePath')).toBe(false)
+  })
+
+  it('still reports its gutter need, so it lines up with the panes above it', () => {
+    const reports: [number, number][] = []
+    const shared = (index: number, need: number) => {
+      reports.push([index, need])
+      return 61
+    }
+    const y = laneBuild({ gutter: { shared, index: 2 } }).axes![1]!
+    const u = fakePlot({ xMin: t[0]!, xMax: FENCE_TIME })
+    expect((y.size as (u: unknown, v: unknown) => number)(u, [])).toBe(61)
+    expect(reports).toEqual([[2, 57]])
+  })
+
+  it('never shows a zero line, and never takes the log scale', () => {
+    // The pane asks for a zero line and a log scale (both ignored); a zero line would stroke in the chart-series token.
+    const calls = drawOn(laneBuild({ tokens: TOK }), LANES).ctx.calls
+    expect(firstCall(calls, setsTo('strokeStyle', TOK.color.chartS1))).toBe(-1)
+    expect(laneBuild({ log: true }).scales!.y!.distr).toBe(1)
+  })
+
+  it('draws one bar per episode after the existing layers, in the fall and recover tokens', () => {
+    const calls = drawOn(laneBuild({ tokens: TOK }), LANES).ctx.calls
+    const fence = firstCall(calls, setsTo('strokeStyle', TOK.color.fence))
+    const fall = firstCall(calls, setsTo('fillStyle', TOK.color.cDown))
+    const recover = firstCall(calls, setsTo('fillStyle', TOK.color.chartVol))
+    expect(fence).toBeGreaterThan(-1)
+    expect(fall).toBeGreaterThan(fence)
+    expect(recover).toBeGreaterThan(fall)
+    // The open episode's recovery is hatched in the data colour, not filled.
+    expect(firstCall(calls, setsTo('strokeStyle', TOK.color.data))).toBeGreaterThan(-1)
+    expect(texts(calls)).toEqual(expect.arrayContaining(['1', '2', '3']))
+  })
+
+  it('outlines the highlighted lane only, read at every draw', () => {
+    let rank: number | null = null
+    const o = laneBuild({ tokens: TOK, lanesHighlight: () => rank })
+    expect(drawOn(o, LANES).ctx.calls.some((c) => c[0] === 'strokeRect')).toBe(false)
+    rank = 2
+    const calls = drawOn(o, LANES).ctx.calls
+    expect(calls.filter((c) => c[0] === 'strokeRect')).toHaveLength(1)
+    expect(firstCall(calls, setsTo('strokeStyle', TOK.color.chartS1))).toBeGreaterThan(-1)
+    rank = 99
+    expect(drawOn(o, LANES).ctx.calls.some((c) => c[0] === 'strokeRect')).toBe(false)
+  })
+
+  it('also carries the marked windows, and the strip when it is the bottom pane', () => {
+    const calls = drawOn(laneBuild({ isBottom: true, spans: SPANS, ribbon: RIBBON, tokens: TOK }), LANES).ctx.calls
+    expect(firstCall(calls, setsTo('globalAlpha', G.spanAlpha))).toBeGreaterThan(-1)
+    expect(firstCall(calls, setsTo('fillStyle', TOK.color.regimeMid))).toBeGreaterThan(firstCall(calls, setsTo('fillStyle', TOK.color.cDown)))
   })
 })

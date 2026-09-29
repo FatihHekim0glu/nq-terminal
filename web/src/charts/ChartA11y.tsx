@@ -40,6 +40,11 @@ export interface ChartA11yProps {
   /** The data summary: range, last value and the like. Becomes the chart's accessible name. */
   readonly label: string
   readonly table: ChartTable
+  /**
+   * More tables for the same chart (LineStack's marked windows, regime runs and episodes), shown in
+   * the table view after the main one, in order. Absent or empty changes nothing.
+   */
+  readonly extraTables?: readonly ChartTable[]
   /** Controlled table view; leave both out for the wrapper to keep its own state. */
   readonly tableView?: boolean
   readonly onTableViewChange?: (next: boolean) => void
@@ -131,6 +136,7 @@ export default function ChartA11y(props: ChartA11yProps) {
       {tableView ? (
         <div className="chart-a11y-tablewrap" role="region" aria-label={props.table.caption} aria-describedby={hintId} tabIndex={0} onKeyDown={onKeyDown} {...rovingDefault}>
           <DataTable table={props.table} />
+          {props.extraTables?.map((table, i) => <DataTable key={i} table={table} />)}
         </div>
       ) : (
         <div className="chart-a11y-figure" role="img" aria-label={props.label} aria-describedby={hintId} tabIndex={0} onKeyDown={onKeyDown} {...rovingDefault}>

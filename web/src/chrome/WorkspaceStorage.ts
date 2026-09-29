@@ -5,25 +5,18 @@
 //   groups (the terminal uses none) or holds a panel of any component other than PANEL_COMPONENT.
 import type { SerializedDockview } from 'dockview-react'
 import type { MnemonicCode } from '../commands/registry'
+import { fnv1a } from '../state/fnv1a'
 import { layoutFor } from './WorkspaceLayouts'
 import { PANEL_COMPONENT } from './WorkspaceModel'
 
-const FNV_OFFSET = 0x811c9dc5
-const FNV_PRIME = 0x01000193
+// The hash lives in state/fnv1a.ts, shared with the record watch; it is re-exported here for the callers
+// that already import it from this module.
+export { fnv1a }
+
 const EXTRA_GROUP_KEYS = ['floatingGroups', 'popoutGroups', 'edgeGroups'] as const
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/** FNV-1a (32 bit) of a string, as 8 hex digits. Enough to tell two defaults apart. */
-export function fnv1a(text: string): string {
-  let hash = FNV_OFFSET
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, FNV_PRIME) >>> 0
-  }
-  return hash.toString(16).padStart(8, '0')
 }
 
 /** The signature of a screen's default layout; it changes whenever the default does. */

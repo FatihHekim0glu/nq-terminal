@@ -36,6 +36,14 @@ export const CHART_GEOMETRY = {
   /** Event-marker data tip: offset right of the pointer tip, and delay after the pointer rests. */
   datatipOffset: 15,
   datatipDelayMs: 200,
+  /** LineStack context layer. Regime strip: its height and the gap between it and the time axis. */
+  ribbonHeight: 6,
+  ribbonGap: 2,
+  /** Marked windows (stress spans): the fill's opacity, low enough that every series stays legible. */
+  spanAlpha: 0.12,
+  /** Episode lanes: the bar's share of its row, and the step between hatch lines on an open episode. */
+  laneBarShare: 0.6,
+  hatchStep: 4,
 } as const
 
 /** Range toolbar (6.4): row 1 date fields, row 2 contiguous range buttons. */

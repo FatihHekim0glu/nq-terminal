@@ -3,7 +3,7 @@
 // the footer with the basis, the gate's bookkeeping, the bucket, RV22's basis and the fills note.
 import type { ApiError } from '../../api/client'
 import { useWaitingForBackend, waitingLine } from '../../chrome/PanelFault'
-import { CONNECTION } from '../../copy/connection'
+import { CONNECTION_PANEL } from '../../copy/connectionPanel'
 import { fillCopy } from '../../copy/workspace'
 import { GP_COPY as C } from '../../copy/gp'
 import type { SessionBadges } from './model'
@@ -90,7 +90,7 @@ export function ChartMessage({ refusal, error, text, busy = false }: ChartMessag
   if (waiting) {
     return (
       <div className="gp-message" role="status">
-        <p>{error ? waitingLine(error) : CONNECTION.waitingLoad}</p>
+        <p>{error ? waitingLine(error) : CONNECTION_PANEL.waitingLoad}</p>
       </div>
     )
   }

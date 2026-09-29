@@ -60,8 +60,68 @@ export interface LineStackPane {
    * The chart never derives a drawdown from the plotted values.
    */
   readonly summaryDrawdown?: SummaryDrawdown
+  /**
+   * The accessible name describes every series of this pane, in order, not only the first. It is for a
+   * pane of peers, such as the RUNS compare lines, where the first run is no more the subject than the
+   * others. The default is the first series only.
+   */
+  readonly summaryAll?: boolean
   /** Marked points (RR's volatility Hi and Low): a white dot and its label, in the pane's display unit. */
   readonly callouts?: readonly Callout[]
+  /**
+   * An episode-lanes pane: drawn in place of series on a fixed [0, n] scale, with no legend, value
+   * labels, tags or zero line.
+   */
+  readonly lanes?: LanesSpec
+}
+
+// ---------------------------------------------------------------------------------------------
+// Context layer (roadmap 12): marked windows, a regime strip and episode lanes. Every field is
+// optional on LineStackProps and LineStackPane, and without them LineStack draws exactly as before.
+
+/** A marked window on the shared time axis (a stress span): a translucent band with a chip. */
+export interface StackSpan {
+  /** Epoch seconds. */
+  readonly from: number
+  readonly to: number
+  /** Shown on the chip and in the table; carries any [SPENT] tag of the window. */
+  readonly label: string
+}
+
+/** The three states of the regime strip, low to high. */
+export type RibbonState = 'low' | 'mid' | 'high'
+
+/** A three-state strip under the time axis (for example volatility terciles). */
+export interface RibbonSpec {
+  /** What the strip shows, for the readout and the table caption (for example "Regime"). */
+  readonly name: string
+  /** One state per time, aligned to `t`; null draws nothing there. */
+  readonly values: ReadonlyArray<RibbonState | null>
+  /** Each state's words and its one-letter glyph, so no state is told apart by colour alone. */
+  readonly states: Readonly<Record<RibbonState, { readonly label: string; readonly glyph: string }>>
+  /** The readout text where the strip has no state. */
+  readonly missing: string
+}
+
+/** One drawdown episode as a lane bar: a fall from `peak` to `trough`, a recovery to `end`. */
+export interface LaneEpisode {
+  /** 1 is the deepest; the lane order is the order served. */
+  readonly rank: number
+  /** Epoch seconds. */
+  readonly peak: number
+  readonly trough: number
+  /** Where the recovery ended; for an open episode, the last time the data reaches. */
+  readonly end: number
+  /** The episode has not recovered its peak. */
+  readonly open: boolean
+  /** The depth, formatted with its unit (for example "-28.8%"). */
+  readonly depth: string
+}
+
+/** A lanes pane: one row per episode, drawn in place of a line pane's series. */
+export interface LanesSpec {
+  readonly name: string
+  readonly episodes: readonly LaneEpisode[]
 }
 
 export type RangeKey = (typeof RANGE_TOOLBAR.ranges)[number]
@@ -81,4 +141,19 @@ export interface LineStackProps {
   readonly loader?: () => Promise<UplotConstructor>
   /** Called once per build with the milliseconds from building the options to every pane drawn. */
   readonly onRender?: (ms: number) => void
+  /** Marked windows: a band on every pane, chips on the top pane. A new array identity rebuilds every pane, so memoise it. */
+  readonly spans?: readonly StackSpan[]
+  /**
+   * The regime strip under the bottom pane's time axis, which grows that axis by ribbonHeight +
+   * ribbonGap (8 px). A new object identity rebuilds every pane, so memoise it.
+   */
+  readonly ribbon?: RibbonSpec
+  /** The rank of the episode to outline in the lanes panes; null or absent outlines none. Changing it redraws the lanes panes only and never rebuilds. */
+  readonly highlightLane?: number | null
+  /**
+   * Called with the rank of the lane under the pointer, or null when it leaves the lanes. Read at call
+   * time, so a new function never rebuilds. It reports only the pointer's own moves over a lanes pane,
+   * and null when the panes rebuild or unmount while a lane is reported.
+   */
+  readonly onLaneHover?: (rank: number | null) => void
 }

@@ -19,6 +19,8 @@ import type { ResolvedContext } from '../commands/types'
 import { WORKSPACE } from '../copy/workspace'
 import { useLayouts, type LayoutsStore } from '../state/layouts'
 import { useLinkGroups, type LinkGroupsStore } from '../state/linkGroups'
+import { copyLinkEntries } from './copyLink'
+import { markWorkspaceGone, markWorkspaceReady } from './deepLink'
 import { registerNumbered } from './NumberedActions'
 import PanelChrome from './PanelChrome'
 import { PanelActionsContext, type PanelActions } from './PanelChrome.actions'
@@ -162,6 +164,7 @@ function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
         onRelated={() => actions.related()}
         onBack={() => actions.back()}
         onForward={() => actions.forward()}
+        extraOptions={() => copyLinkEntries(title)}
         overlay={overlay}
         landmark={false}
       >
@@ -218,6 +221,8 @@ function useController(props: WorkspaceProps, rootRef: RefObject<HTMLElement | n
 export default function Workspace(props: WorkspaceProps) {
   const rootRef = useRef<HTMLElement>(null)
   const controller = useController(props, rootRef)
+  // Terminal links wait for the workspace (deepLink.ts): ready from onReady until this unmounts.
+  useEffect(() => () => markWorkspaceGone(), [])
   useImperativeHandle(props.ref, () => ({
     run: controller.run,
     preview: controller.preview,
@@ -246,7 +251,10 @@ export default function Workspace(props: WorkspaceProps) {
             disableFloatingGroups
             disableDnd
             announcements={false}
-            onReady={(event) => controller.onReady(event.api)}
+            onReady={(event) => {
+              controller.onReady(event.api)
+              markWorkspaceReady()
+            }}
           />
         </PanelEnvContext>
       </NumberingContext>

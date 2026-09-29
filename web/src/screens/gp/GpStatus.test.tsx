@@ -7,7 +7,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../../api/client'
 import { connectionStore, DOWN_AFTER, INITIAL_CONNECTION, resetConnection } from '../../api/connection'
-import { CONNECTION } from '../../copy/connection'
+import { CONNECTION_PANEL } from '../../copy/connectionPanel'
 import { fillCopy } from '../../copy/workspace'
 import { ChartMessage } from './GpStatus'
 
@@ -26,14 +26,14 @@ describe('ChartMessage: while the connection store is down', () => {
     render(<ChartMessage refusal={null} error={null} text="guidance" />)
     const status = screen.getByRole('status')
     expect(status.textContent).toBe('guidance')
-    expect(status.textContent).not.toBe(CONNECTION.waitingLoad)
+    expect(status.textContent).not.toBe(CONNECTION_PANEL.waitingLoad)
   })
 
   it('shows the waiting-to-load sentence as a status, with no aria-busy, while busy', () => {
     goDown()
     render(<ChartMessage refusal={null} error={null} text="Loading..." busy />)
     const status = screen.getByRole('status')
-    expect(status.textContent).toBe(CONNECTION.waitingLoad)
+    expect(status.textContent).toBe(CONNECTION_PANEL.waitingLoad)
     expect(status.hasAttribute('aria-busy')).toBe(false)
   })
 
@@ -42,7 +42,7 @@ describe('ChartMessage: while the connection store is down', () => {
     const error = new ApiError({ kind: 'http', path: '/api/bars?symbol=NQ', status: 502, body: null, detail: '502' })
     render(<ChartMessage refusal={null} error={error} text={null} />)
     const status = screen.getByRole('status')
-    expect(status.textContent).toBe(fillCopy(CONNECTION.waiting, { request: 'GET /api/bars', answer: '502' }))
+    expect(status.textContent).toBe(fillCopy(CONNECTION_PANEL.waiting, { request: 'GET /api/bars', answer: '502' }))
   })
 })
 

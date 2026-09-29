@@ -182,7 +182,7 @@ const GRAPHICS: readonly ContrastPair[] = [
   { fg: 'list-border', bg: 'list-bg', min: COMPONENT_MIN },
   { fg: 'text', bg: 'field-btn', min: COMPONENT_MIN },
   ...on(['chart-s1', 'chart-axis', 'accent-2', 'chart-vol', 'candle-up', 'candle-dn', 'bar-pos', 'bar-neg',
-    'last-line', 'roll-vol', 'dist-curve', 'zero-line'], ['bg'], COMPONENT_MIN),
+    'last-line', 'roll-vol', 'dist-curve', 'zero-line', 'regime-low', 'regime-mid', 'regime-high'], ['bg'], COMPONENT_MIN),
 ]
 
 function defaultPairs(): ContrastPair[] {

@@ -38,6 +38,11 @@ export interface PanelChromeProps {
   readonly onRelated?: () => void
   readonly onBack?: () => void
   readonly onForward?: () => void
+  /**
+   * More rows for the Options menu, after the panel's own. Evaluated when the menu opens, not on render,
+   * so a row can read state as it is then. Options shows even when this is all the panel adds.
+   */
+  readonly extraOptions?: () => ReadonlyArray<MenuEntry>
   /** Drawn over the stage (red bar and below), e.g. the related functions menu. */
   readonly overlay?: ReactNode
   /**
@@ -62,10 +67,12 @@ function LinkChip({ group }: { readonly group: Exclude<LinkGroup, '-'> }) {
 interface OptionsProps {
   readonly title: string
   readonly entries: ReadonlyArray<MenuEntry>
+  readonly extra?: () => ReadonlyArray<MenuEntry>
 }
 
-function OptionsButton({ title, entries }: OptionsProps) {
+function OptionsButton({ title, entries, extra }: OptionsProps) {
   const [open, setOpen] = useState(false)
+  const [added, setAdded] = useState<ReadonlyArray<MenuEntry>>([])
   const ref = useRef<HTMLButtonElement>(null)
   const menuId = useId()
   return (
@@ -77,7 +84,10 @@ function OptionsButton({ title, entries }: OptionsProps) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) setAdded(extra?.() ?? [])
+          setOpen(!open)
+        }}
         {...roving}
       >
         <span aria-hidden="true">≡</span> {PANEL.options}
@@ -86,7 +96,7 @@ function OptionsButton({ title, entries }: OptionsProps) {
         <DropdownMenu
           id={menuId}
           label={fillCopy(PANEL.optionsMenu, { title })}
-          entries={entries}
+          entries={[...entries, ...added]}
           tone="dark"
           align="right"
           trigger={ref}
@@ -112,7 +122,7 @@ function optionEntries(props: PanelChromeProps): MenuEntry[] {
 }
 
 function TitleTools(props: PanelChromeProps) {
-  const { tags = [], tableView, onTableViewChange, maximised = false, onToggleMaximise, title } = props
+  const { tags = [], tableView, onTableViewChange, maximised = false, onToggleMaximise, extraOptions, title } = props
   const entries = optionEntries(props)
   return (
     <div className="ptitle-tools">
@@ -133,7 +143,7 @@ function TitleTools(props: PanelChromeProps) {
           </button>
         </Tooltip>
       ) : null}
-      {entries.length > 0 ? <OptionsButton title={title} entries={entries} /> : null}
+      {entries.length > 0 || extraOptions ? <OptionsButton title={title} entries={entries} extra={extraOptions} /> : null}
       {onToggleMaximise ? (
         <Tooltip text={maximised ? PANEL.restore : PANEL.maximise}>
           <button

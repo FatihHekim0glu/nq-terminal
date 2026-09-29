@@ -3,6 +3,8 @@
 // alpha. Every button is a roving item of the panel and a numbered item (Number <GO>): criteria from
 // 51), rounds from 61), confirmations from 81), so they never clash with the grid's 1) to N).
 import type { ReactNode } from 'react'
+import type { ApiError } from '../../api/client'
+import PanelFault from '../../chrome/PanelFault'
 import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
 import { CONFIRM, REG } from '../../copy/reg'
@@ -147,7 +149,7 @@ export function AcceptanceBlock({ acceptances }: { readonly acceptances: Schemas
 interface ConfirmProps {
   readonly panelId: string
   readonly rows: readonly ConfirmRow[] | null
-  readonly error: string | null
+  readonly error: ApiError | null
   readonly onOpen: (name: string) => void
 }
 
@@ -190,7 +192,7 @@ function ConfirmTable({ rows, onOpen }: { readonly rows: readonly ConfirmRow[]; 
 export function ConfirmBlock({ panelId, rows, error, onOpen }: ConfirmProps) {
   useNumbered(panelId, 'reg-confirm', (rows ?? []).map((r, i) => ({ n: CONFIRM_START + i, label: r.name, run: () => onOpen(r.name) })))
   let body: ReactNode
-  if (error !== null) body = <p className="reg-msg down" role="alert">{fillCopy(CONFIRM.failed, { detail: error })}</p>
+  if (error !== null) body = <PanelFault error={error} failedText={CONFIRM.failed} className="reg-msg" />
   else if (rows === null) body = null
   else if (rows.length === 0) body = <p className="reg-msg">{CONFIRM.empty}</p>
   else body = <ConfirmTable rows={rows} onOpen={onOpen} />

@@ -1,6 +1,7 @@
-// Copy for the backend connection banner (roadmap #7). Nothing reads this yet: the banner itself is
-// wave 4 (W4-INT); the keys are written now so the state machine and copy stay in step. UK spelling,
-// no em or en dashes. `{name}` slots are filled by fillCopy() (copy/workspace.ts).
+// Copy for the backend connection strip (roadmap #7). ConnectionStrip reads the strip lines (mounted in
+// App since W4); noAnswer is also read by PanelFault, for a request the backend never answered. The
+// panel waiting and retry lines live in their own copy module, out of the shell. UK spelling, no em or
+// en dashes. `{name}` slots are filled by fillCopy() (copy/workspace.ts).
 
 export const CONNECTION = {
   lead: 'API DOWN',
@@ -9,9 +10,5 @@ export const CONNECTION = {
   checkNow: 'Check now',
   checkNowLabel: 'Check now whether the backend answers',
   back: 'Backend back at {time} ET; {n} requests retried.',
-  waiting: 'Waiting for the backend: {request} answered {answer}.',
-  waitingLoad: 'Waiting for the backend before loading.',
   noAnswer: 'no answer',
-  retry: 'Retry',
-  retryLabel: 'Retry this request',
 } as const

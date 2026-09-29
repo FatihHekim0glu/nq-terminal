@@ -170,6 +170,98 @@ describe('ChartA11y (UI_SPEC section 9: axe cannot see into canvas)', () => {
   })
 })
 
+describe('ChartA11y extraTables (LineStack context layer)', () => {
+  const WINDOWS: ChartTable = {
+    caption: 'Equity, marked windows',
+    columns: [
+      { key: 'window', label: 'Window' },
+      { key: 'days', label: 'Sessions', numeric: true },
+    ],
+    rows: [{ window: '2020 COVID crash', days: 23 }, { window: '2018 Q4 sell-off', days: 84 }],
+  }
+  const RUNS: ChartTable = {
+    caption: 'Equity, Regime runs',
+    columns: [{ key: 'state', label: 'State' }, { key: 'sessions', label: 'Sessions', numeric: true }],
+    rows: [{ state: 'low volatility', sessions: 120 }],
+  }
+
+  it('renders each extra table after the main one, in order, inside the same table view', () => {
+    renderChart({ tableView: true, onTableViewChange: () => {}, extraTables: [WINDOWS, RUNS] })
+    const tables = screen.getAllByRole('table')
+    expect(tables.map((t) => within(t).getByText(/./, { selector: 'caption' }).textContent)).toEqual([
+      'Equity, basis B', 'Equity, marked windows', 'Equity, Regime runs',
+    ])
+    const region = screen.getByRole('region')
+    for (const table of tables) expect(region.contains(table)).toBe(true)
+    // Document order: main, then windows, then runs.
+    expect(tables[0]!.compareDocumentPosition(tables[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tables[1]!.compareDocumentPosition(tables[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('keeps the region named by the main table and the main table\'s own rows', () => {
+    renderChart({ tableView: true, onTableViewChange: () => {}, extraTables: [WINDOWS] })
+    expect(screen.getByRole('region').getAttribute('aria-label')).toBe('Equity, basis B')
+    const main = screen.getByRole('table', { name: 'Equity, basis B' })
+    expect(within(main).getAllByRole('row')).toHaveLength(3)
+    expect(within(main).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Date', 'Equity'])
+  })
+
+  it('renders the extra table as a real table: caption, column headers, row headers, numeric cells', () => {
+    renderChart({ tableView: true, onTableViewChange: () => {}, extraTables: [WINDOWS] })
+    const extra = screen.getByRole('table', { name: 'Equity, marked windows' })
+    expect(within(extra).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Window', 'Sessions'])
+    expect(within(extra).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['2020 COVID crash', '2018 Q4 sell-off'])
+    const cells = within(extra).getAllByRole('cell')
+    expect(cells.map((cell) => cell.textContent)).toEqual(['23', '84'])
+    expect(cells[0]!.className).toContain('num')
+    expect(within(extra).getAllByRole('columnheader')[1]!.className).toContain('num')
+  })
+
+  it('shows the extra tables in the T view only, never under the chart', () => {
+    renderChart({ extraTables: [WINDOWS] })
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: CHART.tableToggle }))
+    expect(screen.getAllByRole('table')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: CHART.tableToggle }))
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByRole('img', { name: LABEL })).toBeTruthy()
+  })
+
+  // useId gives each render its own id, so the ids are masked before two renders are compared.
+  const markup = (container: HTMLElement) => container.innerHTML.replace(/(\bid|aria-describedby)="[^"]*"/g, '$1="_"')
+
+  it('leaves the DOM exactly as it was without them, whether absent or empty', () => {
+    const plain = renderChart({ tableView: true, onTableViewChange: () => {} })
+    const before = markup(plain.container)
+    expect(before).toContain('<table')
+    cleanup()
+    const undefinedExtras = renderChart({ tableView: true, onTableViewChange: () => {}, extraTables: undefined })
+    expect(markup(undefinedExtras.container)).toBe(before)
+    cleanup()
+    const empty = renderChart({ tableView: true, onTableViewChange: () => {}, extraTables: [] })
+    expect(markup(empty.container)).toBe(before)
+    expect(within(empty.container).getAllByRole('table')).toHaveLength(1)
+  })
+
+  it('leaves the chart view unchanged when extra tables are passed', () => {
+    const plain = renderChart()
+    const before = markup(plain.container)
+    expect(before).toContain('canvas')
+    cleanup()
+    const withExtras = renderChart({ extraTables: [WINDOWS, RUNS] })
+    expect(markup(withExtras.container)).toBe(before)
+  })
+
+  it('keeps T and the toggle working with extras present', () => {
+    renderChart({ extraTables: [WINDOWS] })
+    const img = screen.getByRole('img', { name: LABEL })
+    fireEvent.keyDown(img, { key: 't' })
+    expect(screen.getAllByRole('table')).toHaveLength(2)
+    fireEvent.keyDown(screen.getByRole('region'), { key: 't' })
+    expect(screen.queryByRole('table')).toBeNull()
+  })
+})
+
 describe('describeSeries: the aria-label summary', () => {
   it('names range, first, last, low and high with the unit', () => {
     const text = describeSeries({

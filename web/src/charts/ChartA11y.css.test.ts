@@ -43,3 +43,21 @@ describe('ChartA11y.css readout', () => {
     expect(rule(a11y, '.chart-a11y-readout')).toMatch(/padding:\s*0 5px/)
   })
 })
+
+describe('ChartA11y.css stacked tables', () => {
+  // The T view of a LineStack with a context layer stacks four tables (values, windows, regime runs,
+  // lanes) as direct siblings in .chart-a11y-tablewrap; without a gap the next caption abuts the last row.
+  const SIBLINGS = '.chart-a11y-table + .chart-a11y-table'
+  const declarations = (css: string | null) => (css ?? '').split(';').map((d) => d.trim().replace(/\s+/g, ' ')).filter((d) => d !== '')
+
+  it('puts one row of space between a table and the next one', () => {
+    expect(declarations(rule(a11y, SIBLINGS))).toEqual(['margin-top: var(--row-h)'])
+  })
+
+  it('takes the gap from a token: no pixel length and no colour literal in the rule', () => {
+    const body = rule(a11y, SIBLINGS)
+    expect(body, `no rule for ${SIBLINGS}`).not.toBeNull()
+    expect(body).not.toMatch(/\d+(?:\.\d+)?px/)
+    expect(body).not.toMatch(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\(/i)
+  })
+})

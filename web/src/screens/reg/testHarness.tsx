@@ -6,6 +6,7 @@ import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
+import { connectionStore, DOWN_AFTER, INITIAL_CONNECTION } from '../../api/connection'
 import { createApiQueryClient } from '../../api/queries'
 import { registerNumbered } from '../../chrome/NumberedActions'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
@@ -55,6 +56,14 @@ export function stubApi(override: Readonly<Record<string, number>> = {}): Seen[]
     return Promise.resolve(body === undefined ? json({ detail: 'not found' }, 404) : json(body))
   })
   return seen
+}
+
+/** Puts the connection store down, as chrome/PanelFault.test.tsx does; a test calls resetConnection() after. */
+export function backendDown(): void {
+  connectionStore.setState(
+    { ...INITIAL_CONNECTION, status: 'down', failures: DOWN_AFTER, downSince: Date.now(), lastCheckAt: Date.now() },
+    true,
+  )
 }
 
 export function mountScreen(node: ReactNode, actions: Partial<PanelActions> = {}) {

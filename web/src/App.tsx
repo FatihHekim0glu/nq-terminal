@@ -7,6 +7,10 @@
 // change or withdraw anything. The Workspace reports the layout owner (the screen whose layout the panels
 // are arranged under, and whether the viewer has edited it): the frame strip and the status line show it
 // with an edited mark, and RESET, UNDO and the <GO> preview row on the command line act on it.
+// The provider supervises the backend connection (roadmap 7): the API DOWN strip sits under the header and
+// the status line names the time the backend went quiet. The research-record watch (roadmap 16) reads its
+// six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
+// through useRecordWatch. The diff and its long copy load with the reader, never with this file.
 import { Suspense, lazy, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ApiProvider } from './api/ApiProvider'
 import CommandZone from './AppCommandBar'
@@ -16,6 +20,7 @@ import type { ParsedCommand } from './commands/parser'
 import type { ResolvedContext } from './commands/types'
 import type { CommandLineHandle } from './chrome/CommandLine'
 import { useTerminalKeys, type KeyWhere } from './chrome/CommandLine.keys'
+import ConnectionStrip from './chrome/ConnectionStrip'
 import { LiveEventTape } from './chrome/EventTape.live'
 import { toggleTape, useTapeOn } from './chrome/EventTape.store'
 import { FrameStrip, type ColourScheme } from './chrome/FrameStrip'
@@ -25,6 +30,8 @@ import { KeyMapOverlay } from './chrome/KeyToolbar.overlay'
 import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
+import { RecordWatchReader, useIdleReady, useRecordWatch, type RecordWatchView } from './chrome/RecordWatch.live'
+import { killState } from './chrome/StatusBar.format'
 import { LiveStatusBar, useHealthState } from './chrome/StatusBar.live'
 import type { FocusedPanel, ShownLayout, WorkspaceHandle } from './chrome/Workspace'
 import type { previewText } from './chrome/WorkspacePreview'
@@ -127,15 +134,15 @@ interface ChromeHeaderProps {
   readonly refs: ChromeRefs
   readonly env: ChromeEnv
   readonly actions: ChromeActions
+  readonly watch: RecordWatchView
 }
 
 /** The four chrome rows above the workspace. */
-function ChromeHeader({ shown, focused, panel, refs, env, actions }: ChromeHeaderProps) {
+function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: ChromeHeaderProps) {
   const tapeOn = useTapeOn()
   const scheme = useScheme()
   const health = useHealthState()
   const group = focused?.params.group ?? null
-  const kill = health.status === 'ok' ? (health.data.kill_switch_on ? 'on' : 'off') : 'unknown'
   const nav = focused ? { code: focused.params.code, group: focused.params.group, context: focused.context } : null
   const openNew = () => {
     refs.cmd.current?.focus()
@@ -159,7 +166,7 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions }: ChromeHeade
         onReset={() => actions.runAndFocus('RESET')}
       />
       <KeyToolbar onKey={(key) => runKey(actions, env, key)} />
-      <NavToolbar focused={nav} kill={kill} onAction={(a) => runNav(actions, env, a)} />
+      <NavToolbar focused={nav} kill={killState(health)} onAction={(a) => runNav(actions, env, a)} />
       <CommandZone
         commandRef={refs.cmd}
         focusedGroup={group}
@@ -173,6 +180,8 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions }: ChromeHeade
         onBack={() => actions.back(false)}
         onMenu={() => refs.workspace.current?.openRelatedMenu?.(panel.id ?? undefined) ?? false}
         focusedCode={() => focused?.params.code ?? null}
+        watchMenu={() => watch.menu()}
+        onWatchSeen={() => watch.accept()}
         {...layoutCallbacks(refs, shown.code)}
       />
     </header>
@@ -188,6 +197,10 @@ function Terminal() {
   // the last command ran in, else panel 1 (look spec 4.2, 4.3).
   const panel = { id: focused?.panelId ?? null, number: focused?.number ?? null }
   const tapeOn = useTapeOn()
+  // The six reads of the record watch start at the browser's first idle moment (at the latest 4 s), so they
+  // never compete with HOME's first render. The reader renders nothing; its view is read with useRecordWatch.
+  const idle = useIdleReady()
+  const watch = useRecordWatch()
   const refs: ChromeRefs = {
     cmd: useRef<CommandLineHandle>(null),
     workspace: useRef<ChromeWorkspaceHandle>(null),
@@ -203,20 +216,22 @@ function Terminal() {
   return (
     <div className="nqt-frame">
       <h1 className="sr-only">{CHROME.appTitle}</h1>
-      <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} env={env} actions={actions} />
+      <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} env={env} actions={actions} watch={watch} />
+      <ConnectionStrip />
       <Suspense fallback={<WorkspaceLoading />}>
         <Workspace ref={refs.workspace} onLayoutChange={setShown} onLayoutDropped={(code) => postMessage(fillCopy(LAYOUT.dropped, { screen: code }))} onFocusedPanelChange={setFocused} />
       </Suspense>
       {tapeOn ? <LiveEventTape /> : null}
-      <LiveStatusBar screen={shown.code} edited={shown.edited} />
+      <LiveStatusBar screen={shown.code} edited={shown.edited} watch={watch} />
       {keymapOpen ? <KeyMapOverlay onClose={() => setKeymapOpen(false)} /> : null}
+      {idle ? <RecordWatchReader /> : null}
     </div>
   )
 }
 
 export default function App() {
   return (
-    <ApiProvider>
+    <ApiProvider supervise>
       <Terminal />
     </ApiProvider>
   )

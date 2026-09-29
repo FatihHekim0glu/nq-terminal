@@ -267,6 +267,11 @@
   --dist-curve: #F79400;
   --roll-vol: #00B5F7;
   --zero-line: #848484;
+  /* The regime strip under a LineStack time axis: one blue ramp, low to high, told apart by lightness
+     alone (adjacent steps 1.8:1 or more, each 3:1 on --bg), so the CVD blocks below leave it as it is. */
+  --regime-low: #3A6EA5;
+  --regime-mid: #5FA8E8;
+  --regime-high: #CFE8FF;
 
   /* Values named in sections 4 to 7, tokenised here so no component writes a literal. */
   --menu-border: #BABABA;       /* 4.7 menu box edge */

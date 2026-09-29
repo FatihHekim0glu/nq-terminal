@@ -59,6 +59,9 @@
   font-size: var(--fs-data);
   line-height: var(--row-h);
 }
+/* Tables stacked in the T view (values, windows, regime runs, lanes) are direct siblings in the wrapper:
+   one row of space keeps a caption from touching the last row above it. */
+.chart-a11y-table + .chart-a11y-table { margin-top: var(--row-h); }
 .chart-a11y-table caption { text-align: left; color: var(--data); padding: 0 5px; }
 .chart-a11y-table thead th {
   position: sticky;

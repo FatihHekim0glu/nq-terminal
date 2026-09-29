@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
-import { StatusBar, type HealthState } from './StatusBar'
+import { WATCH } from '../copy/watch'
+import { emptyDiff, type WatchDiff, type WatchItem } from '../state/recordWatch.schema'
+import type { RecordWatchView } from './RecordWatch.live'
+import { StatusBar, type StatusBarProps, type HealthState } from './StatusBar'
 import statusCss from './StatusBar.css?raw'
 import { dataWindow, dayBefore } from './StatusBar.format'
 
@@ -160,6 +163,123 @@ describe('StatusBar: the 22px status line (spec 4.10, decision D7)', () => {
   it('fetches nothing itself', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
     renderBar({ status: 'ok', data: HEALTH })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+// 2026-09-29 14:05:07 UTC is 10:05:07 in New York (daylight saving time).
+const DOWN_SINCE = Date.UTC(2026, 8, 29, 14, 5, 7)
+
+function renderWith(props: Partial<StatusBarProps>) {
+  render(<StatusBar screen="HOME" contexts={CONTEXTS} health={{ status: 'error' }} {...props} />)
+  return screen.getByRole('contentinfo', { name: STATUS_BAR.label })
+}
+
+describe('StatusBar: the connection state (roadmap 7)', () => {
+  it('names when the backend went quiet when the connection is down, instead of HEALTH unavailable', () => {
+    const bar = renderWith({ connection: { status: 'down', downSince: DOWN_SINCE } })
+    // The segment opens with a screen reader only full stop, so the visible words are matched at its end.
+    const down = seg(bar, /^\. API DOWN since 10:05:07 ET$/)
+    expect(down).toBeTruthy()
+    expect(down?.className).toMatch(/\bwarn\b/)
+    expect(down?.className).toMatch(/\bkeep\b/)
+    expect(within(bar).queryByText(STATUS_BAR.healthDown)).toBeNull()
+    expect(seg(bar, 'KILL unknown')).toBeTruthy()
+  })
+
+  it('reads the down text from the copy, with the Eastern time of downSince', () => {
+    const bar = renderWith({ connection: { status: 'down', downSince: Date.UTC(2026, 0, 15, 20, 0, 0) } })
+    expect(within(bar).getByText(STATUS_BAR.apiDown.replace('{value}', '15:00:00'))).toBeTruthy()
+  })
+
+  it('announces the down sentence with the kill switch in the same live region', () => {
+    const bar = renderWith({ connection: { status: 'down', downSince: DOWN_SINCE } })
+    expect(within(bar).getByRole('status').textContent).toBe('KILL unknown. API DOWN since 10:05:07 ET')
+  })
+
+  it('keeps HEALTH unavailable while the connection is only degraded, unknown or ok', () => {
+    for (const connection of [
+      { status: 'degraded', downSince: null },
+      { status: 'unknown', downSince: null },
+      { status: 'ok', downSince: null },
+    ] as const) {
+      const bar = renderWith({ connection })
+      expect(within(bar).getByText(STATUS_BAR.healthDown)).toBeTruthy()
+      expect(bar.textContent).not.toContain('API DOWN')
+      cleanup()
+    }
+  })
+
+  it('keeps HEALTH unavailable when no connection state is passed', () => {
+    const bar = renderWith({})
+    expect(within(bar).getByText(STATUS_BAR.healthDown)).toBeTruthy()
+    expect(bar.textContent).not.toContain('API DOWN')
+  })
+
+  it('does not print a made up time when the connection is down without a start time', () => {
+    const bar = renderWith({ connection: { status: 'down', downSince: null } })
+    expect(within(bar).getByText(STATUS_BAR.healthDown)).toBeTruthy()
+    expect(bar.textContent).not.toContain('API DOWN')
+  })
+
+  it('says nothing about the connection while the health answer is good', () => {
+    const bar = renderWith({ health: { status: 'ok', data: HEALTH }, connection: { status: 'ok', downSince: null } })
+    expect(bar.textContent).not.toContain('API DOWN')
+    expect(within(bar).queryByText(STATUS_BAR.healthDown)).toBeNull()
+  })
+})
+
+const ITEM: WatchItem = { source: 'registry', key: 'volmanaged_v0', kind: 'changed', field: 'p', before: 0.01, after: 0.02, line: 'volmanaged_v0 DES' }
+const NEW_ITEM: WatchItem = { source: 'runs', key: 'run_1', kind: 'appended', field: '', before: null, after: null, line: 'run_1 RUN' }
+
+function watchView(state: RecordWatchView['state'], diff: WatchDiff = emptyDiff(0), over: Partial<RecordWatchView> = {}): RecordWatchView {
+  return { state, diff, since: '20 Sept, 10:00', menu: () => null, accept: () => null, ...over }
+}
+
+describe('StatusBar: the WATCH segment (roadmap 16)', () => {
+  const texts = (bar: HTMLElement) => Array.from(bar.querySelectorAll<HTMLElement>('.seg')).map((el) => el.textContent ?? '')
+
+  it('shows nothing without a watch, and nothing while the six reads are pending', () => {
+    expect(texts(renderWith({})).some((t) => t.startsWith(WATCH.key))).toBe(false)
+    cleanup()
+    expect(texts(renderWith({ watch: watchView('waiting') })).some((t) => t.startsWith(WATCH.key))).toBe(false)
+  })
+
+  it('reads WATCH from now on the first visit and WATCH no change on a quiet later one', () => {
+    expect(seg(renderWith({ watch: watchView('baseline') }), 'WATCH from now')).toBeTruthy()
+    cleanup()
+    const clean = seg(renderWith({ watch: watchView('clean') }), 'WATCH no change')
+    expect(clean).toBeTruthy()
+    expect(clean?.className).not.toMatch(/\bwarn\b/)
+  })
+
+  it('counts new and moved records without the warning colour', () => {
+    const diff: WatchDiff = { ...emptyDiff(0), appended: [NEW_ITEM, { ...NEW_ITEM, key: 'run_2' }], updated: [{ ...NEW_ITEM, key: 'run_3', kind: 'updated' }] }
+    const news = seg(renderWith({ watch: watchView('news', diff) }), 'WATCH 3 new')
+    expect(news).toBeTruthy()
+    expect(news?.className).not.toMatch(/\bwarn\b/)
+  })
+
+  it('turns amber and says why in words when a record that should not change was rewritten', () => {
+    const diff: WatchDiff = { ...emptyDiff(0), changed: [ITEM] }
+    const bar = renderWith({ watch: watchView('changed', diff, { title: 'registry volmanaged_v0: p was 0.01, now 0.02' }) })
+    const changed = seg(bar, /^WATCH 1 changed/)
+    expect(changed?.className).toMatch(/\bwarn\b/)
+    expect(changed?.getAttribute('title')).toBe('registry volmanaged_v0: p was 0.01, now 0.02')
+    expect(changed?.querySelector('.sr-only')?.textContent).toContain(WATCH.changedNote)
+  })
+
+  it('sits right after the context segments and before the DATA window', () => {
+    const bar = renderWith({ health: { status: 'ok', data: HEALTH }, watch: watchView('clean') })
+    const all = texts(bar)
+    const at = all.indexOf('WATCH no change')
+    expect(all.slice(at - 3, at)).toEqual(['A NQ1 Index', 'B rebal_v0', 'C -'])
+    expect(all[at + 1]).toBe('DATA 2010-01-01..2021-12-31')
+  })
+
+  it('fetches nothing itself', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    renderWith({ watch: watchView('clean') })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

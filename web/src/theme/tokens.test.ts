@@ -157,6 +157,10 @@ const COLOUR_TOKENS: Record<string, string> = {
   'dist-curve': '#F79400',
   'roll-vol': '#00B5F7',
   'zero-line': '#848484',
+  // Regime strip (LineStack context layer): one blue ramp, low to high volatility
+  'regime-low': '#3A6EA5',
+  'regime-mid': '#5FA8E8',
+  'regime-high': '#CFE8FF',
 }
 
 // Aliases the spec defines by reference, not by value.
@@ -255,6 +259,13 @@ describe('tokens.css: CVD themes (section 2.3)', () => {
     expect(t['c-up']).toBe('#51EE6C')
     expect(t.data).toBe('#FFA028')
     expect([t['bar-pos'], t['bar-neg']]).toEqual(['#00851C', '#C31834'])
+  })
+
+  it('keeps the regime ramp the same blue in both CVD themes', () => {
+    for (const cvd of ['deut', 'prot'] as const) {
+      const t = readTokens(tokensCss, cvd)
+      expect([t['regime-low'], t['regime-mid'], t['regime-high']], cvd).toEqual(['#3A6EA5', '#5FA8E8', '#CFE8FF'])
+    }
   })
 })
 

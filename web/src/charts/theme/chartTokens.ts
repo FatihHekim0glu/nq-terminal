@@ -57,6 +57,10 @@ export const CHART_TOKENS = {
   distCurve: { css: '--dist-curve', value: '#F79400' },
   rollVol: { css: '--roll-vol', value: '#00B5F7' },
   zeroLine: { css: '--zero-line', value: '#848484' },
+  // LineStack's regime strip: one blue ramp, low to high (the CVD themes leave it alone).
+  regimeLow: { css: '--regime-low', value: '#3A6EA5' },
+  regimeMid: { css: '--regime-mid', value: '#5FA8E8' },
+  regimeHigh: { css: '--regime-high', value: '#CFE8FF' },
   // 6.3: pane separator hover in lightweight-charts (resize is off, so it rarely shows).
   chartSplitHover: { css: '--chart-split-hover', value: '#626262' },
   // 6.1: floating Track | Table | Zoom toolbar.
@@ -101,13 +105,24 @@ export interface StyleSource {
 }
 
 const HEX6 = /^#[0-9A-F]{6}$/
+const HEX3 = /^#([0-9A-F])([0-9A-F])([0-9A-F])$/
 const PX = /^(\d+(?:\.\d+)?)px$/
 
 const ALL_TOKENS: Readonly<Record<ChartColorKey, TokenDef>> = CHART_TOKENS
 
+/**
+ * A custom property's hex colour as `#RRGGBB`, or null. A production build minifies the stylesheet, so
+ * `#3399FF` reaches getComputedStyle as `#39f` (each digit doubles): both spellings are read.
+ */
+function expandHex(raw: string): string | null {
+  if (HEX6.test(raw)) return raw
+  const short = HEX3.exec(raw)
+  return short ? `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}` : null
+}
+
 function readColour(source: StyleSource | null, def: TokenDef): string {
   const raw = source?.getPropertyValue(def.css).trim().toUpperCase() ?? ''
-  return HEX6.test(raw) ? raw : def.value
+  return expandHex(raw) ?? def.value
 }
 
 function readFont(source: StyleSource | null): ChartTokens['font'] {
@@ -123,7 +138,7 @@ function rootStyle(): StyleSource | null {
 
 /**
  * The chart tokens as the page currently resolves them. With no DOM (tests, or before mount) and for
- * any value that is not a 6-digit hex, the spec default is used.
+ * any value that is not a 6-digit or 3-digit hex, the spec default is used.
  */
 export function readChartTokens(source: StyleSource | null = rootStyle()): ChartTokens {
   const entries = (Object.keys(ALL_TOKENS) as ChartColorKey[]).map((k) => [k, readColour(source, ALL_TOKENS[k])] as const)

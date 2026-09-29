@@ -13,6 +13,7 @@ import type { Schemas } from '../../api/types'
 import { PScatter } from '../../charts/echarts/PScatter'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
+import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { CONFIRM, MT } from '../../copy/reg'
@@ -147,7 +148,7 @@ export default function MtScreen(_props: ScreenProps) {
         onSelect={(id) => setView(id as MtView)}
       />
       {mt.isError ? (
-        <p className="reg-msg down" role="alert">{fillCopy(MT.failed, { detail: mt.error.detail })}</p>
+        <PanelFault error={mt.error} failedText={MT.failed} className="reg-msg" />
       ) : mt.data ? (
         <div id={viewId} role="tabpanel" className="mt-view" aria-label={`${MT_VIEW_START + MT_VIEWS.indexOf(view)}) ${MT_TAB_LABEL[view]}`}>
           {view === 'family' ? (
@@ -160,7 +161,7 @@ export default function MtScreen(_props: ScreenProps) {
           )}
         </div>
       ) : (
-        <p className="reg-msg" role="status">{MT.loading}</p>
+        <PanelLoading text={MT.loading} className="reg-msg" />
       )}
     </div>
   )

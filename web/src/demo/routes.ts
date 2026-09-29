@@ -10,6 +10,7 @@ import {
   hypothesisKey, runKey,
 } from './data/analytics'
 import { OPENINGS, oosLog } from './data/audit'
+import { runComparison } from './data/compare'
 import { LIVE_PERFORMANCE, LIVE_ROUTES, demoLiveStatus, forBookJournal, journalPage } from './data/live'
 import { INSTRUMENTS, bars, catalog, marketUniverse, pairCorrelation, realisedVol, twoDay } from './data/market'
 import {
@@ -69,7 +70,7 @@ export const DEMO_ROUTES: DemoRoutes = {
   // Runs and the ledger
   '/api/runs': () => served(RUNS),
   '/api/runs/stats': ({ query }) => compareStats(query.get('ids')),
-  '/api/runs/compare': () => NOT_IN_DEMO,
+  '/api/runs/compare': ({ query }) => runComparison(query.get('ids')),
   '/api/runs/{run_id}': ({ params }) => servedOr(RUN_DETAILS.get(params.run_id)),
   '/api/runs/{run_id}/equity': () => NOT_IN_DEMO,
   '/api/runs/{run_id}/trades': ({ params, query }) => repage(RUN_TRADES.get(params.run_id), query),

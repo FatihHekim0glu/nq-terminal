@@ -194,7 +194,7 @@ export default function RegScreen(props: ScreenProps) {
       <ConfirmBlock
         panelId={actions.panelId}
         rows={confirmRows}
-        error={confirmations.isError ? confirmations.error.detail : null}
+        error={confirmations.isError ? confirmations.error : null}
         onOpen={openDes}
       />
     </>
