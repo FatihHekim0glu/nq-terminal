@@ -4,7 +4,9 @@
 // the spec's hypothesis and frozen pass bar verbatim (two lines, More opens them), and the selected page.
 // A registered risk overlay carries [OVERLAY] beside its verdict. `98) Report` saves the description as
 // Markdown. Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
+import { useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useRef, useState } from 'react'
+import { apiQueryKey } from '../../api/queryKey'
 import { useHypothesis } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { saveText } from '../../chrome/download'
@@ -12,14 +14,17 @@ import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
-import { usePanelSource } from '../../chrome/panelSources'
+import { usePanelSource, type PanelSource } from '../../chrome/panelSources'
 import TabStrip from '../../chrome/TabStrip'
 import type { PanelLink } from '../../state/linkGroups'
 import { DES, DES_REPORT } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
-import DesChecks from './DesChecks'
+import type { DossierInput } from '../../export/dossier/types'
+import type { Analytics } from '../tear/tearKpis'
+import { defaultCost } from '../tear/tearQueries'
 import DesCosts from './DesCosts'
 import DesLinks from './DesLinks'
+import DesPassChecks from './DesPassChecks'
 import { DesBar, LoadError, ShaChecks, Status, Tag, VerdictBadge, roving } from './DesParts'
 import DesProfile from './DesProfile'
 import DesRobustness from './DesRobustness'
@@ -89,7 +94,7 @@ function useDesNumbers(detail: HypothesisDetail | undefined, setTab: (tab: DesTa
 }
 
 function Page({ tab, detail, link, onTab }: { readonly tab: DesTab; readonly detail: HypothesisDetail; readonly link: PanelLink; readonly onTab: (tab: DesTab) => void }) {
-  if (tab === 'checks') return <DesChecks detail={detail} />
+  if (tab === 'checks') return <DesPassChecks detail={detail} />
   if (tab === 'costs') return <DesCosts detail={detail} />
   if (tab === 'links') return <DesLinks detail={detail} />
   if (tab === 'robustness') return <DesRobustness detail={detail} />
@@ -118,6 +123,22 @@ export default function HypothesisDes({ name, link }: HypothesisDesProps) {
     const provenance = detail ? desTabProvenance(detail, tab) : null
     return provenance ? { provenance } : null
   }, [detail, tab]))
+  // What the evidence pack is made from (roadmap 15 part 2): the description on screen and, when the browser
+  // already holds it, the hypothesis tear sheet, read from the cache by the exact key the tear sheet asks with
+  // (its default cost). The cache is read when the pack is made, so a tear sheet opened after DES is in it;
+  // nothing is ever fetched. Registered apart from the provenance above: the dossier is for the whole panel,
+  // while the provenance is what the shown tab's chart draws, and neither may hide the other.
+  const client = useQueryClient()
+  const cost = detail ? defaultCost(detail.card.series_costs) : null
+  usePanelSource(useMemo<PanelSource | null>(() => {
+    if (!detail) return null
+    const dossier = (): DossierInput => ({
+      kind: 'des',
+      detail,
+      analytics: client.getQueryData<Analytics>(apiQueryKey('/api/analytics/hypothesis/{name}', { path: { name }, query: cost === null ? {} : { cost } })) ?? null,
+    })
+    return { provenance: null, dossier }
+  }, [detail, client, name, cost]))
   return (
     <div className="des" ref={ref} aria-label={fillCopy(DES.bodyLabel, { name })} role="group">
       <DesBar title={DES.title} page={page} current={name} onReport={detail ? () => report(detail) : undefined} />

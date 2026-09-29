@@ -12,7 +12,7 @@ import { useRun } from '../../api/queries'
 import type { ApiError } from '../../api/client'
 import { useExportSource } from '../../chrome/exportSource'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
-import { usePanelSource } from '../../chrome/panelSources'
+import { usePanelSource, type PanelSource } from '../../chrome/panelSources'
 import { RUN_TAGS } from '../../copy/runs'
 import { TEAR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
@@ -149,11 +149,16 @@ function Loaded({ target, tab, link, data, card, extended, extendedError, honest
   const bootstrap = tab === 'EQ' && bootstrapPossible(data.n)
   const hasExtended = tab === 'RET' || tab === 'RR' || ((tab === 'EQ' || tab === 'DD') && extended !== null)
   const honestyKey = honestyTags.join('\n')
-  usePanelSource(useMemo(() => {
+  // The same registration carries the dossier the evidence pack is made from (roadmap 15 part 2): the answers
+  // held here, handed over when the pack is made, so nothing is asked or computed now.
+  usePanelSource(useMemo<PanelSource>(() => {
     const sources = tearSources({ kind, name }, tab, data.context, { bootstrap, extended: hasExtended })
     const extraTags = honestyKey === '' ? [] : honestyKey.split('\n')
-    return { provenance: tearProvenance(data, { kind, name }, specSha, { extraTags, alsoSources: sources.slice(1) }) }
-  }, [data, kind, name, specSha, tab, bootstrap, hasExtended, honestyKey]))
+    return {
+      provenance: tearProvenance(data, { kind, name }, specSha, { extraTags, alsoSources: sources.slice(1) }),
+      dossier: () => ({ kind: 'tear', target: { kind, name }, tab, analytics: data, card }),
+    }
+  }, [data, card, kind, name, specSha, tab, bootstrap, hasExtended, honestyKey]))
   return (
     <div className="tear-view">
       <Kpis data={data} />

@@ -1,19 +1,24 @@
-// The panel's image export (roadmap 15): the Options rows "Grab as image" and "Copy image", and the runner
-// behind them and behind GRAB <GO>. The Workspace is the one importer of this file, so it loads with the
+// The panel's export (roadmap 15): the Options rows "Grab as image" and "Copy image", and the runner
+// behind them and behind GRAB <GO>; and, for a panel whose screen registered a dossier, the row "Evidence
+// pack (HTML)" (roadmap 15 part 2). The Workspace is the one importer of this file, so it loads with the
 // Workspace chunk and never with the first paint. The grab itself (src/export/grab/run.ts, with its
-// compose and caption code) is reached only through the dynamic import below, never a static one. Copy
-// image needs the clipboard write to start inside the click (Safari refuses it after an await), and the
-// grab is synchronous up to that write, so the chunk is warmed when the Options rows are built (the menu
-// opening) and a click on a warm runner calls it at once. Nothing here makes a request: the health answer
-// is read from the cache the status line already fills.
+// compose and caption code) and the pack (src/export/pack/run.ts, with the dossier model and the HTML
+// writer) are reached only through the dynamic imports below, never a static one. Copy image needs the
+// clipboard write to start inside the click (Safari refuses it after an await), and the grab is
+// synchronous up to that write, so its chunk is warmed when the Options rows are built (the menu opening)
+// and a click on a warm runner calls it at once; the pack chunk is warmed the same way, so its download
+// also starts inside the click. Nothing here makes a request: the health answer is read from the cache
+// the status line already fills.
 import type { QueryClient } from '@tanstack/react-query'
 import { apiQueryKey } from '../api/queryKey'
 import type { SuccessOf } from '../api/types'
+import { DOSSIER } from '../copy/dossier'
 import { GRAB } from '../copy/grab'
 import { fillCopy } from '../copy/workspace'
 import type { HealthLite } from '../export/grab/run'
 import type { MenuEntry } from './FunctionBar.menu'
 import { postMessage } from './MessageLine.store'
+import { panelDossier } from './panelSources'
 
 /** The panel a grab is for: its id, its mnemonic, its number in reading order (null when none) and its link group. */
 export interface PanelExportTarget {
@@ -44,34 +49,74 @@ function reason(error: unknown): string {
   return error instanceof Error && error.message.trim() !== '' ? error.message.trim().replace(/\.+$/, '') : String(error)
 }
 
-type GrabRunner = typeof import('../export/grab/run')
-
-/** The runner once its chunk has loaded: a warm one is called inside the click, with nothing awaited. */
-let runner: GrabRunner | null = null
-/** The load in flight or done; cleared when it fails, so the next attempt imports again. */
-let loading: Promise<GrabRunner> | null = null
-
-function loadGrabRunner(): Promise<GrabRunner> {
-  if (loading === null) {
-    const attempt: Promise<GrabRunner> = import('../export/grab/run').then(
-      (m) => {
-        runner = m
-        return m
-      },
-      (error: unknown) => {
-        if (loading === attempt) loading = null
-        throw error
-      },
-    )
-    loading = attempt
-  }
-  return loading
+/** A lazily imported runner: warm once its chunk has loaded, so a click can call it at once. */
+interface LazyRunner<T> {
+  /** The module once its chunk has loaded, else null. */
+  current(): T | null
+  /** The load in flight or done; cleared when it fails, so the next attempt imports again. */
+  load(): Promise<T>
+  /** Forgets the loaded module and any load in flight (tests). */
+  reset(): void
 }
 
-/** Forgets the loaded runner and any load in flight (tests). */
+function lazyRunner<T>(importer: () => Promise<T>): LazyRunner<T> {
+  let loaded: T | null = null
+  let loading: Promise<T> | null = null
+  return {
+    current: () => loaded,
+    load() {
+      if (loading === null) {
+        const attempt: Promise<T> = importer().then(
+          (m) => {
+            loaded = m
+            return m
+          },
+          (error: unknown) => {
+            if (loading === attempt) loading = null
+            throw error
+          },
+        )
+        loading = attempt
+      }
+      return loading
+    },
+    reset() {
+      loaded = null
+      loading = null
+    },
+  }
+}
+
+const grabRunner = lazyRunner(() => import('../export/grab/run'))
+const packRunner = lazyRunner(() => import('../export/pack/run'))
+
+/** Forgets the loaded grab runner and any load in flight (tests). */
 export function resetGrabRunner(): void {
-  runner = null
-  loading = null
+  grabRunner.reset()
+}
+
+/** Forgets the loaded pack runner and any load in flight (tests). */
+export function resetPackRunner(): void {
+  packRunner.reset()
+}
+
+/**
+ * Calls `call` on the runner and says on the message line (with `failed`) when the chunk cannot load or the
+ * runner breaks. Resolves when done and never rejects. With the runner already loaded, `call` runs before
+ * this function returns.
+ */
+function runWith<T>(lazy: LazyRunner<T>, call: (runner: T) => Promise<unknown>, failed: string): Promise<void> {
+  let pending: Promise<unknown>
+  try {
+    const warm = lazy.current()
+    pending = warm ? call(warm) : lazy.load().then(call)
+  } catch (error) {
+    pending = Promise.reject(error)
+  }
+  return pending.then(
+    () => undefined,
+    (error: unknown) => postMessage(fillCopy(failed, { detail: reason(error) }), 'error'),
+  )
 }
 
 /**
@@ -81,16 +126,17 @@ export function resetGrabRunner(): void {
  */
 export function runGrab(target: PanelExportTarget, health: HealthLite | null, where: GrabTarget): Promise<void> {
   const request = { ...target, health, target: where }
-  let pending: Promise<unknown>
-  try {
-    pending = runner ? runner.grabPanel(request) : loadGrabRunner().then((m) => m.grabPanel(request))
-  } catch (error) {
-    pending = Promise.reject(error)
-  }
-  return pending.then(
-    () => undefined,
-    (error: unknown) => postMessage(fillCopy(GRAB.failed, { detail: reason(error) }), 'error'),
-  )
+  return runWith(grabRunner, (m) => m.grabPanel(request), GRAB.failed)
+}
+
+/**
+ * Saves the panel's evidence pack through the lazy runner (which says what happened on the message line, as
+ * this does when the chunk cannot load or the runner breaks). Resolves when done and never rejects. With the
+ * runner already loaded, packPanel is called before this function returns.
+ */
+export function runPack(target: PanelExportTarget, health: HealthLite | null): Promise<void> {
+  const request = { panelId: target.panelId, health }
+  return runWith(packRunner, (m) => m.packPanel(request), DOSSIER.failed)
 }
 
 /** Copy image needs a clipboard that takes images; a browser without one shows only Grab as image. */
@@ -99,15 +145,20 @@ function canCopyImage(): boolean {
 }
 
 /**
- * The Options rows for one panel: Grab as image, and Copy image where the browser can. `health` is read when
- * a row is chosen, so the caption carries the server clock as it is then. Where Copy image is offered, the
- * grab chunk is warmed now (a failure is silent here; the click that follows loads it again and reports).
+ * The Options rows for one panel: Grab as image, Copy image where the browser can, and Evidence pack (HTML)
+ * where the panel's screen registered a dossier. `health` is read when a row is chosen, so the caption
+ * carries the server clock as it is then. Where Copy image or the pack is offered, its chunk is warmed now
+ * (a failure is silent here; the click that follows loads it again and reports).
  */
 export function panelExportEntries(target: PanelExportTarget, health: () => HealthLite | null): MenuEntry[] {
   const entries: MenuEntry[] = [{ label: GRAB.menuImage, onSelect: () => void runGrab(target, health(), 'file') }]
   if (canCopyImage()) {
     entries.push({ label: GRAB.menuCopy, onSelect: () => void runGrab(target, health(), 'clipboard') })
-    void loadGrabRunner().catch(() => undefined)
+    void grabRunner.load().catch(() => undefined)
+  }
+  if (panelDossier(target.panelId) !== null) {
+    entries.push({ label: DOSSIER.menuPack, onSelect: () => void runPack(target, health()) })
+    void packRunner.load().catch(() => undefined)
   }
   return entries
 }

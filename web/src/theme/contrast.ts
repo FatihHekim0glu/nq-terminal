@@ -183,13 +183,18 @@ const GRAPHICS: readonly ContrastPair[] = [
   { fg: 'text', bg: 'field-btn', min: COMPONENT_MIN },
   ...on(['chart-s1', 'chart-axis', 'accent-2', 'chart-vol', 'candle-up', 'candle-dn', 'bar-pos', 'bar-neg',
     'last-line', 'roll-vol', 'dist-curve', 'zero-line', 'regime-low', 'regime-mid', 'regime-high'], ['bg'], COMPONENT_MIN),
+  { fg: 'print-rule', bg: 'print-bg', min: COMPONENT_MIN },
 ]
+
+/** The print tokens (the evidence pack and the print dossier): text on the paper; the rule is a graphic. */
+const PRINT_TEXT = ['print-fg', 'print-muted', 'print-label'] as const
 
 function defaultPairs(): ContrastPair[] {
   return [
     ...on(['text', 'data', 'muted', 'white', 'c-up', 'link'], SURFACES, TEXT_MIN),
     ...on(['c-down'], DOWN_SURFACES, TEXT_MIN),
     ...on(SECTOR_AND_GROUP, ['bg', 'raised'], TEXT_MIN),
+    ...on(PRINT_TEXT, ['print-bg'], TEXT_MIN),
     ...on(['black'], BLACK_LABEL_FILLS, TEXT_MIN),
     ...on(['white'], WHITE_LABEL_FILLS, TEXT_MIN),
     ...COMPONENT_TEXT.map(([fg, bg]) => ({ fg, bg, min: TEXT_MIN })),

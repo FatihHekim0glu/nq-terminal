@@ -146,6 +146,44 @@ describe('tokens.css passes section 8.2', () => {
   })
 })
 
+describe('print tokens (the evidence pack and the print dossier)', () => {
+  it('checks the print text tokens on the print paper at 4.5:1', () => {
+    for (const fg of ['print-fg', 'print-muted', 'print-label']) {
+      expect(hasPair(fg, 'print-bg', TEXT_MIN), `${fg} on print-bg`).toBe(true)
+    }
+  })
+
+  it('checks the print rule on the print paper at 3:1, as a graphic', () => {
+    expect(hasPair('print-rule', 'print-bg', COMPONENT_MIN)).toBe(true)
+    expect(hasPair('print-rule', 'print-bg', TEXT_MIN)).toBe(false)
+  })
+
+  it('reads the ratios the palette was chosen for', () => {
+    expect(ratioOf('print-fg', 'print-bg')).toBeCloseTo(21, 10)
+    expect(ratioOf('print-muted', 'print-bg')).toBeCloseTo(8.45, 2)
+    expect(ratioOf('print-label', 'print-bg')).toBeCloseTo(6.8, 1)
+    expect(ratioOf('print-rule', 'print-bg')).toBeCloseTo(3.36, 2)
+  })
+
+  it('passes in the default theme and, being theme independent, in both colour-vision themes', () => {
+    const pairs = CONTRAST_PAIRS.filter((p) => p.bg === 'print-bg')
+    expect(pairs).toHaveLength(4)
+    for (const cvd of [undefined, 'deut', 'prot'] as const) {
+      expect(auditContrast(readTokens(tokensCss, cvd), pairs), cvd ?? 'default').toEqual([])
+    }
+  })
+
+  it('fails a print label that sinks under 4.5:1 (a light amber #C98A2E is 2.9)', () => {
+    const broken = readTokens(swapToken(tokensCss, 'print-label', '#C98A2E'))
+    expect(auditContrast(broken)).toContainEqual(expect.objectContaining({ fg: 'print-label', bg: 'print-bg', min: TEXT_MIN }))
+  })
+
+  it('fails a print rule that sinks under 3:1 (a pale grey #BFBFBF is 1.8)', () => {
+    const broken = readTokens(swapToken(tokensCss, 'print-rule', '#BFBFBF'))
+    expect(auditContrast(broken)).toContainEqual(expect.objectContaining({ fg: 'print-rule', bg: 'print-bg', min: COMPONENT_MIN }))
+  })
+})
+
 describe('SEAG heat ramp (MRET): black or white text passes at every one of 101 steps', () => {
   const ramps = [
     { name: 'green', from: 'mret-up-floor', to: 'mret-up-max', worst: 4.6 },

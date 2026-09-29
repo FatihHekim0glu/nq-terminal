@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
-// The Options rows and the runner behind GRAB <GO> (roadmap 15). panelExport.ts is what the Workspace
-// imports; the grab itself (src/export/grab/run.ts) is reached only through a dynamic import, mocked here.
+// The Options rows and the runner behind GRAB <GO> (roadmap 15), and the Evidence pack row (roadmap 15 part 2).
+// panelExport.ts is what the Workspace imports; the grab itself (src/export/grab/run.ts) and the pack
+// (src/export/pack/run.ts) are reached only through dynamic imports, mocked here.
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiQueryKey } from '../api/queryKey'
+import { DOSSIER } from '../copy/dossier'
 import { GRAB } from '../copy/grab'
 import { fillCopy } from '../copy/workspace'
 import type { GrabRequest } from '../export/grab/run'
+import type { PackRequest } from '../export/pack/run'
 import { resetMessage, useMessage } from './MessageLine.store'
-import { panelExportEntries, panelTarget, readHealth, resetGrabRunner, runGrab, type PanelExportTarget } from './panelExport'
+import { panelExportEntries, panelTarget, readHealth, resetGrabRunner, resetPackRunner, runGrab, runPack, type PanelExportTarget } from './panelExport'
+import { registerPanelSource, resetPanelSources } from './panelSources'
 
 const grabPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
 vi.mock('../export/grab/run', () => ({ grabPanel }))
+const packPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
+vi.mock('../export/pack/run', () => ({ packPanel }))
 
 const TARGET: PanelExportTarget = { panelId: 'panel_3', code: 'EQ', number: 3, group: 'A' }
 const HEALTH = { now_utc: '2026-09-26T12:00:00Z', fixture_mode: true }
@@ -26,7 +32,11 @@ function received(): GrabRequest {
 beforeEach(() => {
   grabPanel.mockClear()
   grabPanel.mockImplementation(async () => true)
+  packPanel.mockClear()
+  packPanel.mockImplementation(async () => true)
   resetGrabRunner()
+  resetPackRunner()
+  resetPanelSources()
   resetMessage()
 })
 
@@ -213,6 +223,125 @@ describe('Copy image keeps the click gesture (Safari writes the clipboard only i
   })
 })
 
+// ---------------------------------------------------------------- the Evidence pack row (roadmap 15 part 2)
+
+/** The call the mocked pack runner received, typed as the request the real one takes. */
+function packed(): PackRequest {
+  const call = packPanel.mock.calls.at(-1)
+  if (!call) throw new Error('the pack runner was not called')
+  return call[0] as PackRequest
+}
+
+const labels = (target: PanelExportTarget = TARGET) => panelExportEntries(target, () => null).map((e) => e.label)
+
+describe('the Evidence pack row', () => {
+  it('is offered only for a panel whose screen registered a dossier', () => {
+    expect(labels()).toEqual([GRAB.menuImage])
+    registerPanelSource('panel_9', { provenance: null, dossier: () => null })
+    expect(labels()).toEqual([GRAB.menuImage])
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    expect(labels()).toEqual([GRAB.menuImage, DOSSIER.menuPack])
+  })
+
+  it('is not offered for a panel that registered only a provenance', () => {
+    registerPanelSource(TARGET.panelId, { provenance: { tags: [], basis: null, unit: null, window: null, n: null, source: null, specSha: null } })
+    expect(labels()).toEqual([GRAB.menuImage])
+  })
+
+  it('is offered for a source with both a provenance and a dossier', () => {
+    registerPanelSource(TARGET.panelId, {
+      provenance: { tags: [], basis: null, unit: null, window: null, n: null, source: null, specSha: null },
+      dossier: () => null,
+    })
+    expect(labels()).toContain(DOSSIER.menuPack)
+  })
+
+  it('comes after Grab as image and Copy image', () => {
+    supportClipboardImages()
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    expect(labels()).toEqual([GRAB.menuImage, GRAB.menuCopy, DOSSIER.menuPack])
+  })
+
+  it('is called Evidence pack (HTML)', () => {
+    expect(DOSSIER.menuPack).toBe('Evidence pack (HTML)')
+  })
+
+  it('packs the panel with the health read at that moment, and nothing else', async () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    let health: typeof HEALTH | null = null
+    const pack = panelExportEntries(TARGET, () => health).at(-1)
+    health = HEALTH
+    pack?.onSelect()
+    await vi.waitFor(() => expect(packPanel).toHaveBeenCalled())
+    expect(packed()).toEqual({ panelId: 'panel_3', health: HEALTH })
+    expect(grabPanel).not.toHaveBeenCalled()
+  })
+
+  it('leaves the check of the dossier to the runner, so a row built earlier still works when chosen', async () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    const pack = panelExportEntries(TARGET, () => null).at(-1)
+    resetPanelSources()
+    pack?.onSelect()
+    await vi.waitFor(() => expect(packPanel).toHaveBeenCalled())
+  })
+})
+
+describe('runPack', () => {
+  it('hands the request to the lazy pack runner and makes no request of its own', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    await runPack(TARGET, HEALTH)
+    expect(packed()).toEqual({ panelId: 'panel_3', health: HEALTH })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('passes a missing health answer through as null', async () => {
+    await runPack(TARGET, null)
+    expect(packed().health).toBeNull()
+  })
+
+  it('says so on the message line when the runner breaks, and never rejects', async () => {
+    packPanel.mockRejectedValueOnce(new Error('palette is not usable.'))
+    await expect(runPack(TARGET, null)).resolves.toBeUndefined()
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'palette is not usable' }))
+    expect(useMessage.getState().tone).toBe('error')
+  })
+
+  it('reads a thrown value that is not an Error', async () => {
+    packPanel.mockRejectedValueOnce('boom')
+    await runPack(TARGET, null)
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'boom' }))
+  })
+
+  it('leaves the message line alone when the pack went well (the runner speaks for itself)', async () => {
+    await runPack(TARGET, null)
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('once loaded, a later runPack calls packPanel synchronously, inside the click', async () => {
+    await runPack(TARGET, null)
+    packPanel.mockClear()
+    void runPack(TARGET, null)
+    expect(packPanel).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so on the message line when a warm runner breaks synchronously, and never rejects', async () => {
+    await runPack(TARGET, null)
+    packPanel.mockImplementationOnce(() => {
+      throw new Error('no palette')
+    })
+    await expect(runPack(TARGET, null)).resolves.toBeUndefined()
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'no palette' }))
+  })
+
+  it('keeps the grab runner and the pack runner apart', async () => {
+    await runPack(TARGET, null)
+    expect(grabPanel).not.toHaveBeenCalled()
+    await runGrab(TARGET, null, 'file')
+    expect(packPanel).toHaveBeenCalledTimes(1)
+  })
+})
+
+
 describe('the lazy runner is loaded only when it can be used, and a failed load is not remembered', () => {
   afterEach(() => {
     vi.doUnmock('../export/grab/run')
@@ -285,5 +414,80 @@ describe('the lazy runner is loaded only when it can be used, and a failed load 
     copy?.onSelect()
     await vi.waitFor(() => expect(ok).toHaveBeenCalledTimes(1))
     expect(loads).toBe(2)
+  })
+})
+
+describe('the lazy pack runner is loaded only when it can be used, and a failed load is not remembered', () => {
+  afterEach(() => {
+    vi.doUnmock('../export/pack/run')
+    vi.resetModules()
+  })
+
+  async function fresh(factory: () => Record<string, unknown>) {
+    vi.resetModules()
+    vi.doMock('../export/pack/run', factory)
+    const exported = await import('./panelExport')
+    const sources = await import('./panelSources')
+    const { useMessage: message } = await import('./MessageLine.store')
+    return { ...exported, sources, message }
+  }
+
+  it('posts DOSSIER.failed when the chunk cannot load, and imports again on the next attempt', async () => {
+    let loads = 0
+    const ok = vi.fn(async () => true)
+    const exported = await fresh(() => {
+      loads += 1
+      if (loads === 1) throw new Error('Failed to fetch dynamically imported module')
+      return { packPanel: ok }
+    })
+    await expect(exported.runPack(TARGET, null)).resolves.toBeUndefined()
+    expect(exported.message.getState().text).toMatch(/^The dossier could not be made: .+\.$/)
+    expect(exported.message.getState().tone).toBe('error')
+    expect(ok).not.toHaveBeenCalled()
+    await exported.runPack(TARGET, null)
+    expect(loads).toBe(2)
+    expect(ok).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed warm-up is silent, and the click that follows loads the chunk again', async () => {
+    let loads = 0
+    const ok = vi.fn(async () => true)
+    const exported = await fresh(() => {
+      loads += 1
+      if (loads === 1) throw new Error('offline')
+      return { packPanel: ok }
+    })
+    exported.sources.registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    const pack = exported.panelExportEntries(TARGET, () => null).at(-1)
+    await settleImport()
+    expect(exported.message.getState().text).toBe('')
+    pack?.onSelect()
+    await vi.waitFor(() => expect(ok).toHaveBeenCalledTimes(1))
+    expect(loads).toBe(2)
+  })
+
+  it('warms the runner when the row is built, so choosing it packs at once, with nothing awaited', async () => {
+    const ok = vi.fn(async () => true)
+    const exported = await fresh(() => ({ packPanel: ok }))
+    exported.sources.registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    const pack = exported.panelExportEntries(TARGET, () => HEALTH).at(-1)
+    await settleImport()
+    pack?.onSelect()
+    expect(ok).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not warm the pack chunk for a panel that cannot be packed, and warms it for one that can', async () => {
+    let loads = 0
+    const exported = await fresh(() => {
+      loads += 1
+      return { packPanel }
+    })
+    exported.panelExportEntries(TARGET, () => null)
+    await settleImport()
+    expect(loads).toBe(0)
+    exported.sources.registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    exported.panelExportEntries(TARGET, () => null)
+    await settleImport()
+    expect(loads).toBe(1)
   })
 })

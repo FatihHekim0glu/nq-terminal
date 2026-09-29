@@ -292,6 +292,15 @@
   --study-mid: #FFFFFF;
   --study-lower: #00FF00;       /* 6.2 Bollinger lower; 6.3 PScatter Holm line */
 
+  /* Print (the evidence pack and the print dossier): black on white, whatever the screen theme. The pack is
+     an offline file that reads these five at the moment it is made, so it never carries a dark screen
+     colour. Not overridden by the colour-vision themes below. */
+  --print-bg: #FFFFFF;
+  --print-fg: #000000;
+  --print-muted: #4D4D4D;
+  --print-rule: #8C8C8C;
+  --print-label: #8A4B00;
+
   color-scheme: dark;
 }
 

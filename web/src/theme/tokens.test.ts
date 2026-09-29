@@ -232,6 +232,40 @@ describe('tokens.css: section 2 colours (8.1)', () => {
   })
 })
 
+// The print tokens (roadmap 15 part 2): the evidence pack (an offline HTML file) and the print dossier read
+// these five, never the dark screen tokens, so a pack prints as black on white in every theme.
+const PRINT_TOKENS: Record<string, string> = {
+  'print-bg': '#FFFFFF',
+  'print-fg': '#000000',
+  'print-muted': '#4D4D4D',
+  'print-rule': '#8C8C8C',
+  'print-label': '#8A4B00',
+}
+
+describe('tokens.css: print tokens', () => {
+  it('defines the five print tokens with their exact values', () => {
+    const tokens = readTokens(tokensCss)
+    for (const [name, value] of Object.entries(PRINT_TOKENS)) {
+      expect(tokens[name], `--${name}`).toBe(value)
+    }
+  })
+
+  it('defines each print token once, as a plain colour and not as an alias of a screen token', () => {
+    const raw = readRawTokens(tokensCss)
+    for (const [name, value] of Object.entries(PRINT_TOKENS)) {
+      expect(raw[name], `--${name}`).toBe(value)
+      expect(tokensCss.match(new RegExp(`--${name}\\s*:`, 'g')), `--${name} declarations`).toHaveLength(1)
+    }
+  })
+
+  it('leaves the print tokens as they are in both colour-vision themes', () => {
+    for (const cvd of ['deut', 'prot'] as const) {
+      const themed = readTokens(tokensCss, cvd)
+      for (const [name, value] of Object.entries(PRINT_TOKENS)) expect(themed[name], `${cvd} --${name}`).toBe(value)
+    }
+  })
+})
+
 describe('tokens.css: CVD themes (section 2.3)', () => {
   it('deut: blue up, #FF5566 down on every surface, amber unchanged', () => {
     const t = readTokens(tokensCss, 'deut')

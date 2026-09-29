@@ -8,6 +8,9 @@ export const DOSSIER = {
   menuPack: 'Evidence pack (HTML)',
   unavailable: 'Evidence packs and print dossiers are made from DES and the tear sheet.',
   packSaved: 'Saved the evidence pack as {file} with {n} charts, built from the answers already on screen.',
+  /** packSaved for exactly one chart and for none, so the count never reads "1 charts" or "0 charts". */
+  packSavedOne: 'Saved the evidence pack as {file} with 1 chart, built from the answers already on screen.',
+  packSavedNone: 'Saved the evidence pack as {file} with no charts, built from the answers already on screen.',
   failed: 'The dossier could not be made: {detail}.',
   tearMissing: 'The tear sheet of {name} is not loaded, so it is not in this dossier. Open {name} EQ first; the dossier makes no request.',
   descriptive: 'Descriptive: the terminal adds no verdict. Verdicts, pass checks and hashes are read from the research files.',
