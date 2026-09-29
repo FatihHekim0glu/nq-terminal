@@ -3,9 +3,9 @@
 // the export line, the related functions menu, the quote header, the field and the chart wrapper, and the
 // tab sets. Nothing that loads with the shell may import it. This reads the sources as text.
 //
-// PANEL, FUNCTION_BAR, FUNCTION_NUMBERS and PLACEHOLDER are lazy-only too, but stay in workspace.ts for now:
-// screens/reg/RegScreen.tsx and chrome/Workspace.test.tsx import them from there. Once those two import from
-// panelParts, they can move as well (about 1 kB gzip).
+// PLACEHOLDER (shell diet 3, roadmap wave 9) moved to copy/placeholder.ts: only chrome/WorkspacePlaceholder.tsx reads it.
+// PANEL, FUNCTION_BAR and FUNCTION_NUMBERS are lazy-only too, but stay in workspace.ts for now: about 40 screens and
+// their tests import them from there (about 0.23 kB gzip).
 import { describe, expect, it } from 'vitest'
 import { CHART, EXPORT, FIELD, QUOTE, RELATED, TAB_SETS } from './panelParts'
 import * as workspace from './workspace'
@@ -30,9 +30,8 @@ const SHELL_FILES = [
   '/src/chrome/FrameStrip.tsx',
   '/src/chrome/KeyToolbar.actions.ts',
   '/src/chrome/NavToolbar.tsx',
-  '/src/chrome/RecordWatch.live.tsx',
+  '/src/chrome/RecordWatch.view.tsx',
   '/src/chrome/StatusBar.tsx',
-  '/src/chrome/useDeepLinks.ts',
 ]
 
 const importsPanelParts = (text: string) => /\bfrom\s+['"][^'"]*\bcopy\/panelParts['"]/.test(text)
@@ -56,8 +55,8 @@ describe('panelParts: the panels\' parts', () => {
 describe('workspace.ts: what the shell reads', () => {
   it('no longer holds the parts copy, and still holds WORKSPACE and fillCopy', () => {
     const names = Object.keys(workspace)
-    for (const moved of ['CHART', 'EXPORT', 'FIELD', 'QUOTE', 'RELATED', 'TAB_SETS']) expect(names, moved).not.toContain(moved)
-    expect(names).toEqual(expect.arrayContaining(['WORKSPACE', 'fillCopy', 'PANEL', 'FUNCTION_BAR', 'FUNCTION_NUMBERS', 'PLACEHOLDER']))
+    for (const moved of ['CHART', 'EXPORT', 'FIELD', 'QUOTE', 'RELATED', 'TAB_SETS', 'PLACEHOLDER']) expect(names, moved).not.toContain(moved)
+    expect(names).toEqual(expect.arrayContaining(['WORKSPACE', 'fillCopy', 'PANEL', 'FUNCTION_BAR', 'FUNCTION_NUMBERS']))
   })
 })
 

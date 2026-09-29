@@ -47,28 +47,6 @@ export const FUNCTION_BAR = {
 /** House numbering for red-bar buttons (look spec 4.4). */
 export const FUNCTION_NUMBERS = { compare: 95, actions: 96, settings: 97, export: 98, help: 99 } as const
 
-export const PLACEHOLDER = {
-  heading: '{code}: {screen}',
-  status: 'Not built yet.',
-  P0: 'This screen arrives in phase {phase} of the build. The command, the panel and its link group already work.',
-  P1: 'A P1 screen, planned for after the P0 release.',
-  P2: 'A P2 screen, built only after the user gives an explicit go.',
-  context: 'Context: {value}',
-  noContext: 'Context: none',
-  argument: 'Argument: {value}',
-  gridCaption: '{code} placeholder: what this panel will show',
-  itemColumn: 'Item',
-  valueColumn: 'Value',
-  noteColumn: 'Note',
-  rowScreen: 'Screen',
-  rowStatus: 'Status',
-  rowBuild: 'Build',
-  rowContext: 'Context',
-  rowArgument: 'Argument',
-  missing: '--',
-  none: 'none',
-} as const
-
 /** Replaces each `{name}` slot with its value; unknown slots are left as they are. */
 export function fillCopy(template: string, values: Readonly<Record<string, string | number>>): string {
   return template.replace(/\{([a-zA-Z]+)\}/g, (slot, name: string) =>

@@ -1,6 +1,7 @@
-// Copy for the global chrome (spec 4.1, 4.2, 4.9, 4.10): frame strip, key toolbar, nav toolbar,
-// command zone, message line, event tape and status line. UK spelling, no em or en dashes.
-// `{value}` is filled in by the component.
+// Copy for the global chrome (spec 4.1, 4.2, 4.10): frame strip, key toolbar, nav toolbar,
+// command zone, message line and status line. UK spelling, no em or en dashes.
+// `{value}` is filled in by the component. This file is part of the first-paint shell: the event tape's
+// words are in copy/tape.ts and the key map overlay's in copy/keymap.ts, which load with those chunks.
 
 export const CHROME = {
   appTitle: 'nq-lab terminal',
@@ -144,21 +145,4 @@ export const STATUS_BAR = {
   escKey: '<Esc>',
   escHint: 'command',
   empty: '-',
-} as const
-
-export const TAPE = {
-  label: 'Event tape',
-  src: 'OOS',
-  read: 'gate read',
-  sealed: '[SEALED]',
-  inSample: '[IS]',
-  empty: 'No gate reads logged yet.',
-  error: 'The gate log did not answer.',
-  loading: 'Reading the gate log.',
-} as const
-
-export const KEYMAP = {
-  title: 'Keyboard map',
-  close: 'Close the key map',
-  closeText: 'Close',
 } as const

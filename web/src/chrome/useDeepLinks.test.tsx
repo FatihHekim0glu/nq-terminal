@@ -682,10 +682,12 @@ describe('useDeepLinks: a link that is malformed', () => {
   })
 })
 
-// The wiring: CommandZone (AppCommandBar.tsx) calls useDeepLinks once, and the lines reach the real
-// command line, so a link is handled exactly like typing it.
+// The wiring: CommandZone (AppCommandBar.tsx) mounts the link reader (chrome/DeepLinks.tsx, loaded on demand) once,
+// and the lines reach the real command line, so a link is handled exactly like typing it.
 describe('CommandZone: a link in the address bar goes through the real command line', () => {
-  beforeAll(() => {
+  // The reader is a dynamic import: loading it once here means every test's own import settles within its first act().
+  beforeAll(async () => {
+    await import('./DeepLinks')
     class NoResize {
       observe() {}
       unobserve() {}

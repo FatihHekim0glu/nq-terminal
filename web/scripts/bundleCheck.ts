@@ -19,18 +19,21 @@ import { gzipSync } from 'node:zlib'
 export const BUNDLE_BUDGET = {
   /**
    * The shell was 120.4 kB gzip before Phase 5 (index, vendor, react and the runtime), 132.1 kB after wave 5,
-   * 125.2 kB after the wave 6 shell diet (everything first paint does not need moved behind a dynamic import) and
+   * 125.2 kB after the wave 6 shell diet (everything first paint does not need moved behind a dynamic import),
    * 115.2 kB after shell diet 2 (wave 7), which aliased cmdk's unused Radix dialog stack to a stub (vite.config.ts,
-   * rule 8 below). scripts/shellBudget.test.ts names each piece and pins this ceiling. The ceiling is that size plus
-   * 1.5 kB, so a later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else
-   * out first, or raise this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.
+   * rule 8 below), 116.5 kB after wave 8 (workspaces) and 112.8 kB after shell diet 3 (wave 9: the record watch's
+   * reader, the address bar's link reader and the tape, key map and placeholder copy load on demand, useQueries with
+   * its QueriesObserver load with REG and DES, and cmdk's unused command-score is stubbed; vite.config.ts).
+   * scripts/shellBudget.test.ts names each piece and pins this ceiling. The ceiling is that size plus 2 kB, so a
+   * later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else out first, or raise
+   * this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.
    */
-  shellGzip: 116_700,
+  shellGzip: 114_900,
   /**
-   * The gallery build's shell (the E2E build, `--gallery`) is about 0.8 kB larger: its entry loads the API client
-   * and the connection state eagerly, so those two split out of index. Measured 116.0 kB after shell diet 2, plus 1.5 kB.
+   * The gallery build's shell (the E2E build, `--gallery`) is about 0.9 kB larger: its entry loads the API client
+   * and the connection state eagerly, so those two split out of index. Measured 113.7 kB after shell diet 3, plus 2 kB.
    */
-  galleryShellGzip: 117_600,
+  galleryShellGzip: 115_800,
   libraryGzip: {
     uplot: 30_000,
     'lightweight-charts': 75_000,

@@ -1,7 +1,7 @@
 // Event tape (spec 4.9): three PT Mono lines over the status line, newest on top, `NNNN SRC HH:MM text`.
 // The source is the gate access log, so every line is a gate read (caller, timeframe, symbol) marked
 // [IS] or [SEALED]. A static list: it never scrolls or animates. Props only; EventTape.live.tsx fetches.
-import { TAPE } from '../copy/chrome'
+import { TAPE } from '../copy/tape'
 import './EventTape.css'
 
 export const TAPE_LINES = 3

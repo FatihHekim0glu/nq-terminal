@@ -2,7 +2,7 @@
 // table from HELP in a floating dialog under the key toolbar. Alt+K again, Esc or Close shuts it and
 // focus goes back where it was. Non-modal: the command line and the panels stay usable.
 import { useEffect, useRef } from 'react'
-import { KEYMAP } from '../copy/chrome'
+import { KEYMAP } from '../copy/keymap'
 import { KeyboardDrawing, KeyTable } from './HelpScreen.keymap'
 import './KeyToolbar.overlay.css'
 

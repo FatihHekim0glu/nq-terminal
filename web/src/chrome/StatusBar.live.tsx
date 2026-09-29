@@ -6,7 +6,7 @@ import { useConnection } from '../api/connection'
 import { useHealth } from '../api/queries'
 import type { MnemonicCode } from '../commands/registry'
 import { useLinkGroups } from '../state/linkGroups'
-import type { RecordWatchView } from './RecordWatch.live'
+import type { RecordWatchView } from './RecordWatch.view'
 import { StatusBar, type HealthState } from './StatusBar'
 
 export interface LiveStatusBarProps {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { TAPE } from '../copy/chrome'
+import { TAPE } from '../copy/tape'
 import { EventTape, tapeLine, type TapeEntry } from './EventTape'
 import { loadTapeOn, saveTapeOn } from './EventTape.store'
 

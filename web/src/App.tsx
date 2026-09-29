@@ -10,7 +10,7 @@
 // The provider supervises the backend connection (roadmap 7): the API DOWN strip sits under the header and
 // the status line names the time the backend went quiet. The research-record watch (roadmap 16) reads its
 // six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
-// through useRecordWatch. The diff and its long copy load with the reader, never with this file. GRAB <GO> asks
+// through useRecordWatch. The reader, the diff and their long copy load on demand, never with this file. GRAB <GO> asks
 // the Workspace handle to grab the focused panel; the image code and its copy load with the Workspace and on
 // demand, never through this file. SAVE, LOAD and FORGET (roadmap #14) go through the Workspace handle (saveWorkspace,
 // loadWorkspace, forgetWorkspace) and the workspaces store (the tab list and the menu): the recipe type and its walker stay in
@@ -34,7 +34,7 @@ import { createChromeActions, runGlobalKey, runKey, runNav, workspaceMenu, type 
 import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
-import { RecordWatchReader, useIdleReady, useRecordWatch, type RecordWatchView } from './chrome/RecordWatch.live'
+import { useIdleReady, useRecordWatch, type RecordWatchView } from './chrome/RecordWatch.view'
 import { killState } from './chrome/StatusBar.format'
 import { LiveStatusBar, useHealthState } from './chrome/StatusBar.live'
 import type { FocusedPanel, ShownLayout, WorkspaceHandle } from './chrome/Workspace'
@@ -64,6 +64,10 @@ const KeyMapOverlay = lazy(() => import('./chrome/KeyToolbar.overlay').then((m) 
 // its own chunk beside the Workspace: the shell carries none of its words. A chunk that cannot be fetched is dropped
 // without a word, since the line is a courtesy and HELP says the same.
 const HomeOrientation = lazy(() => import('./screens/home/HomeOrientation'))
+// The record watch's reader (the six reads, the marks and WATCH SEEN) mounts after the first idle moment and loads as a
+// chunk of its own then, so the shell carries the view (chrome/RecordWatch.view.tsx) and none of the reader. A chunk that
+// cannot be fetched is dropped without a word: the watch is a courtesy and its segment simply stays away.
+const RecordWatchReader = lazy(() => import('./chrome/RecordWatch.live').then((m) => ({ default: m.RecordWatchReader })))
 
 const Workspace = lazy(async () => {
   const [workspace, preview] = await Promise.all([import('./chrome/Workspace'), import('./chrome/WorkspacePreview')])
@@ -318,7 +322,13 @@ function Terminal() {
           </Suspense>
         </LazyBoundary>
       ) : null}
-      {idle ? <RecordWatchReader /> : null}
+      {idle ? (
+        <LazyBoundary onError={() => {}}>
+          <Suspense fallback={null}>
+            <RecordWatchReader />
+          </Suspense>
+        </LazyBoundary>
+      ) : null}
     </div>
   )
 }

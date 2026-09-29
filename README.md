@@ -315,14 +315,14 @@ over budget or loads a chart or grid library with the shell.
 
 | Chunk, gzip | Budget | Measured 2026-09-29 |
 |---|---:|---:|
-| Shell (index, React, vendor, runtime, preload, commands, sectors) | 116.7 kB | 115.2 kB |
+| Shell (index, React, vendor, runtime, preload, commands, sectors) | 114.9 kB | 112.8 kB |
 | uPlot | 30.0 kB | 22.1 kB |
 | Lightweight Charts | 75.0 kB | 61.4 kB |
 | ECharts | 230.0 kB | 201.6 kB |
 | TanStack grid | 45.0 kB | 18.7 kB |
 | Perspective | 100.0 kB | 86.1 kB |
 
-`scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 117.6 kB); raise it only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build.
+`scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 115.8 kB); raise it only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build, and cmdk's unused command-score is swapped for `src/vendor/commandScoreStub.ts` by the `cmdkScoreStub` plugin there.
 
 **Status.** P0 and P1 are built: 29 of the 30 mnemonics open a screen. P2, the `JOBS` backtest queue and a read-only
 IB snapshot, is not built and waits for the owner's decision.

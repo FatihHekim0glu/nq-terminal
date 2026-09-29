@@ -22,7 +22,7 @@ import { LAYOUT } from '../copy/layout'
 import { fillCopy } from '../copy/workspace'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
 import { KeyText } from './MessageLine'
-import { WatchSegment, type RecordWatchView } from './RecordWatch.live'
+import { WatchSegment, type RecordWatchView } from './RecordWatch.view'
 import { dataWindowValue, etClock, type HealthState } from './StatusBar.format'
 import './StatusBar.css'
 

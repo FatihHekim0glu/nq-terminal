@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
 
 // One origin in normal use (PRD DL13): uvicorn on 127.0.0.1:8765 serves web/dist at `/`.
@@ -31,9 +32,32 @@ export function outDirFor(mode: string): string {
 // sends that one import to a stub that throws if it is ever rendered (src/vendor/radixDialogStub.tsx). It is
 // scoped to the exact specifier: the other Radix packages cmdk uses (primitive, id, compose-refs) stay real.
 // scripts/bundleCheck.ts (rule 8) and scripts/shellBudget.test.ts fail if the dialog code comes back.
+// (cmdk's command-score is stubbed by the cmdkScoreStub plugin below, not by an alias: an alias would match the
+// hashed chunk name './chunk-NZJY6EH4.mjs' from any importer, and the plugin scopes it to cmdk's entry file.)
 export const RESOLVE_ALIASES = [
   { find: /^@radix-ui\/react-dialog$/, replacement: fileURLToPath(new URL('./src/vendor/radixDialogStub.tsx', import.meta.url)) },
 ] as const
+
+// cmdk scores every item with its own fuzzy matcher (command-score, about 0.4 kB gzip), which the terminal never
+// uses: chrome/CommandLine.tsx passes shouldFilter={false}. The matcher sits in a chunk cmdk names by content hash,
+// which only cmdk's entry file imports, and the entry reads one export from it (`a`, the scorer). This plugin sends
+// that one import, from that one importer, to src/vendor/commandScoreStub.ts (a scorer that returns 1). cmdk's own
+// command-score module (dist/command-score.mjs) and every other importer keep the real chunk. The hashed name is
+// pinned by src/vendor/commandScoreStub.test.ts against the installed cmdk, so an upgrade that renames it fails
+// there, and scripts/shellBudget.test.ts fails if the matcher's code is in any build.
+const CMDK_SCORE_CHUNK = './chunk-NZJY6EH4.mjs'
+const CMDK_ENTRY = /[\\/]node_modules[\\/](?:.*[\\/])?cmdk[\\/]dist[\\/]index\.mjs$/
+const COMMAND_SCORE_STUB = fileURLToPath(new URL('./src/vendor/commandScoreStub.ts', import.meta.url))
+
+export function cmdkScoreStub(): Plugin {
+  return {
+    name: 'nqt:cmdk-score-stub',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      return source === CMDK_SCORE_CHUNK && importer !== undefined && CMDK_ENTRY.test(importer) ? COMMAND_SCORE_STUB : null
+    },
+  }
+}
 
 /** Matches a file inside one of the named packages, in a flat or a pnpm node_modules. */
 function nodeModule(names: string): RegExp {
@@ -62,17 +86,21 @@ export const LIBRARY_CHUNKS = [
 // Vite's own preload helper wraps every import() in library code too (Perspective's viewer has some), so
 // a library group would capture it and the shell, which needs the helper for its lazy screens, would
 // then load that whole library chunk. It is captured first, into a tiny chunk of its own.
+// The last group, vendor, takes every other node_modules file the app uses, so a library only lazy code needs would
+// still be in the shell. It skips two TanStack Query files: useQueries and its QueriesObserver are called by REG and
+// DES only (about 0.85 kB gzip), so they fall out of the vendor group and load with those screens. The lookahead
+// names the two files, and scripts/shellBudget.test.ts checks that `getQueries(){` (their marker) is in no shell chunk.
 export const PRELOAD_HELPER = /(^|[\\/\0])vite[\\/]preload-helper/
 export const CHUNK_GROUPS = [
   { name: 'preload', test: PRELOAD_HELPER, priority: 50 },
   { name: 'react', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?(react|react-dom|scheduler)[@\\/]/, priority: 40 },
   { name: 'dockview', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?dockview(-core|-react)?[@\\/]/, priority: 20 },
   ...LIBRARY_CHUNKS.map((c) => ({ ...c, priority: 30 })),
-  { name: 'vendor', test: /[\\/]node_modules[\\/]/, priority: 10 },
+  { name: 'vendor', test: /[\\/]node_modules[\\/](?!.*[\\/](?:queriesObserver|useQueries)\.js$)/, priority: 10 },
 ] as const
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [cmdkScoreStub(), react(), tailwindcss()],
   resolve: { alias: [...RESOLVE_ALIASES] },
   build: {
     outDir: outDirFor(mode),

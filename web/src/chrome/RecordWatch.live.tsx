@@ -1,65 +1,37 @@
-// The research-record watch in the shell (roadmap 16): after the first idle moment it reads six records
-// the terminal already serves, compares them with this browser's checkpoint, and offers the result to the
-// status line (WatchSegment), the command line (WATCH and WATCH SEEN) and the grids (useWatchMarks).
-// SHELL RULE: the diff, the WATCH <GO> list and their long copy load through one dynamic import of
-// ./RecordWatch.lazy, so this file must never import them statically (state/recordWatch.split.test.ts).
-// A local change watch from this browser, not a proof.
-import { useEffect, useState } from 'react'
-import { create } from 'zustand'
+// The research-record watch's reader (roadmap 16): after the first idle moment it reads six records the terminal
+// already serves, compares them with this browser's checkpoint, and offers the result to the status line
+// (WatchSegment), the command line (WATCH and WATCH SEEN) and the grids (useWatchMarks) through the view store in
+// RecordWatch.view.tsx.
+// SHELL RULE: this file loads on demand (App.tsx mounts it through a dynamic import after the first idle moment),
+// so nothing in the first-paint shell may import it; the shell reads RecordWatch.view.tsx. The diff, the WATCH <GO>
+// list and their long copy load through one dynamic import of ./RecordWatch.lazy, so this file must never import
+// them statically (state/recordWatch.split.test.ts). It re-exports the view module, so callers and tests keep one
+// import path. A local change watch from this browser, not a proof.
+import { useEffect } from 'react'
 import { useConfirmations, useLedger, useOosLog, useOpenings, useRegistry, useRuns } from '../api/queries'
-import { WATCH } from '../copy/watch'
+import { WATCH_READ } from '../copy/watchReader'
 import { fillCopy } from '../copy/workspace'
 import {
   WATCH_SOURCES,
   emptyDiff,
   type WatchDiff,
   type WatchInputs,
-  type WatchItem,
-  type WatchMenuView,
   type WatchSnapshot,
   type WatchSource,
   type WatchState,
 } from '../state/recordWatch.schema'
 import { useRecordWatchStore } from '../state/recordWatch.store'
-import type { MenuModel } from './CommandLine.menus'
 import { postMessage } from './MessageLine.store'
-import { EMPTY_MARKS, useWatchMarksStore, type WatchMark, type WatchMarks as Marks } from './RecordWatch.marks'
+import { useWatchMarksStore, type WatchMark, type WatchMarks as Marks } from './RecordWatch.marks'
+import { useWatchStore, watchListMenu, type RecordWatchView, type WatchLazy } from './RecordWatch.view'
 
-// Screens import these from ./RecordWatch.marks directly (see the leaf's header); the re-export keeps this
-// module's own callers working.
+// Screens import these from ./RecordWatch.marks directly (see the leaf's header) and the shell reads the view from
+// ./RecordWatch.view; the re-exports keep this module's own callers working.
 export { useWatchMarks, type WatchMark } from './RecordWatch.marks'
+export { WatchSegment, resetRecordWatchView, useIdleReady, useRecordWatch, type RecordWatchView } from './RecordWatch.view'
 
-/** How long a browser without an idle callback waits before the six reads start. */
-const IDLE_DELAY_MS = 2000
-/** The latest an idle callback may wait: a busy page still starts the reads. */
-const IDLE_TIMEOUT_MS = 4000
 /** The gate log is read with the OOS screen's own unfiltered request, so both share one cache entry. */
 const OOS_READ = { limit: 5000 } as const
-
-/** What the rest of the terminal sees of the watch. */
-export interface RecordWatchView {
-  readonly state: WatchState
-  readonly diff: WatchDiff
-  /** The Eastern time of the checkpoint the records were compared with; null while waiting. */
-  readonly since: string | null
-  /** The text of the first rewritten record, for the segment's tooltip. */
-  readonly title?: string | null
-  /** The WATCH <GO> list; null until the diff has loaded. */
-  menu(): MenuModel | null
-  /** WATCH SEEN <GO>: mark what was read as seen. The text to post, or null before the first read. */
-  accept(): string | null
-}
-
-/** The lazy module's side of the contract, so its shape is checked here without importing its types. */
-interface WatchLazy {
-  snapshotOf(inputs: WatchInputs, takenAt: number): WatchSnapshot
-  diffWatch(before: WatchSnapshot, after: WatchSnapshot): WatchDiff
-  extendCheckpoint(before: WatchSnapshot, after: WatchSnapshot): WatchSnapshot | null
-  mergeAccepted(before: WatchSnapshot | null, after: WatchSnapshot): WatchSnapshot
-  watchMenu(view: WatchMenuView, diff: WatchDiff): MenuModel
-  bootText(diff: WatchDiff, since: string): string | null
-  itemText(item: WatchItem): string
-}
 
 let etFormat: Intl.DateTimeFormat | undefined
 
@@ -69,33 +41,7 @@ export function formatEt(ms: number): string {
   return etFormat.format(ms)
 }
 
-/** True after the browser's first idle moment (at the latest 4 s), or after `delayMs` where it has no idle callback. */
-export function useIdleReady(delayMs: number = IDLE_DELAY_MS): boolean {
-  const [ready, setReady] = useState(false)
-  useEffect(() => {
-    if (typeof window.requestIdleCallback === 'function') {
-      const id = window.requestIdleCallback(() => setReady(true), { timeout: IDLE_TIMEOUT_MS })
-      return () => window.cancelIdleCallback(id)
-    }
-    const id = window.setTimeout(() => setReady(true), delayMs)
-    return () => window.clearTimeout(id)
-  }, [delayMs])
-  return ready
-}
-
-// ---- the view store -----------------------------------------------------------------------------------
-
-interface WatchStore {
-  readonly view: RecordWatchView
-  /** The latest read of the records, kept so WATCH SEEN can mark it. */
-  readonly snapshot: WatchSnapshot | null
-  readonly lazy: WatchLazy | null
-}
-
-function menu(): MenuModel | null {
-  const { lazy, view } = useWatchStore.getState()
-  return lazy && view.state !== 'waiting' ? lazy.watchMenu({ state: view.state, since: view.since }, view.diff) : null
-}
+// ---- the view -----------------------------------------------------------------------------------------
 
 function accept(): string | null {
   const { lazy, snapshot } = useWatchStore.getState()
@@ -103,14 +49,10 @@ function accept(): string | null {
   const now = Date.now()
   const kept = useRecordWatchStore.getState()
   const merged = lazy.mergeAccepted(kept.checkpoint, { ...snapshot, takenAt: now })
-  if (!kept.setCheckpoint(merged)) return WATCH.unsaved
+  if (!kept.setCheckpoint(merged)) return WATCH_READ.unsaved
   show(lazy, snapshot, merged, emptyDiff(merged.takenAt), 'clean')
-  return fillCopy(WATCH.seen, { time: formatEt(now) })
+  return fillCopy(WATCH_READ.seen, { time: formatEt(now) })
 }
-
-const WAITING: RecordWatchView = { state: 'waiting', diff: emptyDiff(0), since: null, title: null, menu, accept }
-
-const useWatchStore = create<WatchStore>()(() => ({ view: WAITING, snapshot: null, lazy: null }))
 
 /** What the grids mark: new and moved records as NEW, rewritten ones as CHG. Removed rows are not on a grid. */
 function marksOf(diff: WatchDiff, previous: Marks): Marks {
@@ -124,20 +66,9 @@ function marksOf(diff: WatchDiff, previous: Marks): Marks {
 
 function show(lazy: WatchLazy, snapshot: WatchSnapshot, checkpoint: WatchSnapshot, diff: WatchDiff, state: Exclude<WatchState, 'waiting'>): void {
   const first = diff.changed[0]
-  const view: RecordWatchView = { state, diff, since: formatEt(checkpoint.takenAt), title: state === 'changed' && first ? lazy.itemText(first) : null, menu, accept }
+  const view: RecordWatchView = { state, diff, since: formatEt(checkpoint.takenAt), title: state === 'changed' && first ? lazy.itemText(first) : null, menu: watchListMenu, accept }
   useWatchStore.setState({ view, snapshot, lazy })
   useWatchMarksStore.setState((prev) => ({ marks: marksOf(diff, prev.marks) }))
-}
-
-/** The watch as the chrome shows it. */
-export function useRecordWatch(): RecordWatchView {
-  return useWatchStore((s) => s.view)
-}
-
-/** Back to waiting with nothing read (tests). */
-export function resetRecordWatchView(): void {
-  useWatchStore.setState({ view: WAITING, snapshot: null, lazy: null })
-  useWatchMarksStore.setState({ marks: EMPTY_MARKS })
 }
 
 // ---- reading -------------------------------------------------------------------------------------------
@@ -186,7 +117,7 @@ function ingest(lazy: WatchLazy, inputs: WatchInputs): void {
       // Nothing was kept, so nothing can be compared: say so once, stay waiting and try again on the next read.
       if (!bootPosted) {
         bootPosted = true
-        postMessage(WATCH.unkept)
+        postMessage(WATCH_READ.unkept)
       }
       return
     }
@@ -225,31 +156,4 @@ export function RecordWatchReader(): null {
     }
   }, [settled, registry.data, confirmations.data, openings.data, ledger.data, oos.data, runs.data])
   return null
-}
-
-// ---- the status line ----------------------------------------------------------------------------------
-
-function stateText(view: RecordWatchView): string {
-  switch (view.state) {
-    case 'baseline':
-      return WATCH.baseline
-    case 'news':
-      return fillCopy(WATCH.news, { n: view.diff.appended.length + view.diff.updated.length })
-    case 'changed':
-      return fillCopy(WATCH.changed, { n: view.diff.changed.length })
-    default:
-      return WATCH.clean
-  }
-}
-
-/** The status line segment: WATCH and its state. Amber, and read out in words, when a record was rewritten. */
-export function WatchSegment({ view }: { readonly view: RecordWatchView }) {
-  if (view.state === 'waiting') return null
-  const changed = view.state === 'changed'
-  return (
-    <span className={`seg keep${changed ? ' warn' : ''}`} title={view.title ?? undefined}>
-      <b>{WATCH.key}</b> {stateText(view)}
-      {changed ? <span className="sr-only">. {WATCH.changedNote}</span> : null}
-    </span>
-  )
 }

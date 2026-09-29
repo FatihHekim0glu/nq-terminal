@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { ApiProvider } from '../api/ApiProvider'
 import { createApiQueryClient } from '../api/queries'
 import { WATCH } from '../copy/watch'
+import { WATCH_READ } from '../copy/watchReader'
 import { CONFIRMATIONS, REGISTRY } from '../screens/reg/regFixtures'
 import { LEDGER, RUNS } from '../screens/runs/runs.fixtures'
 import type { WatchDiff, WatchSnapshot, WatchSource } from '../state/recordWatch.schema'
@@ -304,8 +305,8 @@ describe('RecordWatchReader', () => {
     })
     stubFetch()
     const { container } = mount()
-    await waitFor(() => expect(useMessage.getState().text).toBe(WATCH.unkept))
-    expect(useMessage.getState().text).toBe(WATCH.unkept)
+    await waitFor(() => expect(useMessage.getState().text).toBe(WATCH_READ.unkept))
+    expect(useMessage.getState().text).toBe(WATCH_READ.unkept)
     expect(latest.state).toBe('waiting')
     expect(segment(container)).toBeNull()
     expect(latest.menu()).toBeNull()
@@ -402,7 +403,7 @@ describe('RecordWatchReader', () => {
     act(() => {
       message = latest.accept()
     })
-    expect(message).toBe(WATCH.unsaved)
+    expect(message).toBe(WATCH_READ.unsaved)
     expect(latest.state).toBe('changed')
   })
 
