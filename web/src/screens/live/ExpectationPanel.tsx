@@ -7,7 +7,8 @@
 // tracking has a finite value. The tracking, hypothesis and run list reads share the app's cache with the other panels.
 import { useMemo } from 'react'
 import type { ApiError } from '../../api/client'
-import { useApiQuery, useHypothesis, usePaperTracking, useRuns } from '../../api/queries'
+import { useApiQuery, useRuns } from '../../api/queries'
+import { useHypothesis, usePaperTracking } from '../../api/queries.screens'
 import { Cone } from '../../charts/echarts/Cone'
 import { EXPECTATION } from '../../copy/expectation'
 import { fillCopy } from '../../copy/workspace'
