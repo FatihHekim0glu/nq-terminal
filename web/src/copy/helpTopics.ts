@@ -109,8 +109,10 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     shows: [
       'Sorted p values against rank, with the Bonferroni and Holm boundaries and the BH line.',
       'The adjusted values table.',
+      '85) Family holds all of this, with the Deflated Sharpe (SV3) and an approximate power table computed in the browser.',
+      '86) Replication draws each sealed confirmation\'s p against its parent\'s registered in-sample p: stored numbers only.',
     ],
-    data: 'GET /api/multiple-testing: the registry p values, recomputed, then compared with the stored columns.',
+    data: 'GET /api/multiple-testing: the registry p values, recomputed, then compared with the stored columns; GET /api/analytics/deflated for SV3 and the power table; GET /api/registry once 86) Replication is open.',
     examples: ['{MT <GO>}'],
     related: ['REG', 'DES'],
   },
@@ -270,7 +272,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     summary: 'This help: every function, the keys, the keyboard, link groups and licences.',
     shows: [
       'The numbered mnemonic index; a number and <GO> opens that function\'s help here.',
-      'MNEM HELP or F1 shows one function\'s help; HL searches the help, the hypotheses and the runs.',
+      'MNEM HELP or F1 shows one function\'s help; HL searches functions, metrics, instruments, help text, hypotheses and runs.',
     ],
     data: 'GET /api/commands for the hypotheses and runs the command line knows.',
     examples: ['{HELP <GO>}', '{GP HELP <GO>}'],
@@ -298,8 +300,9 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     shows: [
       'Gross and net exposure over turnover, per session, with the price basis; the means the API sends; every session in a grid, newest first.',
       'A run with no mark to market snapshots (an intraday run) says so and shows none.',
+      'With a per instrument series: Totals, By instrument (a heat map) and By sector (a stack), sampled rather than averaged; 98) Export adds one column per instrument.',
     ],
-    data: 'GET /api/analytics/run/{run_id}/exposure.',
+    data: 'GET /api/analytics/run/{run_id}/exposure; GET /api/commands for the instrument sectors.',
     examples: ['{nt_dtsmom_v0_ts1 EXPO <GO>}'],
     related: ['RUN'],
   },
