@@ -211,3 +211,77 @@ describe('PanelChrome title bar (look spec 4.3)', () => {
     }
   })
 })
+
+describe('PanelChrome extraOptions (a generic extension of the Options menu)', () => {
+  const rows = (onSelect: () => void = () => {}) => [
+    { label: 'Extra one', onSelect },
+    { label: 'Extra two', onSelect },
+  ]
+  const optionsButton = () => screen.getByRole('button', { name: PANEL.options })
+  const menuLabels = () => within(screen.getByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent)
+
+  it('appends the extra rows after the panel own rows', () => {
+    renderPanel({ onRelated: () => {}, onBack: () => {}, onForward: () => {}, onToggleMaximise: () => {}, extraOptions: () => rows() })
+    fireEvent.click(optionsButton())
+    expect(menuLabels()).toEqual([PANEL.related, PANEL.back, PANEL.forward, PANEL.maximise, 'Extra one', 'Extra two'])
+  })
+
+  it('runs the chosen extra row and closes the menu', () => {
+    const onSelect = vi.fn()
+    renderPanel({ extraOptions: () => rows(onSelect) })
+    fireEvent.click(optionsButton())
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Extra two' }))
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('shows Options when extraOptions is the only source of rows', () => {
+    renderPanel({ extraOptions: () => rows() })
+    expect(optionsButton().getAttribute('aria-haspopup')).toBe('menu')
+    fireEvent.click(optionsButton())
+    expect(menuLabels()).toEqual(['Extra one', 'Extra two'])
+  })
+
+  it('shows no Options at all when the panel has neither rows nor extraOptions', () => {
+    renderPanel()
+    expect(screen.queryByRole('button', { name: PANEL.options })).toBeNull()
+  })
+
+  it('evaluates extraOptions only when the menu opens, not on render', () => {
+    const extraOptions = vi.fn(() => rows())
+    const { rerender } = renderPanel({ extraOptions })
+    expect(extraOptions).not.toHaveBeenCalled()
+    rerender(
+      <PanelChrome panelId="p1" number={1} code="GP" title="NQ GP 1d" subject="NQ 1d" group="A" extraOptions={extraOptions}>
+        <p>content</p>
+      </PanelChrome>,
+    )
+    expect(extraOptions).not.toHaveBeenCalled()
+    fireEvent.click(optionsButton())
+    expect(extraOptions).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not evaluate it again while the menu stays open, and again at the next open', () => {
+    const extraOptions = vi.fn(() => rows())
+    const { rerender } = renderPanel({ extraOptions, onRelated: () => {} })
+    fireEvent.click(optionsButton())
+    rerender(
+      <PanelChrome panelId="p1" number={1} code="GP" title="NQ GP 1d" subject="NQ 1d" group="A" onRelated={() => {}} extraOptions={extraOptions} focused>
+        <p>content</p>
+      </PanelChrome>,
+    )
+    expect(extraOptions).toHaveBeenCalledTimes(1)
+    fireEvent.click(optionsButton())
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(optionsButton())
+    expect(extraOptions).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads the rows as they are at the moment of opening', () => {
+    let label = 'Before'
+    renderPanel({ extraOptions: () => [{ label, onSelect: () => {} }] })
+    label = 'After'
+    fireEvent.click(optionsButton())
+    expect(menuLabels()).toEqual(['After'])
+  })
+})

@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import { createRef } from 'react'
+import { StrictMode, createRef } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic } from '../commands/registry'
-import { PLACEHOLDER } from '../copy/workspace'
+import { LINK_COPY } from '../copy/linkCopy'
+import { PANEL, PLACEHOLDER } from '../copy/workspace'
 import { HELP } from '../copy/help'
 import { createLayoutsStore } from '../state/layouts'
 import { createLinkGroupsStore } from '../state/linkGroups'
 import type { SafeStorage } from '../state/safeStorage'
 import type { SerializedDockview } from 'dockview-react'
+import { linesFromHash, resetWorkspaceReady, whenWorkspaceReady } from './deepLink'
+import { resetMessage, useMessage } from './MessageLine.store'
 import Workspace, { WORKSPACE_THEME, type FocusedPanel, type WorkspaceHandle } from './Workspace'
 import { toStored } from './WorkspaceStorage'
 import { panelTabStops } from './WorkspaceFocus'
@@ -563,5 +566,110 @@ describe('Workspace panels: a screen that throws draws again once its arguments 
     act(() => ref.current?.run(command('GP', { args: { timeframe: '1h' }, canonical: 'NQ GP 1h' }), 'replace'))
     await waitFor(() => expect(failed()).toBeNull())
     expect(screen.getByText('ok 1h')).toBeTruthy()
+  })
+})
+
+describe('Workspace links: the ready signal and Copy link in the Options menu', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'clipboard')
+    resetWorkspaceReady()
+    resetMessage()
+  })
+
+  const stillWaiting = (promise: Promise<void>): Promise<boolean> =>
+    Promise.race([promise.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 20))])
+
+  function stubClipboard() {
+    const writeText = vi.fn(async (_text: string) => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    return writeText
+  }
+
+  async function copyFrom(title: string, row: string): Promise<void> {
+    const options = within(screen.getByRole('region', { name: title })).getByRole('button', { name: PANEL.options })
+    act(() => options.click())
+    act(() => within(screen.getByRole('menu')).getByRole('menuitem', { name: row }).click())
+  }
+
+  it('whenWorkspaceReady waits for dockview, then resolves', async () => {
+    resetWorkspaceReady()
+    expect(await stillWaiting(whenWorkspaceReady())).toBe(true)
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await expect(whenWorkspaceReady()).resolves.toBeUndefined()
+  })
+
+  it('is not ready any more once the Workspace has unmounted', async () => {
+    resetWorkspaceReady()
+    const view = renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    view.unmount()
+    expect(await stillWaiting(whenWorkspaceReady())).toBe(true)
+  })
+
+  it('stays ready under StrictMode, where the effects run twice', async () => {
+    resetWorkspaceReady()
+    render(
+      <StrictMode>
+        <div style={{ width: 1200, height: 800 }}>
+          <Workspace screens={SHELL_SCREENS} layouts={createLayoutsStore(memoryStorage())} linkGroups={createLinkGroupsStore(memoryStorage())} />
+        </div>
+      </StrictMode>,
+    )
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await expect(whenWorkspaceReady()).resolves.toBeUndefined()
+  })
+
+  it("Copy link on 'NQ GP 1d' copies this page address ending in #go=NQ%20GP%201d", async () => {
+    const writeText = stubClipboard()
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await copyFrom('NQ GP 1d', LINK_COPY.copyLink)
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const copied = writeText.mock.calls[0]?.[0] ?? ''
+    expect(copied).toBe(`${window.location.origin}${window.location.pathname}#go=NQ%20GP%201d`)
+    expect(copied.endsWith('#go=NQ%20GP%201d')).toBe(true)
+    await waitFor(() => expect(useMessage.getState().text).toBe('Link to NQ GP 1d copied.'))
+  })
+
+  it('Copy link as Markdown copies [title](link)', async () => {
+    const writeText = stubClipboard()
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await copyFrom('volmanaged_v0 EQ', LINK_COPY.copyMarkdown)
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0]?.[0]).toBe(
+      `[volmanaged_v0 EQ](${window.location.origin}${window.location.pathname}#go=volmanaged_v0%20EQ)`,
+    )
+  })
+
+  it('shows the link itself when the browser has no clipboard', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await copyFrom('REG', LINK_COPY.copyLink)
+    await waitFor(() => expect(useMessage.getState().tone).toBe('error'))
+    expect(useMessage.getState().text).toContain('#go=REG')
+  })
+
+  it('every panel of HOME offers a link that reads back as its own command line', async () => {
+    const writeText = stubClipboard()
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    for (const title of HOME_TITLES) {
+      writeText.mockClear()
+      await copyFrom(title, LINK_COPY.copyLink)
+      await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+      const link = writeText.mock.calls[0]?.[0] ?? ''
+      expect(linesFromHash(link.slice(link.indexOf('#')))).toEqual([{ line: title, newPanel: false }])
+    }
+  })
+
+  it('offers Copy link and Copy link as Markdown last in the Options menu, after the panel own rows', async () => {
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    act(() => within(screen.getByRole('region', { name: 'NQ GP 1d' })).getByRole('button', { name: PANEL.options }).click())
+    const labels = within(screen.getByRole('menu')).getAllByRole('menuitem').map((m) => m.textContent)
+    expect(labels.slice(-2)).toEqual([LINK_COPY.copyLink, LINK_COPY.copyMarkdown])
+    expect(labels).toContain(PANEL.related)
   })
 })
