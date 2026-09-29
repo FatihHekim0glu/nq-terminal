@@ -2,13 +2,16 @@
 // 7.10; ANALYTICS_CATALOG RI2). Read only: two GETs (/api/audit/oos-log, /api/audit/openings).
 //
 //   red bar      [Caller ▾] 96) Actions 98) Export                          Gate access log
+//   subtitle     OOS: out-of-sample gate access log (every view says what OOS is)
 //   param row    Since [YYYY-MM-DD]  View [Log | Timeline]   Terminal reads n  Sealed reads n  ...
 //   card         Openings: opened 2026-09-26 by user CLOSED ... pins ... [SPENT]
 //   body         the log table (newest first, days banded) or the swimlane timeline by caller
 //
 // Counts describe the whole log (the API's own totals); the table and the timeline show the matching
 // entries, newest first, up to the API's page limit. View Pivot opens the same entries in the Perspective
-// pivot grid (TASKS 9.1), grouped by caller.
+// pivot grid (TASKS 9.1), grouped by caller. The DES link 'Gate reads (OOS) for this hypothesis' opens this screen
+// on one caller (U07, oosCaller): the panel it opens in takes the requested caller once, and a later plain OOS
+// starts on All callers.
 import { useMemo, useState } from 'react'
 import { useOosLog } from '../../api/queries'
 import { Swimlane } from '../../charts/echarts/Swimlane'
@@ -24,6 +27,7 @@ import { FUNCTION_BAR, FUNCTION_NUMBERS, fillCopy } from '../../copy/workspace'
 import { saveText } from '../../chrome/download'
 import { OosPivot } from '../../perspective'
 import OosLogGrid from './OosLogGrid'
+import { useOosCallerRequest } from './oosCaller'
 import OpeningsCard from './OpeningsCard'
 import { actionsItem } from './panelMenu'
 import { callerOptions, entriesCsv, newestFirst, severityLegend, sinceValid, swimlaneData, type OosLog } from './oosModel'
@@ -115,13 +119,14 @@ function exportEntries(log: OosLog | undefined): void {
 export default function OosScreen(_props: ScreenProps) {
   const actions = usePanelActions()
   const [caller, setCaller] = useState('')
+  useOosCallerRequest(actions.panelId, setCaller)
   const [sinceText, setSinceText] = useState('')
   const [since, setSince] = useState('')
   const [sinceBad, setSinceBad] = useState(false)
   const [view, setView] = useState<View>('log')
   const query = useOosLog({ caller: caller || undefined, since: since || undefined, limit: MAX_PAGE })
   const log = query.data
-  const options = useMemo(() => callerOptions(log?.counts_by_caller ?? {}), [log?.counts_by_caller])
+  const options = useMemo(() => callerOptions(log?.counts_by_caller ?? {}, caller), [log?.counts_by_caller, caller])
   const lanes = useMemo(() => options.slice(1).map((o) => o.value), [options])
 
   const submitSince = (value: string) => {
@@ -142,6 +147,8 @@ export default function OosScreen(_props: ScreenProps) {
           { n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, onRun: () => exportEntries(log) },
         ]}
       />
+      {/* U07: the screen's title says 'Gate access log'; this spells out what OOS is, in every view. */}
+      <p className="oos-notes">{OOS.subtitle}</p>
       <ParamRow label={OOS.paramsLabel}>
         <AmberField label={OOS.sinceField} value={sinceText} placeholder={OOS.sincePlaceholder} width="116px" onChange={setSinceText} onSubmit={submitSince} />
         {sinceBad ? <span className="oos-invalid" role="status">{OOS.sinceInvalid}</span> : null}

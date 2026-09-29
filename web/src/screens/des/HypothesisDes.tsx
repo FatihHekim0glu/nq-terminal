@@ -6,6 +6,7 @@
 // Markdown. Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
 import { useQueryClient } from '@tanstack/react-query'
 import { useId, useMemo, useRef, useState } from 'react'
+import { useOosLog } from '../../api/queries'
 import { apiQueryKey } from '../../api/queryKey'
 import { useHypothesis } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
@@ -18,8 +19,10 @@ import { usePanelSource, type PanelSource } from '../../chrome/panelSources'
 import TabStrip from '../../chrome/TabStrip'
 import type { PanelLink } from '../../state/linkGroups'
 import { DES, DES_REPORT } from '../../copy/des'
+import { OOS_LINK } from '../../copy/oos'
 import { fillCopy } from '../../copy/workspace'
 import type { DossierInput } from '../../export/dossier/types'
+import { requestOosCaller } from '../oos/oosCaller'
 import type { Analytics } from '../tear/tearKpis'
 import { defaultCost } from '../tear/tearQueries'
 import DesCosts from './DesCosts'
@@ -52,6 +55,32 @@ function Clamped({ label, text, testId }: { readonly label: string; readonly tex
   )
 }
 
+/**
+ * U07: the way from a hypothesis to its reads of the sealed-window gate. The count is the gate log's own `matched`
+ * for this exact caller name (one GET, limit 1), worded as what was queried: a screen may log its reads under its
+ * own caller name, and a caller is never inferred from a name stem. Until it is known, or if it cannot be read,
+ * the link stands alone. The link asks OOS for the caller in this panel (oosCaller) and then opens it; the count
+ * is the link's description for assistive technology.
+ */
+function GateReads({ name }: { readonly name: string }) {
+  const { panelId } = usePanelActions()
+  const countId = useId()
+  const matched = useOosLog({ caller: name, limit: 1 }).data?.matched
+  const count = typeof matched !== 'number'
+    ? null
+    : fillCopy(matched === 0 ? OOS_LINK.none : matched === 1 ? OOS_LINK.readsOne : OOS_LINK.reads, { n: matched, caller: name })
+  const open = () => {
+    requestOosCaller(name, panelId)
+    requestLine('OOS')
+  }
+  return (
+    <p className="des-note" data-testid="des-gate-reads">
+      <button type="button" className="des-link" onClick={open} aria-describedby={count === null ? undefined : countId} {...roving}>{OOS_LINK.link}</button>
+      {count === null ? null : <span id={countId}> {count}</span>}
+    </p>
+  )
+}
+
 function Head({ detail }: { readonly detail: HypothesisDetail }) {
   const { card } = detail
   const hypothesis = hypothesisText(detail.spec)
@@ -69,6 +98,7 @@ function Head({ detail }: { readonly detail: HypothesisDetail }) {
       </div>
       {hypothesis ? <Clamped label={DES.hypothesis} text={hypothesis} testId="des-hypothesis" /> : null}
       {passBar ? <Clamped label={DES.passBar} text={passBar} testId="des-passbar" /> : <p className="des-note">{DES.passBarNone}</p>}
+      <GateReads name={card.name} />
     </div>
   )
 }

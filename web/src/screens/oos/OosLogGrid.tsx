@@ -1,7 +1,9 @@
 // The access log table (look spec 7.10, ECO layout): newest first, days banded black and #1E1E1E, the
 // API's alert flag (A: a sealed read or a window the gate would refuse), its house severity as a bar of
 // 1 to 4 steps (R), and the result in words (served [IS], PAST FENCE, SEALED READ), so neither the flag
-// nor the bar is ever the only cue.
+// nor the bar is ever the only cue. U07: the A and R headers carry the house tooltip (what the flag and the 1 to 4
+// bar mean). The subtitle that spells out 'out-of-sample' belongs to the screen (OosScreen), so it shows in every
+// view, not only here.
 import { useCallback, useMemo } from 'react'
 import { useHypotheses } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
@@ -46,10 +48,10 @@ function Result({ e }: { readonly e: OosEntry }) {
 function oosColumns(levels: readonly Schemas['SeverityLevel'][]): MonitorColumn<OosEntry>[] {
   return [
   { id: 'time', header: OOS.colTime, width: 150, kind: 'name', value: (e) => e.ts_utc, format: entryTime },
-  { id: 'alert', header: OOS.colAlert, width: 22, kind: 'text', value: (e) => (e.alert ? 1 : 0), format: (e) => alertText(e) ?? '', render: (e) => <Alert e={e} />, sortable: false },
+  { id: 'alert', header: OOS.colAlert, width: 22, kind: 'text', value: (e) => (e.alert ? 1 : 0), format: (e) => alertText(e) ?? '', render: (e) => <Alert e={e} />, sortable: false, hint: OOS.hintAlert },
   // A text column, so its width is its own 44px (a number column widens to its longest text); the level
   // in words is inside the cell for assistive technology.
-  { id: 'severity', header: OOS.colSeverity, width: 44, kind: 'text', value: (e) => e.severity, format: (e) => String(severitySteps(e)), render: (e) => <Severity e={e} levels={levels} /> },
+  { id: 'severity', header: OOS.colSeverity, width: 44, kind: 'text', value: (e) => e.severity, format: (e) => String(severitySteps(e)), render: (e) => <Severity e={e} levels={levels} />, hint: OOS.hintSeverity },
   { id: 'caller', header: OOS.colCaller, width: 150, kind: 'name', value: (e) => e.caller },
   { id: 'reason', header: OOS.colReason, width: 400, kind: 'text', value: (e) => e.reason },
   { id: 'symbol', header: OOS.colSymbol, width: 80, kind: 'text', value: (e) => e.symbol },

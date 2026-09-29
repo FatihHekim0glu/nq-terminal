@@ -117,6 +117,23 @@ describe('caller options', () => {
     expect(options.slice(1).map((o) => o.value)).toEqual(['za_screen', 'terminal', 'gate_selfcheck'])
     expect(options[1]!.label).toBe('za_screen (5)')
   })
+
+  it('adds a selected caller the log has no reads for, right after All callers, with 0 reads', () => {
+    const options = callerOptions({ terminal: 2, za_screen: 5 }, 'za_v0')
+    expect(options.slice(0, 2)).toEqual([{ value: '', label: OOS.allCallers }, { value: 'za_v0', label: 'za_v0 (0)' }])
+    expect(options.slice(2).map((o) => o.value)).toEqual(['za_screen', 'terminal'])
+  })
+
+  it('adds nothing when the selected caller is in the log, or nothing is selected', () => {
+    const counts = { terminal: 2, za_screen: 5 }
+    expect(callerOptions(counts, 'za_screen')).toEqual(callerOptions(counts))
+    expect(callerOptions(counts, '')).toEqual(callerOptions(counts))
+    expect(callerOptions(counts, 'za_screen').map((o) => o.value)).toEqual(['', 'za_screen', 'terminal'])
+  })
+
+  it('adds the selected caller to an empty log too', () => {
+    expect(callerOptions({}, 'za_v0').map((o) => o.label)).toEqual([OOS.allCallers, 'za_v0 (0)'])
+  })
 })
 
 describe('since filter', () => {

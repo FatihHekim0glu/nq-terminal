@@ -112,11 +112,18 @@ export function dayBandLines(rows: readonly OosEntry[]): ReadonlySet<number> {
   return banded
 }
 
-/** All callers, then each caller by read count (most first) and name. */
-export function callerOptions(counts: Readonly<Record<string, number>>): FieldOption[] {
+/**
+ * All callers, then each caller by read count (most first) and name. `selected` is the caller the screen is on:
+ * when the log holds no reads for it (DES asked for a hypothesis that logs its reads under another name), it is
+ * listed right after All callers with 0 reads, so the field shows what the log is filtered on. The counts describe
+ * the whole log (the API's own totals), so a caller absent from them has 0 reads.
+ */
+export function callerOptions(counts: Readonly<Record<string, number>>, selected = ''): FieldOption[] {
   const callers = Object.entries(counts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b, 'en'))
+  const missing = selected !== '' && !(selected in counts)
   return [
     { value: '', label: OOS.allCallers },
+    ...(missing ? [{ value: selected, label: fillCopy(OOS.callerOption, { caller: selected, n: 0 }) }] : []),
     ...callers.map(([caller, n]) => ({ value: caller, label: fillCopy(OOS.callerOption, { caller, n }) })),
   ]
 }

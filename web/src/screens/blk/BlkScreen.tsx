@@ -1,6 +1,6 @@
 // BLK (TASKS 9.4; UI_SPEC section 5, P1; look spec 7): the blocks of a hypothesis on a screen of their
 // own. The red bar with the amber hypothesis field, the name line (cyan name, verdict, tag), then the
-// blocks as a numbered table beside the DES bar ladder. Every value is the screen JSON's own, from
+// blocks as a numbered table beside the DES bar ladder (N04: with the t the screen JSON records under each bar). Every value is the screen JSON's own, from
 // GET /api/hypotheses/{name}, printed exactly as DES prints it; `98) Export` saves them at full precision.
 // A sealed-window confirmation has no in-sample blocks and says where to look instead.
 import { useMemo, useRef } from 'react'
@@ -17,13 +17,15 @@ import { BookBar, EmptyGuide, Failed, HypothesisRoute, Loading, type Confirmatio
 import { NameLine } from '../cost/NameLine'
 import { MISSING, blocksInput, type HypothesisDetail } from '../des/desModel'
 import { DesCard } from '../des/DesParts'
+import { LadderTNote } from '../des/LadderTNote'
+import { withRecordedT } from '../des/ladderT'
 import { blockRows, ladderCsv } from './ladder'
 import LadderTable from './LadderTable'
 
 function Blocks({ detail }: { readonly detail: HypothesisDetail }) {
   const { card, des } = detail
   const rows = useMemo(() => blockRows(des), [des])
-  const ladder = useMemo(() => blocksInput(des, card.name), [des, card.name])
+  const ladder = useMemo(() => withRecordedT(blocksInput(des, card.name), detail.screen), [des, card.name, detail.screen])
   const unit = des.blocks_unit ?? MISSING
   return (
     <div className="books-page">
@@ -35,7 +37,8 @@ function Blocks({ detail }: { readonly detail: HypothesisDetail }) {
             <LadderTable caption={fillCopy(BLK.caption, { name: card.name, unit })} columns={{ n: BLK.cols.n, label: BLK.cols.block, value: BLK.cols.value }} rows={rows} testId="blk-table" />
           </DesCard>
           <DesCard title={fillCopy(BOOKS.unit, { unit })}>
-            {ladder ? <div className="books-ladder"><BarLadder data={ladder} chartId="blk-ladder" /></div> : null}
+            {ladder.input ? <div className="books-ladder"><BarLadder data={ladder.input} chartId="blk-ladder" /></div> : null}
+            {ladder.count > 0 ? <LadderTNote card={card} className="books-note" /> : null}
           </DesCard>
         </div>
       )}

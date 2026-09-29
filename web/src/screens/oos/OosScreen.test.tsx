@@ -7,6 +7,7 @@ import type { Schemas } from '../../api/types'
 import { useMessage } from '../../chrome/MessageLine.store'
 import { OOS, OPENINGS } from '../../copy/oos'
 import { stubLayout } from '../../grids/testing'
+import { requestOosCaller, resetOosCaller } from './oosCaller'
 import OosScreen from './OosScreen'
 
 vi.mock('../../charts/echarts/Swimlane', () => ({
@@ -84,8 +85,14 @@ function mount() {
   )
 }
 
-beforeEach(() => stubLayout(600))
+beforeEach(() => {
+  stubLayout(600)
+  resetOosCaller()
+})
 afterEach(() => cleanup())
+
+/** Every URL the screen asked for on the gate log. */
+const logUrls = (spy: ReturnType<typeof routes>) => spy.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith('/api/audit/oos-log'))
 
 describe('OOS: the R severity column (Phase 8)', () => {
   it('draws each entry\'s severity as steps with its meaning for assistive technology, and the legend', async () => {
@@ -99,6 +106,79 @@ describe('OOS: the R severity column (Phase 8)', () => {
     expect(rows[0]!.querySelectorAll('.oos-sev-step.on')).toHaveLength(1)
     const legend = screen.getByRole('list', { name: OOS.severityLegendLabel })
     expect(within(legend).getByText('4 sealed read (spent window): 1')).toBeTruthy()
+  })
+})
+
+describe('U07: OOS opens on the caller DES asked for', () => {
+  it('opens on the caller DES asked for', async () => {
+    const spy = routes()
+    requestOosCaller('za_screen', '')
+    mount()
+    const field = await screen.findByRole('combobox', { name: OOS.callerField })
+    await waitFor(() => expect(within(field).getByText('za_screen (1)')).toBeTruthy())
+    await waitFor(() => expect(logUrls(spy).some((u) => u.includes('caller=za_screen'))).toBe(true))
+    for (const [, init] of spy.mock.calls) expect(init?.method).toBe('GET')
+  })
+
+  it('a requested caller with no reads shows as that caller with 0', async () => {
+    const spy = routes()
+    requestOosCaller('za_v0', '')
+    mount()
+    const field = await screen.findByRole('combobox', { name: OOS.callerField })
+    await waitFor(() => expect(within(field).getByText('za_v0 (0)')).toBeTruthy())
+    await waitFor(() => expect(logUrls(spy).some((u) => u.includes('caller=za_v0'))).toBe(true))
+    // The option list holds it right after All callers, so the field can go back and forth.
+    await waitFor(() => expect(screen.getByText('Terminal reads 7')).toBeTruthy())
+    fireEvent.click(field)
+    const options = within(await screen.findByRole('listbox')).getAllByRole('option').map((o) => o.textContent)
+    expect(options.slice(0, 2)).toEqual([OOS.allCallers, 'za_v0 (0)'])
+  })
+
+  it('a later plain OOS starts on All callers', async () => {
+    routes()
+    requestOosCaller('za_screen', '')
+    const first = mount()
+    const field = await screen.findByRole('combobox', { name: OOS.callerField })
+    await waitFor(() => expect(within(field).getByText('za_screen (1)')).toBeTruthy())
+    first.unmount()
+    mount()
+    const again = await screen.findByRole('combobox', { name: OOS.callerField })
+    expect(within(again).getByText(OOS.allCallers)).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Terminal reads 7')).toBeTruthy())
+    expect(within(again).getByText(OOS.allCallers)).toBeTruthy()
+  })
+
+  it('leaves a request meant for another panel alone', async () => {
+    routes()
+    requestOosCaller('za_screen', 'p-other')
+    mount()
+    const field = await screen.findByRole('combobox', { name: OOS.callerField })
+    await waitFor(() => expect(screen.getByText('Terminal reads 7')).toBeTruthy())
+    expect(within(field).getByText(OOS.allCallers)).toBeTruthy()
+  })
+})
+
+describe('U07: the subtitle says out-of-sample in every view', () => {
+  it('says out-of-sample in every view', async () => {
+    routes()
+    mount()
+    expect(screen.getAllByText(OOS.subtitle)).toHaveLength(1)
+    await screen.findByRole('grid', { name: OOS.gridLabel })
+    expect(screen.getAllByText(OOS.subtitle)).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: OOS.viewTimeline }))
+    await screen.findByTestId('swimlane')
+    expect(screen.getAllByText(OOS.subtitle)).toHaveLength(1)
+  })
+
+  it('puts the subtitle between the red bar and the parameter row', async () => {
+    routes()
+    mount()
+    const bar = screen.getByRole('toolbar', { name: /Gate access log/ })
+    const subtitle = screen.getByText(OOS.subtitle)
+    const params = screen.getByRole('group', { name: OOS.paramsLabel })
+    expect(bar.compareDocumentPosition(subtitle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(subtitle.compareDocumentPosition(params) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await screen.findByRole('grid', { name: OOS.gridLabel })
   })
 })
 

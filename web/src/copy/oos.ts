@@ -4,6 +4,10 @@
 export const OOS = {
   screen: 'Gate access log and openings',
   title: 'Gate access log',
+  // U07: 'out-of-sample' appeared nowhere, and 'A', 'R' and 'house' went unexplained.
+  subtitle: 'OOS: out-of-sample gate access log',
+  hintAlert: 'A: alert flag. Set for a sealed read or a window the gate would refuse.',
+  hintSeverity: "R: house severity 1 to 4, this project's own scale. The key above says what each level means.",
   allCallers: 'All callers',
   callerField: 'Caller',
   callerOption: '{caller} ({n})',
@@ -44,7 +48,7 @@ export const OOS = {
   severityText: 'severity {level} of {max}',
   severityMeaning: 'severity {level} of {max}: {meaning}',
   severityLegendLabel: 'Severity levels (house semantics) with their counts over the whole log',
-  severityLegendTitle: 'R severity (house):',
+  severityLegendTitle: "R: house severity (this project's own scale):",
   severityLegendItem: '{level} {meaning}: {n}',
   resultServed: 'served [IS]',
   resultSealed: 'SEALED READ',
@@ -57,6 +61,18 @@ export const OOS = {
   exportEmpty: 'Nothing to export.',
   exportUnavailable: 'This browser cannot save a file here.',
   exportFile: 'oos_access_log_view.csv',
+} as const
+
+/**
+ * U07: the DES link from a hypothesis to its gate reads, with the count the gate log holds for it. The count is for
+ * the exact caller name the link asks for (a caller is recorded, never inferred from a name stem), and a screen may
+ * log its reads under its own caller name (za_v0 reads as za_screen), so the words say what was asked.
+ */
+export const OOS_LINK = {
+  link: 'Gate reads (OOS) for this hypothesis',
+  readsOne: '1 read logged as caller {caller}',
+  reads: '{n} reads logged as caller {caller}',
+  none: 'no reads logged as caller {caller} (a screen may log its reads under its own caller name)',
 } as const
 
 export const OPENINGS = {

@@ -20,6 +20,8 @@ import { costRows, ladderCsv } from '../blk/ladder'
 import LadderTable from '../blk/LadderTable'
 import { MISSING, breakEvenText, costInput, type HypothesisDetail } from '../des/desModel'
 import { DesCard } from '../des/DesParts'
+import { LadderTNote } from '../des/LadderTNote'
+import { withRecordedT } from '../des/ladderT'
 import { runTags } from '../runs/model'
 import { CostsCard } from '../tear/RunBooks'
 import { formatNumber } from '../tear/tearFormat'
@@ -57,7 +59,7 @@ function Bar({ name, page, kind, onExport }: BarProps) {
 function Ladder({ detail }: { readonly detail: HypothesisDetail }) {
   const { card, des } = detail
   const rows = useMemo(() => costRows(des), [des])
-  const ladder = useMemo(() => costInput(des, card.name), [des, card.name])
+  const ladder = useMemo(() => withRecordedT(costInput(des, card.name), detail.screen), [des, card.name, detail.screen])
   const unit = des.cost_ladder_unit ?? MISSING
   return (
     <div className="books-page">
@@ -75,7 +77,8 @@ function Ladder({ detail }: { readonly detail: HypothesisDetail }) {
             <p className="books-note" data-testid="cost-break-even">{breakEvenText(des)}</p>
           </DesCard>
           <DesCard title={fillCopy(DES.unitLine, { unit })}>
-            {ladder ? <div className="books-ladder"><BarLadder data={ladder} chartId="cost-ladder" /></div> : null}
+            {ladder.input ? <div className="books-ladder"><BarLadder data={ladder.input} chartId="cost-ladder" /></div> : null}
+            {ladder.count > 0 ? <LadderTNote card={card} className="books-note" /> : null}
           </DesCard>
         </div>
       )}
