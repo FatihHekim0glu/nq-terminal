@@ -128,13 +128,20 @@ export interface MarkLineOption {
   silent: true
   symbol: ['none', 'none']
   animation: false
+  /** Decimals ECharts keeps on each reference value (it rounds to 2 by default, and clamps at 20). */
+  precision: number
   label: { fontFamily: string; fontSize: number }
   data: MarkLineItem[]
 }
 
-/** markLine settings shared by every reference line: no end symbols, no hover, no animation, chart font. */
+/**
+ * markLine settings shared by every reference line: no end symbols, no hover, no animation, chart font.
+ * ECharts rounds each xAxis / yAxis value with toFixed(precision), and precision defaults to 2, which
+ * would turn alpha / k = 0.05 / 21 into 0 (gone on a log axis). 20 is its maximum and keeps every value
+ * drawn here (p values, ratios, the fence in milliseconds) exact.
+ */
 export function markLine(data: readonly MarkLineItem[], tokens: ChartTokens): MarkLineOption {
-  return { silent: true, symbol: ['none', 'none'], animation: false, label: textFont(tokens), data: [...data] }
+  return { silent: true, symbol: ['none', 'none'], animation: false, precision: 20, label: textFont(tokens), data: [...data] }
 }
 
 export function isFiniteNumber(v: number | null | undefined): v is number {
