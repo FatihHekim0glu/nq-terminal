@@ -12,10 +12,10 @@ export const CLIENT_NAME = 'nq-lab-terminal'
 export const PLUMBING_BANNER = 'PLUMBING TEST, DELAYED DATA: not strategy performance'
 
 /**
- * The subject of the EQ and DD tear sheets the flows open. The fixture backend serves a tear sheet for its volmanaged run.
- * The demo serves none for any run: a run's tear sheet needs its RunDetail as well as its analytics, and the runs the demo
- * holds analytics for have no RunDetail (src/demo/data/runs.ts, analytics.ts). Offline the flows read the hypothesis's tear
- * sheet instead, which the demo serves whole (EQ, DD and RET at 1 tick), through the same tabs and the same numbered keys.
+ * The subject of the EQ and DD tear sheets the keyboard flows open. The fixture backend serves a tear sheet for its volmanaged run.
+ * The demo now holds that run's record and analytics too (src/demo/data/runs.ts RUN_DETAILS, analytics.ts), and the rules flow
+ * opens that run's EQ itself. Offline the keyboard flows keep the hypothesis's tear sheet as their subject, which the demo serves
+ * whole (EQ, DD and RET at 1 tick), through the same tabs and the same numbered keys.
  */
 export const TEAR_SUBJECT = OFFLINE ? 'volmanaged_v0' : 'nt_volmanaged_v0_fixture_m1'
 

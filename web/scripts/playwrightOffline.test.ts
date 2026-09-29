@@ -19,6 +19,19 @@ const WEB = fileURLToPath(new URL('..', import.meta.url))
 const OFFLINE_DIR = path.join(WEB, 'e2e', 'offline')
 const read = (...parts: string[]): string => readFileSync(path.join(WEB, ...parts), 'utf8')
 
+/**
+ * The reason strings of every offline screen skip in the offline section of e2e/visual/screens.ts: each inline
+ * `offlineSkip: '...'` plus each entry of the OFFLINE_SKIPS table (the text between `const OFFLINE_SKIPS` and `const OFFLINE_BASE`).
+ */
+export function screenSkipReasons(section: string): string[] {
+  const reasons = [...section.matchAll(/offlineSkip: '([^']*)'/g)].map((m) => m[1] ?? '')
+  const start = section.indexOf('const OFFLINE_SKIPS')
+  const end = section.indexOf('const OFFLINE_BASE')
+  const table = start < 0 || end < start ? '' : section.slice(start, end)
+  reasons.push(...[...table.matchAll(/'[A-Za-z-]+': '([^']*)'/g)].map((m) => m[1] ?? ''))
+  return reasons
+}
+
 /** Playwright's own default testMatch: what a project without a testMatch runs. */
 const DEFAULT_TEST_MATCH = /.*\.(spec|test)\.(c|m)?[jt]sx?$/
 const OFFLINE_NAME = /(^tsconfig\.json$)|(\.offline\.ts$)|(\.config\.ts$)/
@@ -294,11 +307,9 @@ describe('the offline screens and skips (roadmap #18, slice 2)', () => {
   })
 
   it('gives every offline screen skip a reason that names the demo dataset', () => {
-    const reasons = [...offlineSection.matchAll(/offlineSkip: '([^']*)'/g)].map((m) => m[1] ?? '')
-    const table = offlineSection.slice(offlineSection.indexOf('const OFFLINE_SKIPS'), offlineSection.indexOf('const OFFLINE_BASE'))
-    reasons.push(...[...table.matchAll(/'[A-Za-z-]+': '([^']*)'/g)].map((m) => m[1] ?? ''))
-    // EQ-run and RR-run remain; SEAS and EVT are driven to the request the demo holds instead of skipped.
-    expect(reasons.length).toBeGreaterThanOrEqual(2)
+    const reasons = screenSkipReasons(offlineSection)
+    // No screen is skipped offline since P5 (src/demo/offlineScreens.test.ts pins the empty table), and SEAS and EVT are driven to
+    // the request the demo holds. Any skip added later must name the demo dataset; the planted case below keeps this loop honest.
     for (const reason of reasons) expect(reason, reason).toMatch(/not in the demo dataset/)
   })
 
@@ -347,11 +358,11 @@ describe('the offline screens and skips (roadmap #18, slice 2)', () => {
       for (const reason of offlineSkipReasons(source)) expect(reason, `${spec}: ${reason}`).toMatch(NAMES_THE_DEMO)
     }
     expect(offlineSkipReasons(read('e2e', 'flows', 'keyboard.spec.ts')).length).toBeGreaterThanOrEqual(1)
-    // rules.spec.ts leaves out two steps: the fence test's GIP read and the tags test's run tear sheet, which is named
-    // (RunDetail) instead of being swapped for the hypothesis's, so the run-reads-[POST HOC] check is never lost unsaid.
+    // rules.spec.ts leaves out one step, the fence test's GIP read (1m bars). The tags test's run tear sheet runs offline since the
+    // demo holds the volmanaged run's record (P5, src/demo/data/runs.ts), so the run-reads-[POST HOC] check is never lost.
     const rules = read('e2e', 'flows', 'rules.spec.ts')
-    expect(offlineSkipReasons(rules).length).toBeGreaterThanOrEqual(2)
-    expect(offlineSkipReasons(rules).some((r) => r.includes('RunDetail'))).toBe(true)
+    expect(offlineSkipReasons(rules)).toHaveLength(1)
+    expect(offlineSkipReasons(rules).some((r) => r.includes('RunDetail'))).toBe(false)
     expect(rules).not.toContain('TEAR_SUBJECT')
   })
 
@@ -370,6 +381,17 @@ describe('the offline screens and skips (roadmap #18, slice 2)', () => {
     expect(offlineSkipReasons(`test.skip(OFFLINE, 'no bars')`).every((r) => NAMES_THE_DEMO.test(r))).toBe(false)
     expect(offlineSkipReasons(`test.skip(OFFLINE && x, '1m bars are not in the demo dataset')`)).toEqual(['1m bars are not in the demo dataset'])
     expect(offlineSkipReasons(`leaveOutOffline('1m bars are not in the demo dataset (a)')`)).toEqual(['1m bars are not in the demo dataset (a)'])
+  })
+
+  it('born failing: the screen skip extraction finds inline and table reasons, so the per-reason loop cannot pass empty by accident', () => {
+    const planted =
+      "{ name: 'X', offlineSkip: 'bars are not in the demo dataset' }\n" +
+      'const OFFLINE_SKIPS: Readonly<Record<string, string>> = {\n' +
+      "  'EQ-run': 'GET /api/runs/x is not in the demo dataset',\n" +
+      '}\n' +
+      'const OFFLINE_BASE'
+    expect(screenSkipReasons(planted)).toEqual(['bars are not in the demo dataset', 'GET /api/runs/x is not in the demo dataset'])
+    expect(screenSkipReasons('const OFFLINE_SKIPS = {}\nconst OFFLINE_BASE')).toEqual([])
   })
 
   it('leaves the Windows list alone: no spec reads OFFLINE_SCREENS outside the offline branch', () => {

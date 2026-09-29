@@ -98,12 +98,9 @@ test.describe('rule flows', () => {
     await expect(checks.getByRole('cell', { name: /^Sharpe difference \(m - BH\)/ }).first()).toBeVisible()
     await expect(checks.getByRole('cell', { name: /^dsr\b/i })).toHaveCount(0)
 
-    // A run's tear sheet needs its RunDetail, which the demo does not hold: offline this step is left out, by name.
-    if (!leaveOutOffline('GET /api/runs/nt_volmanaged_v0_fixture_m1 (RunDetail) is not in the demo dataset (src/demo/data/runs.ts RUN_DETAILS), so no run tear sheet is served')) {
-      await openScreen(page, `${RUN} EQ`, 'EQ')
-      const tiles = panel(page, `${RUN} EQ`).getByRole('list', { name: 'Tear sheet key figures' })
-      await expect(tiles).toContainText('[POST HOC]')
-    }
+    await openScreen(page, `${RUN} EQ`, 'EQ')
+    const tiles = panel(page, `${RUN} EQ`).getByRole('list', { name: 'Tear sheet key figures' })
+    await expect(tiles).toContainText('[POST HOC]')
     await openScreen(page, 'volmanaged_v0 EQ', 'EQ')
     await expect(panel(page, 'volmanaged_v0 EQ')).toContainText('[PRE-REG]')
 

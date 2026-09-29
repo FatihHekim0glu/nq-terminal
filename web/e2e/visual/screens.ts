@@ -113,8 +113,12 @@ async function pickOption(page: Page, code: string, field: string, option: strin
 
 /** The lines that differ from SCREENS because the demo holds the body under another id (src/demo/data). */
 const OFFLINE_LINES: Readonly<Record<string, string>> = {
-  // RunDetail is held for nt_dtsmom_v0_fixture_ts1, nt_overnight_v0_fixture_open and nt_za_v0_fixture_unbalanced only (runs.ts RUN_DETAILS).
+  // The trades, fills and log tables of a run are held for nt_dtsmom_v0_fixture_ts1 only (runs.ts RUN_TRADES, RUN_FILLS, RUN_LOGS); the
+  // records of the other runs show without their tables, and the run chart (analytics.ts PANELS) is held for the dtsmom run.
   RUN: 'nt_dtsmom_v0_fixture_ts1 RUN',
+  // Run analytics are held for nt_volmanaged_v0_fixture_m1 and smoke_2015_01 only (analytics.ts ANALYTICS, RUN_EXTENDED), not for the dtsmom book,
+  // so RR opens the sized volmanaged run. Its run record is held (runs.ts RUN_DETAILS), which the tear sheet reads first.
+  'RR-run': 'nt_volmanaged_v0_fixture_m1 RR',
 }
 
 /** The chart counts that differ from SCREENS; each names the demo body that draws the difference. */
@@ -122,13 +126,19 @@ const OFFLINE_CHART_COUNTS: Readonly<Record<string, number>> = {
   // Two more than the fixture: the tracking chart of the paper book (analytics.ts PAPER_TRACKING, populated) and the LV6 expectation
   // cone (the volmanaged_v0 SV6 bootstrap, HYP_BOOTSTRAP, with the volmanaged run's analytics, RUN_ANALYTICS).
   LIVE: 3,
+  // smoke_2015_01 draws its equity chart only. The demo holds its run record and analytics but no trades, costs, exposure or extended body
+  // for it (analytics.ts TRADES, COSTS, EXPOSURE and EXTENDED hold the volmanaged and za runs), so its run books say so instead of drawing.
+  'EQ-run': 1,
+  // The volmanaged run's RR draws its net P&L against slippage ladder, its exposure and turnover pane and its weekday ladder (3). The
+  // fixture's dtsmom RR draws 4; the demo holds no excursions or trade paths for the volmanaged run (analytics.ts EXCURSION_VIEWS, TRADE_PATH_VIEWS).
+  'RR-run': 3,
 }
 
-/** Screens of SCREENS the demo dataset cannot show, each with the body it lacks. */
-const OFFLINE_SKIPS: Readonly<Record<string, string>> = {
-  'EQ-run': 'GET /api/runs/smoke_2015_01 is not in the demo dataset (runs.ts RUN_DETAILS holds no RunDetail for a run with analytics), so its tear sheet refuses',
-  'RR-run': 'GET /api/analytics/run/nt_dtsmom_v0_fixture_ts1 is not in the demo dataset (analytics.ts holds run analytics for the volmanaged run and smoke_2015_01 only), so its tear sheet refuses',
-}
+/**
+ * Screens of SCREENS the demo dataset cannot show, each with the body it lacks (the case is skipped by name, never dropped).
+ * Empty since the demo holds the run records of the two runs that have analytics (runs.ts RUN_DETAILS): EQ-run and RR-run draw.
+ */
+const OFFLINE_SKIPS: Readonly<Record<string, string>> = {}
 
 /**
  * The screens of SCREENS the offline run drives, without GIP (1m bars are not in the demo dataset: market.ts serves daily

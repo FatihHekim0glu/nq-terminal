@@ -14,7 +14,7 @@ import { BOOK } from '../screens/live/liveFixtures'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../screens/des/desTestData'
 import { OVERNIGHT_SCREEN, VOLMANAGED_SCREEN } from '../screens/des/robustness.fixtures'
 import { intParam } from './data/answer'
-import { GAP_TEXT } from './data/analytics'
+import { GAP_TEXT, evidenceInDemo } from './data/analytics'
 import { DEMO_DETAIL, DEMO_TEXT } from './data/text'
 import { demoLiveJournalRows, demoLiveStatus } from './data/live'
 import { HYPOTHESIS_DETAILS, withScreen } from './data/research'
@@ -192,6 +192,7 @@ const PROBES: readonly Probe[] = [
   ['GP catalog', () => get('/api/data/catalog'), (c: Schemas['DataCatalog']) => c.series.some((s) => s.symbol === 'NQ.V.0')],
   ['GP rv', () => get('/api/market/rv', { query: { symbol: 'NQ.V.0', window: RV_WINDOW } }), (r: Schemas['RealisedVolSeries']) => r.rv.length === r.t.length && r.last !== null],
   ['GP runs', () => get('/api/runs'), (r: Schemas['RunSummary'][]) => r.length === 6],
+  ['GP universe (RV22 header)', () => get('/api/market/universe', { query: { window: RV_WINDOW } }), (u: Schemas['Universe']) => u.rows.length === 27 && u.window === RV_WINDOW],
   ['MON universe', () => get('/api/market/universe', { query: { window: DEFAULT_WINDOW } }), (u: Schemas['Universe']) => u.rows.length === 27],
   ['MON two-day', () => get('/api/market/two-day', { query: { symbols: 'NQ.V.0' } }), (d: Schemas['TwoDay']) => d.rows.length === 1 && d.sessions.length === 2],
   ['HOME EQ panel', () => get('/api/analytics/hypothesis/{name}/panel', { path: { name: HYP } }), (p: Schemas['HomePanel']) => p.context.name === HYP],
@@ -323,6 +324,121 @@ describe('no body is served under another context', () => {
     expect(study.gate).toEqual(zeroGate)
     const seas = ok('/api/seasonality/instrument/{root}', { path: { root: 'NQ' }, query: { start_year: 2020, end_year: 2021 } })
     expect(seas.gate).toEqual(zeroGate)
+  })
+
+  it('reads every market body as zero reads: the universe table at 252 and 22, the RV22 line and the pair correlation', () => {
+    // MON and CORR print this record as "Gate: caller ..., N reads this process": the fixture table (screens/mon/testUniverse.ts)
+    // carries the 27 reads of the day it was captured, which the demo must not repeat (health says gate_reads 0).
+    const zeroGate = { caller: 'demo', served_years: [], cached: false, reads_this_process: 0 }
+    expect(ok('/api/market/universe', { query: { window: 252 } }).gate).toEqual(zeroGate)
+    expect(ok('/api/market/universe', { query: { window: 22 } }).gate).toEqual(zeroGate)
+    expect(ok('/api/market/rv', { query: { symbol: 'NQ.V.0', window: 22 } }).gate).toEqual(zeroGate)
+    expect(ok('/api/market/pair-corr', { query: { a: 'NQ.V.0', b: 'ZN.V.0', window: DEFAULT_WINDOW } }).gate).toEqual(zeroGate)
+  })
+})
+
+describe('a run tear sheet reads the run record first, so every run with analytics has one (P5)', () => {
+  // useTearAnalytics asks GET /api/runs/{id} and only then the analytics route: a run that has analytics but no record
+  // refuses every tear sheet tab (EQ, DD, RET, RR, MRET) with "not in the demo dataset".
+  const TEAR_RUNS = ['nt_volmanaged_v0_fixture_m1', 'smoke_2015_01'] as const
+
+  it.each(TEAR_RUNS)('%s: GET /api/runs/{run_id} answers 200 with the record of that run', (id) => {
+    const detail = ok('/api/runs/{run_id}', { path: { run_id: id } })
+    expect(detail.summary.run_id).toBe(id)
+    expect(detail.config['run_id']).toBe(id)
+    expect(detail.summary.readable).toBe(true)
+    // The tear sheet asks analytics only for a run whose balance check passed (rule 4).
+    expect(detail.summary.balance_ok).toBe(true)
+    expect(detail.summary.usable).toBe(true)
+  })
+
+  it.each(TEAR_RUNS)('%s: the record agrees with the analytics body about the same run (id, freq, dates)', (id) => {
+    const detail = ok('/api/runs/{run_id}', { path: { run_id: id } })
+    const analytics = ok('/api/analytics/run/{run_id}', { path: { run_id: id } })
+    expect(analytics.context).toMatchObject({ kind: 'run', name: detail.summary.run_id, freq: 'D' })
+    // The daily series lies inside the dates the run covered (start inclusive, end exclusive).
+    expect(analytics.first! >= detail.summary.start!).toBe(true)
+    expect(analytics.last! < detail.summary.end!).toBe(true)
+  })
+
+  it.each(TEAR_RUNS)('%s: the record is the very row the run list holds, and the counts match the tables it names', (id) => {
+    const detail = ok('/api/runs/{run_id}', { path: { run_id: id } })
+    expect(detail.summary).toEqual(ok('/api/runs').find((r) => r.run_id === id))
+    expect(detail.counts.trades).toBe(detail.summary.n_trades)
+    expect(detail.summary_stats['n_trades']).toBe(detail.summary.n_trades)
+    expect(detail.balance_check['ok']).toBe(true)
+  })
+
+  it('a run with mark to market snapshots carries them (the analytics series is built from them)', () => {
+    const detail = ok('/api/runs/{run_id}', { path: { run_id: 'nt_volmanaged_v0_fixture_m1' } })
+    const analytics = ok('/api/analytics/run/{run_id}', { path: { run_id: 'nt_volmanaged_v0_fixture_m1' } })
+    expect(analytics.source).toBe('mtm_snapshots')
+    expect(detail.log_sections['snapshots']).toBe(analytics.n)
+    expect(detail.summary.kind).toBe('sized')
+  })
+
+  it('names as evidence only runs that have both a record and analytics', () => {
+    const named = evidenceInDemo().runs
+    expect([...named].sort()).toEqual([...TEAR_RUNS].sort())
+    for (const id of named) {
+      expect(get('/api/runs/{run_id}', { path: { run_id: id } }).status, `${id} record`).toBe(200)
+      expect(get('/api/analytics/run/{run_id}', { path: { run_id: id } }).status, `${id} analytics`).toBe(200)
+    }
+  })
+
+  it('still answers the honest 404 for a run the dataset holds no record of', () => {
+    refused(get('/api/runs/{run_id}', { path: { run_id: 'nt_za_v0_fixture_a' } }), 404)
+    refused(get('/api/runs/{run_id}', { path: { run_id: 'nt_not_in_the_demo' } }), 404)
+  })
+})
+
+describe('GP asks the universe at its RV window (P5)', () => {
+  // useGpData reads GET /api/market/universe?window=22 for the RV22 header on every daily chart that ends at the fence,
+  // HOME's GP included. A refusal there is a console error on every page that opens GP.
+  const rowOf = (u: Schemas['Universe'], symbol: string) => u.rows.find((r) => r.symbol === symbol)!
+
+  it('serves the window GP asks for, describing that window', () => {
+    const u = ok('/api/market/universe', { query: { window: RV_WINDOW } })
+    expect(u.window).toBe(RV_WINDOW)
+    expect(u.correlation_window.sessions).toBe(RV_WINDOW)
+    expect(u.rows).toHaveLength(27)
+    expect(u.as_of).toBe('2021-12-31')
+    // The same filler table as the default window, so the same gate record too.
+    expect(u.gate).toEqual(ok('/api/market/universe', { query: { window: DEFAULT_WINDOW } }).gate)
+  })
+
+  it('is the same on every call and keeps the same symbols, last closes and one day returns as the default window', () => {
+    const a = ok('/api/market/universe', { query: { window: RV_WINDOW } })
+    expect(ok('/api/market/universe', { query: { window: RV_WINDOW } })).toEqual(a)
+    const d = ok('/api/market/universe', { query: { window: DEFAULT_WINDOW } })
+    expect(a.rows.map((r) => r.symbol)).toEqual(d.rows.map((r) => r.symbol))
+    for (const row of a.rows) {
+      expect(row.last_close, row.symbol).toBe(rowOf(d, row.symbol).last_close)
+      expect(row.returns['1D'], row.symbol).toBe(rowOf(d, row.symbol).returns['1D'])
+    }
+  })
+
+  it('reads the RV22 header from the same number as the RV22 pane ends on, for every symbol', () => {
+    const u = ok('/api/market/universe', { query: { window: RV_WINDOW } })
+    for (const row of u.rows) {
+      const line = ok('/api/market/rv', { query: { symbol: row.symbol, window: RV_WINDOW } })
+      expect(row.realised_vol, row.symbol).toBe(line.last)
+    }
+  })
+
+  it('leaves the default window table exactly as it was', () => {
+    const d = ok('/api/market/universe', { query: { window: DEFAULT_WINDOW } })
+    expect(d.window).toBe(252)
+    expect(d.correlation_window.sessions).toBe(252)
+    expect(rowOf(d, 'NQ.V.0').realised_vol).toBe(0.27304595530797793)
+    expect(ok('/api/market/universe')).toEqual(d)
+  })
+
+  it('still refuses a window the dataset holds no table for, and one outside the contract (20 to 2520)', () => {
+    for (const window of [63, 126, 21, 253]) refused(get('/api/market/universe', { query: { window } }), 404)
+    refused(raw('/api/market/universe', { window: '19' }), 404)
+    refused(raw('/api/market/universe', { window: '2521' }), 404)
+    refused(raw('/api/market/universe', { window: '22.5' }), 404)
   })
 })
 

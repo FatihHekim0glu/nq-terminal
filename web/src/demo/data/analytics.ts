@@ -13,6 +13,7 @@ import {
 } from '../../screens/tear/tearP1.fixtures'
 import { NOT_IN_DEMO, intParam, refuse, served, type DemoBody, type DemoRefusal } from './answer'
 import { HYPOTHESIS_DETAILS } from './research'
+import { RUN_DETAILS } from './runs'
 import { DEMO_DETAIL } from './text'
 
 type Context = Schemas['Context']
@@ -92,7 +93,8 @@ function distinct<T>(items: readonly T[]): T[] {
 /**
  * What the dataset really serves as a tear sheet, read from the bodies themselves so the hint cannot drift
  * from them: the hypotheses that have both a tear sheet and their DES card (with the costs the sheets were
- * captured at), and the runs that have a tear sheet.
+ * captured at), and the runs that have a tear sheet. A run's tear sheet opens through its run record first
+ * (screens/tear/tearQueries.ts), so a run with analytics and no record is not named.
  */
 export function evidenceInDemo(): { readonly hypotheses: readonly string[]; readonly costs: readonly number[]; readonly runs: readonly string[] } {
   const contexts = [...ANALYTICS.values()].map((body) => body.context)
@@ -100,7 +102,7 @@ export function evidenceInDemo(): { readonly hypotheses: readonly string[]; read
   return {
     hypotheses: distinct(sheets.map((c) => c.name)),
     costs: distinct(sheets.flatMap((c) => (c.cost === null ? [] : [c.cost]))).sort((a, b) => a - b),
-    runs: distinct(contexts.filter((c) => c.kind === 'run').map((c) => c.name)),
+    runs: distinct(contexts.filter((c) => c.kind === 'run' && RUN_DETAILS.has(c.name)).map((c) => c.name)),
   }
 }
 

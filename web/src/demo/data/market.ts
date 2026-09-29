@@ -5,8 +5,10 @@
 // the marker). Each series is walked back from the universe table's last close, so GP and MON agree on it.
 // The universe is the MON tests' table (screens/mon/testUniverse.ts: the NQ, ES and ZT rows and the first
 // matrix entries as the fixture backend returned them, the rest deterministic fillers); rv, two-day and
-// pair-corr are seeded fillers in the same style, whose basis says so. Nothing goes through a gate here, so
-// every gate record reads zero reads and no year served.
+// pair-corr are seeded fillers in the same style, whose basis says so. The table is served for two windows: 252
+// (MON's default) and 22 (GP's RV22 header, useGpData RV_WINDOW), the second with the same filler rows except
+// realised_vol, which is the last value of the RV22 line of /api/market/rv, so GP's header and its RV22 pane
+// read one number. Nothing goes through a gate here, so every gate record reads zero reads and no year served.
 import type { Schemas } from '../../api/types'
 import { fillCopy } from '../../copy/workspace'
 import { mulberry32, ohlcvFixture } from '../../gallery/fixtures'
@@ -27,10 +29,12 @@ const TS_CONVENTION = 'bar open, UTC'
 const RV_UNIT = 'fraction per year, annualised (0.18 is 18%)'
 const DAILY = '1d'
 const VENDOR = 'vendor'
-/** The window every universe body here describes (MON's default, the API's default). */
+/** The window of the universe table MON reads (its default, the API's default). */
 const UNIVERSE_WINDOW = 252
-/** GP asks for RV22 (useGpData RV_WINDOW); the only rv window the demo serves. */
+/** GP asks for RV22 (useGpData RV_WINDOW): the only rv window the demo serves, and the second window of the universe table. */
 const RV_WINDOW = 22
+/** The universe windows the demo holds a table for; any other is a 404 (the contract allows 20 to 2520). */
+const UNIVERSE_WINDOWS: readonly number[] = [UNIVERSE_WINDOW, RV_WINDOW]
 const SEED = 20_260_927
 /** backend/tests/fakes.py: the contract rolls on the 10th of March, June, September and December (0-based months). */
 const ROLL_MONTHS = [2, 5, 8, 11] as const
@@ -52,17 +56,29 @@ function decimalsOf(tick: number): number {
 
 // ---------------------------------------------------------------- the universe table
 
-let universe: Schemas['Universe'] | null = null
+const universes = new Map<number, Schemas['Universe']>()
 
-/** The universe table at the default window (built once). */
-function universeBody(): Schemas['Universe'] {
-  universe ??= makeUniverse(UNIVERSE_WINDOW)
-  return universe
+/**
+ * The universe table of a window the demo serves (built once each). The RV22 table repeats the default table's
+ * filler rows, and reads each row's realised volatility from the RV22 line, the number GP's pane ends on.
+ */
+function universeBody(window: number = UNIVERSE_WINDOW): Schemas['Universe'] {
+  let body = universes.get(window)
+  if (body === undefined) {
+    const table = makeUniverse(window)
+    // The fixture table carries the gate record of the day it was captured (27 reads); the demo reads no gate, so both windows say so.
+    body = window === RV_WINDOW
+      ? { ...table, gate: DEMO_GATE, rows: table.rows.map((row) => ({ ...row, realised_vol: rvSeries(row.symbol)?.last ?? row.realised_vol })) }
+      : { ...table, gate: DEMO_GATE }
+    universes.set(window, body)
+  }
+  return body
 }
 
-/** GET /api/market/universe: the table describes one window, so only that window is answered. */
+/** GET /api/market/universe: a table describes one window, so only the windows the demo holds a table for are answered. */
 export function marketUniverse(query: URLSearchParams): Answer<Schemas['Universe']> {
-  return intParam(query, 'window', UNIVERSE_WINDOW) === UNIVERSE_WINDOW ? served(universeBody()) : NOT_IN_DEMO
+  const window = intParam(query, 'window', UNIVERSE_WINDOW)
+  return window !== null && UNIVERSE_WINDOWS.includes(window) ? served(universeBody(window)) : NOT_IN_DEMO
 }
 
 const SYMBOLS: readonly string[] = ROOTS.map(([root]) => `${root}.V.0`)
@@ -219,24 +235,37 @@ function bridge(from: number, to: number, count: number, seed: number, scale: nu
   return out
 }
 
-/** GET /api/market/rv for GP's RV22 pane: a seeded line around the universe row's realised volatility. */
-export function realisedVol(query: URLSearchParams): Answer<Schemas['RealisedVolSeries']> {
-  const symbol = query.get('symbol') ?? ''
+const rvLines = new Map<string, Schemas['RealisedVolSeries']>()
+
+/** The RV22 line of a universe symbol: a seeded line around the default table row's realised volatility (built once each). */
+function rvSeries(symbol: string): Schemas['RealisedVolSeries'] | undefined {
   const row = universeRow(symbol)
+  if (!row) return undefined
+  let line = rvLines.get(symbol)
+  if (line === undefined) {
+    const window = RV_WINDOW
+    const t = [...SESSION_TIMES]
+    const z = mulberry32(SEED + 2000 + SYMBOLS.indexOf(symbol))
+    const level = row.realised_vol ?? 0.2
+    let x = 0
+    const rv = t.map((_, k) => {
+      x = 0.97 * x + 0.06 * (z() - 0.5)
+      return k < window ? null : Number((level * Math.exp(x)).toFixed(6))
+    })
+    line = {
+      symbol, window, label: LABEL, basis: DEMO_TEXT.rvBasis, unit: RV_UNIT,
+      t, date: t.map(isoDay), rv, last: rv[rv.length - 1] ?? null, gate: DEMO_GATE,
+    }
+    rvLines.set(symbol, line)
+  }
+  return line
+}
+
+/** GET /api/market/rv for GP's RV22 pane. */
+export function realisedVol(query: URLSearchParams): Answer<Schemas['RealisedVolSeries']> {
+  const line = rvSeries(query.get('symbol') ?? '')
   const window = intParam(query, 'window', RV_WINDOW)
-  if (!row || window !== RV_WINDOW) return NOT_IN_DEMO
-  const t = [...SESSION_TIMES]
-  const z = mulberry32(SEED + 2000 + SYMBOLS.indexOf(symbol))
-  const level = row.realised_vol ?? 0.2
-  let x = 0
-  const rv = t.map((_, k) => {
-    x = 0.97 * x + 0.06 * (z() - 0.5)
-    return k < window ? null : Number((level * Math.exp(x)).toFixed(6))
-  })
-  return served({
-    symbol, window, label: LABEL, basis: DEMO_TEXT.rvBasis, unit: RV_UNIT,
-    t, date: t.map(isoDay), rv, last: rv[rv.length - 1] ?? null, gate: DEMO_GATE,
-  })
+  return line && window === RV_WINDOW ? served(line) : NOT_IN_DEMO
 }
 
 /** GET /api/market/pair-corr: a seeded line that ends at the universe matrix entry of the pair, at the same window. */
