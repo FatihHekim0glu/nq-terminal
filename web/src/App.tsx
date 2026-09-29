@@ -4,12 +4,15 @@
 // ApiProvider; link-group contexts and user layouts come from the zustand stores (src/state). The
 // Workspace (and dockview with it) loads as its own chunk, so the frame and its safety labels paint
 // first. The chrome's keys and buttons run through KeyToolbar.actions.ts; nothing here can place,
-// change or withdraw anything.
+// change or withdraw anything. The Workspace reports the layout owner (the screen whose layout the panels
+// are arranged under, and whether the viewer has edited it): the frame strip and the status line show it
+// with an edited mark, and RESET, UNDO and the <GO> preview row on the command line act on it.
 import { Suspense, lazy, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ApiProvider } from './api/ApiProvider'
 import CommandZone from './AppCommandBar'
 import type { MnemonicCode } from './commands/registry'
 import { displayContext } from './commands/sectors'
+import type { ParsedCommand } from './commands/parser'
 import type { ResolvedContext } from './commands/types'
 import type { CommandLineHandle } from './chrome/CommandLine'
 import { useTerminalKeys, type KeyWhere } from './chrome/CommandLine.keys'
@@ -23,14 +26,26 @@ import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
 import { LiveStatusBar, useHealthState } from './chrome/StatusBar.live'
-import type { FocusedPanel, WorkspaceHandle } from './chrome/Workspace'
+import type { FocusedPanel, ShownLayout, WorkspaceHandle } from './chrome/Workspace'
+import type { previewText } from './chrome/WorkspacePreview'
 import { CHROME, MESSAGES } from './copy/chrome'
-import { WORKSPACE } from './copy/workspace'
+import { LAYOUT } from './copy/layout'
+import { WORKSPACE, fillCopy } from './copy/workspace'
 import { useLinkGroups } from './state/linkGroups'
 import { applyScheme, loadScheme, saveScheme } from './chrome/FrameStrip.scheme'
 import './chrome/FrameStrip.frame.css'
 
-const Workspace = lazy(() => import('./chrome/Workspace'))
+// WorkspacePreview (previewText and the plan describer) stays out of the shell, about 480 B gzip: it loads
+// beside the Workspace chunk, and the <GO> preview row says nothing until it has. The Workspace chunk
+// imports WorkspacePreview itself, so waiting for both costs no extra request, and the row is ready with
+// the first render of the Workspace.
+let previewer: typeof previewText | null = null
+
+const Workspace = lazy(async () => {
+  const [workspace, preview] = await Promise.all([import('./chrome/Workspace'), import('./chrome/WorkspacePreview')])
+  previewer = preview.previewText
+  return workspace
+})
 
 type ChromeWorkspaceHandle = WorkspaceHandle & ChromeWorkspace
 
@@ -82,8 +97,31 @@ function chromeEnv(refs: ChromeRefs, toggleKeymap: () => void): ChromeEnv {
   }
 }
 
+/**
+ * What the command line asks of the layout (roadmap #6): RESET and UNDO answer with the text the message
+ * line posts, and the <GO> preview row says what Enter, or Shift+Enter (a new panel), would do with the
+ * typed line. All read the workspace when they run. Before the Workspace has loaded RESET and the preview
+ * answer null (the command line says the layout is not ready) and UNDO says there is nothing to undo.
+ */
+function layoutCallbacks(refs: ChromeRefs, screen: MnemonicCode) {
+  return {
+    onReset: (): string | null => {
+      const result = refs.workspace.current?.resetLayout()
+      return result ? fillCopy(result === 'reset' ? LAYOUT.reset : LAYOUT.resetDefault, { screen }) : null
+    },
+    onUndo: (): string | null => {
+      const restored = refs.workspace.current?.undo()
+      return restored ? fillCopy(LAYOUT.undone, { screen: restored }) : LAYOUT.undoNone
+    },
+    previewRun: (command: ParsedCommand, newPanel: boolean): string | null => {
+      const preview = refs.workspace.current?.preview(command, newPanel ? 'new-panel' : 'replace')
+      return (preview && previewer?.(preview, newPanel ? 'shift' : 'enter')) || null
+    },
+  }
+}
+
 interface ChromeHeaderProps {
-  readonly screen: MnemonicCode
+  readonly shown: ShownLayout
   readonly focused: FocusedPanel | null
   readonly panel: { readonly id: string | null; readonly number: number | null }
   readonly refs: ChromeRefs
@@ -92,7 +130,7 @@ interface ChromeHeaderProps {
 }
 
 /** The four chrome rows above the workspace. */
-function ChromeHeader({ screen, focused, panel, refs, env, actions }: ChromeHeaderProps) {
+function ChromeHeader({ shown, focused, panel, refs, env, actions }: ChromeHeaderProps) {
   const tapeOn = useTapeOn()
   const scheme = useScheme()
   const health = useHealthState()
@@ -108,7 +146,18 @@ function ChromeHeader({ screen, focused, panel, refs, env, actions }: ChromeHead
   }
   return (
     <header className="nqt-chrome">
-      <FrameStrip screen={screen} tapeOn={tapeOn} scheme={scheme.scheme} onOpen={(code) => actions.runAndFocus(code)} onNew={openNew} onTape={() => toggleTape()} onScheme={scheme.choose} />
+      <FrameStrip
+        screen={shown.code}
+        edited={shown.edited}
+        tapeOn={tapeOn}
+        scheme={scheme.scheme}
+        onOpen={(code) => actions.runAndFocus(code)}
+        onNew={openNew}
+        onTape={() => toggleTape()}
+        onScheme={scheme.choose}
+        onUndo={() => actions.runAndFocus('UNDO')}
+        onReset={() => actions.runAndFocus('RESET')}
+      />
       <KeyToolbar onKey={(key) => runKey(actions, env, key)} />
       <NavToolbar focused={nav} kill={kill} onAction={(a) => runNav(actions, env, a)} />
       <CommandZone
@@ -124,13 +173,15 @@ function ChromeHeader({ screen, focused, panel, refs, env, actions }: ChromeHead
         onBack={() => actions.back(false)}
         onMenu={() => refs.workspace.current?.openRelatedMenu?.(panel.id ?? undefined) ?? false}
         focusedCode={() => focused?.params.code ?? null}
+        {...layoutCallbacks(refs, shown.code)}
       />
     </header>
   )
 }
 
 function Terminal() {
-  const [screen, setScreen] = useState<MnemonicCode>('HOME')
+  // The layout owner and its edited flag, as the Workspace reports them (never the last command's screen).
+  const [shown, setShown] = useState<ShownLayout>({ code: 'HOME', edited: false, workspace: null })
   const [focused, setFocused] = useState<FocusedPanel | null>(null)
   const [keymapOpen, setKeymapOpen] = useState(false)
   // The panel the command line addresses, as the workspace reports it: last focused, else the panel
@@ -152,12 +203,12 @@ function Terminal() {
   return (
     <div className="nqt-frame">
       <h1 className="sr-only">{CHROME.appTitle}</h1>
-      <ChromeHeader screen={screen} focused={focused} panel={panel} refs={refs} env={env} actions={actions} />
+      <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} env={env} actions={actions} />
       <Suspense fallback={<WorkspaceLoading />}>
-        <Workspace ref={refs.workspace} onScreenChange={setScreen} onFocusedPanelChange={setFocused} />
+        <Workspace ref={refs.workspace} onLayoutChange={setShown} onLayoutDropped={(code) => postMessage(fillCopy(LAYOUT.dropped, { screen: code }))} onFocusedPanelChange={setFocused} />
       </Suspense>
       {tapeOn ? <LiveEventTape /> : null}
-      <LiveStatusBar screen={screen} />
+      <LiveStatusBar screen={shown.code} edited={shown.edited} />
       {keymapOpen ? <KeyMapOverlay onClose={() => setKeymapOpen(false)} /> : null}
     </div>
   )

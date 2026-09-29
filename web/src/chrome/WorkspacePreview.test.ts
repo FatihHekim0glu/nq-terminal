@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic } from '../commands/registry'
 import { fillCopy } from '../copy/workspace'
-import { LAYOUT } from '../copy/layout'
+import { LAYOUT_SEPARATOR } from '../copy/layout'
+import { LAYOUT_PREVIEW } from '../copy/layoutPreview'
 import { layoutFor } from '../screens/layouts'
 import type { OpenPlan, PanelParams } from './WorkspaceModel'
 import { describePlan, previewText, type PreviewInput, type RunPreview } from './WorkspacePreview'
@@ -152,7 +153,7 @@ describe('describePlan: load', () => {
 describe('previewText', () => {
   it('renders a replace with no retarget', () => {
     const p: RunPreview = { kind: 'replace', panel: { number: 4, code: 'REG' }, code: 'GP', retarget: null }
-    expect(previewText(p, 'enter')).toBe(fillCopy(LAYOUT.replace, { panel: '4-REG', code: 'GP' }))
+    expect(previewText(p, 'enter')).toBe(fillCopy(LAYOUT_PREVIEW.replace, { panel: '4-REG', code: 'GP' }))
   })
 
   it('prints panel refs as {number}-{code}, e.g. 4-REG', () => {
@@ -168,7 +169,7 @@ describe('previewText', () => {
       retarget: { group: 'A', panels: [{ number: 3, code: 'GIP' }] },
     }
     expect(previewText(p, 'enter')).toBe(
-      fillCopy(LAYOUT.replace, { panel: '1-GP', code: 'GP' }) + LAYOUT.separator + fillCopy(LAYOUT.retarget, { group: 'A', panels: '3-GIP' }),
+      fillCopy(LAYOUT_PREVIEW.replace, { panel: '1-GP', code: 'GP' }) + LAYOUT_SEPARATOR + fillCopy(LAYOUT_PREVIEW.retarget, { group: 'A', panels: '3-GIP' }),
     )
   })
 
@@ -180,21 +181,21 @@ describe('previewText', () => {
       retarget: { group: 'A', panels: [{ number: 1, code: 'GP' }, { number: 3, code: 'GIP' }] },
     }
     expect(previewText(p, 'shift')).toBe(
-      fillCopy(LAYOUT.addAlone, { code: 'VCONE' }) + LAYOUT.separator + fillCopy(LAYOUT.retarget, { group: 'A', panels: '1-GP, 3-GIP' }),
+      fillCopy(LAYOUT_PREVIEW.addAlone, { code: 'VCONE' }) + LAYOUT_SEPARATOR + fillCopy(LAYOUT_PREVIEW.retarget, { group: 'A', panels: '1-GP, 3-GIP' }),
     )
   })
 
   it('renders add with an anchor, add alone, and every load source', () => {
     const withAnchor: RunPreview = { kind: 'add', after: { number: 4, code: 'REG' }, code: 'LEDG', retarget: null }
-    expect(previewText(withAnchor, 'shift')).toBe(fillCopy(LAYOUT.add, { code: 'LEDG', panel: '4-REG' }))
+    expect(previewText(withAnchor, 'shift')).toBe(fillCopy(LAYOUT_PREVIEW.add, { code: 'LEDG', panel: '4-REG' }))
     const alone: RunPreview = { kind: 'add', after: null, code: 'LEDG', retarget: null }
-    expect(previewText(alone, 'shift')).toBe(fillCopy(LAYOUT.addAlone, { code: 'LEDG' }))
+    expect(previewText(alone, 'shift')).toBe(fillCopy(LAYOUT_PREVIEW.addAlone, { code: 'LEDG' }))
     const savedLoad: RunPreview = { kind: 'load', screen: 'HOME', panels: 4, source: 'saved', same: false }
-    expect(previewText(savedLoad, 'enter')).toBe(fillCopy(LAYOUT.loadSaved, { screen: 'HOME', n: 4 }))
+    expect(previewText(savedLoad, 'enter')).toBe(fillCopy(LAYOUT_PREVIEW.loadSaved, { screen: 'HOME', n: 4 }))
     const defaultLoad: RunPreview = { kind: 'load', screen: 'HOME', panels: 4, source: 'default', same: true }
-    expect(previewText(defaultLoad, 'enter')).toBe(fillCopy(LAYOUT.loadDefault, { screen: 'HOME', n: 4 }))
+    expect(previewText(defaultLoad, 'enter')).toBe(fillCopy(LAYOUT_PREVIEW.loadDefault, { screen: 'HOME', n: 4 }))
     const contextLoad: RunPreview = { kind: 'load', screen: 'REG', panels: 2, source: 'context', same: false }
-    expect(previewText(contextLoad, 'enter')).toBe(fillCopy(LAYOUT.loadContext, { screen: 'REG', n: 2 }))
+    expect(previewText(contextLoad, 'enter')).toBe(fillCopy(LAYOUT_PREVIEW.loadContext, { screen: 'REG', n: 2 }))
   })
 
   it('is empty for a variant that cannot happen for that kind (a load never follows Shift+Enter)', () => {

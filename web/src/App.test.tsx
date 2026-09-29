@@ -4,10 +4,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import App from './App'
 import { layoutFor } from './chrome/WorkspaceLayouts'
 import { COMMAND_LINE } from './copy/commands'
-import { FRAME_STRIP, KEY_TOOLBAR, NAV_TOOLBAR, TAPE } from './copy/chrome'
-import { WORKSPACE } from './copy/workspace'
+import { FRAME_STRIP, KEY_TOOLBAR, NAV_TOOLBAR, STATUS_BAR, TAPE } from './copy/chrome'
+import { LAYOUT } from './copy/layout'
+import { WORKSPACE, fillCopy } from './copy/workspace'
 import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
+import { resetMessage } from './chrome/MessageLine.store'
 
 // The Workspace (and dockview) is a lazy chunk: the first import in a test run takes a moment.
 configure({ asyncUtilTimeout: 5000 })
@@ -85,6 +87,7 @@ beforeEach(() => {
   useLinkGroups.getState().clearAll()
   useLayouts.getState().resetAll()
   localStorage.clear()
+  resetMessage()
 })
 
 afterEach(cleanup)
@@ -94,11 +97,36 @@ function segment(root: HTMLElement, text: string): HTMLElement | undefined {
   return Array.from(root.querySelectorAll<HTMLElement>('.seg')).find((el) => el.textContent === text)
 }
 
+/** The Screen segment of the status line, whatever it shows after the key. */
+function screenSegment(status: HTMLElement): HTMLElement | undefined {
+  return Array.from(status.querySelectorAll<HTMLElement>('.seg')).find((el) => el.querySelector('b')?.textContent === STATUS_BAR.screen)
+}
+
+/** What the eye reads in `el`: its text without the screen reader only words. */
+function visibleText(el: HTMLElement | undefined): string {
+  if (!el) return ''
+  const copy = el.cloneNode(true) as HTMLElement
+  copy.querySelectorAll('.sr-only').forEach((node) => node.remove())
+  return (copy.textContent ?? '').trim()
+}
+
+/** The frame strip (tabs and Options), apart from the key toolbar's own buttons. */
+function frameStrip() {
+  return within(document.querySelector<HTMLElement>('[data-chrome="frame"]')!)
+}
+
 async function runLine(line: string): Promise<void> {
   const input = screen.getByRole('combobox', { name: COMMAND_LINE.label })
   fireEvent.change(input, { target: { value: line } })
   fireEvent.keyDown(input, { key: 'Enter' })
   await waitFor(() => expect((input as HTMLInputElement).value).toBe(''))
+}
+
+/** Alt+N, as the key toolbar documents it: focus panel N and wait until focus is inside it. */
+async function focusPanel(main: HTMLElement, n: number): Promise<void> {
+  fireEvent.keyDown(document.body, { key: String(n), code: `Digit${n}`, altKey: true })
+  const panel = main.querySelectorAll('[data-nqt-panel]')[n - 1]
+  await waitFor(() => expect(panel?.contains(document.activeElement)).toBe(true))
 }
 
 async function homeLoaded(): Promise<HTMLElement> {
@@ -289,10 +317,151 @@ describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, comma
     await runLine('LEDG')
     await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
     expect(localStorage.getItem('nqt.layouts')).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'HOME' }))
+    // The HOME tab is the layout owner and still active after LEDG (a replace leaves the owner alone), so
+    // its name now carries the title and the edited word: matched by its mnemonic, inside the frame strip.
+    fireEvent.click(frameStrip().getByRole('button', { name: /^HOME/ }))
     await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    expect(visibleText(screenSegment(screen.getByRole('contentinfo')))).toBe('Screen HOME*')
     const stored: { readonly layouts?: Readonly<Record<string, unknown>> } = JSON.parse(localStorage.getItem('nqt.layouts') ?? '{}')
     expect(stored.layouts).toHaveProperty('HOME')
+  })
+
+  it('Alt+4 then LEDG: the HOME tab and the Screen segment carry the edited mark, and there is no LEDG tab', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const status = screen.getByRole('contentinfo')
+    expect(visibleText(screenSegment(status))).toBe('Screen HOME')
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(visibleText(screenSegment(status))).toBe('Screen HOME*'))
+    expect(screenSegment(status)?.querySelector('.sr-only')?.textContent?.trim()).toBe(LAYOUT.editedLabel)
+    const nav = screen.getByRole('navigation', { name: FRAME_STRIP.label })
+    const tabs = within(nav).getAllByRole('button')
+    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual(['HOME', 'RESEARCH', 'LIVE', 'new'])
+    expect(within(nav).queryByRole('button', { name: /LEDG/ })).toBeNull()
+    const home = tabs[0]!
+    expect(home.getAttribute('aria-current')).toBe('page')
+    expect(home.querySelector('[aria-hidden="true"]')?.textContent).toBe(LAYOUT.editedMark)
+    expect(within(home).getByText(LAYOUT.editedLabel, { exact: false })).toBeTruthy()
+  })
+
+  it('shows what <GO> and <Shift+GO> would do before Enter, under the command line', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 4)
+    const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+    act(() => input.focus())
+    fireEvent.change(input, { target: { value: 'LEDG' } })
+    const expected = '<GO> replaces 4-REG with LEDG | <Shift+GO> adds LEDG in a new panel right of 4-REG'
+    await waitFor(() => expect(document.querySelector('.cmd-preview')?.textContent).toBe(expected))
+    // Previewing changes nothing: the panels, the saved layouts and the mark stay as they were.
+    expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull()
+    expect(localStorage.getItem('nqt.layouts')).toBeNull()
+    expect(visibleText(screenSegment(screen.getByRole('contentinfo')))).toBe('Screen HOME')
+  })
+
+  it('answers the <GO> preview on the first keystrokes after the Workspace has rendered', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 4)
+    const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+    act(() => input.focus())
+    fireEvent.change(input, { target: { value: 'LEDG' } })
+    // No waitFor: the preview module is loaded together with the Workspace, so the first line already has its row.
+    expect(document.querySelector('.cmd-preview')?.textContent).toBe('<GO> replaces 4-REG with LEDG | <Shift+GO> adds LEDG in a new panel right of 4-REG')
+  })
+
+  it('RESET puts HOME back to its default and UNDO brings the customised panels back', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    const status = screen.getByRole('contentinfo')
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await runLine('RESET')
+    expect(screen.getByText(fillCopy(LAYOUT.reset, { screen: 'HOME' }))).toBeTruthy()
+    await waitFor(() => expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull())
+    await waitFor(() => expect(visibleText(screenSegment(status))).toBe('Screen HOME'))
+    expect(localStorage.getItem('nqt.layouts')).toBeNull()
+    expect(within(screen.getByRole('navigation', { name: FRAME_STRIP.label })).getAllByRole('button')[0]?.textContent).toBe('HOME Home view')
+    await runLine('UNDO')
+    expect(screen.getByText(fillCopy(LAYOUT.undone, { screen: 'HOME' }))).toBeTruthy()
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(visibleText(screenSegment(status))).toBe('Screen HOME*'))
+    expect(localStorage.getItem('nqt.layouts')).not.toBeNull()
+  })
+
+  it('RESET on a default layout and UNDO with nothing behind it say so, and change nothing', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await runLine('RESET')
+    expect(screen.getByText(fillCopy(LAYOUT.resetDefault, { screen: 'HOME' }))).toBeTruthy()
+    await runLine('UNDO')
+    expect(screen.getByText(LAYOUT.undoNone)).toBeTruthy()
+    expect(within(main).getAllByRole('heading', { level: 2 })).toHaveLength(HOME_PANELS)
+    expect(localStorage.getItem('nqt.layouts')).toBeNull()
+  })
+
+  it('the Options entries run UNDO and RESET, name the result in the message line and hand focus to the command line', async () => {
+    render(<App />)
+    const main = await homeLoaded()
+    await focusPanel(main, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    fireEvent.click(frameStrip().getByRole('button', { name: FRAME_STRIP.options }))
+    fireEvent.click(frameStrip().getByRole('button', { name: LAYOUT.resetOption }))
+    expect(screen.getByText(fillCopy(LAYOUT.reset, { screen: 'HOME' }))).toBeTruthy()
+    await waitFor(() => expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull())
+    expect(document.activeElement?.id).toBe('cmd')
+    fireEvent.click(frameStrip().getByRole('button', { name: FRAME_STRIP.options }))
+    fireEvent.click(frameStrip().getByRole('button', { name: LAYOUT.undoOption }))
+    expect(screen.getByText(fillCopy(LAYOUT.undone, { screen: 'HOME' }))).toBeTruthy()
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    expect(document.activeElement?.id).toBe('cmd')
+  })
+
+  it('before the lazy Workspace has loaded: RESET says the layout is not ready, UNDO has nothing to undo, no preview row', async () => {
+    vi.resetModules()
+    vi.doMock('./chrome/Workspace', () => new Promise(() => {}))
+    try {
+      const { default: FreshApp } = await import('./App')
+      render(<FreshApp />)
+      const input = screen.getByRole('combobox', { name: COMMAND_LINE.label }) as HTMLInputElement
+      fireEvent.change(input, { target: { value: 'LEDG' } })
+      expect(document.querySelector('.cmd-preview')).toBeNull()
+      await runLine('RESET')
+      expect(screen.getByText(COMMAND_LINE.layoutUnavailable)).toBeTruthy()
+      await runLine('UNDO')
+      expect(screen.getByText(LAYOUT.undoNone)).toBeTruthy()
+      expect(localStorage.getItem('nqt.layouts')).toBeNull()
+    } finally {
+      vi.doUnmock('./chrome/Workspace')
+      vi.resetModules()
+    }
+  })
+
+  it('announces a saved layout dropped for an older default, shows the default, and UNDO restores the saved panels', async () => {
+    const first = render(<App />)
+    const firstMain = await homeLoaded()
+    await focusPanel(firstMain, 4)
+    await runLine('LEDG')
+    await waitFor(() => expect(within(firstMain).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    const saved = useLayouts.getState().layouts.HOME as { readonly dock: unknown }
+    first.unmount()
+    cleanup()
+    resetMessage()
+    // The same dock, saved from a default that no longer exists.
+    useLayouts.getState().saveLayout('HOME', { base: '00000000', dock: saved.dock })
+    render(<App />)
+    const main = await homeLoaded()
+    expect(within(main).queryByRole('group', { name: 'LEDG content' })).toBeNull()
+    expect(screen.getByText(fillCopy(LAYOUT.dropped, { screen: 'HOME' }))).toBeTruthy()
+    expect(visibleText(screenSegment(screen.getByRole('contentinfo')))).toBe('Screen HOME')
+    await runLine('UNDO')
+    expect(screen.getByText(fillCopy(LAYOUT.undone, { screen: 'HOME' }))).toBeTruthy()
+    await waitFor(() => expect(within(main).getByRole('group', { name: 'LEDG content' })).toBeTruthy())
+    await waitFor(() => expect(visibleText(screenSegment(screen.getByRole('contentinfo')))).toBe('Screen HOME*'))
   })
 
   it('drops a command typed before the lazy Workspace finishes loading, without reporting it ran (D18)', async () => {

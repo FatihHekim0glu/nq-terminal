@@ -8,6 +8,8 @@ import { StatusBar, type HealthState } from './StatusBar'
 
 export interface LiveStatusBarProps {
   readonly screen: MnemonicCode
+  /** The viewer has a saved layout for `screen` (shows the edited mark). */
+  readonly edited?: boolean
 }
 
 /** The health query as the chrome shows it: a failed poll is unknown, never an earlier answer. */
@@ -17,8 +19,8 @@ export function useHealthState(): HealthState {
   return health.data ? { status: 'ok', data: health.data } : { status: 'loading' }
 }
 
-export function LiveStatusBar({ screen }: LiveStatusBarProps) {
+export function LiveStatusBar({ screen, edited }: LiveStatusBarProps) {
   const state = useHealthState()
   const contexts = useLinkGroups((s) => s.contexts)
-  return <StatusBar screen={screen} contexts={contexts} health={state} />
+  return <StatusBar screen={screen} edited={edited} contexts={contexts} health={state} />
 }

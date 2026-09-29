@@ -3,6 +3,7 @@ import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
+import { LAYOUT } from '../copy/layout'
 import { StatusBar, type HealthState } from './StatusBar'
 import statusCss from './StatusBar.css?raw'
 import { dataWindow, dayBefore } from './StatusBar.format'
@@ -47,6 +48,36 @@ describe('StatusBar: the 22px status line (spec 4.10, decision D7)', () => {
     expect(seg(bar, 'Gate reads 7')).toBeTruthy()
     expect(seg(bar, /^\d{2}:\d{2}:\d{2} ET$/)).toBeTruthy()
     expect(seg(bar, '<Esc> command')).toBeTruthy()
+  })
+
+  it('marks the screen edited: HOME* to the eye, HOME then the word edited to a screen reader', () => {
+    render(<StatusBar screen="HOME" edited contexts={CONTEXTS} health={{ status: 'ok', data: HEALTH }} />)
+    const bar = screen.getByRole('contentinfo', { name: STATUS_BAR.label })
+    const screenSeg = Array.from(bar.querySelectorAll<HTMLElement>('.seg')).find((el) => el.querySelector('b')?.textContent === STATUS_BAR.screen)!
+    const mark = screenSeg.querySelector('[aria-hidden="true"]')
+    expect(mark?.textContent).toBe(LAYOUT.editedMark)
+    const word = screenSeg.querySelector('.sr-only')
+    expect(word?.textContent?.trim()).toBe(LAYOUT.editedLabel)
+    // Visible text: everything but the screen reader word.
+    const visible = Array.from(screenSeg.childNodes)
+      .filter((n) => !(n instanceof HTMLElement && n.classList.contains('sr-only')))
+      .map((n) => n.textContent)
+      .join('')
+      .trim()
+    expect(visible).toBe(`${STATUS_BAR.screen} HOME${LAYOUT.editedMark}`)
+    // The segment reads on: key, the screen, the word (the mark is aria-hidden).
+    expect(screenSeg.textContent).toBe(`${STATUS_BAR.screen} HOME${LAYOUT.editedMark} ${LAYOUT.editedLabel}`)
+  })
+
+  it('shows a plain Screen segment when the layout is not edited, or when edited is not given', () => {
+    const plain = renderBar({ status: 'ok', data: HEALTH }, 'REG')
+    expect(seg(plain, 'Screen REG')).toBeTruthy()
+    expect(plain.querySelector('.sr-only')).toBeNull()
+    cleanup()
+    render(<StatusBar screen="REG" edited={false} contexts={CONTEXTS} health={{ status: 'ok', data: HEALTH }} />)
+    const bar = screen.getByRole('contentinfo', { name: STATUS_BAR.label })
+    expect(seg(bar, 'Screen REG')).toBeTruthy()
+    expect(bar.querySelector('[aria-hidden="true"]')).toBeNull()
   })
 
   it('opens with an amber label and sets each key in bold (Suggested Functions style)', () => {

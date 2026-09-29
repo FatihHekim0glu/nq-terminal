@@ -4,7 +4,7 @@ import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedCommand } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
-import { LAYOUT } from '../copy/layout'
+import { LAYOUT_SEPARATOR } from '../copy/layout'
 import { PreviewAnnouncer, usePreviewText } from './CommandLine.preview'
 import { useCommandLineParts, type CommandLineOptions } from './CommandLine.state'
 
@@ -38,7 +38,7 @@ describe('usePreviewText: the <GO> preview row', () => {
   it('shows the Enter text plus, after the separator, the Shift+Enter text', () => {
     const { result } = setup({ previewRun: preview })
     act(() => result.current.p.s.edit('NQ GP'))
-    expect(result.current.preview).toBe(`Enter: NQ GP${LAYOUT.separator}Shift: NQ GP`)
+    expect(result.current.preview).toBe(`Enter: NQ GP${LAYOUT_SEPARATOR}Shift: NQ GP`)
   })
 
   it('NXTW: only the Shift+Enter (new panel) text, no separator', () => {

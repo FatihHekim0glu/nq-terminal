@@ -18,8 +18,8 @@ function fallbackOf(p: CommandLineParts) {
 /**
  * What the typed line would do: previewRun(command, newPanel) alone for a line already opening in a
  * new panel (NXTW, Shift+Enter has no separate line form); otherwise that text plus, after
- * LAYOUT_SEPARATOR (the same string as LAYOUT.separator), the new-panel form too. Null when the line is not a runnable command, or the
- * caller has nothing to say about it.
+ * LAYOUT_SEPARATOR (the string the lazy WorkspacePreview joins its clauses with), the new-panel form too.
+ * Null when the line is not a runnable command, or the caller has nothing to say about it.
  */
 export function usePreviewText(p: CommandLineParts): string | null {
   const { previewRun } = p.options

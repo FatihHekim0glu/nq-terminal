@@ -1,16 +1,19 @@
 // StatusBar (spec 4.10, decision D7): the 22px house status line in the Suggested Functions style: an
 // amber label, then segments of a bold white key and a value, divided by 1px rules.
-//   Status | Screen HOME | A NQ1 Index | B rebal_v0 | C - | DATA 2010-01-01..2021-12-31 | TWS not monitored
+//   Status | Screen HOME* | A NQ1 Index | B rebal_v0 | C - | DATA 2010-01-01..2021-12-31 | TWS not monitored
 //          | KILL off | Gate reads 7 | READ ONLY | NO ORDER PATH | 14:02:11 ET | <Esc> command
 // The safety segments (TWS, KILL, gate reads, READ ONLY, NO ORDER PATH) never shrink; contexts and
 // the data window give way first. The kill and health segments sit in one live region (assertive
 // while the kill switch is on), so a change of safety state is announced; the clock stays outside it.
+// The `*` after the screen means the viewer has a saved layout for it (roadmap #6): aria-hidden, with
+// the word `edited` after it for a screen reader.
 // Props only: the caller passes the health query state, so this component never fetches.
 import { useEffect, useState, type ReactNode } from 'react'
 import type { MnemonicCode } from '../commands/registry'
 import { displayContext } from '../commands/sectors'
 import type { CommandIndexData, HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
+import { LAYOUT } from '../copy/layout'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
 import { KeyText } from './MessageLine'
 import { dataWindowValue, etClock } from './StatusBar.format'
@@ -23,6 +26,8 @@ export type HealthState =
 
 export interface StatusBarProps {
   readonly screen: MnemonicCode
+  /** The viewer has a saved layout for `screen`. */
+  readonly edited?: boolean
   readonly contexts: LinkContexts
   readonly health: HealthState
   readonly index?: CommandIndexData | null
@@ -91,14 +96,21 @@ function ContextSegments({ contexts, index }: { readonly contexts: LinkContexts;
   })
 }
 
-export function StatusBar({ screen, contexts, health, index = null }: StatusBarProps) {
+export function StatusBar({ screen, edited, contexts, health, index = null }: StatusBarProps) {
   const clock = useEtClock()
   const data = health.status === 'ok' ? health.data : null
   const range = data ? dataWindowValue(data.fence) : STATUS_BAR.dataFallbackValue
   return (
     <footer className="nqt-status status-bar" aria-label={STATUS_BAR.label} data-chrome="status">
       <span className="status-label">{STATUS_BAR.lead}</span>
-      <Seg k={STATUS_BAR.screen}>{screen}</Seg>
+      <Seg k={STATUS_BAR.screen}>
+        {screen}
+        {edited ? (
+          <>
+            <span aria-hidden="true">{LAYOUT.editedMark}</span> <span className="sr-only">{LAYOUT.editedLabel}</span>
+          </>
+        ) : null}
+      </Seg>
       <ContextSegments contexts={contexts} index={index} />
       <Seg k={STATUS_BAR.data} kind="shrink">{range}</Seg>
       {data?.fixture_mode ? <span className="seg keep warn">{STATUS_BAR.fixture}</span> : null}

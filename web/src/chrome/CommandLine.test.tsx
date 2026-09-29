@@ -7,7 +7,7 @@ import type { ParsedCommand } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
 import { COMMAND_LINE, PARSE_MESSAGES } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
-import { LAYOUT } from '../copy/layout'
+import { LAYOUT_SEPARATOR } from '../copy/layout'
 import { CommandLine, type CommandLineHandle, type CommandLineProps } from './CommandLine'
 import { resetMessage } from './MessageLine.store'
 
@@ -495,7 +495,7 @@ describe('CommandLine: the <GO> preview row (roadmap #6 slice 2)', () => {
     const list = screen.getByRole('listbox')
     const row = list.parentElement?.querySelector('.cmd-preview')
     expect(row?.getAttribute('aria-hidden')).toBe('true')
-    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT.separator}Shift: NQ GP`)
+    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT_SEPARATOR}Shift: NQ GP`)
     expect(input.getAttribute('aria-expanded')).toBe('true')
   })
 
@@ -506,7 +506,7 @@ describe('CommandLine: the <GO> preview row (roadmap #6 slice 2)', () => {
     key('Escape')
     expect(screen.queryByRole('listbox')).toBeNull()
     const row = document.querySelector('.cmd-pop .cmd-preview')
-    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT.separator}Shift: NQ GP`)
+    expect(row?.textContent).toBe(`Enter: NQ GP${LAYOUT_SEPARATOR}Shift: NQ GP`)
   })
 
   it('hides the standalone preview popup once the line loses focus', () => {

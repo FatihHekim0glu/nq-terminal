@@ -7,7 +7,8 @@ import type { MnemonicCode } from '../commands/registry'
 import type { ParsedCommand } from '../commands/parser'
 import type { LinkGroup } from '../state/linkGroups'
 import { fillCopy } from '../copy/workspace'
-import { LAYOUT } from '../copy/layout'
+import { LAYOUT_SEPARATOR } from '../copy/layout'
+import { LAYOUT_PREVIEW } from '../copy/layoutPreview'
 import type { OpenPlan, PanelParams } from './WorkspaceModel'
 
 export interface PanelRef {
@@ -94,7 +95,7 @@ function refText(ref: PanelRef): string {
 function withRetarget(text: string, retarget: Retarget | null): string {
   if (!retarget) return text
   const panels = retarget.panels.map(refText).join(', ')
-  return text + LAYOUT.separator + fillCopy(LAYOUT.retarget, { group: retarget.group, panels })
+  return text + LAYOUT_SEPARATOR + fillCopy(LAYOUT_PREVIEW.retarget, { group: retarget.group, panels })
 }
 
 /** `p` as the line the command line shows before Enter ('enter') or Shift+Enter ('shift') runs it;
@@ -102,14 +103,14 @@ function withRetarget(text: string, retarget: Retarget | null): string {
  * follows Enter, per WorkspaceModel.planOpen). */
 export function previewText(p: RunPreview, variant: 'enter' | 'shift'): string {
   if (variant === 'enter' && p.kind === 'replace') {
-    return withRetarget(fillCopy(LAYOUT.replace, { panel: refText(p.panel), code: p.code }), p.retarget)
+    return withRetarget(fillCopy(LAYOUT_PREVIEW.replace, { panel: refText(p.panel), code: p.code }), p.retarget)
   }
   if (variant === 'shift' && p.kind === 'add') {
-    const base = p.after ? fillCopy(LAYOUT.add, { code: p.code, panel: refText(p.after) }) : fillCopy(LAYOUT.addAlone, { code: p.code })
+    const base = p.after ? fillCopy(LAYOUT_PREVIEW.add, { code: p.code, panel: refText(p.after) }) : fillCopy(LAYOUT_PREVIEW.addAlone, { code: p.code })
     return withRetarget(base, p.retarget)
   }
   if (variant === 'enter' && p.kind === 'load') {
-    const template = p.source === 'saved' ? LAYOUT.loadSaved : p.source === 'context' ? LAYOUT.loadContext : LAYOUT.loadDefault
+    const template = p.source === 'saved' ? LAYOUT_PREVIEW.loadSaved : p.source === 'context' ? LAYOUT_PREVIEW.loadContext : LAYOUT_PREVIEW.loadDefault
     return fillCopy(template, { screen: p.screen, n: p.panels })
   }
   return ''
