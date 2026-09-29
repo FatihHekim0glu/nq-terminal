@@ -7,7 +7,7 @@ import type { BarLadderInput } from '../../charts/echarts/barLadderModel'
 import type { DistributionInput } from '../../charts/echarts/distributionModel'
 import { mretRows, type HeatmapInput } from '../../charts/echarts/heatmapModel'
 import type { Callout } from '../../charts/LineStack.draw'
-import type { LineStackPane, RibbonSpec, RibbonState, StackSpan } from '../../charts/LineStack.types'
+import type { LaneEpisode, LanesSpec, LineStackPane, RibbonSpec, RibbonState, StackSpan } from '../../charts/LineStack.types'
 import { TEAR, TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
 import { TEAR_P1 } from '../../copy/tearP1'
 import { fillCopy } from '../../copy/workspace'
@@ -57,6 +57,10 @@ export function eqStack(data: Analytics, name: string, ext: Extended | null = nu
   return { title: fillCopy(TEAR_EQ.title, { name }), t, panes, ...stackContext(ext, t) }
 }
 
+/**
+ * DD: equity over the underwater curve, then (last, so it carries the time axis and the regime strip) the
+ * lanes of the served DD2 rows. Without a drawable row there is no lanes pane and the stack is what it was.
+ */
 export function ddStack(data: Analytics, name: string, ext: Extended | null = null): StackSpec {
   const { drawdown } = data
   const series: LineStackPane['series'][number][] = [
@@ -66,7 +70,81 @@ export function ddStack(data: Analytics, name: string, ext: Extended | null = nu
     series.push({ name: TEAR_DD.benchUnderwater, style: 'benchmark', values: scaleSeries(drawdown.bench_dd, drawdown.unit) })
   }
   const under: LineStackPane = { id: 'underwater', weight: 1.3, zero: 'white', unit: paneUnit(drawdown.unit), decimals: 2, series }
-  return { title: fillCopy(TEAR_DD.title, { name }), t: drawdown.t, panes: [equityPane(data, name, 2), under], ...stackContext(ext, drawdown.t) }
+  const lanes = drawdownLanes(data)
+  const panes = [equityPane(data, name, 2), under, ...(lanes ? [lanesPane(lanes)] : [])]
+  return { title: fillCopy(TEAR_DD.title, { name }), t: drawdown.t, panes, ...stackContext(ext, drawdown.t) }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Drawdown episode lanes (roadmap 10, phase 1). The served DD2 rows drawn as they came: one lane per row,
+// deepest first, from its peak to its trough and on to its recovery, or to the last session while open.
+// Nothing here is derived from the rows (no longest, median or total): DD3 is not served, and the note
+// under the table says so.
+
+/** Number <GO> 11 to 20 pins the episode of rank 1 to 10; 1 to 5 are the tabs and 95 to 99 the function bar. */
+const LANE_NUMBER_BASE = 10
+
+/** The Number <GO> that pins the episode of this rank. */
+export const laneNumber = (rank: number): number => LANE_NUMBER_BASE + rank
+
+/** The lanes pane's share of the stack: 0.16 per row, never under 0.8 (equity is 2, underwater 1.3). */
+export const laneWeight = (n: number): number => Math.max(0.8, 0.16 * n)
+
+interface ReadLanes {
+  readonly episodes: readonly LaneEpisode[]
+  readonly dropped: number
+}
+
+/**
+ * The lane of each served row that can be placed. Its rank is its place in the served table (so it matches
+ * the table's # column even when an earlier row is left out). A null peak is the series' first session; an
+ * unrecovered row runs to the last session of the underwater series. A row with a date that is not real, or
+ * with no session to stand for its start or its end, is dropped and counted. The table's dates and the
+ * chart's `t` come from one index (the API's axis: 00:00 UTC of each session date, month-end sessions
+ * included), so a date maps to its `t` exactly and no lane shifts.
+ */
+function readLanes(data: Analytics): ReadLanes {
+  const { t, unit } = data.drawdown
+  const first = t[0]
+  const last = t[t.length - 1]
+  const episodes: LaneEpisode[] = []
+  let dropped = 0
+  data.drawdown_table.forEach((row, i) => {
+    const peak = row.peak === null ? (first ?? Number.NaN) : epochOfDate(row.peak)
+    const trough = epochOfDate(row.trough)
+    const end = row.recovery === null ? (last ?? Number.NaN) : epochOfDate(row.recovery)
+    if (![peak, trough, end].every(Number.isFinite)) {
+      dropped += 1
+      return
+    }
+    episodes.push({ rank: i + 1, peak, trough, end, open: row.open, depth: formatValue(row.depth, unit, 2) })
+  })
+  return { episodes, dropped }
+}
+
+/** The lanes of the served DD2 rows; null when there is no row to draw. */
+export function drawdownLanes(data: Analytics): LanesSpec | null {
+  const { episodes } = readLanes(data)
+  return episodes.length === 0 ? null : { name: TEAR_DD.lanesName, episodes }
+}
+
+/** How many served rows are left out of the lanes for a date that is not real. */
+export function lanesDropped(data: Analytics): number {
+  return readLanes(data).dropped
+}
+
+function lanesPane(lanes: LanesSpec): LineStackPane {
+  return { id: 'lanes', weight: laneWeight(lanes.episodes.length), series: [], lanes }
+}
+
+/** The lanes in words, under the table: what they are, what they are not, and any row left out. Empty with no rows. */
+export function laneNotes(data: Analytics): string[] {
+  const served = data.drawdown_table.length
+  const dropped = lanesDropped(data)
+  return [
+    ...(served - dropped > 0 ? [fillCopy(served === 1 ? TEAR_DD.lanesNoteOne : TEAR_DD.lanesNote, { n: served })] : []),
+    ...(dropped > 0 ? [fillCopy(dropped === 1 ? TEAR_DD.laneDroppedOne : TEAR_DD.laneDropped, { n: dropped })] : []),
+  ]
 }
 
 // ---------------------------------------------------------------------------------------------

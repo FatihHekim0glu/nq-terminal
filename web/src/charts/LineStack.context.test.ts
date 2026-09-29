@@ -577,6 +577,106 @@ describe('drawLanes and laneAt: episode lanes', () => {
     expect(named(u.ctx.calls, 'save')).toHaveLength(named(u.ctx.calls, 'restore').length)
   })
 
+  describe('an open episode whose trough is the last session (no recovery leg to hatch)', () => {
+    // 100px per day from x = 8; one row of 300px, so a 180px bar from y = 68; mid line at y = 158.
+    const openAtEnd: LanesSpec = { name: 'x', episodes: [{ rank: 1, peak: days(6), trough: days(10), end: days(10), open: true, depth: '-9.0%' }] }
+    const recoveredAtEnd: LanesSpec = { name: 'x', episodes: [{ rank: 1, peak: days(6), trough: days(10), end: days(10), open: false, depth: '-9.0%' }] }
+    const width = (text: string, pr = 1) => text.length * font.size * pr * 0.55
+
+    it('hatches the right end of the fall bar, 3 hatch steps wide, inside a clip rect', () => {
+      const u = draw(plot(), null, openAtEnd)
+      const calls = u.ctx.calls
+      // The fall bar is x 608 to 1008; its last 3 * 4 = 12 css px are hatched.
+      expect(named(calls, 'fillRect')).toEqual([['fillRect', 608, 68, 400, 180]])
+      expect(calls).toContainEqual(['rect', 996, 68, 12, 180])
+      expect(indexOfCall(calls, 'clip')).toBeGreaterThan(indexOfCall(calls, 'rect', 996, 68, 12, 180))
+      expect(calls).toContainEqual(['set:strokeStyle', c.chartVol])
+      const starts = named(calls, 'moveTo').map((x) => x[1] as number)
+      expect(starts.length).toBeGreaterThan(0)
+      expect(named(calls, 'lineTo')).toHaveLength(starts.length)
+      for (let i = 1; i < starts.length; i += 1) expect(starts[i]! - starts[i - 1]!).toBe(G.hatchStep)
+      const clip = indexOfCall(calls, 'clip')
+      const stroke = indexOfCall(calls, 'stroke')
+      expect(clip).toBeLessThan(stroke)
+      expect(named(calls, 'stroke')).toHaveLength(1)
+    })
+
+    it('scales the hatch box and step by the pixel ratio', () => {
+      const u = draw(plot({ pxRatio: 2 }), null, openAtEnd)
+      expect(u.ctx.calls).toContainEqual(['rect', 1992, 136, 24, 360])
+      const starts = named(u.ctx.calls, 'moveTo').map((x) => x[1] as number)
+      for (let i = 1; i < starts.length; i += 1) expect(starts[i]! - starts[i - 1]!).toBe(G.hatchStep * 2)
+    })
+
+    it('hatches a fall bar narrower than 3 steps across its whole width', () => {
+      const thin: LanesSpec = { name: 'x', episodes: [{ rank: 1, peak: days(9.95), trough: days(10), end: days(10), open: true, depth: '-1.0%' }] }
+      const u = draw(plot(), null, thin)
+      const fall = named(u.ctx.calls, 'fillRect')[0] as [string, number, number, number, number]
+      expect(u.ctx.calls).toContainEqual(['rect', fall[1], fall[2], fall[3], fall[4]])
+      expect(fall[3]).toBeLessThan(3 * G.hatchStep)
+    })
+
+    it('writes the depth and the word open on the fall bar, after the rank and clear of the hatch', () => {
+      const u = draw(plot(), null, openAtEnd)
+      const texts = named(u.ctx.calls, 'fillText')
+      expect(texts).toContainEqual(['fillText', '1', 12, 158])
+      const depth = texts.find((x) => x[1] === '-9.0%')
+      const open = texts.find((x) => x[1] === LINE_STACK.laneOpen)
+      expect(depth).toEqual(['fillText', '-9.0%', 612, 158])
+      expect(open).toBeDefined()
+      expect(open![2] as number).toBeCloseTo(612 + width('-9.0%') + 6, 6)
+      expect(open![2] as number).toBeLessThan(996)
+    })
+
+    it('starts the text clear of the rank when the fall bar reaches the left edge of the view', () => {
+      const u = draw(plot({ xMin: days(8), xMax: days(10) }), null, openAtEnd)
+      const depth = named(u.ctx.calls, 'fillText').find((x) => x[1] === '-9.0%')
+      expect(depth).toBeDefined()
+      // The fall bar is clipped to the plot's left edge (x = 8): text no earlier than inset + rank width + gap.
+      expect(depth![2] as number).toBeCloseTo(8 + 4 + width('1') + 6, 6)
+    })
+
+    it('leaves a text part out when it would run onto the hatch', () => {
+      const narrow: LanesSpec = { name: 'x', episodes: [{ rank: 1, peak: days(9.6), trough: days(10), end: days(10), open: true, depth: '-9.0%' }] }
+      const u = draw(plot(), null, narrow)
+      expect(named(u.ctx.calls, 'fillText').map((x) => x[1])).toEqual(['1'])
+      expect(u.ctx.calls).toContainEqual(['rect', 996, 68, 12, 180])
+    })
+
+    it('draws no depth text and no rank where rows are shorter than the text, but still hatches', () => {
+      const many: LanesSpec = {
+        name: 'x',
+        episodes: Array.from({ length: 40 }, (_, i) => ({ rank: i + 1, peak: days(6), trough: days(10), end: days(10), open: true, depth: '-1%' })),
+      }
+      const u = draw(plot(), null, many)
+      expect(named(u.ctx.calls, 'fillText')).toEqual([])
+      expect(named(u.ctx.calls, 'clip')).toHaveLength(40)
+    })
+
+    it('leaves a recovered episode with trough equal to end unchanged: no hatch, no depth', () => {
+      const u = draw(plot(), null, recoveredAtEnd)
+      expect(named(u.ctx.calls, 'fillRect')).toEqual([['fillRect', 608, 68, 400, 180]])
+      expect(named(u.ctx.calls, 'clip')).toEqual([])
+      expect(named(u.ctx.calls, 'stroke')).toEqual([])
+      expect(named(u.ctx.calls, 'moveTo')).toEqual([])
+      expect(named(u.ctx.calls, 'fillText').map((x) => x[1])).toEqual(['1'])
+    })
+
+    it('leaves an open episode with a recovery leg unchanged: the hatch and the text stay on the recovery', () => {
+      const u = draw(plot(), null, { name: 'x', episodes: [lanes.episodes[1]!] })
+      // Day 4 to 5 falls (x 408 to 508), day 5 to 10 is the open recovery (x 508 to 1008).
+      expect(u.ctx.calls).toContainEqual(['rect', 508, 68, 500, 180])
+      expect(named(u.ctx.calls, 'clip')).toHaveLength(1)
+      expect(named(u.ctx.calls, 'fillText')).toContainEqual(['fillText', '-12.0%', 512, 158])
+      expect(named(u.ctx.calls, 'fillText').map((x) => x[1])).toContain(LINE_STACK.laneOpen)
+    })
+
+    it('balances save and restore', () => {
+      const u = draw(plot(), 1, openAtEnd)
+      expect(named(u.ctx.calls, 'save')).toHaveLength(named(u.ctx.calls, 'restore').length)
+    })
+  })
+
   describe('laneAt', () => {
     const ranked: LanesSpec = {
       name: 'x',

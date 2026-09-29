@@ -82,10 +82,21 @@ export const TEAR_DD = {
   maxLine: 'Max drawdown {value}; benchmark {bench}.',
   tableCaption: 'Top drawdowns, deepest first (DD2)',
   tableEmpty: 'No drawdown episodes.',
-  cols: { rank: '#', peak: 'Peak', trough: 'Trough', recovery: 'Recovery', depth: 'Depth', toTrough: 'To trough', toRecovery: 'To recovery', length: 'Length' },
+  cols: { no: 'No.', rank: '#', peak: 'Peak', trough: 'Trough', recovery: 'Recovery', depth: 'Depth', toTrough: 'To trough', toRecovery: 'To recovery', length: 'Length' },
   start: 'start',
   open: 'open',
   lengthUnit: 'Lengths in {unit}.',
+  /** The lanes pane under the underwater curve (roadmap 10): the DD2 rows as episodes. Nothing is summarised: DD3 is not served. */
+  lanesName: 'Episodes',
+  lanesNote: 'Lanes: the {n} deepest drawdowns the API lists (DD2), deepest first. Each falls from peak to trough, then recovers; an open episode ends in a hatch. Not every episode: DD3 (all episodes and time to recovery) is not served.',
+  lanesNoteOne: 'Lanes: the deepest drawdown the API lists (DD2). It falls from peak to trough, then recovers; an open episode ends in a hatch. Not every episode: DD3 (all episodes and time to recovery) is not served.',
+  /** Number <GO> 11 to 20 pins the episode of that rank. */
+  laneItem: 'Episode {rank}',
+  /** The message line after a pin, since the outline in the chart and the table fill are visual only. */
+  lanePinned: 'Episode {rank} is marked in the chart and the table.',
+  laneUnpinned: 'Episode {rank} is no longer marked.',
+  laneDropped: '{n} rows with an unreadable date are not drawn.',
+  laneDroppedOne: '1 row with an unreadable date is not drawn.',
 } as const
 
 export const TEAR_RR = {
@@ -307,5 +318,7 @@ export const TEAR_GALLERY = {
   unusableTitle: 'Tear sheet of an unusable run',
   sv7Title: 'Returns tab of a hypothesis with its Sharpe difference card',
   contextTitle: 'Equity tab of a hypothesis with its market context',
+  ddTitle: 'Drawdown tab of a hypothesis with its episode lanes',
+  ddNote: 'Gallery data only: the fixture hypothesis with four drawdown episodes placed by hand inside its 39 sessions (one from the first session, one still open), so that the lanes, the hatch and the depth are drawn. The curves are the fixture\'s own.',
   contextNote: 'Gallery data only: the fixture hypothesis with its stress windows and regime labels placed by hand inside its 39 sessions, so that the bands and the strip are drawn.',
 } as const

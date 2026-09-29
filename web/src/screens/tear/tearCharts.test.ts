@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { contextTables } from '../../charts/LineStack.context'
 import type { Schemas } from '../../api/types'
+import { TEAR_DD } from '../../copy/tear'
+import { fillCopy } from '../../copy/workspace'
 import { HYP_ANALYTICS, RUN_ANALYTICS, SMOKE_ANALYTICS } from './tear.fixtures'
 import { HYP_EXTENDED } from './tearP1.fixtures'
+import type { Analytics } from './tearKpis'
 import { displayUnit, formatValue } from './tearFormat'
 import {
   basisLine,
   contextLines,
   ddStack,
   distributionInput,
+  drawdownLanes,
   drawdownRows,
   epochOfDate,
   eqStack,
+  laneNotes,
+  laneNumber,
+  lanesDropped,
+  laneWeight,
   mretHeatmap,
   regimeRibbon,
   rrEmpty,
@@ -73,7 +81,7 @@ describe('EQ (look spec 7.5)', () => {
 describe('DD (look spec 7.5)', () => {
   it('stacks equity over the underwater curve in percent with a white zero line', () => {
     const stack = ddStack(SMOKE_ANALYTICS, 'smoke_2015_01')
-    expect(stack.panes.map((p) => p.id)).toEqual(['equity', 'underwater'])
+    expect(stack.panes.map((p) => p.id)).toEqual(['equity', 'underwater', 'lanes'])
     const under = stack.panes[1]!
     expect(under.zero).toBe('white')
     expect(under.unit).toBe('%')
@@ -499,5 +507,218 @@ describe('EQ and DD stacks with the market context', () => {
     const [windows, runs] = contextTables(eq.title, eq.t, eq.spans, eq.ribbon)
     expect(windows!.rows.map((r) => r.inView)).toEqual(['yes'])
     expect(runs!.rows.map((r) => [r.state, r.sessions])).toEqual([['mid volatility', 15], ['high volatility', 14]])
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Roadmap 10, phase 1: drawdown episode lanes over the served DD2 rows
+
+type Row = Analytics['drawdown_table'][number]
+const iso = (seconds: number) => new Date(seconds * 1000).toISOString().slice(0, 10)
+const DD_T = HYP_ANALYTICS.drawdown.t
+
+function withRows(rows: readonly Partial<Row>[], base: Analytics = HYP_ANALYTICS): Analytics {
+  const first = base.drawdown_table[0]!
+  return { ...base, drawdown_table: rows.map((r) => ({ ...first, ...r })) }
+}
+
+/** Ten recovered-or-open rows, deepest first, all inside the fixture's 39 sessions. */
+function tenRows(): Row[] {
+  return Array.from({ length: 10 }, (_, i): Row => {
+    const open = i === 9
+    return {
+      peak: iso(DD_T[i]!),
+      trough: iso(DD_T[i + 2]!),
+      recovery: open ? null : iso(DD_T[i + 5]!),
+      depth: -0.1 + i * 0.005,
+      peak_to_trough: 2,
+      trough_to_recovery: open ? null : 3,
+      length: open ? 30 : 5,
+      open,
+    }
+  })
+}
+
+describe('drawdownLanes (DD2): one lane per served row, in served order', () => {
+  it('maps the fixture\'s one open row to a lane with epoch second bounds and the depth text', () => {
+    const lanes = drawdownLanes(HYP_ANALYTICS)!
+    expect(lanes.name).toBe(TEAR_DD.lanesName)
+    expect(lanes.name).toBe('Episodes')
+    expect(lanes.episodes).toEqual([
+      {
+        rank: 1,
+        peak: epochOfDate('2011-04-27'),
+        trough: epochOfDate('2011-06-17'),
+        // open: the lane runs to the last session the data reaches
+        end: DD_T[DD_T.length - 1],
+        open: true,
+        depth: formatValue(HYP_ANALYTICS.drawdown_table[0]!.depth, HYP_ANALYTICS.drawdown.unit, 2),
+      },
+    ])
+    expect(lanes.episodes[0]!.depth).toBe('-9.49%')
+    expect(lanes.episodes[0]!.peak).toBe(1303862400)
+  })
+
+  it('keeps ten rows in the order served with ranks 1 to 10, a recovered row ending at its recovery', () => {
+    const data = withRows(tenRows())
+    const { episodes } = drawdownLanes(data)!
+    expect(episodes.map((e) => e.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    expect(episodes.map((e) => e.peak)).toEqual(DD_T.slice(0, 10))
+    expect(episodes.map((e) => e.trough)).toEqual(DD_T.slice(2, 12))
+    expect(episodes.slice(0, 9).map((e) => e.end)).toEqual(DD_T.slice(5, 14))
+    expect(episodes.slice(0, 9).every((e) => !e.open)).toBe(true)
+    expect(episodes[9]).toMatchObject({ open: true, end: DD_T[DD_T.length - 1] })
+    // the depths are the served ones, unsorted and unchanged
+    expect(episodes.map((e) => e.depth)).toEqual(data.drawdown_table.map((r) => formatValue(r.depth, data.drawdown.unit, 2)))
+  })
+
+  it('starts a lane at the first session of the series when the served peak is null (the starting value)', () => {
+    const [episode] = drawdownLanes(withRows([{ peak: null }]))!.episodes
+    expect(episode!.peak).toBe(DD_T[0])
+  })
+
+  it('leaves out a row with a date that is not real, counts it, and keeps the others\' served ranks', () => {
+    const rows = tenRows()
+    rows[1] = { ...rows[1]!, peak: '2011-02-30' }
+    rows[4] = { ...rows[4]!, trough: 'later' }
+    rows[6] = { ...rows[6]!, recovery: '2011-13-01' }
+    const data = withRows(rows)
+    const lanes = drawdownLanes(data)!
+    expect(lanes.episodes.map((e) => e.rank)).toEqual([1, 3, 4, 6, 8, 9, 10])
+    expect(lanesDropped(data)).toBe(3)
+    expect(lanes.episodes.every((e) => [e.peak, e.trough, e.end].every(Number.isFinite))).toBe(true)
+  })
+
+  it('is null with no rows, and when no row has a readable date', () => {
+    expect(drawdownLanes(withRows([]))).toBeNull()
+    expect(lanesDropped(withRows([]))).toBe(0)
+    const bad = withRows([{ trough: 'x' }, { peak: 'y' }])
+    expect(drawdownLanes(bad)).toBeNull()
+    expect(lanesDropped(bad)).toBe(2)
+  })
+
+  it('cannot place a row on an empty axis when it starts or runs open: dropped and counted', () => {
+    const empty = { ...withRows([{ peak: null }]), drawdown: { ...HYP_ANALYTICS.drawdown, t: [] } }
+    expect(drawdownLanes(empty)).toBeNull()
+    expect(lanesDropped(empty)).toBe(1)
+    const recovered = { ...withRows([{ peak: '2011-04-27', recovery: '2011-06-01', open: false }]), drawdown: { ...HYP_ANALYTICS.drawdown, t: [] } }
+    expect(drawdownLanes(recovered)!.episodes).toHaveLength(1)
+  })
+
+  it('places a monthly series\' month-end rows exactly on its t, so no lane shifts', () => {
+    const ends = ['2020-01-31', '2020-02-29', '2020-03-31', '2020-04-30', '2020-05-29', '2020-06-30']
+    const t = ends.map(epochOfDate)
+    const data: Analytics = {
+      ...withRows([{ peak: '2020-01-31', trough: '2020-03-31', recovery: '2020-05-29', open: false }, { peak: '2020-05-29', trough: '2020-06-30', recovery: null, open: true }]),
+      drawdown: { ...HYP_ANALYTICS.drawdown, t, date: ends },
+    }
+    const [closed, open] = drawdownLanes(data)!.episodes
+    expect([closed!.peak, closed!.trough, closed!.end]).toEqual([t[0], t[2], t[4]])
+    expect([open!.peak, open!.trough, open!.end]).toEqual([t[4], t[5], t[5]])
+    for (const e of [closed!, open!]) for (const at of [e.peak, e.trough, e.end]) expect(t).toContain(at)
+  })
+
+  it('summarises nothing: a lane holds the served facts only (DD3 is not served)', () => {
+    const lanes = drawdownLanes(withRows(tenRows()))!
+    expect(Object.keys(lanes).sort()).toEqual(['episodes', 'name'])
+    for (const e of lanes.episodes) expect(Object.keys(e).sort()).toEqual(['depth', 'end', 'open', 'peak', 'rank', 'trough'])
+  })
+})
+
+describe('laneWeight: the lanes pane grows with its rows, never under 0.8', () => {
+  it('is 0.8 up to five rows and 1.6 at ten', () => {
+    expect(laneWeight(0)).toBe(0.8)
+    expect(laneWeight(1)).toBe(0.8)
+    expect(laneWeight(5)).toBeCloseTo(0.8, 12)
+    expect(laneWeight(10)).toBeCloseTo(1.6, 12)
+    expect(laneWeight(7)).toBeCloseTo(1.12, 12)
+  })
+})
+
+describe('laneNumber: Number <GO> 11 to 20 pins an episode', () => {
+  it('is ten more than the rank', () => {
+    expect([1, 2, 10].map(laneNumber)).toEqual([11, 12, 20])
+  })
+})
+
+describe('ddStack with the lanes pane', () => {
+  const NAME = 'volmanaged_v0'
+
+  it('stacks equity, underwater and the lanes, the lanes last so they carry the time axis and the regime strip', () => {
+    const stack = ddStack(HYP_ANALYTICS, NAME)
+    expect(stack.panes.map((p) => p.id)).toEqual(['equity', 'underwater', 'lanes'])
+    const lanes = stack.panes[2]!
+    expect(lanes.series).toEqual([])
+    expect(lanes.lanes).toEqual(drawdownLanes(HYP_ANALYTICS))
+    expect(lanes.weight).toBe(laneWeight(1))
+    expect(lanes.summaryDrawdown).toBeUndefined()
+    expect(lanes.zero).toBeUndefined()
+  })
+
+  it('weights the pane by the rows drawn', () => {
+    const stack = ddStack(withRows(tenRows()), NAME)
+    expect(stack.panes[2]!.weight).toBeCloseTo(1.6, 12)
+    expect(stack.panes[2]!.lanes!.episodes).toHaveLength(10)
+  })
+
+  it('keeps the equity and underwater panes exactly as they were', () => {
+    const [equity, underwater] = ddStack(HYP_ANALYTICS, NAME).panes
+    const without = ddStack(withRows([]), NAME).panes
+    expect(without.map((p) => p.id)).toEqual(['equity', 'underwater'])
+    expect(equity).toEqual(without[0])
+    expect(underwater).toEqual(without[1])
+  })
+
+  it('has no lanes pane for an empty table, or when no row can be drawn', () => {
+    expect(ddStack(withRows([]), NAME).panes.map((p) => p.id)).toEqual(['equity', 'underwater'])
+    expect(ddStack(withRows([{ trough: 'x' }]), NAME).panes.map((p) => p.id)).toEqual(['equity', 'underwater'])
+  })
+
+  it('carries the market context over all three panes without touching them', () => {
+    const plain = ddStack(HYP_ANALYTICS, NAME)
+    const withContext = ddStack(HYP_ANALYTICS, NAME, HYP_EXTENDED)
+    expect(withContext.panes).toEqual(plain.panes)
+    expect(withContext.ribbon).toBeDefined()
+  })
+})
+
+describe('laneNotes: what the lanes are, in words, and what they are not', () => {
+  it('names the rows as the deepest the API lists and says DD3 is not served', () => {
+    const data = withRows(tenRows())
+    const [note, ...rest] = laneNotes(data)
+    expect(rest).toEqual([])
+    expect(note).toBe(fillCopy(TEAR_DD.lanesNote, { n: 10 }))
+    expect(note).toContain('the 10 deepest drawdowns the API lists (DD2), deepest first')
+    expect(note).toContain('an open episode ends in a hatch')
+    expect(note).not.toContain('is hatched')
+    expect(note).toContain('DD3 (all episodes and time to recovery) is not served')
+  })
+
+  it('says it in the singular for one row', () => {
+    const [note] = laneNotes(HYP_ANALYTICS)
+    expect(note).toBe(TEAR_DD.lanesNoteOne)
+    expect(note).toContain('the deepest drawdown the API lists (DD2)')
+    expect(note).toContain('an open episode ends in a hatch')
+    expect(note).toContain('DD3')
+  })
+
+  it('adds the count of rows left out for an unreadable date', () => {
+    const rows = tenRows()
+    rows[2] = { ...rows[2]!, peak: 'x' }
+    expect(laneNotes(withRows(rows))).toEqual([fillCopy(TEAR_DD.lanesNote, { n: 10 }), TEAR_DD.laneDroppedOne])
+    expect(laneNotes(withRows(rows))[1]).toBe('1 row with an unreadable date is not drawn.')
+    const two = tenRows().map((r, i) => (i < 2 ? { ...r, peak: 'x' } : r))
+    expect(laneNotes(withRows(two))[1]).toBe('2 rows with an unreadable date are not drawn.')
+  })
+
+  it('only counts the rows left out when none can be drawn, and prints nothing for an empty table', () => {
+    expect(laneNotes(withRows([{ peak: 'x' }, { peak: 'y' }]))).toEqual([fillCopy(TEAR_DD.laneDropped, { n: 2 })])
+    expect(laneNotes(withRows([]))).toEqual([])
+  })
+
+  it('derives no statistic from the rows: no longest, median or total in the copy', () => {
+    for (const text of [TEAR_DD.lanesNote, TEAR_DD.lanesNoteOne, TEAR_DD.laneDropped, TEAR_DD.laneItem, TEAR_DD.lanesName]) {
+      expect(text).not.toMatch(/longest|median|total|average|mean|recovery time/i)
+    }
   })
 })

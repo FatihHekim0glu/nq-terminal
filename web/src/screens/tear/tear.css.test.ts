@@ -71,3 +71,58 @@ describe('the 1180px tear container: the SV7 card beside a wider statistics colu
     expect(block).toMatch(/\.tear-stats-sv7\s*>\s*\.tear-stats-cols\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
   })
 })
+
+// Roadmap 10: the DD lanes and the DD2 table mark the same episode. The table's half is a row fill.
+describe('the highlighted drawdown row: the selection fill, from tokens', () => {
+  it('fills every cell of the highlighted row, the rank row header and the No. cell included, with --sel-bg', () => {
+    for (const cell of ['td', 'th']) {
+      expect(rule(`.tear-table [data-highlight='true'] ${cell}`), cell).toMatch(/background:\s*var\(--sel-bg\)\s*;/)
+    }
+  })
+
+  it('lifts the down red on that fill, as the grids do for a selected row (3.9 to 1 otherwise)', () => {
+    expect(rule(".tear-table [data-highlight='true']")).toMatch(/--c-down:\s*var\(--c-down-raised\)\s*;/)
+  })
+
+  it('reads the No. hint cell (a plain td) muted, right aligned, on the grid row height, no bold', () => {
+    const declarations = rule('.tear-no')
+    expect(declarations).toMatch(/color:\s*var\(--muted\)\s*;/)
+    expect(declarations).toMatch(/text-align:\s*right\s*;/)
+    expect(declarations).toMatch(/height:\s*var\(--row-h\)\s*;/)
+    expect(declarations).toMatch(/font-weight:\s*400\s*;/)
+    expect(declarations).toMatch(/background:\s*var\(--bg\)\s*;/)
+  })
+
+  it('keeps the rank row header (a th) as it looked as a cell: on the grid row height, not bold, on the page fill', () => {
+    const declarations = rule('.tear-rank')
+    expect(declarations).toMatch(/font-weight:\s*400\s*;/)
+    expect(declarations).toMatch(/height:\s*var\(--row-h\)\s*;/)
+    expect(declarations).toMatch(/padding:\s*0\s+5px\s*;/)
+    expect(declarations).toMatch(/background:\s*var\(--bg\)\s*;/)
+  })
+
+  it('lets the row hover fill reach the rank row header, which the grid rule (td only) does not', () => {
+    expect(rule('.tear-table tbody tr:hover .tear-rank')).toMatch(/background:\s*var\(--hover-row\)\s*;/)
+  })
+
+  it('names no colour of its own: the whole sheet stays on tokens', () => {
+    expect(STRIPPED).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(STRIPPED).not.toMatch(/\b(?:rgb|rgba|hsl|hsla)\(/)
+  })
+})
+
+// A short panel gave the lanes pane about 50 px: rows of 3 px, with no text and no room to hover. The DD chart
+// wrapper carries the number of drawn lanes and asks for 16 px more than the chart's 160 px floor per lane.
+describe('.tear-chart-lanes: the DD chart grows with its lanes', () => {
+  it('adds 16px per drawn lane to the 160px floor, from --tear-lane-rows (none by default)', () => {
+    expect(rule('.tear-chart-lanes')).toMatch(/min-height:\s*calc\(160px\s*\+\s*var\(--tear-lane-rows,\s*0\)\s*\*\s*16px\)\s*;/)
+  })
+
+  it('names no colour of its own', () => {
+    expect(rule('.tear-chart-lanes')).not.toMatch(/#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/)
+  })
+
+  it('comes after .tear-chart, so its min-height wins at equal specificity', () => {
+    expect(STRIPPED.indexOf('.tear-chart-lanes {')).toBeGreaterThan(STRIPPED.indexOf('.tear-chart {'))
+  })
+})

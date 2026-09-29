@@ -61,6 +61,11 @@
   min-width: 0;
 }
 
+/* DD: the chart holds one lane row per drawn episode (--tear-lane-rows, set by TearViews). At the 160px floor
+   alone a short panel left the lanes pane about 50px, so rows of 3px with no text and no hover target; 16px a
+   lane keeps them readable. It follows .tear-chart, so its min-height wins at equal specificity. */
+.tear-chart-lanes { min-height: calc(160px + var(--tear-lane-rows, 0) * 16px); }
+
 .tear-chart-heat { flex: 2 1 auto; min-height: 128px; }
 
 /* RR with a series shorter than its rolling window: each pane states why it is empty, centred, with no
@@ -126,6 +131,42 @@
   max-height: calc(7 * var(--row-h));
   overflow: auto;
 }
+
+/* DD: the table row and the lane of the same episode are marked together (hover on either, or the episode
+   pinned with Number <GO> 11 to 20). The fill is the selection blue of the grids. It has more weight than the
+   grid's own cell fill (a class and an attribute against one class) and less than its hover fills, which
+   stay on top under the pointer. */
+.tear-table [data-highlight='true'] td,
+.tear-table [data-highlight='true'] th {
+  background: var(--sel-bg);
+}
+/* The down red fails on the selection blue (3.9 to 1), so the marked row lifts it, as the grids do for a
+   selected row. */
+.tear-table [data-highlight='true'] { --c-down: var(--c-down-raised); }
+
+/* The No. cell (11) upward) is a plain cell that hints the Number <GO> of the row: the rank beside it is the row
+   header, so a screen reader announces the rank, not the hint. It reads like the rank. */
+.tear-no {
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+/* The rank is the row header (a th), which the grid styles only in thead: it takes the look the cell had, and
+   the row hover fill the grid gives only to td. */
+.tear-rank {
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--bg);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.tear-table tbody tr:hover .tear-no,
+.tear-table tbody tr:hover .tear-rank { background: var(--hover-row); }
 
 .tear-basis {
   margin: 0;

@@ -4,13 +4,18 @@
 // statistics scroll box, which also holds the SV7 Sharpe difference card. RR: rolling Sharpe over rolling volatility.
 // MRET: the year by month heat map, then the yearly totals (a house addition, labelled so). EQ and DD also
 // carry a Market context toggle: the RK5 stress windows as bands and the RG1 regime as a strip, from /extended.
-import { Fragment, useId, useMemo, useState, type JSX, type ReactNode } from 'react'
+// DD's top drawdowns are also drawn as episode lanes under the underwater curve, cross-highlighted with the
+// table (hover on either side; Number <GO> 11 to 20 pins an episode).
+import { Fragment, useCallback, useId, useMemo, useState, type CSSProperties, type JSX, type ReactNode } from 'react'
 import type { ApiError } from '../../api/client'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Distribution } from '../../charts/echarts/Distribution'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import LineStack from '../../charts/LineStack'
 import { ToggleGroup } from '../../chrome/Field.buttons'
+import { postMessage } from '../../chrome/MessageLine.store'
+import { usePanelActions } from '../../chrome/PanelChrome.actions'
+import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import { ROVING_ATTR, ROVING_SCROLL_ATTR } from '../../chrome/WorkspaceFocus'
 import { TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
@@ -18,9 +23,9 @@ import type { PanelLink } from '../../state/linkGroups'
 import { Card } from './TearCard'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, contextLines, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, stackContext, statsNotes, statsSections,
-  tailsNote, yearlyLadder,
-  type RrEmpty, type StackSpec,
+  basisLine, contextLines, ddStack, distributionInput, drawdownLanes, drawdownRows, eqStack, laneNotes, laneNumber, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, stackContext,
+  statsNotes, statsSections, tailsNote, yearlyLadder,
+  type DrawdownRowView, type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
 import type { Analytics } from './tearKpis'
@@ -66,11 +71,41 @@ function Basis({ data, unit, extra }: { readonly data: Analytics; readonly unit:
   )
 }
 
-/** `context`: the market context layers to draw (EQ and DD, while Shown); left out, the stack is drawn as it is. */
-function Stack({ spec, link, context }: { readonly spec: StackSpec; readonly link: PanelLink; readonly context?: Pick<StackSpec, 'spans' | 'ribbon'> }) {
+/** The lanes of a DD stack: the episode to outline, and where the chart reports the lane under the pointer. */
+interface LaneLink {
+  readonly highlight: number | null
+  readonly onHover: (rank: number | null) => void
+}
+
+/**
+ * `context`: the market context layers to draw (EQ and DD, while Shown); left out, the stack is drawn as it is.
+ * `lanes`: DD's episode highlight; left out, the chart neither outlines a lane nor reports one.
+ * `laneRows`: how many lanes the stack draws; above 0 the chart asks for 16px a lane above its floor (tear.css),
+ * so a short panel never squeezes the lanes into rows too thin to read or hover.
+ */
+function Stack({ spec, link, context, lanes, laneRows }: {
+  readonly spec: StackSpec
+  readonly link: PanelLink
+  readonly context?: Pick<StackSpec, 'spans' | 'ribbon'>
+  readonly lanes?: LaneLink
+  readonly laneRows?: number
+}) {
+  const withLanes = laneRows !== undefined && laneRows > 0
   return (
-    <div className="tear-chart">
-      <LineStack title={spec.title} t={spec.t} panes={spec.panes} link={link} spans={context?.spans} ribbon={context?.ribbon} />
+    <div
+      className={withLanes ? 'tear-chart tear-chart-lanes' : 'tear-chart'}
+      style={withLanes ? ({ ['--tear-lane-rows' as string]: laneRows } as CSSProperties) : undefined}
+    >
+      <LineStack
+        title={spec.title}
+        t={spec.t}
+        panes={spec.panes}
+        link={link}
+        spans={context?.spans}
+        ribbon={context?.ribbon}
+        highlightLane={lanes?.highlight}
+        onLaneHover={lanes?.onHover}
+      />
     </div>
   )
 }
@@ -122,24 +157,57 @@ function EqView({ data, name, link, extended, extendedError }: ViewProps) {
   )
 }
 
-function DrawdownTable({ data }: { readonly data: Analytics }) {
-  const rows = useMemo(() => drawdownRows(data), [data])
+/**
+ * Which episode is marked: the one under the pointer (a lane or a table row), else the pinned one. The pin
+ * belongs to the table it was made in, so a new table (another cost or frequency) starts with none. `pinned`
+ * is the pin alone (never the hover), for what is announced and for aria-current.
+ */
+function useEpisodeMark(data: Analytics) {
+  const [hover, setHover] = useState<number | null>(null)
+  const [pin, setPin] = useState<{ readonly data: Analytics; readonly rank: number } | null>(null)
+  const pinned = pin !== null && pin.data === data ? pin.rank : null
+  const onHover = useCallback((rank: number | null) => setHover((current) => (current === rank ? current : rank)), [])
+  const togglePin = useCallback(
+    (rank: number) => setPin((current) => (current !== null && current.data === data && current.rank === rank ? null : { data, rank })),
+    [data],
+  )
+  return { highlight: hover ?? pinned, pinned, onHover, togglePin }
+}
+
+interface DrawdownTableProps {
+  readonly rows: readonly DrawdownRowView[]
+  readonly unit: string
+  /** The rank of the row to mark (the lane outlined in the chart), or null. */
+  readonly highlight: number | null
+  /** The rank pinned with Number <GO> 11 to 20, or null: the row says so with aria-current (hover never does). */
+  readonly pinned: number | null
+  readonly onHover: (rank: number | null) => void
+}
+
+function DrawdownTable({ rows, unit, highlight, pinned, onHover }: DrawdownTableProps) {
   const C = TEAR_DD.cols
-  const heads = [C.rank, C.peak, C.trough, C.recovery, C.depth, C.toTrough, C.toRecovery, C.length]
-  const unit = data.rolling.window_unit
+  const heads = [C.no, C.rank, C.peak, C.trough, C.recovery, C.depth, C.toTrough, C.toRecovery, C.length]
+  const numeric = new Set<string>([C.no, C.rank, C.depth, C.toTrough, C.toRecovery, C.length])
   const caption = `${TEAR_DD.tableCaption}. ${fillCopy(TEAR_DD.lengthUnit, { unit })}`
   return (
     <ScrollRegion className="tear-table" label={caption}>
       <table className="nqt-grid">
         <caption className="tear-caption">{caption}</caption>
         <thead>
-          <tr>{heads.map((h, i) => <th key={h} scope="col" className={i === 0 || i >= 4 ? 'num' : undefined}>{h}</th>)}</tr>
+          <tr>{heads.map((h) => <th key={h} scope="col" className={numeric.has(h) ? 'num' : undefined}>{h}</th>)}</tr>
         </thead>
         <tbody>
           {rows.length === 0 ? <tr><td colSpan={heads.length} className="muted">{TEAR_DD.tableEmpty}</td></tr> : null}
           {rows.map((r) => (
-            <tr key={r.rank}>
-              <td className="num muted">{r.rank}</td>
+            <tr
+              key={r.rank}
+              data-highlight={highlight === r.rank ? 'true' : undefined}
+              aria-current={pinned === r.rank ? 'true' : undefined}
+              onMouseEnter={() => onHover(r.rank)}
+              onMouseLeave={() => onHover(null)}
+            >
+              <td className="num tear-no">{`${laneNumber(r.rank)})`}</td>
+              <th scope="row" className="num muted tear-rank">{r.rank}</th>
               <td className="name">{r.peak}</td>
               <td className="name">{r.trough}</td>
               <td className="name">{r.recovery}</td>
@@ -158,6 +226,25 @@ function DrawdownTable({ data }: { readonly data: Analytics }) {
 function DdView({ data, name, link, extended, extendedError }: ViewProps) {
   const spec = useMemo(() => ddStack(data, name), [data, name])
   const market = useMarketContext(spec.t, extended, extendedError)
+  const rows = useMemo(() => drawdownRows(data), [data])
+  const notes = useMemo(() => laneNotes(data), [data])
+  const laneRows = useMemo(() => drawdownLanes(data)?.episodes.length ?? 0, [data])
+  const { highlight, pinned, onHover, togglePin } = useEpisodeMark(data)
+  const panelId = usePanelActions().panelId || 'tear'
+  // The pin is drawn (an outline and a fill), which a screen reader cannot see: the message line says what the
+  // number did, decided from the pin as it is now.
+  const numbered = useMemo(
+    () => rows.map((r) => ({
+      n: laneNumber(r.rank),
+      label: fillCopy(TEAR_DD.laneItem, { rank: r.rank }),
+      run: () => {
+        togglePin(r.rank)
+        postMessage(fillCopy(pinned === r.rank ? TEAR_DD.laneUnpinned : TEAR_DD.lanePinned, { rank: r.rank }))
+      },
+    })),
+    [rows, togglePin, pinned],
+  )
+  useNumbered(panelId, 'dd-lanes', numbered)
   const dd = data.drawdown
   const max = fillCopy(TEAR_DD.maxLine, {
     value: formatValue(dd.max_drawdown, dd.unit, 2),
@@ -167,8 +254,9 @@ function DdView({ data, name, link, extended, extendedError }: ViewProps) {
     <>
       <Basis data={data} unit={dd.unit} extra={max} />
       {market.controls}
-      <Stack spec={spec} link={link} context={market.layers} />
-      <DrawdownTable data={data} />
+      <Stack spec={spec} link={link} context={market.layers} lanes={{ highlight, onHover }} laneRows={laneRows} />
+      <DrawdownTable rows={rows} unit={data.rolling.window_unit} highlight={highlight} pinned={pinned} onHover={onHover} />
+      {notes.map((line) => <p key={line} className="tear-note">{line}</p>)}
     </>
   )
 }

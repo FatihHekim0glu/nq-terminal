@@ -23,6 +23,8 @@ const CHIP_GAP = 2
 /** A lane's rank sits this far in from the plot's left edge; the gap between two texts on a bar. */
 const LANE_INSET = 4
 const LANE_TEXT_GAP = 6
+/** How many hatch steps wide the hatch is at the end of an open episode that has no recovery leg. */
+const OPEN_END_STEPS = 3
 
 const canvasFontOf = (font: ChartTokens['font'], pr: number) => `${font.size * pr}px ${font.family}`
 
@@ -263,7 +265,21 @@ function hatchBox(u: DrawPlot, box: readonly [number, number], y: number, height
   ctx.restore()
 }
 
-/** Labels on the bars: the rank at the plot's left edge, then depth and the word open on the recovery. */
+/**
+ * The hatched right end of an open episode's fall bar, for the episode whose trough is its last session (it has
+ * no recovery leg to hatch, so the hatch marks where it is still open). Null for any other episode, and for one
+ * whose recovery is merely outside the view.
+ */
+function openEndBox(bar: LaneBar, pr: number): readonly [number, number] | null {
+  if (!bar.episode.open || bar.recover !== null || bar.fall === null || bar.episode.end > bar.episode.trough) return null
+  return [Math.max(bar.fall[0], bar.fall[1] - OPEN_END_STEPS * G.hatchStep * pr), bar.fall[1]]
+}
+
+/**
+ * Labels on the bars: the rank at the plot's left edge, then the depth and the word open on the recovery, or,
+ * for an open episode with no recovery leg, on its fall bar after the rank and short of the hatch. A part that
+ * does not fit is left out; no text is drawn where the row is shorter than the text.
+ */
 function drawLaneText(u: DrawPlot, bars: readonly LaneBar[], rowHeight: number, barHeight: number, colours: LaneColours, font: ChartTokens['font'], pr: number): void {
   const rankFits = rowHeight >= font.size * pr
   const partsFit = barHeight >= font.size * pr
@@ -275,13 +291,20 @@ function drawLaneText(u: DrawPlot, bars: readonly LaneBar[], rowHeight: number, 
   ctx.textBaseline = 'middle'
   ctx.fillStyle = colours.text
   for (const bar of bars) {
-    if (rankFits) ctx.fillText(String(bar.episode.rank), u.bbox.left + LANE_INSET * pr, bar.mid)
-    if (!partsFit || bar.recover === null) continue
+    const rank = String(bar.episode.rank)
+    if (rankFits) ctx.fillText(rank, u.bbox.left + LANE_INSET * pr, bar.mid)
+    if (!partsFit) continue
+    const openEnd = openEndBox(bar, pr)
+    const run = bar.recover ?? (openEnd === null ? null : bar.fall)
+    if (run === null) continue
+    // On the fall bar the text must clear the rank (drawn at the plot's left edge) and stop short of the hatch.
+    const limit = openEnd === null ? run[1] : openEnd[0]
+    let x = run[0] + LANE_INSET * pr
+    if (bar.recover === null && rankFits) x = Math.max(x, u.bbox.left + LANE_INSET * pr + ctx.measureText(rank).width + LANE_TEXT_GAP * pr)
     const parts = [bar.episode.depth, bar.episode.open ? LINE_STACK.laneOpen : ''].filter((p) => p !== '')
-    let x = bar.recover[0] + LANE_INSET * pr
     for (const part of parts) {
       const width = ctx.measureText(part).width
-      if (x + width + CHIP_PAD * pr > bar.recover[1]) continue
+      if (x + width + CHIP_PAD * pr > limit) continue
       ctx.fillText(part, x, bar.mid)
       x += width + LANE_TEXT_GAP * pr
     }
@@ -292,9 +315,11 @@ function drawLaneText(u: DrawPlot, bars: readonly LaneBar[], rowHeight: number, 
 /**
  * One row per episode, in the order given. The bar is G.laneBarShare of the row (never under 2px) and
  * centred: the fall runs from peak to trough in `fall`, the recovery from trough to end in `recover`,
- * or hatched every G.hatchStep px for an open episode. The rank sits at the left edge; the depth and
- * the word open follow on the recovery when it is wide enough, and no text is drawn where the row is
- * shorter than the text. The `highlight` rank gets a 1px outline around its whole bar.
+ * or hatched every G.hatchStep px for an open episode. An open episode whose trough is its last session
+ * has no recovery leg, so its hatch ends the fall bar instead (the last OPEN_END_STEPS steps of it). The
+ * rank sits at the left edge; the depth and the word open follow on the recovery (on the fall bar for that
+ * open episode, clear of the rank and the hatch) when it is wide enough, and no text is drawn where the
+ * row is shorter than the text. The `highlight` rank gets a 1px outline around its whole bar.
  */
 export function drawLanes(u: DrawPlot, lanes: LanesSpec, colours: LaneColours, highlight: number | null, font: ChartTokens['font']): void {
   const extent = xExtent(u)
@@ -326,6 +351,8 @@ export function drawLanes(u: DrawPlot, lanes: LanesSpec, colours: LaneColours, h
     }
     ctx.restore()
     if (bar.recover !== null && bar.episode.open) hatchBox(u, bar.recover, bar.y, barHeight, colours.hatch, pr)
+    const openEnd = openEndBox(bar, pr)
+    if (openEnd !== null) hatchBox(u, openEnd, bar.y, barHeight, colours.hatch, pr)
   }
   drawLaneText(u, bars, rowHeight, barHeight, colours, font, pr)
   const marked = highlight === null ? undefined : bars.find((b) => b.episode.rank === highlight)
