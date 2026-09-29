@@ -41,6 +41,8 @@ export interface GlyphAxis {
   readonly format: 'p' | 'number'
   readonly decimals?: number
   readonly unit?: string
+  /** False writes a linear value with no explicit plus, for a duration or a count. Default true. */
+  readonly signed?: boolean
   /** A fixed end of the axis; it wins over the data. Points beyond it are pinned to the edge. */
   readonly min?: number
   readonly max?: number
@@ -188,7 +190,7 @@ export function offScaleLines(input: GlyphScatterInput): GlyphRefLine[] {
 /** A value as the summary and table write it: p-values with formatP (an exponent below its floor). */
 function valueText(v: number, axis: GlyphAxis): string {
   if (axis.format === 'p') return v > 0 && v < P_FLOOR ? v.toExponential(1) : formatP(v)
-  return withUnit(isLog(axis) ? fixed(v, dec(axis)) : signed(v, dec(axis)), axis.unit)
+  return withUnit(isLog(axis) || axis.signed === false ? fixed(v, dec(axis)) : signed(v, dec(axis)), axis.unit)
 }
 
 /**

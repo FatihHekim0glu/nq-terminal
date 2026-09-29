@@ -6,7 +6,7 @@ import GalleryPanel from '../runs/galleryPanel'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import { buildEvidenceRows } from './evidenceModel'
 import { buildRegRows } from './regModel'
-import { CONFIRMATIONS, HYPOTHESES, REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import RegEvidence from './RegEvidence'
 import type { HypothesisDetails } from './useHypothesisDetails'
 
@@ -24,7 +24,14 @@ const DETAILS: HypothesisDetails = {
   pending: 0,
 }
 
-const ROWS_VIEW = buildEvidenceRows({ rows: ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: DEFLATED_REAL, details: DETAILS })
+const ROWS_VIEW = buildEvidenceRows({
+  rows: ROWS,
+  cards: HYPOTHESES,
+  confirmations: CONFIRMATIONS,
+  deflated: DEFLATED_REAL,
+  details: DETAILS,
+  family: { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k },
+})
 
 export default function RegEvidenceGallery() {
   return (

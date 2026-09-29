@@ -1,5 +1,6 @@
 // LIVE: the paper book, read only (TASKS 7.3; UI_SPEC section 7 LIVE; look spec 7.11; ANALYTICS_CATALOG
-// LV1 to LV3, LV5). GETs only: /api/live/status, /performance, /journal, /routes and the LV5 paper tracking.
+// LV1 to LV3, LV5, LV6). GETs only: /api/live/status, /performance, /journal, /routes, the LV5 paper tracking and,
+// for LV6, the hypothesis behind the book with its bootstrap and its linked run.
 // The live stream (TASKS 9.2) is open while LIVE is on screen: the status arrives as an event and a streamed
 // journal row refreshes the journal views, so nothing polls unless the stream is down (the stream line says).
 //
@@ -12,6 +13,7 @@
 //   chart | recon  target against actual (performance rows only) | reconciliation table
 //   routes       READ ONLY Routes (one per close row) and Fills, footer strip of totals (/api/live/routes)
 //   tracking     LV5 paper against model, cumulative and per session ([POST HOC], /api/analytics/paper-tracking)
+//   expectation  LV6 the paper and model paths as a fraction of K on the SV6 cone of the hypothesis ([POST HOC])
 //   journals     the journals under live/logs, expected files that are not written yet named
 import { useMemo } from 'react'
 import { useLiveStatus } from '../../api/queries'
@@ -23,6 +25,7 @@ import { fillCopy } from '../../copy/workspace'
 import { actionsItem } from '../oos/panelMenu'
 import Countdown from '../../tiles/Countdown'
 import KpiTile, { KpiRow } from '../../tiles/KpiTile'
+import ExpectationPanel from './ExpectationPanel'
 import JournalsGrid from './JournalsGrid'
 import { bookItems, exposureKpis, guardItems, type LiveStatus } from './liveModel'
 import PerformancePanel from './PerformancePanel'
@@ -69,6 +72,7 @@ function Book({ status }: { readonly status: LiveStatus }) {
       </div>
       <RoutesPanel />
       <TrackingPanel />
+      <ExpectationPanel />
       <div className="live-journals">
         <JournalsGrid status={status} />
       </div>

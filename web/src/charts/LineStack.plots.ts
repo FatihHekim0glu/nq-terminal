@@ -103,7 +103,8 @@ function paneLegend(el: HTMLElement, pane: LineStackPane, values: readonly Value
   const styles = lineStackSeries(tokens)
   const format = paneFormat(pane)
   const intraday = isIntraday(t)
-  const handle = createLegend(el, pane.series.map((s) => ({ name: s.name, colour: styles[s.style].stroke })), pane.series.length === 1)
+  const single = pane.series.length === 1 && pane.legendStats !== false
+  const handle = createLegend(el, pane.series.map((s) => ({ name: s.name, colour: styles[s.style].stroke })), single)
   let visible: [number, number] | null = null
   let stats: LegendStats | null = null
   const refresh = (u: uPlot) => {
@@ -112,7 +113,7 @@ function paneLegend(el: HTMLElement, pane: LineStackPane, values: readonly Value
   }
   const onScale = (u: uPlot) => {
     visible = visibleIndexRange(t, u.scales.x?.min ?? 0, u.scales.x?.max ?? 0)
-    const s = values.length === 1 && visible ? seriesStats(values[0]!, visible[0], visible[1]) : null
+    const s = single && visible ? seriesStats(values[0]!, visible[0], visible[1]) : null
     stats = s && {
       high: { date: timeLabel(t[s.high.index]!, intraday), value: format(s.high.value) },
       average: format(s.mean),

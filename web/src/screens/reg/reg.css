@@ -157,6 +157,10 @@
 .mt-replication-chart { position: relative; height: 360px; min-width: 0; }
 .mt-deflated { flex: 0 0 auto; }
 .mt-deflated-chart { position: relative; height: 200px; min-width: 0; }
+/* 87) Effective trials: a band, the note, the estimates, the correlation heatmap (a fixed, positioned box tall enough
+   for the 15 daily trials at the house row height) and the DSR table; the panel body scrolls all of it. */
+.mt-neff { flex: 0 0 auto; }
+.mt-neff-chart { position: relative; height: 440px; min-width: 0; }
 .reg-caption {
   height: var(--row-h);
   padding: 0 5px;
@@ -167,6 +171,17 @@
 }
 /* REG's DSR line under the grid. */
 .reg-dsr-note { flex: 0 0 auto; }
+
+/* 95) Compare: the parameter row (cost, Back), the note, the chart (a fixed height, the panes share it by
+   weight), which unit each pane is in, and the hypotheses whose series could not be read. It takes the
+   place of .reg-body, so it fills the same flex slot. */
+.reg-compare { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.reg-compare-back { margin-left: auto; }
+.reg-compare-chart { position: relative; flex: 0 0 auto; height: 420px; min-width: 0; }
+.reg-compare-units { flex: 0 0 auto; margin: 0; padding: 0 5px; list-style: none; }
+.reg-compare-units li { white-space: normal; overflow-wrap: anywhere; }
+.reg-compare-failed { flex: 0 0 auto; color: var(--c-down); }
+.reg-compare-failed ul { margin: 0; padding: 0 5px; list-style: none; }
 
 /* A narrow panel: the rail folds away; the rounds stay reachable through the filter field. */
 @container reg (max-width: 720px) {

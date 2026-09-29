@@ -8,6 +8,8 @@
 // Compare basket (roadmap 9): Space marks up to eight rows, `95) Compare n` (or the `90) Compare n` tab
 // it adds) draws them rebased on one axis with the served stats; `97) Settings` includes probes or clears
 // the basket. Marking asks for nothing; the compare view is the one GET on /api/runs/compare.
+// While the record watch has marked a run (roadmap 16), a Seen column first on the grid shows NEW or CHG
+// for it; 98) Export leaves that browser-local column out.
 import { useId, useMemo, useState } from 'react'
 import { useRuns } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
@@ -15,12 +17,14 @@ import { AmberField, DropdownField, ParamRow } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
+import { useWatchMarks } from '../../chrome/RecordWatch.marks'
 import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
+import { withWatchColumn } from '../../grids/watchColumn'
 import { HELP_LINES, RUNS } from '../../copy/runs'
 import { toggleMark } from './basket'
 import { RUNS_TABS, inRunsTab, matchesRunFilter, strategiesOf, type RunSummary, type RunsTab } from './model'
@@ -150,9 +154,11 @@ export default function RunsScreen(props: ScreenProps) {
   const shown = useShownRuns(runs, tab, filter, strategy)
   const strategies = useMemo(() => [{ value: ALL, label: RUNS.strategyAll }, ...strategiesOf(runs).map((s) => ({ value: s, label: s }))], [runs])
   const compare = useCompareStats(runs)
-  const columns = useMemo(() => runsColumns(compare.stats), [compare.stats])
+  const dataColumns = useMemo(() => runsColumns(compare.stats), [compare.stats])
+  const watchMarks = useWatchMarks('runs')
+  const columns = useMemo(() => withWatchColumn(dataColumns, watchMarks, runId), [dataColumns, watchMarks])
   const marked = useMemo(() => new Set(basket), [basket])
-  const onExport = () => exportCsv(csvFileName('runs', tab), gridCsv(columns, shown), shown.length)
+  const onExport = () => exportCsv(csvFileName('runs', tab), gridCsv(dataColumns, shown), shown.length)
   // An empty basket has no compare view: a reader who clears it (or unmarks the last run) lands on 85) All.
   const keep = (ids: readonly string[]) => {
     setBasket(ids)

@@ -6,11 +6,16 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetConnection } from '../../api/connection'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
+import { resetMessage, useMessage } from '../../chrome/MessageLine.store'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
+import { RecordWatchReader, resetRecordWatchBoot, resetRecordWatchView, useRecordWatch, type RecordWatchView } from '../../chrome/RecordWatch.live'
 import { captureDownloads } from '../../chrome/download.testUtil'
+import type { LineStackProps } from '../../charts/LineStack.types'
 import { stubLayout } from '../../grids/testing'
+import { gridWidth } from '../../grids/useElementWidth'
+import { useRecordWatchStore } from '../../state/recordWatch.store'
 import { HOME_PANEL_IDS } from '../layouts/layouts'
-import { REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, REGISTRY } from './regFixtures'
 import { CONFIRM, REG } from '../../copy/reg'
 import { DEFLATED } from '../../copy/deflated'
 import { EVIDENCE, REG_VIEW_COPY } from '../../copy/evidence'
@@ -18,11 +23,25 @@ import { fillCopy } from '../../copy/workspace'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import RegEvidence from './RegEvidence'
 import RegScreen from './RegScreen'
+import { REG_COLUMNS, REG_COMPACT_COLUMNS, regBoardColumns } from './regColumns'
 import type { EvidenceRow } from './evidenceModel'
-import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi } from './testHarness'
+import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi, type Seen } from './testHarness'
+
+// REG's compare view draws through LineStack (uPlot needs a canvas): a stand-in that records what it was given.
+const charts = vi.hoisted(() => ({ props: [] as LineStackProps[] }))
+vi.mock('../../charts/LineStack', () => ({
+  default: (props: LineStackProps) => {
+    charts.props.push(props)
+    return <div data-testid="linestack" />
+  },
+}))
 
 beforeAll(() => stubLayout(1200))
-beforeEach(() => resetNumbered())
+beforeEach(() => {
+  resetNumbered()
+  resetMessage()
+  charts.props = []
+})
 afterEach(() => {
   cleanup()
   resetConnection()
@@ -211,7 +230,9 @@ describe('REG: registry board', () => {
     mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('stub 503 for /api/registry')
-    expect(alert.textContent).toBe(fillCopy(REG.failed, { detail: 'stub 503 for /api/registry' }))
+    // PanelFault puts the message and its Retry button in one alert (W6-R9b added onRetry).
+    expect(alert.textContent).toContain(fillCopy(REG.failed, { detail: 'stub 503 for /api/registry' }))
+    expect(within(alert).getByRole('button', { name: /Retry/ })).toBeTruthy()
     expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
   })
 
@@ -464,5 +485,489 @@ describe('RegEvidence: #21 the status line is one stable role=status node', () =
     expect(screen.getByRole('status')).toBe(status)
     expect(status.textContent).toBe(fillCopy(EVIDENCE.failed, { n: 1, name: 'y_v0', detail: 'not found' }))
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+})
+
+describe('REG: registry failure and loading through PanelFault and PanelLoading (roadmap #7, W6-R9b)', () => {
+  it('shows the registry error as a PanelFault: the same text, a retry, and the reg-msg box', async () => {
+    stubApi({ '/api/registry': 503 })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(fillCopy(REG.failed, { detail: 'stub 503 for /api/registry' }))
+    expect(alert.classList.contains('reg-msg')).toBe(true)
+    expect(alert.classList.contains('panel-fault-failed')).toBe(true)
+    expect(within(alert).getByRole('button', { name: /retry/i })).toBeTruthy()
+  })
+
+  it('retries the registry read when the retry button is pressed', async () => {
+    const seen = stubApi({ '/api/registry': 503 })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const alert = await screen.findByRole('alert')
+    const before = seen.filter((s) => s.url === '/api/registry').length
+    fireEvent.click(within(alert).getByRole('button', { name: /retry/i }))
+    await waitFor(() => expect(seen.filter((s) => s.url === '/api/registry').length).toBe(before + 1))
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('shows the loading line as a PanelLoading: busy, the same text, the reg-msg box, then the board', async () => {
+    stubApi()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(REG.loading)
+    expect(status.getAttribute('aria-busy')).toBe('true')
+    expect(status.classList.contains('reg-msg')).toBe(true)
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    expect(screen.queryByText(REG.loading)).toBeNull()
+  })
+})
+
+describe('REG: 95) Compare basket (roadmap #9 phase B, W6-R9b)', () => {
+  const SERIES_URL = /^\/api\/hypotheses\/([^/]+)\/series\?cost=(\d)$/
+
+  /** stubApi plus the series GETs: a body for volmanaged_v0 and overnight_v0, a 404 for every other name. */
+  function stubWithSeries(): Seen[] {
+    const seen = stubApi()
+    const spy = vi.spyOn(globalThis, 'fetch')
+    const base = spy.getMockImplementation()!
+    spy.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const m = SERIES_URL.exec(url)
+      if (!m) return base(input, init)
+      seen.push({ url, method: init?.method ?? 'GET' })
+      const name = m[1]!
+      const cost = Number(m[2])
+      if (name !== 'volmanaged_v0' && name !== 'overnight_v0') {
+        return Promise.resolve(new Response(JSON.stringify({ detail: 'not in the demo dataset' }), { status: 404, headers: { 'content-type': 'application/json' } }))
+      }
+      const body = { basis: 'A', bench_label: null, cost, equity: [1, 2, 3], kind: 'trades', name, r: [1, 1, 1], r_bench: null, source: 'fixture', t: [100, 200, 300], unit: 'points per trade (NQ)' }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
+    })
+    return seen
+  }
+
+  /** The grid's active row, which starts on the first: Space acts on it, and the arrows move it. */
+  let cursor = 0
+  beforeEach(() => {
+    cursor = 0
+  })
+
+  /** Space on each named row, walking the active row down or up the board (the grid keeps its own cursor). */
+  function markWithSpace(names: readonly string[]): void {
+    const g = board()
+    act(() => g.focus())
+    for (const name of names) {
+      const target = bodyRows().indexOf(rowOf(name))
+      for (; cursor < target; cursor += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+      for (; cursor > target; cursor -= 1) fireEvent.keyDown(g, { key: 'ArrowUp' })
+      fireEvent.keyDown(g, { key: ' ' })
+    }
+  }
+
+  const compareButton = () => screen.getByRole('button', { name: /^95\) Compare/ })
+  const markedNames = () => bodyRows().filter((r) => r.getAttribute('data-marked') === 'true').map((r) => within(r).getAllByRole('gridcell').map((c) => c.textContent).find((t) => /_v\d/.test(t ?? '')))
+
+  it('starts with an empty basket: 95) Compare is disabled and not a numbered action', async () => {
+    stubWithSeries()
+    await ready()
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(compareButton().getAttribute('aria-disabled')).toBe('true')
+    expect(numberedItems(PANEL_ID).some((i) => i.n === 95)).toBe(false)
+  })
+
+  it('marks a row with Space and counts it on the bar: two rows give 95) Compare 2', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    markWithSpace(['overnight_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    expect(compareButton().getAttribute('aria-disabled')).toBeNull()
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+    expect(rowOf('overnight_v0').getAttribute('data-marked')).toBe('true')
+    expect(bodyRows().filter((r) => r.getAttribute('data-marked') === 'true')).toHaveLength(2)
+    expect(numberedItems(PANEL_ID).some((i) => i.n === 95 && i.label === 'Compare 2')).toBe(true)
+  })
+
+  it('unmarks a marked row when Space is pressed on it again', async () => {
+    stubWithSeries()
+    await ready()
+    const g = board()
+    act(() => g.focus())
+    const at = bodyRows().indexOf(rowOf('volmanaged_v0'))
+    for (let i = 0; i < at; i += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(bodyRows().some((r) => r.hasAttribute('data-marked'))).toBe(false)
+  })
+
+  it('refuses a ninth hypothesis with the message line, and keeps the eight', async () => {
+    stubWithSeries()
+    await ready()
+    const names = REGISTRY.rows.map((r) => r.name).filter((n) => !n.endsWith('_confirm')).slice(0, 9)
+    markWithSpace(names)
+    expect(compareButton().textContent).toBe('95) Compare 8')
+    expect(useMessage.getState().text).toBe(REG.compare.full)
+    expect(useMessage.getState().tone).toBe('error')
+    expect(bodyRows().filter((r) => r.getAttribute('data-marked') === 'true')).toHaveLength(8)
+    // Unmarking one is always allowed, and then the ninth fits.
+    markWithSpace([names[0]!])
+    expect(compareButton().textContent).toBe('95) Compare 7')
+  })
+
+  it('keeps the basket when the board is filtered, so a marked row that is hidden still counts', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    fireEvent.change(screen.getByRole('textbox', { name: REG.filterLabel }), { target: { value: 'zzz_no_such' } })
+    await screen.findByText(REG.empty)
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    fireEvent.change(screen.getByRole('textbox', { name: REG.filterLabel }), { target: { value: '' } })
+    await waitFor(() => expect(bodyRows()).toHaveLength(REGISTRY.counts.rows))
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+  })
+
+  it('95 <GO> replaces the board with the compare view, hides the tab strip, and reads each series at 1 tick', async () => {
+    const seen = stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    expect(screen.getByText(fillCopy(REG.compare.note, { cost: REG.compare.costs['1'] }))).toBeTruthy()
+    expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+    expect(screen.queryByRole('tablist', { name: REG_VIEW_COPY.label })).toBeNull()
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Rounds' })).toBeNull()
+    expect(screen.getByRole('combobox', { name: REG.compare.costLabel })).toBeTruthy()
+    await waitFor(() => expect(charts.props.at(-1)?.panes[0]?.series.map((s) => s.name)).toEqual(['volmanaged_v0 (1 tick)', 'overnight_v0 (1 tick)']))
+    const series = seen.filter((s) => SERIES_URL.test(s.url))
+    expect(new Set(series.map((s) => s.url))).toEqual(new Set(['/api/hypotheses/volmanaged_v0/series?cost=1', '/api/hypotheses/overnight_v0/series?cost=1']))
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('opens the compare view from a click on 95) Compare as well, and hands the panel link group to the chart', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    fireEvent.click(compareButton())
+    await screen.findByRole('region', { name: REG.compare.chartTitleOne })
+    await waitFor(() => expect(charts.props.at(-1)?.link).toBe('-'))
+  })
+
+  it('lists a hypothesis the API cannot answer next to the drawn ones, with no alert', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'za_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByText(fillCopy(REG.compare.failed, { name: 'za_v0', detail: 'not in the demo dataset' }))
+    await waitFor(() => expect(charts.props.at(-1)?.panes[0]?.series.map((s) => s.name)).toEqual(['volmanaged_v0 (1 tick)']))
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+
+  it('Back returns to the board with the tab strip and the same basket', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    fireEvent.click(await screen.findByRole('button', { name: REG.compare.back }))
+    expect(board()).toBeTruthy()
+    expect(screen.getByRole('tablist', { name: REG_VIEW_COPY.label })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })).toBeNull()
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+  })
+
+  it('97) Settings > Clear the basket empties it and, while comparing, returns to the board', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.compare.clear }))
+    expect(await screen.findByRole('grid', { name: /Registry board/ })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: /Screen series/ })).toBeNull()
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(compareButton().getAttribute('aria-disabled')).toBe('true')
+    expect(bodyRows().some((r) => r.hasAttribute('data-marked'))).toBe(false)
+  })
+
+  it('Clear the basket also unmarks the rows on the board itself, and Clear filters leaves the basket alone', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.settings.clear }))
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.compare.clear }))
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(markedNames()).toEqual([])
+  })
+
+  it("marks and compares inside HOME's REG cell too, where the tab strip never shows", async () => {
+    stubWithSeries()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />, { panelId: HOME_PANEL_IDS.reg })
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    fireEvent.click(compareButton())
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: REG.compare.back }))
+    expect(board()).toBeTruthy()
+  })
+
+  it('shows no p value, verdict or statistic in the compare view', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    const region = await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    await waitFor(() => expect(charts.props.length).toBeGreaterThan(0))
+    const text = (region.textContent ?? '').replace(fillCopy(REG.compare.note, { cost: REG.compare.costs['1'] }), '')
+    expect(text).not.toMatch(/\[(PASS|FAIL|CHECK)\]|\bp\s*[=<]|Sharpe|DSR|Holm|BH q/i)
+  })
+})
+
+// The Seen column (roadmap 16, slice 3): the record watch marks a registry row NEW when it is not in this
+// browser's checkpoint and CHG when a field that should never move was rewritten. The marks come through
+// the real watch (RecordWatchReader over a seeded checkpoint), so the key the column reads is the key the
+// watch writes.
+describe('REG: the Seen column from the record watch', () => {
+  let watch: RecordWatchView | undefined
+
+  function WatchProbe() {
+    watch = useRecordWatch()
+    return null
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    useRecordWatchStore.setState({ checkpoint: null })
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    watch = undefined
+  })
+  afterEach(() => {
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    useRecordWatchStore.setState({ checkpoint: null })
+  })
+
+  type Loose = { sources: { registry: { records: Record<string, Record<string, unknown>> } } }
+
+  /** A checkpoint of the fixtures, edited by `change`, so the watch finds the difference. */
+  async function seed(change: (s: Loose) => void = () => undefined): Promise<void> {
+    const lazy = await import('../../chrome/RecordWatch.lazy')
+    const snapshot = JSON.parse(JSON.stringify(lazy.snapshotOf({ registry: REGISTRY, confirmations: CONFIRMATIONS }, Date.UTC(2026, 8, 20, 14, 0)))) as Loose
+    change(snapshot)
+    expect(useRecordWatchStore.getState().setCheckpoint(snapshot as unknown as Parameters<typeof lazy.diffWatch>[0])).toBe(true)
+  }
+
+  async function mountWatched() {
+    const seen = stubApi()
+    mountScreen(
+      <>
+        <RecordWatchReader />
+        <WatchProbe />
+        <RegScreen params={panelParams('REG')} context={null} />
+      </>,
+    )
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    return seen
+  }
+
+  const heads = () => within(board()).getAllByRole('columnheader').map((h) => h.textContent)
+  const seenOf = (name: string) => within(rowOf(name)).getAllByRole('gridcell')[heads().indexOf('Seen')]
+
+  /** REG's measured width (jsdom lays nothing out) for the main column only. */
+  function stubMainWidth(width: number) {
+    return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { width: this.classList.contains('reg-main') ? width : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+  }
+
+  it('adds no column when the watch has nothing to mark', async () => {
+    stubApi()
+    await ready()
+    expect(heads()).not.toContain('Seen')
+    expect(heads()[1]).toBe('Name')
+  })
+
+  it('adds no column when the checkpoint matches the records', async () => {
+    await seed()
+    await mountWatched()
+    await waitFor(() => expect(watch?.state).toBe('clean'))
+    expect(heads()).not.toContain('Seen')
+  })
+
+  it('shows CHG on the row whose frozen field was rewritten (volmanaged_v0, p), first after the number', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.123456))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(heads().slice(1, 3)).toEqual(['Seen', 'Name'])
+    expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+    expect(seenOf('overnight_v0')?.textContent).toBe('')
+    expect(within(board()).getAllByText('CHG')).toHaveLength(1)
+    expect(within(board()).queryByText('NEW')).toBeNull()
+  })
+
+  it('shows NEW, toned muted, on a row the checkpoint does not know', async () => {
+    await seed((s) => void delete s.sources.registry.records['rebal_v0'])
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(seenOf('rebal_v0')?.textContent).toBe('NEW')
+    expect(seenOf('rebal_v0')?.classList.contains('muted')).toBe(true)
+    expect(seenOf('za_v0')?.textContent).toBe('')
+  })
+
+  it('shows NEW and CHG side by side on their own rows', async () => {
+    await seed((s) => {
+      delete s.sources.registry.records['rebal_v0']
+      s.sources.registry.records['volmanaged_v0']!['p'] = 0.5
+    })
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(seenOf('rebal_v0')?.textContent).toBe('NEW')
+    expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+  })
+
+  it('keeps the registry name as the Number <GO> label and opens DES for the picked row', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const labels = numberedItems(PANEL_ID).map((i) => i.label)
+    expect(labels).toEqual(expect.arrayContaining(['volmanaged_v0', 'eomtsy_v0']))
+    expect(labels).not.toContain('CHG')
+    expect(labels).not.toContain('')
+    const { lines, stop } = captureLines()
+    try {
+      const item = numberedItems(PANEL_ID).find((i) => i.label === 'eomtsy_v0')
+      act(() => {
+        activateNumbered(PANEL_ID, item!.n)
+      })
+      expect(lines.at(-1)).toEqual({ line: 'eomtsy_v0 DES', newPanel: false })
+    } finally {
+      stop()
+    }
+  })
+
+  it('leaves the sealed confirmations block and the CSV export alone', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const block = screen.getByRole('region', { name: /Sealed confirmations/ })
+    expect(within(block).queryByText('CHG')).toBeNull()
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /^98\) Export/ }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: REG.export.csv }))
+      const header = (await saved.text(REG.export.fileName)).split('\r\n')[0]
+      expect(header).not.toContain('Seen')
+    } finally {
+      saved.restore()
+    }
+  })
+
+  it('still marks a row for the compare basket with Space while the column shows', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const g = board()
+    act(() => g.focus())
+    const target = bodyRows().indexOf(rowOf('volmanaged_v0'))
+    for (let i = 0; i < target; i += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+    expect(screen.getByRole('button', { name: /^95\) Compare 1$/ })).toBeTruthy()
+  })
+
+  it('drops the column again once WATCH SEEN has marked everything as seen', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    act(() => void watch?.accept())
+    await waitFor(() => expect(heads()).not.toContain('Seen'))
+    expect(within(board()).queryByText('CHG')).toBeNull()
+  })
+
+  it('moves the narrow-panel threshold by the 44 px column only while the watch has marks', async () => {
+    const between = gridWidth(REG_COLUMNS) + 10
+    const rect = stubMainWidth(between)
+    try {
+      stubApi()
+      await ready()
+      // Clean: the full set fits, exactly as before the column existed.
+      expect(heads()).toContain('Bonf')
+      expect(screen.queryByText(/Columns hidden here/)).toBeNull()
+      cleanup()
+      resetRecordWatchView()
+      await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+      await mountWatched()
+      // Marked: the full set plus Seen no longer fits, so the narrow set shows and says so.
+      await waitFor(() => expect(heads()).toContain('Seen'))
+      expect(heads()).not.toContain('Bonf')
+      expect(screen.getByText(/Columns hidden here/)).toBeTruthy()
+    } finally {
+      rect.mockRestore()
+    }
+  })
+
+  it('in a narrow panel the Seen column is added to the narrow set, which keeps Amend, and the note is the plain one', async () => {
+    const rect = stubMainWidth(660)
+    try {
+      await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+      await mountWatched()
+      await waitFor(() => expect(heads()).toContain('Seen'))
+      expect(heads().slice(0, 2)).toEqual(['Number', 'Seen'])
+      expect(heads()).toEqual(expect.arrayContaining(['Seen', 'Name', 'Tag', 'Verdict', 'p', 'Holm', 'BH q', 'Hash ok', 'Amend']))
+      expect(heads()).not.toContain('Bonf')
+      expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+      expect(screen.queryByText(/Seen column replaces Amend/)).toBeNull()
+      expect(screen.getByText(REG.compactNote)).toBeTruthy()
+    } finally {
+      rect.mockRestore()
+    }
+  })
+})
+
+describe('regBoardColumns: the board columns for a set of watch marks', () => {
+  const NONE = new Map<string, 'new' | 'changed'>()
+  const SOME = new Map<string, 'new' | 'changed'>([['volmanaged_v0', 'changed']])
+
+  it('is the plain module arrays for a clean watch, so nothing about the board changes', () => {
+    expect(regBoardColumns(NONE, false)).toBe(REG_COLUMNS)
+    expect(regBoardColumns(NONE, true)).toBe(REG_COMPACT_COLUMNS)
+  })
+
+  it('puts Seen first on the full set and leaves every other column in place', () => {
+    const cols = regBoardColumns(SOME, false)
+    expect(cols.map((c) => c.id)).toEqual(['watch', ...REG_COLUMNS.map((c) => c.id)])
+  })
+
+  it('puts Seen first on the narrow set, keeps Amend, and makes the narrow grid the 44 px column wider', () => {
+    const cols = regBoardColumns(SOME, true)
+    expect(cols.map((c) => c.id)).toEqual(['watch', ...REG_COMPACT_COLUMNS.map((c) => c.id)])
+    expect(cols.map((c) => c.id)).toContain('amend')
+    expect(gridWidth(cols)).toBe(gridWidth(REG_COMPACT_COLUMNS) + 44)
+  })
+
+  it('keys the column by the registry name', () => {
+    const watch = regBoardColumns(SOME, false)[0]!
+    const row = (name: string) => ({ name }) as Parameters<typeof watch.value>[0]
+    expect(watch.value(row('volmanaged_v0'))).toBe('CHG')
+    expect(watch.value(row('overnight_v0'))).toBeNull()
   })
 })

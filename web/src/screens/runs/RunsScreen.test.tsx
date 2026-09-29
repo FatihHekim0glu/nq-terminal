@@ -9,8 +9,10 @@ import type { LineStackProps } from '../../charts/LineStack.types'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { captureDownloads } from '../../chrome/download.testUtil'
 import { resetMessage, useMessage } from '../../chrome/MessageLine.store'
-import { activateNumbered, resetNumbered } from '../../chrome/NumberedActions'
+import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
+import { RecordWatchReader, resetRecordWatchBoot, resetRecordWatchView, useRecordWatch, type RecordWatchView } from '../../chrome/RecordWatch.live'
 import { stubLayout } from '../../grids/testing'
+import { useRecordWatchStore } from '../../state/recordWatch.store'
 import RunsScreen from './RunsScreen'
 import { COMPARE_STATS, RUNS } from './runs.fixtures'
 import { TEST_PANEL, mountScreen, stubApi } from './testing'
@@ -412,5 +414,166 @@ describe('RUNS: the compare basket', () => {
     fireEvent.click(bar(/^95\) Compare 2$/))
     await screen.findByTestId('linestack')
     expect((charts.props.at(-1) as LineStackProps).link).toBe('A')
+  })
+})
+
+// The Seen column (roadmap 16, slice 3): the record watch marks a run NEW when it is not in this browser's
+// checkpoint. The marks come through the real watch (RecordWatchReader over a seeded checkpoint), so the key
+// the column reads is the key the watch writes.
+describe('RUNS: the Seen column from the record watch', () => {
+  let watch: RecordWatchView | undefined
+
+  function WatchProbe() {
+    watch = useRecordWatch()
+    return null
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    useRecordWatchStore.setState({ checkpoint: null })
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    watch = undefined
+  })
+  afterEach(() => {
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    useRecordWatchStore.setState({ checkpoint: null })
+  })
+
+  /** A checkpoint from before `runId` existed, so the watch finds that run new. */
+  async function seedWithout(runId: string): Promise<void> {
+    const lazy = await import('../../chrome/RecordWatch.lazy')
+    const snapshot = JSON.parse(JSON.stringify(lazy.snapshotOf({ runs: RUNS }, Date.UTC(2026, 8, 20, 14, 0)))) as { sources: { runs: { records: Record<string, unknown> } } }
+    Reflect.deleteProperty(snapshot.sources.runs.records, runId)
+    expect(useRecordWatchStore.getState().setCheckpoint(snapshot as unknown as Parameters<typeof lazy.diffWatch>[0])).toBe(true)
+  }
+
+  async function mountWatched() {
+    const seen = stubApi(ROUTES)
+    mountScreen(
+      <>
+        <RecordWatchReader />
+        <WatchProbe />
+        <RunsScreen params={PARAMS} context={null} />
+      </>,
+    )
+    const grid = await screen.findByRole('grid', { name: /Nautilus runs/ })
+    await waitFor(() => expect(within(grid).getByText('8.34')).toBeTruthy())
+    return { seen, grid }
+  }
+
+  const heads = (grid: HTMLElement) => within(grid).getAllByRole('columnheader').map((h) => h.textContent)
+  const seenCell = (grid: HTMLElement, runId: string) => {
+    const index = heads(grid).indexOf('Seen')
+    return within(rowOf(grid, runId)).getAllByRole('gridcell')[index]
+  }
+
+  it('adds no column when the watch has nothing to mark (a clean watch, or the reader has not run)', async () => {
+    const { grid } = await mountRuns()
+    expect(heads(grid)).not.toContain('Seen')
+    expect(heads(grid)[1]).toBe('Run id')
+  })
+
+  it('adds no column when the checkpoint holds every run', async () => {
+    const lazy = await import('../../chrome/RecordWatch.lazy')
+    expect(useRecordWatchStore.getState().setCheckpoint(lazy.snapshotOf({ runs: RUNS }, Date.UTC(2026, 8, 20, 14, 0)))).toBe(true)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(watch?.state).toBe('clean'))
+    expect(heads(grid)).not.toContain('Seen')
+  })
+
+  it('shows NEW on the run that is not in the checkpoint, first after the number, and nothing on the others', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    // Column 0 is the grid's own number; the Seen column follows it and comes before the run id.
+    expect(heads(grid).slice(1, 3)).toEqual(['Seen', 'Run id'])
+    expect(seenCell(grid, DTS)?.textContent).toBe('NEW')
+    expect(seenCell(grid, VOL)?.textContent).toBe('')
+    expect(seenCell(grid, UNBALANCED)?.textContent).toBe('')
+    expect(within(grid).getAllByText('NEW')).toHaveLength(1)
+  })
+
+  it('tones NEW muted and keeps the word in the cell, so the cue is not colour alone', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    const cell = seenCell(grid, DTS)
+    expect(cell?.textContent).toBe('NEW')
+    expect(cell?.classList.contains('muted')).toBe(true)
+  })
+
+  it('sorts by Seen: the marked run comes first, and the unmarked rows keep their order after it', async () => {
+    await seedWithout(VOL)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    fireEvent.click(within(grid).getByRole('columnheader', { name: /^Seen/ }))
+    const bodyRunIds = () => within(grid).getAllByRole('row').filter((r) => r.closest('tbody')).map((r) => within(r).getAllByRole('gridcell')[2]?.textContent)
+    await waitFor(() => expect(bodyRunIds()[0]).toBe(VOL))
+    expect(bodyRunIds()).toHaveLength(RUNS.length)
+  })
+
+  it('keeps the run id as the Number <GO> label and opens RUN for the row that was picked', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    const labels = numberedItems(TEST_PANEL).map((i) => i.label)
+    expect(labels).toEqual(expect.arrayContaining([DTS, VOL]))
+    expect(labels).not.toContain('NEW')
+    const lines: LineRequest[] = []
+    const off = onLineRequest((r) => lines.push(r))
+    act(() => {
+      expect(activateNumbered(TEST_PANEL, 1)).toBe(true)
+    })
+    off()
+    expect(lines).toEqual([{ line: `${DTS} RUN`, newPanel: false }])
+  })
+
+  it('keeps 98) Export to the run data: no Seen column in the CSV', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /98\) Export/ }))
+      const lines = (await saved.text('runs_all.csv')).split('\r\n')
+      expect(lines[0]?.startsWith('Run id,Strategy')).toBe(true)
+      expect(lines[0]).not.toContain('Seen')
+      expect(lines[1]?.split(',')[0]).toBe(RUNS[0]?.run_id)
+    } finally {
+      saved.restore()
+    }
+  })
+
+  it('still marks rows for the compare basket with the column present', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    mark(grid, DTS)
+    mark(grid, VOL)
+    expect(bar(/^95\) Compare 2$/).getAttribute('aria-disabled')).toBeNull()
+    expect(within(grid).getAllByText('marked')).toHaveLength(2)
+    expect(seenCell(grid, DTS)?.textContent).toBe('NEW')
+  })
+
+  it('drops the column again once WATCH SEEN has marked everything as seen', async () => {
+    await seedWithout(DTS)
+    const { grid } = await mountWatched()
+    await waitFor(() => expect(heads(grid)).toContain('Seen'))
+    let message: string | null = null
+    act(() => {
+      message = watch?.accept() ?? null
+    })
+    expect(message).toMatch(/^Marked as seen at .+ ET\.$/)
+    await waitFor(() => expect(heads(grid)).not.toContain('Seen'))
+    expect(within(grid).queryByText('NEW')).toBeNull()
+  })
+
+  it('makes no request of its own: the watch reads the same GETs the screen does', async () => {
+    await seedWithout(DTS)
+    const { seen } = await mountWatched()
+    await waitFor(() => expect(watch?.state).toBe('news'))
+    expect(seen.every((r) => r.method === 'GET')).toBe(true)
   })
 })

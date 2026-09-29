@@ -125,7 +125,7 @@ export function paneUplotData<T>(t: T, pane: LineStackPane, values: readonly T[]
 }
 
 function seriesOptions(s: LineStackSeries, styles: Styles, part: SeriesPart = 'whole'): uPlot.Series {
-  const base = { label: s.name, spanGaps: false, points: { show: false } }
+  const base = { label: s.name, spanGaps: s.spanGaps === true, points: { show: false } }
   switch (s.style) {
     case 'primary': {
       const { stroke, width, fill } = styles.primary

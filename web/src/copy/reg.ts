@@ -81,6 +81,25 @@ export const REG = {
     done: 'Registry saved as {file}.',
     unavailable: 'This browser cannot save a file here.',
   },
+  // 95) Compare (roadmap #9 phase B): up to eight hypotheses marked with Space, their served Basis A
+  // screen series drawn together. `note` takes the cost as its label ('1 tick'), not a bare number.
+  compare: {
+    bar: 'Compare {n}',
+    full: 'The basket holds 8 hypotheses at most: unmark one first.',
+    clear: 'Clear the basket',
+    note: '[POST HOC] Basis A: the screen series at {cost} per side, each pane in its own unit. Hypotheses you picked: descriptive only, no test and no p value.',
+    paramsLabel: 'Compare parameters',
+    costs: { '0': '0 ticks', '1': '1 tick', '2': '2 ticks' },
+    costLabel: 'Cost per side',
+    chartTitle: 'Screen series of {n} hypotheses',
+    chartTitleOne: 'Screen series of 1 hypothesis',
+    seriesName: '{name} ({cost})',
+    unitsLabel: 'Units of the chart panes',
+    unitLine: 'Pane {n} in {unit}: {names}.',
+    unitJoin: ', ',
+    back: 'Back to the board',
+    failed: '{name}: {detail}',
+  },
 } as const
 
 export const CONFIRM = {

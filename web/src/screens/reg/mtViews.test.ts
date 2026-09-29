@@ -1,10 +1,10 @@
-// MT's sub views: 85) Family and 86) Replication, numbered from 85 (look spec 4.4; a later slice appends 87).
+// MT's sub views: 85) Family, 86) Replication and 87) Effective trials, numbered from 85 (look spec 4.4).
 import { describe, expect, it } from 'vitest'
 import { MT_VIEWS, MT_VIEW_START } from './mtViews'
 
 describe('mtViews', () => {
-  it('lists family then replication, numbered from 85', () => {
-    expect(MT_VIEWS).toEqual(['family', 'replication'])
+  it('lists family, replication then trials, numbered from 85', () => {
+    expect(MT_VIEWS).toEqual(['family', 'replication', 'trials'])
     expect(MT_VIEW_START).toBe(85)
   })
 

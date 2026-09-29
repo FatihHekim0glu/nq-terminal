@@ -23,6 +23,11 @@ import {
 import { useRecordWatchStore } from '../state/recordWatch.store'
 import type { MenuModel } from './CommandLine.menus'
 import { postMessage } from './MessageLine.store'
+import { EMPTY_MARKS, useWatchMarksStore, type WatchMark, type WatchMarks as Marks } from './RecordWatch.marks'
+
+// Screens import these from ./RecordWatch.marks directly (see the leaf's header); the re-export keeps this
+// module's own callers working.
+export { useWatchMarks, type WatchMark } from './RecordWatch.marks'
 
 /** How long a browser without an idle callback waits before the six reads start. */
 const IDLE_DELAY_MS = 2000
@@ -30,9 +35,6 @@ const IDLE_DELAY_MS = 2000
 const IDLE_TIMEOUT_MS = 4000
 /** The gate log is read with the OOS screen's own unfiltered request, so both share one cache entry. */
 const OOS_READ = { limit: 5000 } as const
-
-export type WatchMark = 'new' | 'changed'
-type Marks = Readonly<Record<WatchSource, ReadonlyMap<string, WatchMark>>>
 
 /** What the rest of the terminal sees of the watch. */
 export interface RecordWatchView {
@@ -88,11 +90,7 @@ interface WatchStore {
   /** The latest read of the records, kept so WATCH SEEN can mark it. */
   readonly snapshot: WatchSnapshot | null
   readonly lazy: WatchLazy | null
-  readonly marks: Marks
 }
-
-const NO_MARKS = new Map<string, WatchMark>()
-const EMPTY_MARKS: Marks = { registry: NO_MARKS, confirmations: NO_MARKS, openings: NO_MARKS, ledger: NO_MARKS, oos: NO_MARKS, runs: NO_MARKS }
 
 function menu(): MenuModel | null {
   const { lazy, view } = useWatchStore.getState()
@@ -112,7 +110,7 @@ function accept(): string | null {
 
 const WAITING: RecordWatchView = { state: 'waiting', diff: emptyDiff(0), since: null, title: null, menu, accept }
 
-const useWatchStore = create<WatchStore>()(() => ({ view: WAITING, snapshot: null, lazy: null, marks: EMPTY_MARKS }))
+const useWatchStore = create<WatchStore>()(() => ({ view: WAITING, snapshot: null, lazy: null }))
 
 /** What the grids mark: new and moved records as NEW, rewritten ones as CHG. Removed rows are not on a grid. */
 function marksOf(diff: WatchDiff, previous: Marks): Marks {
@@ -127,7 +125,8 @@ function marksOf(diff: WatchDiff, previous: Marks): Marks {
 function show(lazy: WatchLazy, snapshot: WatchSnapshot, checkpoint: WatchSnapshot, diff: WatchDiff, state: Exclude<WatchState, 'waiting'>): void {
   const first = diff.changed[0]
   const view: RecordWatchView = { state, diff, since: formatEt(checkpoint.takenAt), title: state === 'changed' && first ? lazy.itemText(first) : null, menu, accept }
-  useWatchStore.setState((prev) => ({ view, snapshot, lazy, marks: marksOf(diff, prev.marks) }))
+  useWatchStore.setState({ view, snapshot, lazy })
+  useWatchMarksStore.setState((prev) => ({ marks: marksOf(diff, prev.marks) }))
 }
 
 /** The watch as the chrome shows it. */
@@ -135,14 +134,10 @@ export function useRecordWatch(): RecordWatchView {
   return useWatchStore((s) => s.view)
 }
 
-/** The rows of one source that are new or rewritten, by the key the watch uses for that source. */
-export function useWatchMarks(source: WatchSource): ReadonlyMap<string, WatchMark> {
-  return useWatchStore((s) => s.marks[source])
-}
-
 /** Back to waiting with nothing read (tests). */
 export function resetRecordWatchView(): void {
-  useWatchStore.setState({ view: WAITING, snapshot: null, lazy: null, marks: EMPTY_MARKS })
+  useWatchStore.setState({ view: WAITING, snapshot: null, lazy: null })
+  useWatchMarksStore.setState({ marks: EMPTY_MARKS })
 }
 
 // ---- reading -------------------------------------------------------------------------------------------

@@ -94,6 +94,12 @@
 .live-tracking { flex: 0 0 auto; padding-top: 2px; }
 .live-tracking-chart { height: 260px; min-width: 0; }
 
+/* LV6 the paper book on its SV6 cone: the cone with its key (a taller box than LV5's, the key sits under the
+   plot), then the lines that name K, the basis and the placement, in the body's scroll under LV5. */
+.live-expectation { flex: 0 0 auto; padding-top: 2px; }
+.live-expectation-chart { height: 300px; min-width: 0; }
+.live-expectation-computed { color: var(--muted); }
+
 /* A short panel (the 1366x768 split, about 275px) shows the whole target-against-actual chart at
    rest, sized to the panel, rather than the top of it: the chart block comes first, and the strips,
    countdown, tiles, reconciliation, routes and journals follow in the body's scroll (TASKS Phase 8).

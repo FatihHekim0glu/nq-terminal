@@ -7,10 +7,16 @@
 // re-hash status, the tag (edge, [OVERLAY], check) and the amendments); the accepted amendments
 // re-hashed now; and the sealed confirmations in their own block with their own alpha. Enter, a
 // double click or Number <GO> on a row opens DES for it. The DSR column is SV3's Deflated Sharpe
-// ([POST HOC], an extra view only, never a verdict) from GET /api/analytics/deflated. Read only.
-import { useCallback, useId, useMemo, useState, type ReactNode } from 'react'
+// ([POST HOC], an extra view only, never a verdict) from GET /api/analytics/deflated. Space marks up to
+// eight rows (the basket, also in HOME's REG cell); 95) Compare n then replaces the views with RegCompare,
+// their served Basis A screen series, and 97) Settings can clear the basket. While the record watch has
+// marked a registry row (roadmap 16), a Seen column first on the board shows NEW or CHG for it. The
+// registry's own error and loading lines are PanelFault and PanelLoading. Read only.
+import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
+import { useWatchMarks } from '../../chrome/RecordWatch.marks'
+import { switchKeepingFocus } from '../../chrome/keepFocus'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
@@ -26,10 +32,12 @@ import MonitorGrid from '../../grids/MonitorGrid'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { saveText } from '../../chrome/download'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
-import { REG_COLUMNS, REG_COMPACT_COLUMNS, regRowId } from './regColumns'
+import { toggleMark } from '../runs/basket'
+import { regBoardColumns, regRowId } from './regColumns'
 import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
 import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
+import RegCompare from './RegCompare'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
 import { needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
@@ -45,13 +53,23 @@ interface BarProps {
   readonly showChecks: boolean
   readonly onShowChecks: (show: boolean) => void
   readonly onClear: () => void
+  /** Hypotheses in the compare basket; 95) Compare is disabled while there are none. */
+  readonly basketCount: number
+  readonly onCompare: () => void
+  readonly onClearBasket: () => void
   readonly onExport: () => void
   /** Set only on 92) Evidence: 98) Export then also offers the evidence matrix as its own CSV. */
   readonly onExportEvidence?: () => void
 }
 
-function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, onExport, onExportEvidence }: BarProps) {
+function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, basketCount, onCompare, onClearBasket, onExport, onExportEvidence }: BarProps) {
   const items: FunctionBarItem[] = [
+    {
+      n: FUNCTION_NUMBERS.compare,
+      label: basketCount === 0 ? FUNCTION_BAR.compare : fillCopy(REG.compare.bar, { n: basketCount }),
+      onRun: onCompare,
+      disabled: basketCount === 0,
+    },
     {
       n: FUNCTION_NUMBERS.actions,
       label: FUNCTION_BAR.actions,
@@ -68,6 +86,7 @@ function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, 
       menu: [
         { label: showChecks ? REG.settings.hideChecks : REG.settings.showChecks, onSelect: () => onShowChecks(!showChecks) },
         { label: REG.settings.clear, onSelect: onClear },
+        { label: REG.compare.clear, onSelect: onClearBasket },
       ],
     },
     {
@@ -126,18 +145,46 @@ function useRegView(data: ReturnType<typeof useRegData>, f: Filters) {
   return { shown, groups, crit }
 }
 
-export default function RegScreen(_props: ScreenProps) {
+export default function RegScreen(props: ScreenProps) {
   const actions = usePanelActions()
   const views = viewsShown(actions.panelId)
   const [view, setView] = useState<RegView>('board')
   const active = views ? view : 'board'
   const viewId = useId()
   const main = useElementWidth()
-  const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
+  // A clean watch adds no column, so the narrow threshold sits where it always did; with marks it counts
+  // the 44 px Seen column too, so the full set never overflows the panel.
+  const watchMarks = useWatchMarks('registry')
+  const fullColumns = useMemo(() => regBoardColumns(watchMarks, false), [watchMarks])
+  const compact = main.width !== null && main.width < gridWidth(fullColumns)
+  const boardColumns = useMemo(() => (compact ? regBoardColumns(watchMarks, true) : fullColumns), [compact, watchMarks, fullColumns])
   const data = useRegData(main.width !== null && needsDeflated(active, compact))
   const { registry, cards, rows, confirmations, confirmRows } = data
   const [f, setF] = useState<Filters>(NO_FILTER)
   const { shown, groups, crit } = useRegView(data, f)
+  const [basket, setBasket] = useState<readonly string[]>([])
+  const [comparing, setComparing] = useState(false)
+  const showCompare = comparing && basket.length > 0
+  const marked = useMemo(() => new Set(basket), [basket])
+  const onMark = useCallback(
+    (row: RegRow) => {
+      const next = toggleMark(basket, regRowId(row))
+      if (next.full) postMessage(REG.compare.full, 'error')
+      else setBasket(next.ids)
+    },
+    [basket],
+  )
+  const clearBasket = () => {
+    setBasket([])
+    setComparing(false)
+  }
+  // Back unmounts the focused button, so hand keyboard focus to the selected tab, or to the board grid where
+  // the panel has no tab strip (HOME's REG cell). clearBasket keeps its 97) Settings button, which stays mounted.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const backToBoard = useCallback(
+    () => switchKeepingFocus(rootRef.current, '[role="tab"][aria-selected="true"], [role="grid"]', () => setComparing(false)),
+    [],
+  )
   const evidenceData = useEvidenceData(active, { rows, shown, cards: cards.data, confirmations: confirmations.data, deflated: data.deflated })
   const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
   const tag = <span className="reg-tag">{SPEC.preReg}</span>
@@ -145,7 +192,7 @@ export default function RegScreen(_props: ScreenProps) {
   const board: ReactNode = (
     <>
       <div className="reg-grid">
-        <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" />
+        <MonitorGrid label={REG.gridLabel} rows={shown} columns={boardColumns} rowId={regRowId} rowLabel={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" marked={marked} onMark={onMark} />
       </div>
       {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
       {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
@@ -161,7 +208,7 @@ export default function RegScreen(_props: ScreenProps) {
   )
 
   return (
-    <div className="reg-screen" data-screen="REG">
+    <div className="reg-screen" data-screen="REG" ref={rootRef}>
       <RegBar
         actions={actions}
         filter={f.text}
@@ -169,6 +216,9 @@ export default function RegScreen(_props: ScreenProps) {
         showChecks={f.showChecks}
         onShowChecks={(showChecks) => setF((x) => ({ ...x, showChecks }))}
         onClear={() => setF(NO_FILTER)}
+        basketCount={basket.length}
+        onCompare={() => setComparing(true)}
+        onClearBasket={clearBasket}
         onExport={() => exportRows(shown)}
         onExportEvidence={
           active === 'evidence' && evidenceData.evidence
@@ -179,7 +229,7 @@ export default function RegScreen(_props: ScreenProps) {
             : undefined
         }
       />
-      {views ? (
+      {views && !showCompare ? (
         <TabStrip
           panelId={actions.panelId}
           label={REG_VIEW_COPY.label}
@@ -192,9 +242,11 @@ export default function RegScreen(_props: ScreenProps) {
         />
       ) : null}
       {registry.isError ? (
-        <PanelFault error={registry.error} failedText={REG.failed} className="reg-msg" />
+        <PanelFault error={registry.error} failedText={REG.failed} onRetry={() => void registry.refetch()} className="reg-msg" />
       ) : rows === null ? (
         <PanelLoading text={REG.loading} className="reg-msg" />
+      ) : showCompare ? (
+        <RegCompare names={basket} link={props.params.group} onBack={backToBoard} />
       ) : (
         <div className="reg-body">
           <RoundRail panelId={actions.panelId} groups={groups} selected={f.round} onSelect={(round) => setF((x) => ({ ...x, round }))} />

@@ -6,18 +6,22 @@
 // shown rows as CSV (the grid's columns, numbers at full precision). Enter, a double click or
 // Number <GO> on a row opens RUN for its run. Read only: the ledger is written by ledger_append alone.
 // View [Grid | Pivot] opens the shown rows in the Perspective pivot grid (TASKS 9.1), grouped by strategy.
+// While the record watch has marked a ledger row (roadmap 16), a Seen column first on the grid shows NEW or
+// CHG for it, keyed run id @ time as the watch keys the ledger; 98) Export leaves that browser-local column out.
 import { useMemo, useState } from 'react'
 import { useLedger } from '../../api/queries'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { AmberField, DropdownField, ParamRow } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
+import { useWatchMarks, type WatchMark } from '../../chrome/RecordWatch.marks'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
+import { withWatchColumn } from '../../grids/watchColumn'
 import { LEDG, LEDG_HELP_LINE } from '../../copy/ledg'
 import { LedgerPivot, PivotToggle, type GridView } from '../../perspective'
 import AnchorPairs from './AnchorPairs'
@@ -40,6 +44,8 @@ type LedgerView = NonNullable<ReturnType<typeof useLedger>['data']>
 const ALL = ''
 const rowId = (r: LedgerRow) => `${r.run_id}|${r.ts_utc ?? ''}|${r.exp_id ?? ''}`
 const rowLabel = (r: LedgerRow) => r.run_id
+/** A row's key in the record watch: the run id and the time, as state/recordWatch.ts keys the ledger. */
+const watchKey = (r: LedgerRow) => `${r.run_id}@${r.ts_utc ?? ''}`
 const openRun = (r: LedgerRow) => requestLine(`${r.run_id} RUN`)
 const BALANCE_OPTIONS = BALANCE_FILTERS.map((f) => ({ value: f, label: f === 'all' ? LEDG.all : f }))
 
@@ -84,15 +90,21 @@ interface Filters {
 const NO_ROWS: readonly LedgerRow[] = []
 
 /**
- * The shown rows (newest first, filtered), every column (98) Export saves them all) and the columns the
- * grid shows: all of them when the panel is wide enough, else the compact set (no sideways scroll).
+ * The shown rows (newest first, filtered), every data column (98) Export saves them all, without the
+ * browser-local Seen column) and the columns the grid shows: all of them when the panel is wide enough, else
+ * the compact set (no sideways scroll). The Seen column is first in both while the watch has `marks`; a clean
+ * watch adds none, so the narrow threshold counts it only then.
  */
-function useLedgerView(view: LedgerView | undefined, filters: Filters, width: number | null) {
+function useLedgerView(view: LedgerView | undefined, filters: Filters, width: number | null, marks: ReadonlyMap<string, WatchMark>) {
   const pairs = view?.anchor_pairs
   const anchors = useMemo(() => anchorsByRun(pairs ?? []), [pairs])
   const columns = useMemo(() => ledgerColumns(anchors), [anchors])
-  const compact = width !== null && width < gridWidth(columns)
-  const shownColumns = useMemo(() => (compact ? ledgerColumns(anchors, true) : columns), [compact, anchors, columns])
+  const fullColumns = useMemo(() => withWatchColumn(columns, marks, watchKey), [columns, marks])
+  const compact = width !== null && width < gridWidth(fullColumns)
+  const shownColumns = useMemo(
+    () => (compact ? withWatchColumn(ledgerColumns(anchors, true), marks, watchKey) : fullColumns),
+    [compact, anchors, marks, fullColumns],
+  )
   const rows = useMemo(
     () =>
       view
@@ -141,7 +153,8 @@ export default function LedgScreen(_props: ScreenProps) {
   const counts = ledgerCounts(view?.rows ?? [])
   const strategies = useMemo(() => strategyOptions(view), [view])
   const screen = useElementWidth()
-  const { columns, shownColumns, compact, rows } = useLedgerView(view, filters, screen.width)
+  const watchMarks = useWatchMarks('ledger')
+  const { columns, shownColumns, compact, rows } = useLedgerView(view, filters, screen.width, watchMarks)
   const onExport = () => exportCsv(EXPORT_FILE, gridCsv(columns, rows), rows.length)
   return (
     <div className="runs-screen ledg-screen" data-screen="LEDG" ref={screen.ref}>

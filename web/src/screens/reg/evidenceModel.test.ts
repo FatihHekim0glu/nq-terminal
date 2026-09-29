@@ -3,8 +3,9 @@
 import { describe, expect, it } from 'vitest'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA_C3 } from '../des/desTestData'
 import { DEFLATED_REAL } from './deflatedFixtures'
+import { powerView } from './powerModel'
 import { buildRegRows } from './regModel'
-import { CONFIRMATIONS, HYPOTHESES, REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import {
   blocksCount, buildEvidenceRows, detailStatus, evidenceCsv, type BuildEvidenceInput, type EvidenceRow,
 } from './evidenceModel'
@@ -23,8 +24,10 @@ const DETAILS: HypothesisDetails = {
   pending: 0,
 }
 
-function build(details: HypothesisDetails = DETAILS): EvidenceRow[] {
-  const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: DEFLATED_REAL, details }
+const FAMILY = { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k }
+
+function build(details: HypothesisDetails = DETAILS, family: BuildEvidenceInput['family'] = FAMILY): EvidenceRow[] {
+  const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: DEFLATED_REAL, details, family }
   return buildEvidenceRows(input)
 }
 
@@ -184,7 +187,18 @@ describe('evidenceCsv', () => {
       'name', 'verdict [PRE-REG]', 't [PRE-REG]', 't_label', 'holm_p [PRE-REG]', 'blocks_positive [PRE-REG]',
       'blocks_total', 'blocks_unit', 'break_even_ticks_per_side [PRE-REG]', 'sealed_confirmation [SPENT]',
       'sealed_verdict [SPENT]', 'annual_sharpe_sv3a [POST HOC]', 'years_sv3a [POST HOC]', 'dsr_v0 [POST HOC]',
+      'mde_alpha_over_k [POST HOC]', 'sharpe_over_mde [POST HOC]',
     ].join(','))
+  })
+
+  it('writes the two power columns last, at full precision, empty where there is no figure', () => {
+    const lines = evidenceCsv(build()).split('\r\n')
+    // Other cells hold quoted commas, so the last two cells are read from the end of the line.
+    const lastTwo = (name: string) => lines.find((l) => l.startsWith(`${name},`))!.split(',').slice(-2)
+    const power = powerView(DEFLATED_REAL, FAMILY).rows.find((r) => r.name === 'volmanaged_v0')!
+    expect(lastTwo('volmanaged_v0')).toEqual([String(power.mdeFamily), String(power.ratio)])
+    // An unregistered row is not an SV3 trial: no MDE, and the cells are empty, not zero.
+    expect(lastTwo('za_v0_C3_gao_momentum')).toEqual(['', ''])
   })
 
   it('exports at full precision, the raw sealed name and badge, never the display text', () => {
@@ -193,5 +207,73 @@ describe('evidenceCsv', () => {
     expect(csv).toContain('rebal_v1_confirm,FAIL')
     // The display text is only ever "[FAIL] SPENT" (sealedItem); the raw CSV cell never carries it.
     expect(csv).not.toContain('[FAIL] SPENT')
+  })
+})
+
+describe('the power columns (MDE alpha/k and Sharpe/MDE, [POST HOC], computed in the browser)', () => {
+  it('mdeFamily equals powerView\'s value for every SV3 trial, joined by name', () => {
+    const view = powerView(DEFLATED_REAL, FAMILY)
+    const rows = build()
+    for (const p of view.rows) {
+      const row = rowOf(rows, p.name)
+      expect(row.mdeFamily).toBe(p.mdeFamily)
+      expect(row.mdeRatio).toBe(p.ratio)
+    }
+    expect(view.rows).toHaveLength(21)
+  })
+
+  it('pins volmanaged_v0: MDE 1.12 at alpha/k and Sharpe/MDE 0.88 (the catalogue anchor)', () => {
+    const row = rowOf(build(), 'volmanaged_v0')
+    expect(row.mdeFamily).toBeCloseTo(1.12, 2)
+    expect(row.mdeRatio).toBeCloseTo(0.88, 2)
+  })
+
+  it('is the served Sharpe over the MDE, and no other combination', () => {
+    for (const row of build()) {
+      if (row.sharpe === null || typeof row.mdeFamily !== 'number') continue
+      expect(row.mdeRatio).toBe(row.sharpe / row.mdeFamily)
+    }
+  })
+
+  it('is null for a row that is not an SV3 trial (unregistered) and null everywhere without the family', () => {
+    expect(rowOf(build(), 'za_v0_C3_gao_momentum').mdeFamily).toBeNull()
+    expect(rowOf(build(), 'za_v0_C3_gao_momentum').mdeRatio).toBeNull()
+    for (const row of build(DETAILS, null)) {
+      expect(row.mdeFamily).toBeNull()
+      expect(row.mdeRatio).toBeNull()
+    }
+  })
+
+  it('is null for every row when the family has no usable k, but the served columns stay', () => {
+    const rows = build(DETAILS, { alpha: 0.05, k: 0 })
+    for (const row of rows) expect(row.mdeFamily).toBeNull()
+    expect(rowOf(rows, 'volmanaged_v0').sharpe).toBe(0.9914875364356387)
+  })
+
+  it('is null for every row without the deflated view', () => {
+    const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: undefined, details: DETAILS, family: FAMILY }
+    for (const row of buildEvidenceRows(input)) expect(row.mdeFamily).toBeNull()
+  })
+
+  it('leaves the row order, and every other cell, exactly as before', () => {
+    const without = build(DETAILS, null)
+    const withFamily = build()
+    expect(withFamily.map((r) => r.name)).toEqual(without.map((r) => r.name))
+    for (let i = 0; i < without.length; i += 1) {
+      const { mdeFamily: _a, mdeRatio: _b, ...rest } = without[i]!
+      const { mdeFamily: _c, mdeRatio: _d, ...restWith } = withFamily[i]!
+      expect(restWith).toEqual(rest)
+    }
+  })
+
+  it('has no score, rank or total key beside the new fields', () => {
+    for (const row of build()) {
+      const keys = Object.keys(row)
+      expect(keys).toContain('mdeFamily')
+      expect(keys).toContain('mdeRatio')
+      expect(keys).not.toContain('score')
+      expect(keys).not.toContain('rank')
+      expect(keys).not.toContain('total')
+    }
   })
 })

@@ -1,5 +1,5 @@
 /* REG's sub views (look spec 7.2, roadmap #5): the tabpanel that swaps between the board, the
-   evidence matrix and the cost survival board, and each view's own box inside it. Colours come from
+   evidence matrix, the cost survival board and the effect map, and each view's own box inside it. Colours come from
    reg.css's shared classes (reg-msg, reg-muted, reg-warn, reg-tag) and the tokens below; this file
    only shapes the layout. */
 .reg-view { display: flex; flex-direction: column; min-width: 0; }
@@ -30,3 +30,8 @@
 .reg-cost-rungs { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; padding: 0; list-style: none; }
 .reg-cost-rung-label { color: var(--muted); }
 .reg-cost-rung-value { color: var(--white); font-variant-numeric: tabular-nums lining-nums; }
+
+/* 94) Effect map: a band, the marks and glyph legend, the scatter (fixed height, so it never collapses inside the
+   scrolling panel body) and the axis note below it. */
+.reg-map { flex: 0 0 auto; }
+.reg-map-chart { position: relative; height: 420px; min-width: 0; }

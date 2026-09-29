@@ -1,5 +1,7 @@
 // Grid columns for REG's evidence matrix (92) Evidence, look spec 7.2): every cell equals the served
-// field it names, no aggregate anywhere. Module scope, so MonitorGrid gets a stable array.
+// field it names, no aggregate anywhere; the last two (MDE alpha/k, Sharpe/MDE) are computed in the
+// browser from the served n, P and Sharpe (powerModel, [POST HOC]). Module scope, so MonitorGrid gets a
+// stable array.
 import type { MonitorColumn } from '../../grids/MonitorGrid'
 import { EVIDENCE } from '../../copy/evidence'
 import { fillCopy } from '../../copy/workspace'
@@ -35,9 +37,14 @@ export const EVIDENCE_COLUMNS: readonly MonitorColumn<EvidenceRow>[] = [
   { id: 'sharpe', header: C.sharpe, width: 60, kind: 'num', value: (r) => r.sharpe, format: (r) => formatNumber(r.sharpe, 2, { signed: true }) },
   { id: 'years', header: C.years, width: 48, kind: 'num', value: (r) => r.years, format: (r) => formatNumber(r.years, 2) },
   { id: 'dsr', header: C.dsr, width: 56, kind: 'num', value: (r) => r.dsr, format: (r) => formatDsr(r.dsr) },
+  { id: 'mde', header: C.mde, width: 60, kind: 'num', value: (r) => r.mdeFamily ?? null, format: (r) => formatNumber(r.mdeFamily, 2) },
+  { id: 'ratio', header: C.ratio, width: 60, kind: 'num', value: (r) => r.mdeRatio ?? null, format: (r) => formatNumber(r.mdeRatio, 2) },
 ]
 
-const COMPACT_DROP: ReadonlySet<string> = new Set(['years', 'sealed'])
+/** The set a panel too narrow for the two power columns still shows: every column but MDE alpha/k and Sharpe/MDE. */
+export const EVIDENCE_NO_POWER_COLUMNS: readonly MonitorColumn<EvidenceRow>[] = EVIDENCE_COLUMNS.filter((c) => c.id !== 'mde' && c.id !== 'ratio')
+
+const COMPACT_DROP: ReadonlySet<string> = new Set(['years', 'sealed', 'mde', 'ratio'])
 export const EVIDENCE_COMPACT_COLUMNS: readonly MonitorColumn<EvidenceRow>[] = EVIDENCE_COLUMNS.filter((c) => !COMPACT_DROP.has(c.id))
 
 export const evidenceRowId = (r: EvidenceRow): string => r.name
