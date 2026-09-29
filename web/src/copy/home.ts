@@ -73,3 +73,22 @@ export const HOME_LAUNCHPAD = {
   open: 'Run {line}',
   moreLines: ['LIVE', 'OOS', 'RUNS', 'LEDG', 'HELP'],
 } as const
+
+/**
+ * N03: the first-run orientation line on HOME. `{line <GO>}` is a command link; the rest is plain text, with
+ * `<GO>` and `<Esc>` drawn in their key colours. HOME opens on a dense grid, so this says where to start: what
+ * passed (REG, then item 54, 'Passed own bar'), the evidence behind one (DES), the audit trail (OOS) and the
+ * glossary (HELP). The demo adds what DEMO DATA means. 54 is REG's number for its Passed own bar criterion
+ * (HomeOrientation.test.tsx pins it against the REG screen).
+ */
+export const HOME_ORIENTATION = {
+  label: 'Where to start',
+  lead: 'New here?',
+  passed: '{REG <GO>} then 54 <GO>: what passed its own bar.',
+  evidence: '<name> DES <GO>: the evidence behind one.',
+  audit: '{OOS <GO>}: the audit trail.',
+  glossary: '{HELP <GO>}: the glossary.',
+  demo: 'DEMO DATA: what is synthetic is in the glossary.',
+  dismiss: 'Dismiss <Esc>',
+  dismissLabel: 'Dismiss the orientation line',
+} as const

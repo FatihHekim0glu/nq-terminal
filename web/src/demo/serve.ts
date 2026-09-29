@@ -68,7 +68,9 @@ export function answerDemoHttp(method: string, target: string): DemoHttpAnswer |
     return { status: 405, headers: { ...JSON_HEADERS, allow: GET }, body: JSON.stringify({ detail: DEMO_GET_ONLY }) }
   }
   const { status, body } = answerDemo(parts.path, new URLSearchParams(parts.query))
-  const refused = status >= 400 && (body as { detail?: unknown } | null)?.detail === DEMO_DETAIL.notInDemo
+  // A refusal is the bare text or the text followed by what the dataset does hold (a designed tear sheet gap).
+  const detail = (body as { detail?: unknown } | null)?.detail
+  const refused = status >= 400 && typeof detail === 'string' && detail.startsWith(DEMO_DETAIL.notInDemo)
   return {
     status,
     headers: refused ? { ...JSON_HEADERS, [DEMO_REFUSAL_HEADER]: DEMO_REFUSAL_VALUE } : { ...JSON_HEADERS },

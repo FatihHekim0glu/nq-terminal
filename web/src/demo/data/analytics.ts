@@ -11,7 +11,9 @@ import { BOOK_TRADES, NO_EXPOSURE, RUN_ANALYTICS, RUN_COSTS, RUN_EXPOSURE, RUN_T
 import {
   EXCURSIONS, EXCURSIONS_DAILY, HYP_ANALYTICS, HYP_BOOTSTRAP, HYP_EXTENDED, RUN_EXTENDED, TRADE_PATHS,
 } from '../../screens/tear/tearP1.fixtures'
-import { intParam } from './answer'
+import { NOT_IN_DEMO, intParam, refuse, served, type DemoBody, type DemoRefusal } from './answer'
+import { HYPOTHESIS_DETAILS } from './research'
+import { DEMO_DETAIL } from './text'
 
 type Context = Schemas['Context']
 
@@ -57,4 +59,74 @@ export function hypothesisKey(name: string, query: URLSearchParams): string | nu
 /** The key a run GET asks for (its ?freq, D when absent). */
 export function runKey(runId: string, query: URLSearchParams): string {
   return contextKey('run', runId, null, query.get('freq') ?? DEFAULT_FREQ)
+}
+
+// ---------------------------------------------------------------- designed gaps (N01)
+
+/**
+ * The words of a tear sheet gap. The demo holds a tear sheet for very few contexts, so a refusal that only
+ * said 'not in the demo dataset' left the reader at a dead end; this one goes on to name what does exist.
+ * Words of the demo server, held to the copy rules by routes.test.ts.
+ */
+export const GAP_TEXT = {
+  lead: 'Evidence in this demo:',
+  hypotheses: '{names} DES, EQ and RET at {costs} per side',
+  runs: 'run tear sheets for {names}',
+  tick: 'tick',
+  ticks: 'ticks',
+  and: 'and',
+  join: '; ',
+} as const
+
+/** 'a', 'a and b', 'a, b and c'. */
+function list(items: readonly string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} ${GAP_TEXT.and} ${items[items.length - 1]}`
+}
+
+/** The distinct values of `items`, in first-seen order. */
+function distinct<T>(items: readonly T[]): T[] {
+  return [...new Set(items)]
+}
+
+/**
+ * What the dataset really serves as a tear sheet, read from the bodies themselves so the hint cannot drift
+ * from them: the hypotheses that have both a tear sheet and their DES card (with the costs the sheets were
+ * captured at), and the runs that have a tear sheet.
+ */
+export function evidenceInDemo(): { readonly hypotheses: readonly string[]; readonly costs: readonly number[]; readonly runs: readonly string[] } {
+  const contexts = [...ANALYTICS.values()].map((body) => body.context)
+  const sheets = contexts.filter((c) => c.kind === 'hypothesis' && HYPOTHESIS_DETAILS.has(c.name))
+  return {
+    hypotheses: distinct(sheets.map((c) => c.name)),
+    costs: distinct(sheets.flatMap((c) => (c.cost === null ? [] : [c.cost]))).sort((a, b) => a - b),
+    runs: distinct(contexts.filter((c) => c.kind === 'run').map((c) => c.name)),
+  }
+}
+
+/** The pointer sentence, or null when the dataset holds no tear sheet at all. */
+export function evidenceHint(): string | null {
+  const { hypotheses, costs, runs } = evidenceInDemo()
+  const parts: string[] = []
+  if (hypotheses.length > 0) {
+    const unit = costs.length === 1 && costs[0] === 1 ? GAP_TEXT.tick : GAP_TEXT.ticks
+    parts.push(GAP_TEXT.hypotheses.replace('{names}', list(hypotheses)).replace('{costs}', `${list(costs.map(String))} ${unit}`))
+  }
+  if (runs.length > 0) parts.push(GAP_TEXT.runs.replace('{names}', list(runs)))
+  return parts.length === 0 ? null : `${GAP_TEXT.lead} ${parts.join(GAP_TEXT.join)}`
+}
+
+/**
+ * The 404 of a tear sheet the dataset did not capture: the plain refusal first (the offline server and the
+ * page recognise a designed gap by it), then where the evidence is. Only analytics bodies use it; a DES card,
+ * a run record or a malformed request keeps the plain refusal.
+ */
+export function gap(): DemoRefusal {
+  const hint = evidenceHint()
+  return hint === null ? NOT_IN_DEMO : refuse(404, `${DEMO_DETAIL.notInDemo}. ${hint}`)
+}
+
+/** The body when there is one, else the gap that says what exists. */
+export function servedOrGap<T>(body: T | undefined): DemoBody<T> | DemoRefusal {
+  return body === undefined ? gap() : served(body)
 }

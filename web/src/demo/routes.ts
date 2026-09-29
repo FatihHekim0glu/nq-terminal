@@ -7,7 +7,7 @@ import type { ApiPath, RequestOf } from '../api/types'
 import { NOT_IN_DEMO, refuse, served, servedOr, type DemoAnswer } from './data/answer'
 import {
   ANALYTICS, BOOTSTRAP, COSTS, EXCURSION_VIEWS, EXPOSURE, EXTENDED, PANELS, PAPER_TRACKING, TRADES, TRADE_PATH_VIEWS,
-  hypothesisKey, runKey,
+  hypothesisKey, runKey, servedOrGap,
 } from './data/analytics'
 import { OPENINGS, oosLog } from './data/audit'
 import { runComparison } from './data/compare'
@@ -46,10 +46,13 @@ export interface DemoResponse {
   readonly body: unknown
 }
 
-/** A hypothesis view at the cost the request names (1 tick when absent), by the context its body declares. */
+/**
+ * A hypothesis view at the cost the request names (1 tick when absent), by the context its body declares.
+ * A tear sheet that was not captured answers the gap that names what was (N01); a malformed cost is the plain 404.
+ */
 function hypothesisView<T>(views: ReadonlyMap<string, T>, name: string, query: URLSearchParams) {
   const key = hypothesisKey(name, query)
-  return key === null ? NOT_IN_DEMO : servedOr(views.get(key))
+  return key === null ? NOT_IN_DEMO : servedOrGap(views.get(key))
 }
 
 export const DEMO_ROUTES: DemoRoutes = {
@@ -99,15 +102,15 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/analytics/hypothesis/{name}/panel': ({ params, query }) => hypothesisView(PANELS, params.name, query),
   '/api/analytics/hypothesis/{name}/extended': ({ params, query }) => hypothesisView(EXTENDED, params.name, query),
   '/api/analytics/hypothesis/{name}/bootstrap': ({ params, query }) => hypothesisView(BOOTSTRAP, params.name, query),
-  '/api/analytics/run/{run_id}': ({ params, query }) => servedOr(ANALYTICS.get(runKey(params.run_id, query))),
-  '/api/analytics/run/{run_id}/panel': ({ params, query }) => servedOr(PANELS.get(runKey(params.run_id, query))),
-  '/api/analytics/run/{run_id}/extended': ({ params, query }) => servedOr(EXTENDED.get(runKey(params.run_id, query))),
-  '/api/analytics/run/{run_id}/bootstrap': ({ params, query }) => servedOr(BOOTSTRAP.get(runKey(params.run_id, query))),
-  '/api/analytics/run/{run_id}/trades': ({ params }) => servedOr(TRADES.get(params.run_id)),
-  '/api/analytics/run/{run_id}/costs': ({ params }) => servedOr(COSTS.get(params.run_id)),
-  '/api/analytics/run/{run_id}/exposure': ({ params }) => servedOr(EXPOSURE.get(params.run_id)),
-  '/api/analytics/run/{run_id}/trade-paths': ({ params }) => servedOr(TRADE_PATH_VIEWS.get(params.run_id)),
-  '/api/analytics/run/{run_id}/excursions': ({ params }) => servedOr(EXCURSION_VIEWS.get(params.run_id)),
+  '/api/analytics/run/{run_id}': ({ params, query }) => servedOrGap(ANALYTICS.get(runKey(params.run_id, query))),
+  '/api/analytics/run/{run_id}/panel': ({ params, query }) => servedOrGap(PANELS.get(runKey(params.run_id, query))),
+  '/api/analytics/run/{run_id}/extended': ({ params, query }) => servedOrGap(EXTENDED.get(runKey(params.run_id, query))),
+  '/api/analytics/run/{run_id}/bootstrap': ({ params, query }) => servedOrGap(BOOTSTRAP.get(runKey(params.run_id, query))),
+  '/api/analytics/run/{run_id}/trades': ({ params }) => servedOrGap(TRADES.get(params.run_id)),
+  '/api/analytics/run/{run_id}/costs': ({ params }) => servedOrGap(COSTS.get(params.run_id)),
+  '/api/analytics/run/{run_id}/exposure': ({ params }) => servedOrGap(EXPOSURE.get(params.run_id)),
+  '/api/analytics/run/{run_id}/trade-paths': ({ params }) => servedOrGap(TRADE_PATH_VIEWS.get(params.run_id)),
+  '/api/analytics/run/{run_id}/excursions': ({ params }) => servedOrGap(EXCURSION_VIEWS.get(params.run_id)),
   '/api/analytics/deflated': () => served(DEFLATED),
   '/api/analytics/paper-tracking': ({ query }) => forBookJournal(PAPER_TRACKING, query.get('file')),
 

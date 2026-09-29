@@ -73,6 +73,23 @@ describe('answerDemoHttp: the refusal header', () => {
     },
   )
 
+  it.each(['/api/analytics/hypothesis/overnight_v0', '/api/analytics/run/nt_volmanaged_v0_fixture_m1/panel'])(
+    'marks the designed tear sheet gap %s: 404 whose detail starts with the refusal text, and the header',
+    (target) => {
+      const got = answer('GET', target)
+      expect(got.status).toBe(404)
+      const detail = (JSON.parse(got.body) as { detail: string }).detail
+      expect(detail.startsWith(DEMO_DETAIL.notInDemo)).toBe(true)
+      expect(got.headers[DEMO_REFUSAL_HEADER]).toBe(DEMO_REFUSAL_VALUE)
+    },
+  )
+
+  it('still marks a plain NOT_IN_DEMO route (a hypothesis with no detail body)', () => {
+    const got = answer('GET', '/api/hypotheses/tom_v0')
+    expect(got.status).toBe(404)
+    expect(got.headers[DEMO_REFUSAL_HEADER]).toBe(DEMO_REFUSAL_VALUE)
+  })
+
   it('leaves a path outside the contract as a plain 404 without the header', () => {
     for (const target of ['/api/no_such_path', '/api', '/api/']) {
       const got = answer('GET', target)

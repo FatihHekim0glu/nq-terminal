@@ -1,11 +1,12 @@
 // System bodies of the demo dataset, built here (there is no capture): /api/health says fixture mode, so the
-// status line shows its FIXTURE segment, and /api/commands indexes exactly the ids the other bodies serve, so
-// every context the command line offers resolves.
+// status line shows its FIXTURE segment, and /api/commands indexes every id a screen lists (G01): the registry
+// rows and the runs list, as the real backend does, not only the ids the demo holds a body for. A listed id
+// with no captured body parses, opens its screen, and the route answers the honest 'not in the demo dataset'.
 import type { Schemas } from '../../api/types'
 import { MNEMONICS } from '../../commands/registry'
 import { ROOTS } from '../../screens/mon/testUniverse'
-import { CONFIRMATIONS, HYPOTHESIS_DETAILS } from './research'
-import { RUN_DETAILS } from './runs'
+import { CONFIRMATIONS, REGISTRY } from './research'
+import { RUNS } from './runs'
 
 /**
  * GET /api/health at `now`. Versions and pins as the App tests' fixture health reads them (src/App.test.tsx); the
@@ -25,14 +26,17 @@ export function health(now: Date): Schemas['Health'] {
   }
 }
 
-/** GET /api/commands: the registry's mnemonics, the 27 universe roots, and the ids that have their record. */
+/**
+ * GET /api/commands: the registry's mnemonics, the 27 universe roots, every registry row as a hypothesis
+ * (backend/nq_terminal/api/commands.py builds them from the registry) and every run of the runs list.
+ */
 export const COMMAND_INDEX: Schemas['CommandIndex'] = {
   grammar: '<context> <FUNCTION> [args]',
   mnemonics: MNEMONICS.map(({ code, screen, priority, context }) => ({ code, screen, priority, context })),
   instruments: ROOTS.map(([root, sector]) => ({ root, symbol: `${root}.V.0`, sector })),
   universe: ['27F'],
-  hypotheses: [...HYPOTHESIS_DETAILS.keys()],
+  hypotheses: REGISTRY.rows.map((row) => row.name),
   confirmations: CONFIRMATIONS.map((c) => c.name),
-  runs: [...RUN_DETAILS.keys()],
+  runs: RUNS.map((run) => run.run_id),
   registry_error: null,
 }

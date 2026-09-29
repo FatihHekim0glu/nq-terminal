@@ -14,6 +14,7 @@ import { BOOK } from '../screens/live/liveFixtures'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../screens/des/desTestData'
 import { OVERNIGHT_SCREEN, VOLMANAGED_SCREEN } from '../screens/des/robustness.fixtures'
 import { intParam } from './data/answer'
+import { GAP_TEXT } from './data/analytics'
 import { DEMO_DETAIL, DEMO_TEXT } from './data/text'
 import { demoLiveJournalRows, demoLiveStatus } from './data/live'
 import { HYPOTHESIS_DETAILS, withScreen } from './data/research'
@@ -34,6 +35,13 @@ function ok<P extends ApiPath>(path: P, request: RequestOf<P> | Record<string, n
 
 function refused(answer: { status: number; body: unknown }, status: number, detail: string = DEMO_DETAIL.notInDemo) {
   expect(answer).toEqual({ status, body: { detail } })
+}
+
+/** A tear sheet the dataset did not capture: the plain refusal, then where the evidence is (N01). */
+function gapped(answer: { status: number; body: unknown }) {
+  expect(answer.status).toBe(404)
+  const detail = (answer.body as { detail: string }).detail
+  expect(detail.startsWith(`${DEMO_DETAIL.notInDemo}. ${GAP_TEXT.lead} `)).toBe(true)
 }
 
 const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
@@ -73,9 +81,9 @@ describe('answerDemo: path templates and error bodies', () => {
   it('answers ids and requests the dataset does not hold with the honest 404', () => {
     refused(get('/api/runs/{run_id}', { path: { run_id: 'nt_not_in_the_demo' } }), 404)
     refused(get('/api/hypotheses/{name}', { path: { name: 'tom_v0' } }), 404)
-    refused(get('/api/analytics/hypothesis/{name}', { path: { name: 'overnight_v0' }, query: { cost: 1 } }), 404)
-    refused(get('/api/analytics/hypothesis/{name}', { path: { name: 'volmanaged_v0' }, query: { cost: 2 } }), 404)
-    refused(get('/api/analytics/run/{run_id}', { path: { run_id: 'nt_volmanaged_v0_fixture_m1' }, query: { freq: 'M' } }), 404)
+    gapped(get('/api/analytics/hypothesis/{name}', { path: { name: 'overnight_v0' }, query: { cost: 1 } }))
+    gapped(get('/api/analytics/hypothesis/{name}', { path: { name: 'volmanaged_v0' }, query: { cost: 2 } }))
+    gapped(get('/api/analytics/run/{run_id}', { path: { run_id: 'nt_volmanaged_v0_fixture_m1' }, query: { freq: 'M' } }))
     refused(get('/api/instruments/{root}', { path: { root: 'ES' } }), 404)
     refused(get('/api/market/universe', { query: { window: 63 } }), 404)
     refused(get('/api/runs/stats', { query: { ids: 'nt_dtsmom_v0_fixture_ts1,nope' } }), 404)
@@ -225,12 +233,25 @@ describe('HOME and the A6 command lines get 200 bodies (acceptance A5, A6)', () 
   })
 })
 
-describe('the command index and the bodies agree (every id the index offers resolves)', () => {
+describe('the command index and the bodies agree (every id the index offers opens its screen or is honestly absent)', () => {
   const index = ok('/api/commands')
 
-  it('lists hypotheses that each have their DES card', () => {
+  it('lists every registry row as a hypothesis (G01), each answering its DES card or the honest 404', () => {
+    const registry = ok('/api/registry').rows.map((r) => r.name)
     expect(index.hypotheses).toContain(HYP)
-    for (const name of index.hypotheses) expect(ok('/api/hypotheses/{name}', { path: { name } }).card.name).toBe(name)
+    expect([...index.hypotheses].sort()).toEqual([...registry].sort())
+    for (const name of index.hypotheses) {
+      const answer = get('/api/hypotheses/{name}', { path: { name } })
+      if (answer.status === 200) expect((answer.body as Schemas['HypothesisDetail']).card.name).toBe(name)
+      else refused(answer, 404)
+    }
+  })
+
+  it('answers the honest 404, not a parser error, for a passing hypothesis with no captured card (G01)', () => {
+    for (const name of ['tom_v0', 'eomtsy_v0', 'vt_har_v0']) {
+      expect(index.hypotheses).toContain(name)
+      refused(get('/api/hypotheses/{name}', { path: { name } }), 404)
+    }
   })
 
   it('lists confirmations that /api/confirmations holds', () => {
@@ -239,12 +260,21 @@ describe('the command index and the bodies agree (every id the index offers reso
     for (const name of index.confirmations) expect(held).toContain(name)
   })
 
-  it('lists runs that each have their record and appear in /api/runs', () => {
+  it('lists every run of /api/runs (G01), each answering its record or the honest 404', () => {
     const listed = ok('/api/runs').map((r) => r.run_id)
     expect(index.runs).toContain(RUN)
+    expect([...index.runs].sort()).toEqual([...listed].sort())
     for (const id of index.runs) {
-      expect(listed).toContain(id)
-      expect(ok('/api/runs/{run_id}', { path: { run_id: id } }).summary.run_id).toBe(id)
+      const answer = get('/api/runs/{run_id}', { path: { run_id: id } })
+      if (answer.status === 200) expect((answer.body as Schemas['RunDetail']).summary.run_id).toBe(id)
+      else refused(answer, 404)
+    }
+  })
+
+  it('reaches both run tear sheets the demo serves (nt_volmanaged_v0_fixture_m1 and smoke_2015_01) through the index', () => {
+    for (const id of ['nt_volmanaged_v0_fixture_m1', 'smoke_2015_01']) {
+      expect(index.runs).toContain(id)
+      expect(get('/api/analytics/run/{run_id}', { path: { run_id: id } }).status).toBe(200)
     }
   })
 
@@ -269,7 +299,7 @@ describe('no body is served under another context', () => {
     expect(run.context).toMatchObject({ kind: 'run', name: 'nt_volmanaged_v0_fixture_m1', freq: 'D' })
     const trades = ok('/api/analytics/run/{run_id}/trades', { path: { run_id: 'nt_za_v0_fixture_a' } })
     expect(trades.run_id).toBe('nt_za_v0_fixture_a')
-    refused(get('/api/analytics/run/{run_id}/panel', { path: { run_id: 'nt_overnight_v0_fixture_open' } }), 404)
+    gapped(get('/api/analytics/run/{run_id}/panel', { path: { run_id: 'nt_overnight_v0_fixture_open' } }))
   })
 
   it('serves the P1 test bodies only for the request they describe', () => {
@@ -419,9 +449,56 @@ describe('pages, filters and fillers', () => {
   })
 })
 
+describe('designed tear sheet gaps say where the evidence is (N01)', () => {
+  const EVIDENCE = 'Evidence in this demo: volmanaged_v0 DES, EQ and RET at 1 tick per side; run tear sheets for nt_volmanaged_v0_fixture_m1 and smoke_2015_01'
+  const GAP = `${DEMO_DETAIL.notInDemo}. ${EVIDENCE}`
+
+  /** Every analytics GET the tear screens make for a context the dataset did not capture. */
+  const GAPS: ReadonlyArray<readonly [string, () => { status: number; body: unknown }]> = [
+    ['hypothesis tear sheet', () => get('/api/analytics/hypothesis/{name}', { path: { name: 'overnight_v0' }, query: { cost: 1 } })],
+    ['hypothesis panel', () => get('/api/analytics/hypothesis/{name}/panel', { path: { name: 'overnight_v0' }, query: { cost: 2 } })],
+    ['hypothesis extended', () => get('/api/analytics/hypothesis/{name}/extended', { path: { name: 'overnight_v0' }, query: { cost: 0 } })],
+    ['hypothesis bootstrap', () => get('/api/analytics/hypothesis/{name}/bootstrap', { path: { name: 'eomtsy_v0' } })],
+    ['run tear sheet', () => get('/api/analytics/run/{run_id}', { path: { run_id: 'nt_overnight_v0_fixture_open' } })],
+    ['run panel', () => get('/api/analytics/run/{run_id}/panel', { path: { run_id: 'nt_overnight_v0_fixture_open' } })],
+    ['run trades', () => get('/api/analytics/run/{run_id}/trades', { path: { run_id: 'nt_overnight_v0_fixture_open' } })],
+    ['a cost of the captured hypothesis that was not captured', () => get('/api/analytics/hypothesis/{name}', { path: { name: 'volmanaged_v0' }, query: { cost: 2 } })],
+  ]
+
+  it.each(GAPS)('%s: the 404 keeps the demo refusal words and points to what exists', (_label, answer) => {
+    refused(answer(), 404, GAP)
+  })
+
+  it('always starts with the plain demo refusal, so the offline server can still recognise a designed gap', () => {
+    for (const [, answer] of GAPS) {
+      const { status, body } = answer()
+      expect(status).toBe(404)
+      expect((body as { detail: string }).detail.startsWith(DEMO_DETAIL.notInDemo)).toBe(true)
+    }
+  })
+
+  it('names only evidence that is really served: the hypothesis tear sheet, its DES card and both run tear sheets answer 200', () => {
+    expect(ok('/api/analytics/hypothesis/{name}', { path: { name: 'volmanaged_v0' }, query: { cost: 1 } }).context.name).toBe('volmanaged_v0')
+    expect(get('/api/hypotheses/{name}', { path: { name: 'volmanaged_v0' } }).status).toBe(200)
+    for (const id of ['nt_volmanaged_v0_fixture_m1', 'smoke_2015_01']) {
+      expect(get('/api/analytics/run/{run_id}', { path: { run_id: id } }).status, id).toBe(200)
+    }
+  })
+
+  it('leaves the other honest 404s as the plain refusal (a DES card, a run record, a QA record)', () => {
+    refused(get('/api/hypotheses/{name}', { path: { name: 'overnight_v0_missing' } }), 404)
+    refused(get('/api/runs/{run_id}', { path: { run_id: 'nt_not_in_the_demo' } }), 404)
+    refused(get('/api/qa'), 404)
+  })
+
+  it('follows the copy rules', () => {
+    expect(findCopyViolations({ GAP })).toEqual([])
+  })
+})
+
 describe('the dataset own words follow the copy rules (UI_SPEC section 10)', () => {
   it('has no dash and no US spelling in any detail or label it serves', () => {
-    expect(findCopyViolations({ DEMO_DETAIL, DEMO_TEXT })).toEqual([])
+    expect(findCopyViolations({ DEMO_DETAIL, DEMO_TEXT, GAP_TEXT })).toEqual([])
   })
 })
 

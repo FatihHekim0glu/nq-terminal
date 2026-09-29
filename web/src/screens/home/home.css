@@ -59,3 +59,44 @@
 .home-launch .ix { width: 2.6em; text-align: right; }
 .home-launch .hot { display: inline-block; color: var(--muted); transform: scaleX(.63); transform-origin: right center; }
 .home-launch .group-row td { color: var(--white); font-weight: 700; }
+
+/* The first-run orientation line (N03): one raised row of copy with command links and a Dismiss key. It wraps
+   where the panel is narrow rather than cutting a link off. */
+.home-orient {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 8px;
+  background: var(--raised);
+  border-bottom: 1px solid var(--box-border);
+  color: var(--data);
+  font-size: var(--fs-nav);
+  line-height: 20px;
+}
+.home-orient-text { flex: 1 1 auto; min-width: 0; margin: 0; }
+.home-orient-lead { color: var(--white); font-weight: var(--fw-bold); }
+.home-orient .cmd-link {
+  min-height: 24px;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.home-orient .cmd-link-wrap { color: var(--link); }
+.home-orient-dismiss {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--box-border);
+  border-radius: 0;
+  color: var(--data);
+  font: inherit;
+  cursor: pointer;
+}
+.home-orient-dismiss:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
