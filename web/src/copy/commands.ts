@@ -49,7 +49,7 @@ export const MNEMONIC_SCREENS = {
 
 /** Words the command line acts on itself; they are not screens (spec 5.1 items 6 to 9). */
 export const CHROME_WORDS = {
-  HL: 'Search the help pages, the hypotheses and the runs',
+  HL: 'Search functions, metrics, instruments, help text, hypotheses and runs',
   NO: 'Event tape on or off',
   MENU: 'Related functions for the focused panel',
   LAST: 'The last 8 commands',
@@ -143,7 +143,7 @@ export const SUGGESTION_DETAILS = {
   universe: 'the 27 futures',
   timeframe: 'bar timeframe',
   instrument: '{value} back-adj',
-  search: 'Search the help pages, the hypotheses and the runs',
+  search: 'Search functions, metrics, instruments, help text, hypotheses and runs',
   notBuilt: '{value}, not built yet',
 } as const
 

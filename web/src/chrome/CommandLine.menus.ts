@@ -1,12 +1,17 @@
 // Numbered menus the command line shows in its sheet (spec 5.1 items 3, 4, 6, 8, 9 and 4.7): a
 // context's functions, the sector menus, the last commands, related functions, one function's help and
-// HL search results. Pure builders; CommandLine.state.ts decides what choosing an item does.
+// HL search results. Pure builders (searchMenu only asks the loader to start); CommandLine.state.ts
+// decides what choosing an item does. This file is in the shell: it reads SEARCH and the loader, never the
+// lazy search index or its metric list (commands/searchIndex.split.test.ts).
 import { isBuilt } from '../commands/built'
 import { withValue } from '../commands/messages'
 import { MNEMONICS, findMnemonic, type MnemonicCode, type MnemonicDef } from '../commands/registry'
+import { loadSearchIndex, loadedSearchIndex, type SearchHit } from '../commands/searchIndexLoader'
 import { FUTURES_SECTORS, displayContext, displayInstrument, sectorForRoot, type SectorCode } from '../commands/sectors'
 import type { CommandIndexData, ResolvedContext } from '../commands/types'
 import { ARGUMENT_NAMES, CHROME_WORDS, COMMAND_LINE, SECTOR_MENU, SUGGESTION_DETAILS } from '../copy/commands'
+import { SEARCH } from '../copy/search'
+import { fillCopy } from '../copy/workspace'
 
 export type MenuAct =
   | { readonly kind: 'run'; readonly line: string }
@@ -31,7 +36,10 @@ export interface MenuModel {
 }
 
 export const LAST_COUNT = 8
-const SEARCH_LIMIT = 20
+/** Rows HL lists: with the index loaded, its hits (six a group) then the hypotheses and runs. */
+const SEARCH_LIMIT = 30
+/** Rows without the index: today's functions, words, hypotheses and runs. */
+const TODAY_LIMIT = 20
 const CATEGORY_SEQUENCE = ['rates', 'energy', 'metals', 'grains', 'livestock'] as const
 
 type Draft = Omit<MenuItem, 'n' | 'category'> & { readonly category?: boolean }
@@ -121,14 +129,46 @@ function matches(text: string, q: string): boolean {
   return text.toLowerCase().includes(q)
 }
 
-/** HL results (spec 5.1 item 9): functions and their help text, hypotheses (DES) and runs (RUN). */
-export function searchMenu(query: string, index: CommandIndexData | null): MenuModel {
-  const q = query.toLowerCase()
+/** An index hit as a menu row: an instrument by its ticker, help text with the phrase it matched. */
+function hitDraft(hit: SearchHit, index: CommandIndexData | null): Draft {
+  const { entry, phrase } = hit
+  if (entry.group === 'instrument') return { label: displayInstrument(entry.label, index), detail: entry.detail, act: entry.act }
+  if (entry.group === 'help' && phrase !== null) {
+    return { label: entry.label, detail: fillCopy(SEARCH.helpDetail, { group: SEARCH.groups.help, code: entry.code, phrase }), act: entry.act }
+  }
+  return { label: entry.label, detail: entry.detail, act: entry.act }
+}
+
+/** Today's HL rows: the functions and words that match, before the index has loaded. */
+function functionAndWordDrafts(q: string): Draft[] {
   const fns = MNEMONICS.filter((m) => matches(`${m.code} ${m.screen}`, q)).map((m) => ({ label: m.code, detail: m.screen, act: m.accepts.length === 0 ? functionAct(m, null) : ({ kind: 'fill', line: `${m.code} ` } as const) }))
   const words = Object.entries(CHROME_WORDS).filter(([w, d]) => matches(`${w} ${d}`, q)).map(([w, d]) => ({ label: w, detail: d, act: { kind: 'fill', line: `${w} ` } as const }))
+  return [...fns, ...words]
+}
+
+/**
+ * HL results (spec 5.1 item 9). With the lazy search index loaded: functions, command words, metrics,
+ * instruments and help text, ranked (at most six a group), then the hypotheses (DES) and runs (RUN).
+ * Before it has loaded: today's functions, words, hypotheses and runs, an intro saying the rest is on its
+ * way, and a call to start the load (so a failed import is tried again).
+ *
+ * `opts.lazy` says whether to use the lazy index; it defaults to whether the command index is present.
+ * The command line always asks for it, so HL keeps its metrics, instruments and help text (or the
+ * loading intro) while GET /api/commands is pending or has failed. HELP's own search field passes no
+ * option and no command index: it keeps to today's functions and words and never touches the lazy index,
+ * because that list acts on run and fill items only (a metric, instrument or help hit would crowd its
+ * function list, or do nothing when chosen).
+ */
+export function searchMenu(query: string, index: CommandIndexData | null, opts: { readonly lazy?: boolean } = {}): MenuModel {
+  const q = query.toLowerCase()
+  const lazy = opts.lazy ?? index !== null
+  const search = lazy ? loadedSearchIndex() : null
+  const loading = lazy && search === null
+  if (loading) void loadSearchIndex()
   const hyps = [...(index?.hypotheses ?? []), ...(index?.confirmations ?? [])].filter((h) => matches(h, q)).map((h) => ({ label: h, detail: SUGGESTION_DETAILS.hypothesis, act: { kind: 'run', line: `${h} DES` } as const }))
   const runs = (index?.runs ?? []).filter((r) => matches(r, q)).map((r) => ({ label: r, detail: SUGGESTION_DETAILS.run, act: { kind: 'run', line: `${r} RUN` } as const }))
-  const drafts = [...fns, ...words, ...hyps, ...runs].slice(0, SEARCH_LIMIT)
-  const intro = drafts.length === 0 ? [withValue(COMMAND_LINE.searchNone, query)] : []
+  const found = search ? search.search(query).map((hit) => hitDraft(hit, index)) : functionAndWordDrafts(q)
+  const drafts = [...found, ...hyps, ...runs].slice(0, search ? SEARCH_LIMIT : TODAY_LIMIT)
+  const intro = [...(drafts.length === 0 ? [withValue(COMMAND_LINE.searchNone, query)] : []), ...(loading ? [SEARCH.loading] : [])]
   return menu(`search:${q}`, withValue(COMMAND_LINE.searchTitle, query), drafts, [], intro)
 }

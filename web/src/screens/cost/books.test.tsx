@@ -8,19 +8,30 @@ import type { ComponentType, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { barLadderTable } from '../../charts/echarts/barLadderModel'
+import type { CompositionInput } from '../../charts/echarts/compositionModel'
+import { captureDownloads } from '../../chrome/download.testUtil'
 import { NumberingContext, type NumberedItem, type Registrar } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import type { ResolvedContext } from '../../commands/types'
+import { COMPOSITION } from '../../copy/composition'
 import BlkScreen from '../blk/BlkScreen'
 import { blocksInput, breakEvenText, costInput } from '../des/desModel'
 import { CONFIRMATION, OVERNIGHT, REBAL, VOLMANAGED } from '../des/desTestData'
 import ExpoScreen from '../expo/ExpoScreen'
 import SealScreen from '../seal/SealScreen'
+import { compositionInput, compositionView } from '../tear/bookComposition'
+import RunBooks from '../tear/RunBooks'
 import CostScreen from './CostScreen'
 
 vi.mock('../../charts/LineStack', () => ({
   default: (props: { title: string }) => <div data-testid="linestack" data-title={props.title} />,
+}))
+
+vi.mock('../../charts/echarts/Composition', () => ({
+  Composition: (props: { mode: string; data: CompositionInput }) => (
+    <div data-testid="composition" data-mode={props.mode} data-rows={JSON.stringify(props.data.rows)} />
+  ),
 }))
 
 vi.mock('../../charts/echarts/BarLadder', () => ({
@@ -64,6 +75,18 @@ const EXPOSURE = {
   },
   turnover: { run_id: 'r1', basis: 'B', unit: 'traded notional over equity', label: 'Turnover', price_basis: 'raw close', source: 'fills', periods: 252, t: [1325635200], date: ['2012-01-04'], daily: [0.3], mean_daily: 0.3, annualised: 75.6 },
 }
+// Two instruments, a micro and its parent's sector, as GET /api/analytics/run/{id}/exposure sends them.
+const R3_EXPOSURE = {
+  ...EXPOSURE,
+  run_id: 'r3',
+  exposure: { ...EXPOSURE.exposure, basis: 'B' as const, run_id: 'r3', by_instrument: { 'MNQ.XCME': [0.6, 0.55], 'ZN.XCME': [0.65, 0.95] } },
+}
+const COMMAND_INDEX = {
+  instruments: [
+    { root: 'NQ', symbol: 'NQ.V.0', sector: 'equity' },
+    { root: 'ZN', symbol: 'ZN.V.0', sector: 'rates' },
+  ],
+}
 const NO_EXPOSURE = { run_id: 'r2', tag: '[POST HOC]', available: false, note: 'this run has no mark to market snapshots (an intraday run), so it has no exposure or turnover', exposure: null, turnover: null }
 
 function json(body: unknown, status = 200): Response {
@@ -74,7 +97,10 @@ function route(url: URL): Response {
   const path = decodeURIComponent(url.pathname)
   if (path === '/api/confirmations') return json([CONFIRMATION])
   if (path === '/api/sealed') return json(SEALED_INDEX)
+  if (path === '/api/commands') return json(COMMAND_INDEX)
   if (path === '/api/analytics/run/r1/costs') return json(COSTS)
+  if (path === '/api/analytics/run/r3/costs') return json({ ...COSTS, run_id: 'r3' })
+  if (path === '/api/analytics/run/r3/exposure') return json(R3_EXPOSURE)
   if (path === '/api/analytics/run/r1/exposure') return json(EXPOSURE)
   if (path === '/api/analytics/run/r2/exposure') return json(NO_EXPOSURE)
   const sealed = /^\/api\/sealed\/(.+)$/.exec(path)
@@ -184,13 +210,73 @@ describe('EXPO', () => {
     const rows = within(screen.getByTestId('expo-summary')).getAllByRole('row').map((r) => [r.getAttribute('data-row'), r.lastElementChild?.textContent])
     expect(rows).toEqual([['meanGross', '1.38'], ['meanNet', '0.13'], ['sessions', '2'], ['meanTurnover', '0.30'], ['annualTurnover', '75.60'], ['periods', '252']])
     expect(screen.getByTestId('linestack')).toBeTruthy()
+    // The exposure card reads the instrument index; a run with no per-instrument values offers no toggle.
+    await waitFor(() => expect(calls.map((c) => c.path)).toContain('/api/commands'))
+    expect(screen.queryByRole('group', { name: COMPOSITION.toggle })).toBeNull()
     expectGetOnly()
+  })
+
+  it('offers Totals, By instrument and By sector when the run has per-instrument values, and draws them as served', async () => {
+    show(ExpoScreen, 'EXPO', run('r3'))
+    await screen.findByTestId('expo-summary')
+    const toggle = await screen.findByRole('group', { name: COMPOSITION.toggle })
+    expect(within(toggle).getAllByRole('button').map((b) => b.textContent)).toEqual(['Totals', 'By instrument', 'By sector'])
+    expect(screen.getByTestId('linestack')).toBeTruthy()
+    fireEvent.click(within(toggle).getByRole('button', { name: COMPOSITION.views.heat }))
+    const chart = screen.getByTestId('composition')
+    expect(chart.getAttribute('data-mode')).toBe('heat')
+    await waitFor(() => expect(JSON.parse(screen.getByTestId('composition').getAttribute('data-rows') ?? '[]')).toEqual(
+      compositionInput(compositionView(R3_EXPOSURE.exposure, COMMAND_INDEX)!, 'r3', 'heat').rows,
+    ))
+    const rows = JSON.parse(screen.getByTestId('composition').getAttribute('data-rows') ?? '[]') as Array<{ kind: string; label: string; values?: number[] }>
+    expect(rows.map((r) => r.label)).toEqual(['Equity', 'MNQ', 'Rates', 'ZN'])
+    expect(rows.find((r) => r.label === 'ZN')?.values).toEqual([0.65, 0.95])
+    fireEvent.click(within(toggle).getByRole('button', { name: COMPOSITION.views.stack }))
+    expect(screen.getByTestId('composition').getAttribute('data-mode')).toBe('stack')
+    expect(screen.getByText(COMPOSITION.absolute)).toBeTruthy()
+    expectGetOnly()
+  })
+
+  it('98) Export saves the sessions with one full precision column per instrument, no request', async () => {
+    show(ExpoScreen, 'EXPO', run('r3'))
+    await screen.findByTestId('expo-summary')
+    const before = calls.length
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(await screen.findByRole('button', { name: /98\) Export/ }))
+      const lines = (await saved.text()).split('\r\n')
+      expect(lines).toEqual([
+        'Session,Gross,Net,Turnover,MNQ.XCME,ZN.XCME',
+        '2012-01-04,1.5,-0.25,0.3,0.55,0.95',
+        '2012-01-03,1.25,0.5,,0.6,0.65',
+      ])
+      expect(calls.length).toBe(before)
+    } finally {
+      saved.restore()
+    }
   })
 
   it('says why a run has no exposure', async () => {
     show(ExpoScreen, 'EXPO', run('r2'))
     expect((await screen.findAllByText(/no mark to market snapshots/)).length).toBeGreaterThan(0)
     expect(screen.queryByTestId('expo-summary')).toBeNull()
+    expect(screen.queryByRole('group', { name: COMPOSITION.toggle })).toBeNull()
+  })
+})
+
+describe('RUN books', () => {
+  it('put the composition toggle on the exposure card, reading the instrument index by GET', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <ApiProvider client={client}>
+        <RunBooks runId="r3" />
+      </ApiProvider>,
+    )
+    const toggle = await screen.findByRole('group', { name: COMPOSITION.toggle })
+    fireEvent.click(within(toggle).getByRole('button', { name: COMPOSITION.views.stack }))
+    expect(screen.getByTestId('composition').getAttribute('data-mode')).toBe('stack')
+    await waitFor(() => expect(calls.map((c) => c.path)).toEqual(expect.arrayContaining(['/api/commands', '/api/analytics/run/r3/exposure'])))
+    expectGetOnly()
   })
 })
 

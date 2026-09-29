@@ -139,6 +139,8 @@ export const MT = {
     tag: 'Tag',
   },
   confirmItem: 'opening {opening}, p {p}, n {n}, {alpha}',
+  // The sub tab strip (85 onwards); the later tabs name themselves in their own copy modules.
+  views: { label: 'Multiple-testing views', family: 'Family' },
   actions: { openReg: 'Registry board (REG)' },
   settings: { log: 'Log p axis', linear: 'Linear p axis' },
 } as const

@@ -4,25 +4,43 @@
 // stored adjusted values, and the sealed confirmations listed apart with their own alpha. Enter on a
 // table row opens DES. GETs: /api/multiple-testing, and /api/analytics/deflated for SV3 (the Deflated Sharpe
 // over the registered trials, [POST HOC], an extra view only) under the confirmations.
-import { useCallback, useMemo, useState } from 'react'
+// A sub tab strip from 85 (roadmap R8) picks the view: 85) Family is all of the above; 86) Replication
+// (MtReplication) draws each sealed confirmation against its parent's registered in-sample p and reads
+// /api/registry only once it is open.
+import { useCallback, useId, useMemo, useState } from 'react'
 import { useMultipleTesting } from '../../api/queries'
 import type { Schemas } from '../../api/types'
 import { PScatter } from '../../charts/echarts/PScatter'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
 import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
+import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { CONFIRM, MT } from '../../copy/reg'
+import { REPLICATION } from '../../copy/replication'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import MonitorGrid from '../../grids/MonitorGrid'
 import { MT_COLUMNS, mtRowId } from './regColumns'
 import { badgeText, confirmationRows, formatCount, formatPValue, verdictTone } from './regModel'
 import { boundaryCheck, buildMtRows, familyLine, linesLine, mtScatterInput, type MtRow, type PScale } from './mtModel'
 import DeflatedPanel from './DeflatedPanel'
+import MtReplication from './MtReplication'
+import { MT_VIEWS, MT_VIEW_START, type MtView } from './mtViews'
 import { openDes } from './open'
 import './reg.css'
 
-function MtBar({ actions, scale, onScale }: { readonly actions: PanelActions; readonly scale: PScale; readonly onScale: (s: PScale) => void }) {
+/** Module scope, so TabStrip gets stable tabs. */
+const MT_TAB_LABEL: Readonly<Record<MtView, string>> = { family: MT.views.family, replication: REPLICATION.tab }
+const MT_TABS = MT_VIEWS.map((id) => ({ id, label: MT_TAB_LABEL[id] }))
+
+interface MtBarProps {
+  readonly actions: PanelActions
+  readonly view: MtView
+  readonly scale: PScale
+  readonly onScale: (s: PScale) => void
+}
+
+function MtBar({ actions, view, scale, onScale }: MtBarProps) {
   const items: FunctionBarItem[] = [
     {
       n: FUNCTION_NUMBERS.actions,
@@ -38,6 +56,8 @@ function MtBar({ actions, scale, onScale }: { readonly actions: PanelActions; re
       n: FUNCTION_NUMBERS.settings,
       label: FUNCTION_BAR.settings,
       menu: [{ label: scale === 'log' ? MT.settings.linear : MT.settings.log, onSelect: () => onScale(scale === 'log' ? 'linear' : 'log') }],
+      // The p axis choice belongs to 85) Family; the replication chart has its own axes and ignores it.
+      disabled: view === 'replication',
     },
   ]
   return <FunctionBar panelId={actions.panelId} title={MT.title} items={items} />
@@ -111,16 +131,35 @@ export default function MtScreen(_props: ScreenProps) {
   const actions = usePanelActions()
   const mt = useMultipleTesting()
   const [scale, setScale] = useState<PScale>('log')
+  const [view, setView] = useState<MtView>('family')
+  const viewId = useId()
+  const loaded = !mt.isError && mt.data !== undefined
   return (
     <div className="reg-screen" data-screen="MT">
-      <MtBar actions={actions} scale={scale} onScale={setScale} />
+      <MtBar actions={actions} view={view} scale={scale} onScale={setScale} />
+      <TabStrip
+        panelId={actions.panelId}
+        label={MT.views.label}
+        variant="sub"
+        start={MT_VIEW_START}
+        controls={loaded ? viewId : undefined}
+        tabs={MT_TABS}
+        selected={view}
+        onSelect={(id) => setView(id as MtView)}
+      />
       {mt.isError ? (
         <PanelFault error={mt.error} failedText={MT.failed} className="reg-msg" />
       ) : mt.data ? (
-        <>
-          <MtBody mt={mt.data} scale={scale} />
-          <DeflatedPanel />
-        </>
+        <div id={viewId} role="tabpanel" className="mt-view" aria-label={`${MT_VIEW_START + MT_VIEWS.indexOf(view)}) ${MT_TAB_LABEL[view]}`}>
+          {view === 'family' ? (
+            <>
+              <MtBody mt={mt.data} scale={scale} />
+              <DeflatedPanel />
+            </>
+          ) : (
+            <MtReplication mt={mt.data} />
+          )}
+        </div>
       ) : (
         <PanelLoading text={MT.loading} className="reg-msg" />
       )}

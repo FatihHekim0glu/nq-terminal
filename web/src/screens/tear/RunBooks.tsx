@@ -2,15 +2,19 @@
 // TA1, TA3, TA6, EX1 to EX4, and in P1 TA2, TA4, TA5 as the trade paths card). DES-style cards under the tab view. The trade card appears only
 // when the run has closed trades; the exposure card says why when a run has no snapshots. Each card
 // is [POST HOC] and names its unit; the slippage table holds real fills only, as the API sends them.
-import { useId, useMemo, useState } from 'react'
-import { useRun } from '../../api/queries'
+import { useId, useMemo, useState, type CSSProperties } from 'react'
+import { useCommands, useRun } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
+import { Composition } from '../../charts/echarts/Composition'
 import LineStack from '../../charts/LineStack'
 import { ToggleGroup } from '../../chrome/Field.buttons'
+import { COMPOSITION } from '../../copy/composition'
 import { TEAR, TEAR_BOOKS as B } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import { sig } from '../expo/expoModel'
 import type { PanelLink } from '../../state/linkGroups'
+import type { CompositionMode } from '../../charts/echarts/compositionModel'
+import { compositionInput, compositionView, type RootIndex } from './bookComposition'
 import {
   exposureStack, groupLadder, hasTrades, sensitivityLadder, slippageView, tradeStatRows, waterfallRows,
   type Grouping, type RunCosts, type RunExposure, type RunTrades,
@@ -21,6 +25,7 @@ import { formatNumber } from './tearFormat'
 import { useRunBooks } from './tearQueries'
 import '../../grids/grid.css'
 import '../../tiles/tiles.css'
+import './tearComposition.css'
 
 function Pending({ error }: { readonly error: Parameters<typeof CardPending>[0]['error'] }) {
   return <CardPending error={error} failed={B.failed} loading={TEAR.loadingBooks} />
@@ -117,8 +122,32 @@ export function CostsCard({ costs, runId }: { readonly costs: RunCosts; readonly
   )
 }
 
-export function ExposureCard({ exposure, runId, link }: { readonly exposure: RunExposure; readonly runId: string; readonly link: PanelLink }) {
+/** Totals is the gross, net and turnover stack; the other two draw the per-instrument series. */
+export type ExposureViewName = 'totals' | 'heat' | 'stack'
+
+const VIEW_OPTIONS = (['totals', 'heat', 'stack'] as const).map((view) => ({ value: view, label: COMPOSITION.views[view] }))
+
+export interface ExposureCardProps {
+  readonly exposure: RunExposure
+  readonly runId: string
+  readonly link: PanelLink
+  /** The instrument index (root and sector of each instrument) that groups the per-instrument series.
+   *  Left out, the card reads it from GET /api/commands; null says there is none (every instrument then
+   *  sits under "not in the instrument index"). The gallery passes one, so it makes no request. */
+  readonly index?: RootIndex | null
+  /** The view shown first: Totals, unless a gallery entry asks for another. */
+  readonly initialView?: ExposureViewName
+}
+
+function ExposureBody({ exposure, runId, link, index, initialView = 'totals' }: ExposureCardProps & { readonly index: RootIndex | null }) {
+  // Every hook comes before the early return below: a new read may flip the card between the two shapes.
   const spec = useMemo(() => exposureStack(exposure, runId), [exposure, runId])
+  const composition = useMemo(() => compositionView(exposure.exposure, index), [exposure.exposure, index])
+  const [chosen, setChosen] = useState<ExposureViewName>(initialView)
+  // Without a per-instrument series there is nothing to compose, whatever was chosen before.
+  const mode: CompositionMode | null = composition === null || chosen === 'totals' ? null : chosen
+  const input = useMemo(() => (composition === null || mode === null ? null : compositionInput(composition, runId, mode)), [composition, runId, mode])
+  const uid = useId()
   const e = exposure.exposure
   const t = exposure.turnover
   if (!spec || !e) {
@@ -130,15 +159,41 @@ export function ExposureCard({ exposure, runId, link }: { readonly exposure: Run
     gross: sig(e.mean_gross), net: sig(e.mean_net),
     daily: sig(t?.mean_daily), annual: sig(t?.annualised),
   })
+  // The turnover unit belongs to the Totals stack's second pane; the composition views have no such pane.
+  const unit = t && mode === null
+    ? fillCopy(B.exposureUnitTurnover, { label: e.label, unit: e.unit, turnover: t.unit })
+    : fillCopy(B.exposureUnit, { label: e.label, unit: e.unit })
+  const rows = { '--composition-rows': composition?.rows.length ?? 0 } as CSSProperties
   return (
     <Card title={B.exposureTitle} tag={exposure.tag}>
-      <p className="tear-basis">{t ? fillCopy(B.exposureUnitTurnover, { label: e.label, unit: e.unit, turnover: t.unit }) : fillCopy(B.exposureUnit, { label: e.label, unit: e.unit })}</p>
-      <div className="tear-chart tear-chart-short"><LineStack title={spec.title} t={spec.t} panes={spec.panes} link={link} /></div>
+      <p className="tear-basis">{unit}</p>
+      {composition ? <ToggleGroup label={COMPOSITION.toggle} options={VIEW_OPTIONS} value={mode ?? 'totals'} onChange={(v) => setChosen(v as ExposureViewName)} /> : null}
+      {input && composition && mode ? (
+        <>
+          <div className={`tear-chart-composition tear-chart-composition-${mode}`} style={mode === 'heat' ? rows : undefined}>
+            <Composition data={input} mode={mode} chartId={chartId('tear-composition', uid)} />
+          </div>
+          <p className="tear-note">{COMPOSITION.absolute}</p>
+          <p className="tear-note">{COMPOSITION.sampling[composition.sampling]}</p>
+        </>
+      ) : (
+        <div className="tear-chart tear-chart-short"><LineStack title={spec.title} t={spec.t} panes={spec.panes} link={link} /></div>
+      )}
       <p className="tear-note">{means}</p>
       <p className="tear-note">{fillCopy(B.priceBasis, { text: e.price_basis })}</p>
       <p className="tear-note">{e.positions_reconcile ? B.reconcile : B.noReconcile}</p>
     </Card>
   )
+}
+
+/** The instrument index from GET /api/commands (shared with the command line's own read). */
+function ServedIndexExposure(props: ExposureCardProps) {
+  const commands = useCommands()
+  return <ExposureBody {...props} index={commands.data ?? null} />
+}
+
+export function ExposureCard(props: ExposureCardProps) {
+  return props.index === undefined ? <ServedIndexExposure {...props} /> : <ExposureBody {...props} index={props.index} />
 }
 
 export default function RunBooks({ runId, link = '-' }: { readonly runId: string; readonly link?: PanelLink }) {

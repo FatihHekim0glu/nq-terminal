@@ -92,7 +92,7 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
         postMessage(COMMAND_LINE.searchEmpty)
         return 'HL '
       }
-      p.menus.open(searchMenu(action.query, p.options.index))
+      p.menus.open(searchMenu(action.query, p.options.index, { lazy: true }))
       return ''
     case 'tape':
       postMessage(p.options.onTape?.() ? MESSAGES.tapeOn : MESSAGES.tapeOff)
