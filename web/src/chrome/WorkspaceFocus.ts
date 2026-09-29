@@ -18,6 +18,10 @@
 // keyboard reachable. A box that scrolls on its own inside the body (a virtualised grid, a statistics
 // table in a fixed column) carries `data-roving-scroll`: it takes the Tab stop from the body when both
 // render as stops, since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
+// A panel whose main content is one grid behind many controls (REG: 16 round and 8 criteria buttons come
+// first in the walk) marks that grid `data-roving-entry` (U09): it takes the Tab stop ahead of the body and
+// of a scroll box, and ArrowUp on it, once the grid has no row above to move to, steps back to the item
+// before it, so the controls above stay one key away and the grid is one Tab away.
 import { useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react'
 import { registerRovingSync } from './KeyToolbar.panels'
 
@@ -25,6 +29,8 @@ export const ROVING_ATTR = 'data-roving'
 export const ROVING_DEFAULT_ATTR = 'data-roving-default'
 export const ROVING_OVERLAY_ATTR = 'data-roving-overlay'
 export const ROVING_SCROLL_ATTR = 'data-roving-scroll'
+/** U09: the item Tab lands on when the panel has one, ahead of a scroll box and of the body (REG's grid). */
+export const ROVING_ENTRY_ATTR = 'data-roving-entry'
 /** U12: a container of `data-roving` items that reads top to bottom (HELP's mnemonic rail, a KPI tile
  * row), opted in to Up/Down roving instead of leaving those keys to the browser's own scroll, which can
  * carry the focused item out from under the header or the command zone. */
@@ -93,8 +99,8 @@ export function panelTabStops(root: HTMLElement): HTMLElement[] {
 
 /**
  * The Tab stop: `prefer` when it is an item; else the one stop already chosen (one item at tabindex
- * 0); else, among several rendered stops (or none), a box that scrolls on its own, then the default
- * item, then the first.
+ * 0); else, among several rendered stops (or none), the entry item (U09), a box that scrolls on its
+ * own, then the default item, then the first.
  */
 function pickCurrent(items: readonly HTMLElement[], prefer?: HTMLElement): HTMLElement | undefined {
   if (prefer && items.includes(prefer)) return prefer
@@ -102,6 +108,7 @@ function pickCurrent(items: readonly HTMLElement[], prefer?: HTMLElement): HTMLE
   if (stops.length === 1) return stops[0]
   const pool = stops.length > 1 ? stops : items
   return (
+    pool.find((el) => el.hasAttribute(ROVING_ENTRY_ATTR)) ??
     pool.find((el) => el.hasAttribute(ROVING_SCROLL_ATTR)) ??
     pool.find((el) => el.hasAttribute(ROVING_DEFAULT_ATTR)) ??
     pool[0]
@@ -152,6 +159,24 @@ function moveTo(panel: HTMLElement, event: KeyboardEvent, next: HTMLElement): tr
   event.preventDefault()
   syncRoving(panel, next)
   next.focus()
+  return true
+}
+
+/**
+ * Moves to the first of `candidates` that takes focus and makes it the Tab stop; at the end of the walk (no
+ * candidate takes focus) the current item keeps both. An item folded away by CSS (REG's rail and criteria in a
+ * HOME quadrant are `display: none`) cannot take focus, and made the Tab stop it would leave the panel with
+ * none the eye could see, or Tab could reach.
+ */
+function moveToFirst(panel: HTMLElement, event: KeyboardEvent, candidates: readonly HTMLElement[], stay: HTMLElement): true {
+  event.preventDefault()
+  for (const next of candidates) {
+    syncRoving(panel, next)
+    next.focus()
+    if (document.activeElement === next) return true
+  }
+  syncRoving(panel, stay)
+  stay.focus()
   return true
 }
 
@@ -222,6 +247,17 @@ function handleTabKey(panel: HTMLElement, target: HTMLElement, event: KeyboardEv
   return moveTo(panel, event, tabs[at]!)
 }
 
+/** U09: ArrowUp that reached the panel from an entry item (the grid had no row above and left the key
+ * alone) steps back to the nearest item before it in the walk that takes focus. False when it is not an
+ * entry item, or there is no item before it. */
+function handleEntryUp(panel: HTMLElement, target: HTMLElement, event: KeyboardEvent): boolean {
+  if (event.key !== UP_KEY || !target.hasAttribute(ROVING_ENTRY_ATTR)) return false
+  const items = rovingItems(panel)
+  const index = items.indexOf(target)
+  if (index <= 0) return false
+  return moveToFirst(panel, event, items.slice(0, index).reverse(), target)
+}
+
 /** Moves between items on Left and Right (and between tabs on Home and End). True when it handled the key. */
 export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boolean {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return false
@@ -233,6 +269,7 @@ export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boole
   if (tab !== null) return tab
   if (event.key === UP_KEY || event.key === DOWN_KEY) {
     if (handleVerticalKey(panel, target, event)) return true
+    if (handleEntryUp(panel, target, event)) return true
     if (target.hasAttribute(ROVING_ATTR)) keepScrolledIntoView(target)
     return false
   }
@@ -240,10 +277,8 @@ export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boole
   const items = rovingItems(panel)
   const index = items.indexOf(target)
   if (index === -1) return false
-  const step = event.key === NEXT_KEY ? 1 : -1
-  const next = items[Math.min(Math.max(index + step, 0), items.length - 1)]
-  if (!next) return false
-  return moveTo(panel, event, next)
+  const ahead = event.key === NEXT_KEY ? items.slice(index + 1) : items.slice(0, index).reverse()
+  return moveToFirst(panel, event, ahead, target)
 }
 
 /**

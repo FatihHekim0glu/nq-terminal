@@ -154,10 +154,9 @@ function functionAndWordDrafts(q: string): Draft[] {
  *
  * `opts.lazy` says whether to use the lazy index; it defaults to whether the command index is present.
  * The command line always asks for it, so HL keeps its metrics, instruments and help text (or the
- * loading intro) while GET /api/commands is pending or has failed. HELP's own search field passes no
- * option and no command index: it keeps to today's functions and words and never touches the lazy index,
- * because that list acts on run and fill items only (a metric, instrument or help hit would crowd its
- * function list, or do nothing when chosen).
+ * loading intro) while GET /api/commands is pending or has failed. HELP's own search field passes
+ * `lazy: true` and no command index (U03): it lists the help text and the glossary too, so a word only they
+ * hold is found, and it acts on every kind of hit (run, fill and an instrument's context).
  */
 export function searchMenu(query: string, index: CommandIndexData | null, opts: { readonly lazy?: boolean } = {}): MenuModel {
   const q = query.toLowerCase()

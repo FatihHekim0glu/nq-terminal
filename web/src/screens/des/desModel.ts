@@ -135,6 +135,238 @@ export function checkRows(checks: ReadonlyArray<PassCheck>, start: number): Chec
   }))
 }
 
+// ---------------------------------------------------------------- U15: the gating statistic of each check
+
+/** |alpha| above this many %/yr is flagged as an implausible magnitude beside the value (U15). */
+export const IMPLAUSIBLE_ALPHA_PCT = 1000
+const STAT_DECIMALS = 2
+const RATE_DECIMALS = 1
+const P_DECIMALS = 4
+
+/** The recorded figure a boolean check gates on, and where it was read from (never computed). */
+export interface CheckSource {
+  /** What the figure is: 'alpha t (gating: ...)', 'Blocks', 'Cost ladder at 2 ticks', a raw check's name. */
+  readonly label: string
+  /** The figure or figures in full, with signs. */
+  readonly text: string
+  /** One figure for a narrow box: the block that decides, or the figure itself. */
+  readonly short: string
+  readonly unit: string | null
+  /** The record it was read from, as it is named there. */
+  readonly from: string
+  /** The bar the check name spells (`>= 2.5`), or null when the name spells none (the pass bar has it). */
+  readonly threshold: string | null
+}
+
+/** One formatted figure of a raw value; `flag` is set when its magnitude is implausible. */
+export interface CheckCell {
+  readonly path: string
+  readonly text: string
+  readonly flag: string | null
+}
+
+export interface PassCheckRow extends CheckRow {
+  readonly source: CheckSource | null
+  readonly cells: readonly CheckCell[]
+}
+
+const BAR = /(?:^|_)(ge|gt|le|lt|eq)_(\d+)(?:_(\d+))?$/
+const STEP = /^c\d+$/
+const TICKS = /^(\d+)tick$/
+const GATING_KEYS: readonly string[] = ['t_min', 'welch_t', 't']
+const T_KEYS: ReadonlySet<string> = new Set(['t', 't_b', 't_min', 'welch_t'])
+const P_KEYS = /(^|_)p(_one_sided)?$/
+const MEASURE_KEYS = /(^|_)(mean|median|sd)$|^diff$/
+const PLAIN_KEYS: ReadonlySet<string> = new Set(['total'])
+
+const tokensOf = (name: string): string[] => name.toLowerCase().split('_').filter(Boolean)
+
+/** The bar a check name spells: `t_ge_2_5` is `>= 2.5`. */
+function barOf(name: string): string | null {
+  const m = BAR.exec(name.toLowerCase())
+  if (!m) return null
+  const comparator = COMPARATORS[m[1] ?? '']
+  const number = m[3] === undefined ? m[2] : `${m[2]}.${m[3]}`
+  return comparator === undefined || number === undefined ? null : `${comparator} ${number}`
+}
+
+/** The tick count a check name spells: `2tick` or `two_tick` is 2. */
+function ticksOf(tokens: readonly string[]): number | null {
+  for (const token of tokens) {
+    const m = TICKS.exec(token)
+    if (m?.[1] !== undefined) return Number(m[1])
+  }
+  return tokens.includes('two') && tokens.includes('tick') ? 2 : null
+}
+
+const asRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+
+const asNumber = (value: unknown): number | null => (isNumber(value) ? value : null)
+
+/** The unit stem of a headline unit: 'points per trade (NQ), net at 1 tick per side' is 'points per trade (NQ)'. */
+function unitStem(unit: string | null | undefined): string | null {
+  const stem = (unit ?? '').split(',')[0]?.trim() ?? ''
+  return stem === '' ? null : stem
+}
+
+/** A figure of a raw value by the key it is recorded under; `unit` is the headline unit stem. */
+function formatLeaf(key: string, value: number, unit: string | null): { readonly text: string; readonly flag: string | null } {
+  const k = key.toLowerCase()
+  if (/^n(_|$)/.test(k) && Number.isInteger(value)) return { text: String(value), flag: null }
+  if (k === 'alpha_annual_pct') {
+    const flag = Math.abs(value) > IMPLAUSIBLE_ALPHA_PCT ? DES.passChecks.implausible : null
+    return { text: `${formatNumber(value, STAT_DECIMALS)} ${DES.passChecks.perYear}`, flag }
+  }
+  if (k === 'hit_rate') return { text: `${formatNumber(value * 100, RATE_DECIMALS)}%`, flag: null }
+  if (T_KEYS.has(k)) return { text: formatNumber(value, STAT_DECIMALS, true), flag: null }
+  if (P_KEYS.test(k)) return { text: formatNumber(value, P_DECIMALS), flag: null }
+  if (MEASURE_KEYS.test(k)) {
+    const text = formatNumber(value, Math.max(STAT_DECIMALS, decimalsFor([value])))
+    return { text: unit === null ? text : `${text} ${unit}`, flag: null }
+  }
+  if (PLAIN_KEYS.has(k)) return { text: formatNumber(value, STAT_DECIMALS), flag: null }
+  return { text: scalarText(value) ?? MISSING, flag: null }
+}
+
+const isIndex = (key: string): boolean => DIGITS.test(key)
+
+/** A raw value as formatted cells, one per figure: the same paths as `flattenValue`, with units and flags. */
+function rawCells(value: unknown, key: string, unit: string | null, path = ''): CheckCell[] {
+  if (value === null || value === undefined) return []
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return [{ path, text: MISSING, flag: null }]
+    return [{ path, ...formatLeaf(key, value, unit) }]
+  }
+  const scalar = scalarText(value)
+  if (scalar !== null) return [{ path, text: scalar, flag: null }]
+  if (Array.isArray(value)) return value.flatMap((item, i) => rawCells(item, key, unit, path ? `${path}.${i}` : String(i)))
+  const record = asRecord(value)
+  if (record === null) return []
+  return Object.entries(record).flatMap(([child, item]) => {
+    const label = fieldLabel(child)
+    return rawCells(item, isIndex(child) ? key : child, unit, path ? `${path}.${label}` : label)
+  })
+}
+
+/** The figures of a raw value with their leaf key: `alpha.t_min` is [t_min, 1.29]. */
+function leafNumbers(value: unknown, key: string): Array<readonly [string, number]> {
+  if (isNumber(value)) return [[key, value]]
+  const record = asRecord(value)
+  if (record === null) return Array.isArray(value) ? value.flatMap((item) => leafNumbers(item, key)) : []
+  return Object.entries(record).flatMap(([child, item]) => leafNumbers(item, isIndex(child) ? key : child))
+}
+
+function tSource(card: HypothesisCard, bar: string | null): CheckSource | null {
+  const t = asNumber(card.t_stat)
+  if (t === null) return null
+  const text = formatNumber(t, STAT_DECIMALS, true)
+  return { label: card.t_label ?? DES.kpi.t, text, short: text, unit: DES.units.ratio, from: 'card.t_stat', threshold: bar }
+}
+
+function blocksSource(des: DesExtract, bar: string | null): CheckSource | null {
+  const blocks = des.blocks.flatMap((b) => (isNumber(b.value) ? [{ label: b.label, value: b.value }] : []))
+  if (blocks.length === 0) return null
+  const decimals = decimalsFor(blocks.map((b) => b.value))
+  const shown = blocks.map((b) => `${b.label} ${formatNumber(b.value, decimals, true)}`)
+  const upper = bar?.startsWith('<') === true
+  const decisive = blocks.reduce((a, b) => (upper ? (b.value > a.value ? b : a) : (b.value < a.value ? b : a)))
+  return {
+    label: DES.passChecks.blocks,
+    text: shown.join(', '),
+    short: `${decisive.label} ${formatNumber(decisive.value, decimals, true)}`,
+    unit: des.blocks_unit ?? null,
+    from: 'des.blocks',
+    threshold: bar,
+  }
+}
+
+function ladderSource(des: DesExtract, ticks: number, bar: string | null): CheckSource | null {
+  const rung = des.cost_ladder.find((r) => r.ticks_per_side === ticks)
+  if (rung === undefined || !isNumber(rung.value)) return null
+  const text = formatNumber(rung.value, decimalsFor(des.cost_ladder.map((r) => r.value)), true)
+  return {
+    label: fillCopy(DES.passChecks.costLadder, { ticks: ticksLabel(ticks) }), text, short: text,
+    unit: des.cost_ladder_unit ?? null, from: 'des.cost_ladder', threshold: bar,
+  }
+}
+
+function dsrSource(screen: unknown, ticks: number, bar: string | null): CheckSource | null {
+  const headline = asRecord(asRecord(screen)?.['headline'])
+  const dsr = asNumber(asRecord(headline?.[`${ticks}tick`])?.['dsr'])
+  if (dsr === null) return null
+  const text = formatNumber(dsr, decimalsFor([dsr]), true)
+  return {
+    label: fillCopy(DES.passChecks.at, { label: DES.dsrLabel, ticks: ticksLabel(ticks) }), text, short: text,
+    unit: null, from: `headline.${ticks}tick.dsr`, threshold: bar,
+  }
+}
+
+/** A boolean check cN_x reads the raw value row named x (or containing all its words) that the check page also shows. */
+function siblingSource(tokens: readonly string[], checks: readonly PassCheck[], unit: string | null, bar: string | null): CheckSource | null {
+  const sibling = checks.find((c) => c.passed === null && c.value !== null && c.value !== undefined && tokens.every((t) => tokensOf(c.name).includes(t)))
+  if (sibling === undefined) return null
+  const figures = leafNumbers(sibling.value, sibling.name.toLowerCase())
+  const key = GATING_KEYS.find((k) => figures.some(([leaf]) => leaf === k)) ?? (asRecord(sibling.value) === null ? sibling.name.toLowerCase() : null)
+  const figure = figures.find(([leaf]) => leaf === key)
+  if (key === null || figure === undefined) return null
+  const { text } = formatLeaf(key, figure[1], unit)
+  const scalar = asRecord(sibling.value) === null
+  return {
+    label: sibling.name, text, short: text,
+    unit: T_KEYS.has(key) ? DES.units.ratio : /^n(_|$)/.test(key) ? DES.units.count : null,
+    from: scalar ? sibling.name : `${sibling.name}.${key}`, threshold: bar,
+  }
+}
+
+function headlineSource(card: HypothesisCard, bar: string | null): CheckSource | null {
+  const value = asNumber(card.headline_value)
+  if (value === null) return null
+  const text = formatNumber(value, decimalsFor([value]), true)
+  return {
+    label: card.headline_display ?? card.headline_label ?? DES.kpiDescription.headline, text, short: text,
+    unit: card.headline_unit ?? null, from: 'card.headline_value', threshold: bar,
+  }
+}
+
+/**
+ * The recorded statistic a boolean check gates on (U15), chosen by the words of its name: a t check reads the
+ * card's gating t, a blocks check the extract's blocks, a `dsr` check the screen JSON's Sharpe difference at
+ * that cost, a tick check the cost ladder's rung, a cN check the raw value row of the same name, and a mean
+ * check the registered headline. A raw value row and a check that fits none of these have no statistic.
+ */
+function checkSource(detail: HypothesisDetail, check: PassCheck, checks: readonly PassCheck[], unit: string | null): CheckSource | null {
+  if (check.passed === null || check.passed === undefined) return null
+  const tokens = tokensOf(check.name).filter((t, i) => !(i === 0 && STEP.test(t)))
+  const bar = barOf(check.name)
+  const ticks = ticksOf(tokens)
+  if (tokens.includes('dsr')) return ticks === null ? null : dsrSource(detail.screen, ticks, bar)
+  if (tokens.includes('t')) return tSource(detail.card, bar)
+  if (tokens.includes('block') || tokens.includes('blocks')) return blocksSource(detail.des, bar)
+  if (ticks !== null) return ladderSource(detail.des, ticks, bar)
+  const sibling = siblingSource(tokens, checks, unit, bar)
+  if (sibling !== null) return sibling
+  return tokens.includes('mean') ? headlineSource(detail.card, bar) : null
+}
+
+/**
+ * The rows of the Pass checks page and of the Profile's box (U15): each check as `checkRows` gives it, with
+ * the statistic a boolean gates on and, for a raw value, its figures formatted with the headline unit and
+ * flagged when implausible. Every figure is read from the detail; nothing is computed.
+ */
+export function passCheckRows(detail: HypothesisDetail): PassCheckRow[] {
+  const checks = detail.card.pass_checks
+  const unit = unitStem(detail.card.headline_unit)
+  return checkRows(checks, 1).map((row, i) => {
+    const check = checks[i] as PassCheck
+    return {
+      ...row,
+      source: checkSource(detail, check, checks, unit),
+      cells: rawCells(check.value, check.name.toLowerCase(), unit),
+    }
+  })
+}
+
 /** RL5: the block bars as the screen recorded them; null when the screen records no block extract. */
 export function blocksInput(des: DesExtract, name: string): BarLadderInput | null {
   if (!des.blocks_unit || des.blocks.length === 0) return null
@@ -189,7 +421,19 @@ export interface KpiSpec {
   readonly decimals: number
   readonly signed: boolean
   readonly description: string
+  /** The unit for the tile's popover when the face shows something else in `kpi.unit` (U02: the family). */
+  readonly unit?: string
 }
+
+export interface KpiOptions {
+  /** U02: show 'registry family' beside Bonferroni, Holm and BH q. Off for the report and the dossier. */
+  readonly family?: boolean
+}
+
+/** C7: a value read from a registered result carries [PRE-REG]; a card that is a check inside another spec does not. */
+export const cardTag = (card: HypothesisCard): Kpi['tag'] => (card.registered ? SPEC.preReg : SPEC.postHoc)
+
+const ADJUSTED: ReadonlySet<CardKey> = new Set<CardKey>(['bonferroni_p', 'holm_p', 'bh_q'])
 
 type CardKey = 'n' | 't_stat' | 'p' | 'control_p' | 'bonferroni_p' | 'holm_p' | 'bh_q'
 
@@ -203,9 +447,13 @@ const TEST_FIGURES: ReadonlyArray<readonly [CardKey, string, string, number, key
   ['bh_q', DES.kpi.bhq, DES.units.probability, 4, 'bhq'],
 ]
 
-/** The KPI row: the headline, then n, t, p, control p, Bonferroni, Holm and BH q, all basis A. */
-export function registrationKpis(card: HypothesisCard): KpiSpec[] {
-  const tag = card.registered ? SPEC.preReg : SPEC.postHoc
+/**
+ * The KPI row: the headline, then n, t, p, control p, Bonferroni, Holm and BH q, all basis A. With
+ * `family`, the three adjusted p tiles name the family they are adjusted over on their face (U02); the
+ * popover keeps 'probability' as their unit.
+ */
+export function registrationKpis(card: HypothesisCard, options: KpiOptions = {}): KpiSpec[] {
+  const tag = cardTag(card)
   const headline: KpiSpec = {
     kpi: {
       key: 'headline',
@@ -222,12 +470,13 @@ export function registrationKpis(card: HypothesisCard): KpiSpec[] {
   }
   const tests = TEST_FIGURES.map(([key, label, unit, decimals, about]): KpiSpec => {
     const value = card[key]
+    const family = options.family === true && ADJUSTED.has(key)
     return {
       kpi: {
         key,
         label: key === 't_stat' ? (card.t_label ?? label) : label,
         value,
-        unit,
+        unit: family ? DES.family.unit : unit,
         basis: 'A',
         tag,
         note: value === null ? DES.notRecorded : null,
@@ -235,6 +484,7 @@ export function registrationKpis(card: HypothesisCard): KpiSpec[] {
       decimals,
       signed: key === 't_stat',
       description: DES.kpiDescription[about],
+      ...(family ? { unit } : {}),
     }
   })
   return [headline, ...tests]

@@ -36,6 +36,60 @@ const TEAR_TABS = ['EQ', 'DD', 'RET', 'RR', 'MRET', 'DES']
 /** The other tear sheet tabs and DES, for the page of tab `self`. */
 const tearRelated = (self: string): string[] => TEAR_TABS.filter((c) => c !== self)
 
+/** One label the terminal prints, and what it means (U03). */
+export interface GlossaryEntry {
+  readonly term: string
+  readonly meaning: string
+}
+
+/**
+ * The glossary of the labels the terminal prints: the honesty tags, the verdict words, the gate and the
+ * safety segments of the status line. Our own text, read from this project's specs and screens. It is listed
+ * on the HELP page (HELP_TOPICS.HELP.shows below), which HL's help text search reads, so each term is
+ * searchable: before this, HL answered 'Nothing matches' for TWS, DEMO DATA, Own bar and more.
+ */
+export const GLOSSARY: readonly GlossaryEntry[] = [
+  { term: '[PRE-REG]', meaning: 'A value read from a registered result. The terminal did not compute it.' },
+  { term: '[POST HOC]', meaning: 'A value the terminal computed from a series: descriptive and in sample, not a registered test. No p value is shown on a slice you pick.' },
+  { term: '[SPENT]', meaning: 'The sealed window has been opened, so anything on it is descriptive only and never clean out-of-sample evidence. Opened 2026-09-26.' },
+  { term: '[SEALED]', meaning: 'A gate read that touched the sealed window. OOS marks it and the event tape tags it.' },
+  { term: '[IS]', meaning: 'A gate read inside the in-sample window.' },
+  { term: '[PLUMBING]', meaning: 'A paper book row from a plumbing test on delayed data. It is not strategy performance and never feeds a performance chart.' },
+  { term: '[PROBE]', meaning: 'A backtest run kept as a probe, [PROBE: never a result]. It stays out of compare views by default.' },
+  { term: '[OVERLAY]', meaning: 'A registered risk overlay. It is in the multiple-testing family, but its PASS is not an edge.' },
+  { term: '[GATED]', meaning: 'A session rejected by the day gate.' },
+  { term: '[REPAIRED]', meaning: 'A session rebuilt from trades after the day gate rejected it.' },
+  { term: '[UNUSABLE: BALANCE]', meaning: 'A backtest run whose balance check fails. It shows no equity line.' },
+  { term: 'PASS', meaning: 'The hypothesis met its own pre-registered bar. Family-adjusted p is context and does not change it.' },
+  { term: 'FAIL', meaning: 'The hypothesis missed its own pre-registered bar. Family-adjusted p is context and does not change it.' },
+  { term: 'CHECK', meaning: 'A registry row with no own bar, such as an unregistered check. It has no verdict.' },
+  { term: 'Verdict', meaning: 'PASS or FAIL as the result files hold it. The terminal never produces one and never overrides one.' },
+  { term: 'Own bar', meaning: 'The pass bar a hypothesis registered before it was tested, printed verbatim on DES. It decides PASS or FAIL; family-adjusted p never does.' },
+  { term: 'Family-adjusted p', meaning: 'A p adjusted over the whole registry family of k registered tests (Bonf, Holm and BH q; k is on MT). It is context beside the own bar and does not change PASS or FAIL.' },
+  { term: 'Bonf', meaning: 'Bonferroni adjusted p over the registry family. Its boundary is alpha/k.' },
+  { term: 'Holm', meaning: 'Holm step-down adjusted p over the registry family. Its boundary for the i-th smallest p is alpha/(k-i+1).' },
+  { term: 'BH q', meaning: 'Benjamini-Hochberg q over the registry family: the false discovery rate at that p. Its boundary for the i-th smallest p is i alpha/k.' },
+  { term: 'Hash ok', meaning: "ok when the registry's spec sha256 and the terminal's own re-hash of the spec both match. NO names the check that failed." },
+  { term: 'Amend', meaning: 'Accepted amendments of a spec. ok when each still binds to its spec and result, NO when one has changed since it was accepted.' },
+  { term: 'Fence', meaning: "The dashed line at 2022-01-01 on every time axis, labelled IS | 2022+ SPENT. Served data stops at it, and a request past it shows the gate's refusal text." },
+  { term: 'Gate', meaning: 'The OOS gate. Every price the terminal shows is served through it, in sample only, and every read is logged (see OOS).' },
+  { term: 'IS', meaning: 'In sample: the window 2010-01-01 to 2021-12-31, the last day before the fence.' },
+  { term: 'Sealed', meaning: 'The window from 2022-01-01 that research does not read. A sealed confirmation tests one hypothesis on it, with its own alpha and outside the family.' },
+  { term: 'Basis A', meaning: "A hypothesis's screen series at 0, 1 or 2 ticks per side: the research view of a registered test." },
+  { term: 'Basis B', meaning: 'The account of a Nautilus run or of the paper book: its own balances and trades.' },
+  { term: 'DEMO DATA', meaning: 'The demo build: every answer is fixture data served in the browser, fixture captures and synthetic prices, not research results.' },
+  { term: 'FIXTURE DATA', meaning: 'The backend is reading a fixture folder instead of the research files, so the numbers are test data, not research results.' },
+  { term: 'KILL', meaning: "The paper book's kill switch. KILL ON means the live/KILL file is present and the paper book will not trade. The terminal only reads it and never toggles it." },
+  { term: 'TWS', meaning: 'The Interactive Brokers Trader Workstation behind the paper book. The terminal never talks to it, so the status line says TWS not monitored.' },
+  { term: 'Gate reads', meaning: 'The number of price reads the gate has served since the backend started. It rises with every price a screen reads.' },
+  { term: 'READ ONLY', meaning: 'The terminal reads and never writes: it changes no file, registry entry or ledger.' },
+  { term: 'NO ORDER PATH', meaning: 'The terminal has no way to place, change or cancel an order.' },
+  { term: 'R1', meaning: 'The right axis of a chart. A series name followed by (R1) in a legend is drawn against it.' },
+  { term: 'RV22', meaning: '22-session realised volatility, annualised, in per cent. It is [POST HOC], descriptive only.' },
+]
+
+const glossaryLine = (g: GlossaryEntry): string => `${g.term}: ${g.meaning}`
+
 export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
   HOME: {
     summary: 'The launchpad: four linked panels in a 2x2 grid, about 19 grid rows each at 1920x1080.',
@@ -88,7 +142,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     ],
     data: 'GET /api/hypotheses/{name}. Values are read from the result files at fixed paths, never recomputed.',
     honesty: 'The screen JSON\'s dsr field is the Sharpe difference, shown as "Sharpe difference (m - BH)"; it is not the Deflated Sharpe Ratio.',
-    examples: ['{rebal_v0 DES <GO>}', '{volmanaged_v0 DES <GO>}', '{TY1 COMDTY DES <GO>}'],
+    examples: ['{volmanaged_v0 DES <GO>}', '{rebal_v0 DES <GO>}', '{TY1 COMDTY DES <GO>}'],
     related: ['EQ', 'REG', 'MT', 'RUNS'],
   },
   REG: {
@@ -270,10 +324,12 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     related: ['LIVE'],
   },
   HELP: {
-    summary: 'This help: every function, the keys, the keyboard, link groups and licences.',
+    summary: 'This help: every function, the keys, the keyboard, link groups, licences and a glossary of the labels.',
     shows: [
       'The numbered mnemonic index; a number and <GO> opens that function\'s help here.',
       'MNEM HELP or F1 shows one function\'s help; HL searches functions, metrics, instruments, help text, hypotheses and runs.',
+      'The glossary below defines the labels the terminal prints: the honesty tags, the verdict words, the gate and the safety segments of the status line. HL finds each term.',
+      ...GLOSSARY.map(glossaryLine),
     ],
     data: 'GET /api/commands for the hypotheses and runs the command line knows.',
     examples: ['{HELP <GO>}', '{GP HELP <GO>}'],

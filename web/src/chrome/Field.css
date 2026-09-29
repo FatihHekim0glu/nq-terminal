@@ -5,6 +5,9 @@
 .param-row {
   display: flex;
   flex-wrap: wrap;
+  /* G09: never shrink below the wrapped content. A squeezed flex column (a HOME quadrant) would otherwise
+     cut this row to its 26px floor and let the second line print over the next block. */
+  flex: 0 0 auto;
   align-items: center;
   gap: 4px 8px;
   min-height: 26px;

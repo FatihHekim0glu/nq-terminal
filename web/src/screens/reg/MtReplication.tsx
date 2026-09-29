@@ -11,7 +11,7 @@ import { offScaleLines } from '../../charts/echarts/glyphScatterModel'
 import { CONFIRM } from '../../copy/reg'
 import { REPLICATION } from '../../copy/replication'
 import { fillCopy } from '../../copy/workspace'
-import MonitorGrid from '../../grids/MonitorGrid'
+import MonitorGrid, { type OpenOptions } from '../../grids/MonitorGrid'
 import { openDes } from './open'
 import { REPLICATION_COLUMNS, replicationRowId } from './replicationColumns'
 import { buildReplication, replicationScatter, unmatchedLine, untestedLine, type ReplicationPoint, type ReplicationView } from './replicationModel'
@@ -22,7 +22,7 @@ const CHART_ID = 'mt-replication'
 export function ReplicationBody({ view, registryError }: { readonly view: ReplicationView; readonly registryError: string | null }) {
   const input = useMemo(() => replicationScatter(view), [view])
   const off = useMemo(() => offScaleLines(input), [input])
-  const onOpen = useCallback((pair: ReplicationPoint) => openDes(pair.parent), [])
+  const onOpen = useCallback((pair: ReplicationPoint, options?: OpenOptions) => openDes(pair.parent, options), [])
   const unmatched = unmatchedLine(view)
   return (
     <section className="reg-confirm mt-replication" aria-label={REPLICATION.label}>

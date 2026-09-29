@@ -13,7 +13,7 @@ export const HELP = {
   grammarHeading: 'Command grammar',
   grammar: '[NXTW] <context> [SECTOR] <FUNCTION> [args] [HELP], then <GO> (Enter). The context is an instrument (root or generic ticker such as NQ1, with an optional sector key: INDEX, COMDTY or CURNCY), a hypothesis, a run id or 27F; leave it out to use the focused panel\'s link-group context. A number on its own selects that numbered item of the focused screen.',
   examplesLabel: 'Examples',
-  examples: ['{NQ1 Index GP <GO>}', '{ZN COMDTY GP 1h <GO>}', '{NQ GIP 2019-03-14 <GO>}', '{rebal_v0 DES <GO>}', '{27F CORR <GO>}', '{REG <GO>}', '{GP HELP <GO>}'],
+  examples: ['{NQ1 Index GP <GO>}', '{ZN COMDTY GP 1h <GO>}', '{NQ GIP 2019-03-14 <GO>}', '{volmanaged_v0 DES <GO>}', '{27F CORR <GO>}', '{REG <GO>}', '{GP HELP <GO>}'],
   mnemonicsHeading: 'Mnemonics',
   mnemonicsCaption: 'Mnemonic index, numbered for <GO>',
   columns: { number: 'No.', code: 'Mnemonic', screen: 'Screen', context: 'Context', priority: 'Pri', status: 'Status' },

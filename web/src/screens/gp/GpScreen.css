@@ -13,7 +13,6 @@
   font-size: var(--fs-data);
 }
 
-.gp-screen .param-row { flex: 0 0 auto; flex-wrap: wrap; }
 .gp-sep { color: var(--data); padding: 0 2px; }
 
 /* Range row (6.4): contiguous toggle groups separated by a black gap; wraps at narrow widths. */

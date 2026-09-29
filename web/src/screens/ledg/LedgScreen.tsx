@@ -18,7 +18,7 @@ import { useWatchMarks, type WatchMark } from '../../chrome/RecordWatch.marks'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import MonitorGrid, { type MonitorColumn, type OpenOptions } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { withWatchColumn } from '../../grids/watchColumn'
@@ -46,7 +46,7 @@ const rowId = (r: LedgerRow) => `${r.run_id}|${r.ts_utc ?? ''}|${r.exp_id ?? ''}
 const rowLabel = (r: LedgerRow) => r.run_id
 /** A row's key in the record watch: the run id and the time, as state/recordWatch.ts keys the ledger. */
 const watchKey = (r: LedgerRow) => `${r.run_id}@${r.ts_utc ?? ''}`
-const openRun = (r: LedgerRow) => requestLine(`${r.run_id} RUN`)
+const openRun = (r: LedgerRow, options?: OpenOptions) => requestLine(`${r.run_id} RUN`, options?.newPanel ?? false)
 const BALANCE_OPTIONS = BALANCE_FILTERS.map((f) => ({ value: f, label: f === 'all' ? LEDG.all : f }))
 
 const EXPORT_FILE = 'ledger.csv'

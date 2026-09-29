@@ -28,7 +28,7 @@ import { DEFLATED } from '../../copy/deflated'
 import { EVIDENCE, REG_VIEW_COPY } from '../../copy/evidence'
 import { REG } from '../../copy/reg'
 import { SPEC } from '../../copy/tiles'
-import MonitorGrid from '../../grids/MonitorGrid'
+import MonitorGrid, { type OpenOptions } from '../../grids/MonitorGrid'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { saveText } from '../../chrome/download'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
@@ -38,7 +38,7 @@ import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCs
 import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
 import RegCompare from './RegCompare'
-import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, VerdictNotes } from './RegParts'
+import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, RuleNote, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
 import { needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
 import { RegViewBody, useEvidenceData } from './RegViewBody'
@@ -186,15 +186,15 @@ export default function RegScreen(props: ScreenProps) {
     [],
   )
   const evidenceData = useEvidenceData(active, { rows, shown, cards: cards.data, confirmations: confirmations.data, deflated: data.deflated })
-  const onOpen = useCallback((row: RegRow) => openDes(row.name), [])
+  const onOpen = useCallback((row: RegRow, options?: OpenOptions) => openDes(row.name, options), [])
   const tag = <span className="reg-tag">{SPEC.preReg}</span>
 
   const board: ReactNode = (
     <>
       <div className="reg-grid">
-        <MonitorGrid label={REG.gridLabel} rows={shown} columns={boardColumns} rowId={regRowId} rowLabel={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" marked={marked} onMark={onMark} />
+        <MonitorGrid label={REG.gridLabel} rows={shown} columns={boardColumns} rowId={regRowId} rowLabel={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" tabStop marked={marked} onMark={onMark} />
       </div>
-      {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
+      {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : <RuleNote />}
       {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
       <VerdictNotes rows={shown} />
       <AcceptanceBlock acceptances={registry.data?.acceptances} />

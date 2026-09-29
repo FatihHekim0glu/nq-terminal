@@ -62,7 +62,7 @@ export default function RegEvidence({ rows, width }: RegEvidenceProps) {
           rows={rows}
           columns={columns}
           rowId={evidenceRowId}
-          onOpen={(row) => openDes(row.name)}
+          onOpen={(row, options) => openDes(row.name, options)}
           emptyText={REG.empty}
           scroll="panel"
         />

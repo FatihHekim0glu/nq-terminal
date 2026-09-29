@@ -189,6 +189,15 @@ describe('DES, hypothesis tear sheet', () => {
     expect(rows[0]?.textContent).toContain('[PASS]')
   })
 
+  it('U15: the Pass checks tab of volmanaged_v0 carries the Gating statistic column', async () => {
+    await openHypothesis('volmanaged_v0')
+    fireEvent.click(screen.getByRole('tab', { name: `2) ${DES.tabs.checks}` }))
+    const table = screen.getByRole('table', { name: /Pass checks of volmanaged_v0/ })
+    const c = DES.checksColumns
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([c.number, c.key, c.reading, c.result, DES.passChecks.statColumn, c.value])
+    expect(within(table).getByRole('columnheader', { name: 'Gating statistic' })).toBeTruthy()
+  })
+
   it('labels the dsr check as the Sharpe difference (m - BH)', async () => {
     await openHypothesis('volmanaged_v0')
     fireEvent.click(screen.getByRole('tab', { name: `2) ${DES.tabs.checks}` }))

@@ -3,8 +3,13 @@
 // 1 to 4 steps (R), and the result in words (served [IS], PAST FENCE, SEALED READ), so neither the flag
 // nor the bar is ever the only cue.
 import { useCallback, useMemo } from 'react'
+import { useHypotheses } from '../../api/queries'
+import { requestLine } from '../../chrome/CommandLine.bus'
+import { postMessage } from '../../chrome/MessageLine.store'
+import { OOS_ROW } from '../../copy/grids'
 import { OOS } from '../../copy/oos'
-import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import { fillCopy } from '../../copy/workspace'
+import MonitorGrid, { type MonitorColumn, type OpenOptions } from '../../grids/MonitorGrid'
 import type { Schemas } from '../../api/types'
 import {
   SEVERITY_MAX, alertText, dayBandLines, entryResult, entryTime, resultText, severitySteps, severityText, windowText, type OosEntry,
@@ -72,6 +77,18 @@ export default function OosLogGrid({ rows, emptyText, panelId, levels }: OosLogG
   const banded = useMemo(() => dayBandLines(rows), [rows])
   const columns = useMemo(() => oosColumns(levels), [levels])
   const rowClassName = useCallback((e: OosEntry) => (banded.has(e.line_no) ? 'oos-day-band' : undefined), [banded])
+  // G19: Enter, Shift+Enter and Number <GO> on a row open the caller's DES when the caller is a registered
+  // hypothesis (the callers are amber like every name column), and otherwise read the entry's full reason
+  // out; until the hypotheses are known, or if they cannot be read, every caller reads its reason.
+  const hypotheses = useHypotheses().data
+  const registered = useMemo(() => new Set((hypotheses ?? []).map((h) => h.name)), [hypotheses])
+  const onOpen = useCallback(
+    (e: OosEntry, options?: OpenOptions) => {
+      if (registered.has(e.caller)) requestLine(`${e.caller} DES`, options?.newPanel ?? false)
+      else postMessage(fillCopy(OOS_ROW.detail, { caller: e.caller, reason: e.reason }))
+    },
+    [registered],
+  )
   return (
     <MonitorGrid
       label={OOS.gridLabel}
@@ -80,6 +97,7 @@ export default function OosLogGrid({ rows, emptyText, panelId, levels }: OosLogG
       rowId={rowId}
       rowLabel={rowLabel}
       rowClassName={rowClassName}
+      onOpen={onOpen}
       emptyText={emptyText}
       panelId={panelId}
     />

@@ -21,7 +21,7 @@ import { EFFECTIVE_N } from '../../copy/effectiveN'
 import { CONFIRM, MT } from '../../copy/reg'
 import { REPLICATION } from '../../copy/replication'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import MonitorGrid from '../../grids/MonitorGrid'
+import MonitorGrid, { type OpenOptions } from '../../grids/MonitorGrid'
 import { MT_COLUMNS, mtRowId } from './regColumns'
 import { badgeText, confirmationRows, formatCount, formatPValue, verdictTone } from './regModel'
 import { boundaryCheck, buildMtRows, familyLine, linesLine, mtScatterInput, type MtRow, type PScale } from './mtModel'
@@ -120,7 +120,7 @@ function MtConfirmations({ list }: { readonly list: readonly Schemas['Confirmati
 function MtBody({ mt, scale }: { readonly mt: Schemas['MultipleTesting']; readonly scale: PScale }) {
   const input = useMemo(() => mtScatterInput(mt, scale), [mt, scale])
   const rows = useMemo(() => buildMtRows(mt), [mt])
-  const onOpen = useCallback((row: MtRow) => openDes(row.name), [])
+  const onOpen = useCallback((row: MtRow, options?: OpenOptions) => openDes(row.name, options), [])
   return (
     <div className="mt-body">
       <FamilyHead mt={mt} />

@@ -20,9 +20,10 @@ import DesSpent from './DesSpent'
 import {
   MISSING,
   breakEvenText,
-  checkRows,
+  cardTag,
   decimalsFor,
   formatNumber,
+  passCheckRows,
   registrationKpis,
   shortSha,
   spentStrip,
@@ -41,13 +42,23 @@ export interface DesProfileProps {
   readonly onTab: (tab: DesTab) => void
 }
 
+/** U15: each boolean check with the recorded figure it gates on beside its result (page 2 has the whole story). */
 function ChecksBox({ detail, onTab }: { readonly detail: HypothesisDetail; readonly onTab: (tab: DesTab) => void }) {
-  const rows = checkRows(detail.card.pass_checks, 1).filter((r) => r.result !== 'value')
+  const rows = passCheckRows(detail).filter((r) => r.result !== 'value')
   return (
     <DesCard title={DES.cards.checks} n={DES_NUMBERS.checks} jump={{ label: `${DES.tabs.checks} »`, onRun: () => onTab('checks') }}>
       {rows.length === 0 ? <p className="des-note">{DES.checksNone}</p> : (
-        <Pairs rows={rows.map((r) => [r.reading, <span className={r.result === 'pass' ? 'tone-up' : 'tone-down'}>{r.result === 'pass' ? DES.checkPass : DES.checkFail}</span>])} />
+        <Pairs
+          rows={rows.map((r) => [
+            r.reading,
+            <>
+              {r.source ? <span className="des-muted" title={`${r.source.label}, ${r.source.text}`}>{`${r.source.short} `}</span> : null}
+              <span className={r.result === 'pass' ? 'tone-up' : 'tone-down'}>{r.result === 'pass' ? DES.checkPass : DES.checkFail}</span>
+            </>,
+          ])}
+        />
       )}
+      {rows.some((r) => r.source) ? <p className="des-note">{fillCopy(DES.passChecks.boxNote, { tag: cardTag(detail.card) })}</p> : null}
     </DesCard>
   )
 }
@@ -145,10 +156,11 @@ export default function DesProfile({ detail, link, onTab }: DesProfileProps) {
   return (
     <div className="des-page">
       <KpiRow label={DES.kpiRow}>
-        {registrationKpis(detail.card).map((k) => (
-          <KpiTile key={k.kpi.key} kpi={k.kpi} decimals={k.decimals} signed={k.signed} description={k.description} />
+        {registrationKpis(detail.card, { family: true }).map((k) => (
+          <KpiTile key={k.kpi.key} kpi={k.kpi} decimals={k.decimals} signed={k.signed} description={k.description} unit={k.unit} />
         ))}
       </KpiRow>
+      <p className="des-note">{DES.family.note}</p>
       <div className="des-cols">
         <div className="des-col">
           <DesCard title={DES.cards.equity} n={DES_NUMBERS.equity} jump={{ label: fillCopy(DES.go, { code: 'EQ' }), name: DES.jumpNames.EQ, onRun: () => actions.open('EQ') }}>

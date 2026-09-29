@@ -6,17 +6,22 @@
 // is announced through aria-activedescendant, so scrolling never loses focus. Arrow keys, Page Up and
 // Down, Home and End (with Control for the grid ends) move the active cell; Left and Right on the
 // edge cells are left to the panel. Enter on a header sorts; Enter or a double click on a row drills
-// down (onOpen). Rows carry their `N)` numbers and register them for Number <GO> in the panel.
+// down (onOpen); with Shift the drill asks for a new panel (G20). Rows carry their `N)` numbers and
+// register them for Number <GO> in the panel. A cell cut to an ellipsis carries its full text as a title on
+// hover and, when it becomes the active cell, on the message line (U08).
+// Type-ahead (U09): with the grid focused, a letter jumps to the next row whose name starts with it, and letters
+// typed close together build a prefix; it is scoped to the focused grid, so no page shortcut is bound (WCAG 2.1.4).
 // Marking is opt-in: with onMark, Space on the active data row asks the screen to mark it, and rows the
 // screen lists in `marked` are drawn with a fill, a plus and a screen reader word.
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { RowData } from '@tanstack/react-table'
-import { GRID } from '../copy/grids'
+import { COLUMN_HINTS, GRID } from '../copy/grids'
 import { fillCopy } from '../copy/workspace'
 import { postMessage } from '../chrome/MessageLine.store'
 import { usePanelActions } from '../chrome/PanelChrome.actions'
+import Tooltip from '../chrome/Tooltip'
 import { useNumbered, type NumberedItem } from '../chrome/PanelChrome.numbers'
-import { ROVING_ATTR, ROVING_DEFAULT_ATTR, ROVING_SCROLL_ATTR } from '../chrome/WorkspaceFocus'
+import { ROVING_ATTR, ROVING_DEFAULT_ATTR, ROVING_ENTRY_ATTR, ROVING_SCROLL_ATTR } from '../chrome/WorkspaceFocus'
 import { HEADER_ROW, buildDisplayRows, columnWidth, moveActive, numberWidthEm, type DisplayRow, type GridPos } from './MonitorGrid.model'
 import { useGridWindow, type GridScroll } from './MonitorGrid.window'
 import { useSortedRows, type SortSpec } from './MonitorGrid.sort'
@@ -39,7 +44,20 @@ export interface MonitorColumn<Row extends RowData> {
   /** Custom content (a badge, a bar); the cell still sorts by `value`. */
   readonly render?: (row: Row) => ReactNode
   readonly sortable?: boolean
+  /**
+   * What the header means (U03): shown as the house tooltip and read out on the message line when the
+   * keyboard reaches the header. Defaults to the shared hint for the header text (COLUMN_HINTS), if any.
+   */
+  readonly hint?: string
 }
+
+/** What a drill-down may ask besides the row (G20): Shift with Enter or a double click opens the drill in
+ * a new panel. A plain Enter or double click passes no options at all. */
+export interface OpenOptions {
+  readonly newPanel: boolean
+}
+
+const NEW_PANEL: OpenOptions = { newPanel: true }
 
 export interface MonitorGridProps<Row extends RowData> {
   /** The grid's accessible name. */
@@ -52,8 +70,12 @@ export interface MonitorGridProps<Row extends RowData> {
   readonly groupOf?: (row: Row) => string
   /** Show `N)` numbers and register them for Number <GO> (default true). */
   readonly numbered?: boolean
-  /** Drill down: Enter, a double click or Number <GO> on a row. */
-  readonly onOpen?: (row: Row) => void
+  /**
+   * Drill down: Enter, a double click or Number <GO> on a row. Shift with Enter or a double click also
+   * passes `{ newPanel: true }` (G20); a plain press passes the row alone. A grid without onOpen has no
+   * drill, and its description does not say Enter opens a row (G19).
+   */
+  readonly onOpen?: (row: Row, options?: OpenOptions) => void
   /** Label of a row in the Number <GO> registry; defaults to its first column. */
   readonly rowLabel?: (row: Row) => string
   readonly rowClassName?: (row: Row) => string | undefined
@@ -76,12 +98,19 @@ export interface MonitorGridProps<Row extends RowData> {
    * scrollable-region-focusable either way).
    */
   readonly scroll?: GridScroll
+  /**
+   * The grid is its panel's Tab stop (U09, REG: 24 round and criteria buttons come before it in the item
+   * walk). It carries data-roving-entry, and ArrowUp on its header row is left to the panel, which steps
+   * back to the item before the grid.
+   */
+  readonly tabStop?: boolean
 }
 
 const MISSING = '--'
 const roving = { [ROVING_ATTR]: '', [ROVING_DEFAULT_ATTR]: '' }
 // A grid that scrolls in its own box holds the panel's Tab stop, so that box is reachable by Tab.
 const rovingOwnScroll = { ...roving, [ROVING_SCROLL_ATTR]: '' }
+const entry = { [ROVING_ENTRY_ATTR]: '' }
 
 export function signTone(value: number | null | undefined): CellTone | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return undefined
@@ -97,6 +126,45 @@ export function cellText<Row extends RowData>(col: MonitorColumn<Row>, row: Row)
 function cellClass<Row extends RowData>(col: MonitorColumn<Row>, row: Row, active: boolean): string {
   const tone = col.tone?.(row)
   return [col.kind === 'text' ? '' : col.kind, tone ?? '', active ? 'is-active' : ''].filter(Boolean).join(' ')
+}
+
+/** U08: a cell is cut when its content is wider than the cell (a pixel of slack for sub-pixel layout). */
+function isCut(cell: HTMLElement): boolean {
+  return cell.scrollWidth > cell.clientWidth + 1
+}
+
+/** The title of a cell is its full text while the ellipsis hides part of it, and none once it fits. */
+function syncCellTitle(cell: HTMLElement): void {
+  const text = (cell.textContent ?? '').trim()
+  if (text !== '' && isCut(cell)) {
+    if (cell.title !== text) cell.title = text
+  } else if (cell.hasAttribute('title')) cell.removeAttribute('title')
+}
+
+/** Letters typed further apart than this start a new prefix (the same pause as the amber dropdowns). */
+const TYPEAHEAD_IDLE_MS = 800
+
+/**
+ * The index of the next row whose label starts with `query`, case insensitive (U09). A prefix of one
+ * letter, or one letter typed again and again, searches from just after `from` and wraps, so repeating it
+ * cycles every row that starts with it; a longer prefix keeps the row it is on when that still matches.
+ * `labelAt` is null for a row that cannot match (a section heading). -1 when nothing matches.
+ */
+export function typeaheadRow(count: number, labelAt: (index: number) => string | null, query: string, from: number): number {
+  if (query === '' || count === 0) return -1
+  const repeated = query.length > 1 && [...query].every((c) => c === query[0])
+  const needle = (repeated ? query[0]! : query).toLowerCase()
+  const first = query.length > 1 && !repeated ? 0 : 1
+  for (let step = first; step < count + first; step += 1) {
+    const i = (((from + step) % count) + count) % count
+    if (labelAt(i)?.toLowerCase().startsWith(needle)) return i
+  }
+  return -1
+}
+
+/** A single printable character with no chord modifier: what builds the type-ahead prefix. Space is left to marking. */
+function isTypeaheadKey(e: KeyboardEvent): boolean {
+  return e.key.length === 1 && e.key !== ' ' && !e.ctrlKey && !e.metaKey && !e.altKey
 }
 
 interface Ids {
@@ -180,19 +248,22 @@ function GridHeader<Row extends RowData>({ columns, numbered, ids, active, sort,
         ) : null}
         {columns.map((c, i) => {
           const sorted = sort?.id === c.id ? (sort.desc ? 'descending' : 'ascending') : undefined
-          return (
+          const hint = c.hint ?? COLUMN_HINTS[c.header]
+          const th = (
             <th
               key={c.id}
               scope="col"
               id={ids.header(i + offset)}
               className={[c.kind === 'num' ? 'num' : '', isActive(i + offset) ? 'is-active' : ''].filter(Boolean).join(' ') || undefined}
               aria-sort={sorted}
+              data-hint={hint}
               onClick={() => onSort(i + offset)}
             >
               {c.header}
               {sorted ? <span className="sort-mark" aria-hidden="true">{sorted === 'ascending' ? ' ▲' : ' ▼'}</span> : null}
             </th>
           )
+          return hint ? <Tooltip key={c.id} text={hint}>{th}</Tooltip> : th
         })}
       </tr>
     </thead>
@@ -220,7 +291,7 @@ interface RowProps<Row extends RowData> {
   readonly marked: boolean
   readonly rowClassName?: (row: Row) => string | undefined
   readonly onPick: (pos: GridPos) => void
-  readonly onOpen: (row: Row) => void
+  readonly onOpen: (row: Row, options?: OpenOptions) => void
 }
 
 function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active, marked, rowClassName, onPick, onOpen }: RowProps<Row>) {
@@ -240,7 +311,7 @@ function GridRow<Row extends RowData>({ d, index, columns, numbered, ids, active
   const row = d.row
   const pick = (col: number) => () => onPick({ row: index, col })
   return (
-    <tr role="row" className={rowClassName?.(row)} aria-rowindex={index + 2} aria-selected={onRow} data-marked={marked ? 'true' : undefined} onDoubleClick={() => onOpen(row)}>
+    <tr role="row" className={rowClassName?.(row)} aria-rowindex={index + 2} aria-selected={onRow} data-marked={marked ? 'true' : undefined} onDoubleClick={(e) => (e.shiftKey ? onOpen(row, NEW_PANEL) : onOpen(row))}>
       {numbered ? (
         <td role="gridcell" id={ids.cell(index, 0)} className={`hot${onRow && active.col === 0 ? ' is-active' : ''}`} onMouseDown={pick(0)}>
           <span>
@@ -293,7 +364,9 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
   const active = clampPos(rawActive, display.length, colCount)
   const reveal = useRef(false)
 
-  const open = useCallback((row: Row) => onOpen?.(row), [onOpen])
+  // A plain press passes the row alone; only Shift adds the option (G20), so an onOpen written for one argument sees no change.
+  const openWith = useCallback((row: Row, options?: OpenOptions) => (options ? onOpen?.(row, options) : onOpen?.(row)), [onOpen])
+  const open = useCallback((row: Row) => openWith(row), [openWith])
   const select = useCallback((index: number) => {
     setActive((p) => ({ row: index, col: p.col }))
     scrollToRow(index)
@@ -302,6 +375,18 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
   const items = useNumberedRows(display, labelOf, select, open)
   const panel = usePanelActions()
   useNumbered(props.panelId ?? panel.panelId, `grid${base}`, items)
+
+  const typed = useRef({ text: '', at: 0 })
+  /** Adds a key to the prefix (a pause starts a new one) and finds the row it names. */
+  const typeahead = (key: string): number => {
+    const now = Date.now()
+    typed.current = { text: now - typed.current.at > TYPEAHEAD_IDLE_MS ? key : typed.current.text + key, at: now }
+    const labelAt = (i: number) => {
+      const d = display[i]
+      return d?.kind === 'data' ? labelOf(d.row) : null
+    }
+    return typeaheadRow(display.length, labelAt, typed.current.text, active.row)
+  }
 
   const sortByCol = (col: number) => {
     const c = columns[col - (numbered ? 1 : 0)]
@@ -316,7 +401,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
       if (active.row === HEADER_ROW) sortByCol(active.col)
       else {
         const d = display[active.row]
-        if (d?.kind === 'data') open(d.row)
+        if (d?.kind === 'data') openWith(d.row, e.shiftKey ? NEW_PANEL : undefined)
       }
       return
     }
@@ -330,6 +415,17 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
       if (!e.repeat) onMark(d.row)
       return
     }
+    if (isTypeaheadKey(e)) {
+      const at = typeahead(e.key)
+      if (at === -1) return
+      e.preventDefault()
+      reveal.current = true
+      setActive({ row: at, col: active.col })
+      win.scrollToRow(at)
+      return
+    }
+    // A tab stop grid has controls above it: ArrowUp on its header row (no row above to move to) is the panel's.
+    if (props.tabStop && e.key === 'ArrowUp' && active.row === HEADER_ROW) return
     const next = moveActive(active, { key: e.key, ctrl: e.ctrlKey }, { rows: display.length, cols: colCount, page: win.pageRows() })
     if (!next) return
     e.preventDefault()
@@ -343,14 +439,22 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
   useEffect(() => {
     if (!reveal.current || current === undefined) return
     reveal.current = false
-    revealColumn(document.getElementById(current))
+    const cell = document.getElementById(current)
+    revealColumn(cell)
+    // U08 and U03: keyboard users have no hover, so a body cell cut to an ellipsis, or a header with a hint, is read out on the message line.
+    if (cell?.tagName === 'TD' && isCut(cell)) postMessage((cell.textContent ?? '').trim())
+    else if (cell?.tagName === 'TH' && cell.dataset.hint) postMessage(cell.dataset.hint)
   }, [current, revealColumn])
+  const titleCutCell = useCallback((e: MouseEvent<HTMLTableElement>) => {
+    const cell = e.target instanceof Element ? e.target.closest('td') : null
+    if (cell) syncCellTitle(cell)
+  }, [])
   const maxNumber = items.reduce((m, i) => Math.max(m, i.n), 1)
   const widths = useColumnWidths(columns, rows)
 
   return (
     <div className="nqt-grid-wrap">
-      <span id={hintId} className="sr-only">{onMark ? `${GRID.keysHint} ${GRID.markHint}` : GRID.keysHint}</span>
+      <span id={hintId} className="sr-only">{[GRID.keysHint, onOpen ? GRID.openHint : null, onMark ? GRID.markHint : null].filter(Boolean).join(' ')}</span>
       <div ref={win.scrollRef} className={props.scroll === 'panel' ? 'nqt-grid-scroll nqt-grid-scroll--panel' : 'nqt-grid-scroll'}>
         <table
           className="nqt-grid"
@@ -362,7 +466,9 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
           aria-activedescendant={current}
           tabIndex={0}
           onKeyDown={onKeyDown}
+          onMouseOver={titleCutCell}
           {...(props.scroll === 'panel' ? roving : rovingOwnScroll)}
+          {...(props.tabStop ? entry : null)}
         >
           <colgroup>
             {numbered ? <col style={{ width: `${numberWidthEm(maxNumber)}em` }} /> : null}
@@ -378,7 +484,7 @@ export default function MonitorGrid<Row extends RowData>(props: MonitorGridProps
               const d = display[item.index]
               if (!d) return null
               const isMarked = d.kind === 'data' && marked?.has(rowId(d.row)) === true
-              return <GridRow key={d.key} d={d} index={item.index} columns={columns} numbered={numbered} ids={ids} active={active} marked={isMarked} rowClassName={rowClassName} onPick={setActive} onOpen={open} />
+              return <GridRow key={d.key} d={d} index={item.index} columns={columns} numbered={numbered} ids={ids} active={active} marked={isMarked} rowClassName={rowClassName} onPick={setActive} onOpen={openWith} />
             })}
             {win.spacer.bottom > 0 ? <tr aria-hidden="true" className="nqt-grid-spacer"><td colSpan={colCount} style={{ height: `${win.spacer.bottom}px` }} /></tr> : null}
           </tbody>

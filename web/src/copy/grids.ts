@@ -12,7 +12,10 @@ export const GRID = {
   headingNumber: '{n}) {label} is a heading: rows {first} to {last}.',
   headingNumberEmpty: '{n}) {label} is a heading.',
   keysHint:
-    'Arrow keys move between cells, Page Up and Page Down by a page, Home and End along the row, Control with Home or End to the first or last row. Enter on a column header sorts by it; Enter on a row opens it.',
+    'Arrow keys move between cells, Page Up and Page Down by a page, Home and End along the row, Control with Home or End to the first or last row. Enter on a column header sorts by it. Type a letter to jump to the next row whose name starts with it.',
+  /** Added to the grid's description only when the grid can open a row (it has an onOpen): a grid with
+   * no drill, such as the OOS log before G19, must not promise one. */
+  openHint: 'Enter on a row opens it.',
   /** Row marking (roadmap 9). The glyph is ASCII on purpose: the fonts' cover of a triangle is unverified,
    * and a fallback glyph would shift the number column. */
   markGlyph: '+',
@@ -23,6 +26,39 @@ export const GRID = {
   empty: 'No rows.',
   sortAscending: 'sorted ascending',
   sortDescending: 'sorted descending',
+} as const
+
+const BONF_HINT = 'Bonferroni adjusted p, over the whole registry family of k registered tests (k is on MT). Context only: it never changes PASS or FAIL.'
+const HOLM_HINT = 'Holm step-down adjusted p, over the whole registry family of k registered tests (k is on MT). Context only: it never changes PASS or FAIL.'
+const BH_HINT = 'Benjamini-Hochberg q, the false discovery rate at this p, over the whole registry family (k is on MT). Context only: it never changes PASS or FAIL.'
+
+/**
+ * What a column header means, for the ones that were bare words (U03). Keyed by the header text the REG and MT
+ * grids draw (copy/grids.hints.test.ts keeps the keys honest); a column may also carry its own `hint`, which wins.
+ * MonitorGrid shows it as the house tooltip on hover and reads it out on the message line when the keyboard
+ * reaches the header.
+ */
+export const COLUMN_HINTS: Readonly<Record<string, string>> = {
+  Verdict: "PASS or FAIL against the hypothesis's own pre-registered bar. Family-adjusted p is context and does not change it.",
+  Bonf: BONF_HINT,
+  'Bonf (family)': BONF_HINT,
+  Holm: HOLM_HINT,
+  'Holm (family)': HOLM_HINT,
+  'BH q': BH_HINT,
+  'BH q (family)': BH_HINT,
+  'Spec sha': "The spec file's sha256, shortened. Hash ok says whether it still matches.",
+  'Hash ok': "ok when the registry's spec sha256 and the terminal's own re-hash of the spec both match. NO names the check that failed.",
+  Tag: 'edge, [OVERLAY] (a registered risk overlay, in the family but not an edge) or check (a row with no own bar).',
+  Amend: 'Accepted amendments of the spec. ok when each still binds to its spec and result, NO when one has changed since it was accepted.',
+  'Bonf line': "The Bonferroni boundary, alpha/k: a p under it clears the family correction. Context only: PASS or FAIL is the spec's own bar.",
+  'Holm line': "The Holm boundary for this rank, alpha/(k-i+1) for the i-th smallest p: a p under it clears the family correction. Context only: PASS or FAIL is the spec's own bar.",
+  'BH line': "The Benjamini-Hochberg boundary for this rank, i alpha/k for the i-th smallest p: a p under it clears the family correction. Context only: PASS or FAIL is the spec's own bar.",
+}
+
+/** The OOS log's row open (G19): a caller that is not a registered hypothesis has no DES, so Enter reads the
+ * entry's full reason out on the message line instead of doing nothing. */
+export const OOS_ROW = {
+  detail: '{caller}: {reason}',
 } as const
 
 /**

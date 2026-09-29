@@ -1,6 +1,10 @@
 // Copy for the REG (registry board) and MT (multiple-testing) screens (UI_SPEC 7 and 10; look spec 7.2).
 // UK spelling, no em or en dashes, sentence case; tags and verdict badges keep their upper case.
 
+// U02 (polish 3): the family of the adjusted columns, and the rule that a verdict is each hypothesis's own bar.
+const FAMILY_NOTE = 'Bonf, Holm and BH q are adjusted over the registry family (its size k is on MT).'
+const VERDICT_NOTE = "PASS/FAIL is each hypothesis's own pre-registered bar; family-adjusted p is context and does not change it."
+
 export const REG = {
   title: 'Registry board',
   gridLabel: 'Registry board: every registry row',
@@ -61,7 +65,12 @@ export const REG = {
     yes: 'yes',
     no: 'CHANGED',
   },
-  compactNote: 'Columns hidden here (maximise the panel to see them): round, control p, Bonferroni, spec sha. 98) Export saves every column.',
+  // U02: which family the adjusted columns are adjusted over, and that PASS/FAIL is each hypothesis's own bar
+  // whatever the adjusted p says. The verdict note is also the title of every verdict cell; compactNote carries
+  // both for the narrow board, whose column headers cannot; the full board's note is RegParts's RuleNote.
+  familyNote: FAMILY_NOTE,
+  verdictNote: VERDICT_NOTE,
+  compactNote: `Columns hidden here (maximise the panel to see them): round, control p, Bonferroni, spec sha. 98) Export saves every column. ${FAMILY_NOTE} ${VERDICT_NOTE}`,
   overlayNote: '[OVERLAY]: a registered risk overlay, in the multiple-testing family, but its PASS is not an edge.',
   notesLabel: 'Verdict notes',
   noteSeparator: ': ',

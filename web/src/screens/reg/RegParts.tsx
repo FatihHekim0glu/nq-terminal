@@ -91,6 +91,18 @@ export function CriteriaBlock({ panelId, items, selected, onToggle, tag }: Crite
   )
 }
 
+/** U02, the full board: the rule PASS/FAIL is read by and the family Bonf, Holm and BH q are adjusted over, in one
+ * muted note under the registry grid. The narrow board cannot show those columns and says the same in
+ * REG.compactNote instead, so this is rendered only when the board is not compact. */
+export function RuleNote() {
+  return (
+    <p className="reg-msg reg-muted reg-note">
+      <span>{REG.verdictNote}</span>{' '}
+      <span>{REG.familyNote}</span>
+    </p>
+  )
+}
+
 /** The verdict notes of the rows shown (`dtsmom_v0: multi-asset universe ...`), nothing when none has one. */
 export function VerdictNotes({ rows }: { readonly rows: readonly RegRow[] }) {
   const noted = rows.filter((r) => r.note !== null && r.note !== '')

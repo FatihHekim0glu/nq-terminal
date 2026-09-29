@@ -107,8 +107,12 @@
 .run-tag-down { color: var(--c-down); }
 
 /* ---------- RUN header strip (22px rows) ---------- */
+/* G09: the strip and the ledger wrap to more than their min-height in a narrow panel, and the chart's
+   240px floor otherwise takes the room from them (default flex-shrink 1), so their lines overprinted and
+   covered the focused Copy button. flex 0 0 auto lets the chart area take the squeeze instead. */
 .run-strip {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 0 12px;
@@ -123,6 +127,7 @@
 
 .run-ledger {
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;

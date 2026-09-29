@@ -22,7 +22,7 @@ import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
-import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
+import MonitorGrid, { type MonitorColumn, type OpenOptions } from '../../grids/MonitorGrid'
 import { gridCsv } from '../../grids/gridCsv'
 import { withWatchColumn } from '../../grids/watchColumn'
 import { HELP_LINES, RUNS } from '../../copy/runs'
@@ -41,7 +41,8 @@ const COMPARE = 'compare'
 type RunsView = RunsTab | typeof COMPARE
 const COMPARE_MIN = 2
 const runId = (r: RunSummary) => r.run_id
-const openRun = (r: RunSummary) => requestLine(`${r.run_id} RUN`)
+// Shift with Enter or a double click opens RUN in a new panel (G20); a plain press replaces the RUNS panel.
+const openRun = (r: RunSummary, options?: OpenOptions) => requestLine(`${r.run_id} RUN`, options?.newPanel ?? false)
 
 function useShownRuns(runs: readonly RunSummary[], tab: RunsTab, filter: string, strategy: string): readonly RunSummary[] {
   return useMemo(

@@ -24,8 +24,12 @@ export const REG_COLUMNS: readonly MonitorColumn<RegRow>[] = [
   { id: 'round', header: C.round, width: 50, kind: 'num', value: (r) => r.round, format: (r) => formatCount(r.round) },
   { id: 'tag', header: C.tag, width: 76, kind: 'text', value: (r) => r.tag, format: (r) => tagText(r.tag), tone: (r) => (r.tag === 'check' ? 'muted' : undefined) },
   {
+    // U02: the badge is the hypothesis's own bar, not a family-adjusted verdict; the title says so on every row.
+    // The headers of the adjusted p columns stay short ('Bonf', 'Holm', 'BH q'): the family they are adjusted
+    // over is REG.familyNote (the narrow board's note carries it; the full board's is RegParts's RuleNote).
     id: 'verdict', header: C.verdict, width: 60, kind: 'text', value: (r) => r.badge,
     format: (r) => badgeText(r.badge), tone: (r) => verdictTone(r.badge),
+    render: (r) => <span title={REG.verdictNote}>{badgeText(r.badge)}</span>,
   },
   // U17: 'n' alone read as the same unit as MT's DSR table n (always sessions); REG's n can be trades,
   // months or sessions, so the header names it (DEFLATED.regNColumn: copy/reg.ts is another worker's file

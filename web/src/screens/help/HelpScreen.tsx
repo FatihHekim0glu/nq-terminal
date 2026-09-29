@@ -15,6 +15,7 @@ import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
 import { findMnemonic, MNEMONICS, type MnemonicCode, type MnemonicDef } from '../../commands/registry'
+import { loadSearchIndex, loadedSearchIndex } from '../../commands/searchIndexLoader'
 import { HELP, HELP_KEYS } from '../../copy/help'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL } from '../../copy/workspace'
 import HelpIndex, { LICENCES } from './HelpIndex'
@@ -63,23 +64,40 @@ function HelpSearchResults({ search }: { readonly search: HelpSearch }) {
 
 /**
  * The search state. A plain Enter still runs HL on the command line (D14, and its history line) and hides
- * the list until the next edit, so the results never show twice. Choosing a match (U19; #13: a function
- * that takes a context, or a chrome word, used to loop back into the same search): a function with no
- * context runs its line; one that takes a context opens its help page here, as the contents rail does;
- * a chrome word (HL, NXTW, MENU...) runs itself.
+ * the list until the next edit, so the results never show twice. The matches come from the lazy search index
+ * too (U03), so the glossary and the help text are found here as they are by HL: until it has loaded the list
+ * is today's functions and words with a line saying so, and it is drawn again when the index lands. Choosing a
+ * match (U19; #13: a function that takes a context, or a chrome word, used to loop back into the same search): a
+ * function with no context runs its line; one that takes a context opens its help page here, as the contents
+ * rail does; a chrome word (HL, NXTW, MENU...) and a metric or a help text hit (`<CODE> HELP`) run themselves;
+ * an instrument loads as the context of the command line.
  */
 function useHelpSearch(openTopic: (code: MnemonicCode) => void): HelpSearch {
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [row, setRow] = useState<number | null>(null)
+  const [indexReady, setIndexReady] = useState(() => loadedSearchIndex() !== null)
   const listId = useId()
-  const menu = useMemo(() => (query.trim() === '' || submitted ? null : searchMenu(query, null)), [query, submitted])
+  useEffect(() => {
+    if (indexReady) return undefined
+    let live = true
+    void loadSearchIndex().then((index) => {
+      if (live && index) setIndexReady(true)
+    })
+    return () => {
+      live = false
+    }
+  }, [indexReady])
+  // `indexReady` is not read below: it makes the list ask for the index's rows again once it has arrived.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const menu = useMemo(() => (query.trim() === '' || submitted ? null : searchMenu(query, null, { lazy: true })), [query, submitted, indexReady])
   const close = () => {
     setQuery('')
     setRow(null)
   }
   const choose = (item: MenuItem) => {
     if (item.act.kind === 'run') requestLine(item.act.line)
+    else if (item.act.kind === 'context') requestLine(item.act.context.value)
     else if (item.act.kind === 'fill') {
       const def = findMnemonic(item.label)
       if (def) openTopic(def.code)
