@@ -18,6 +18,7 @@
 // is still loading, see useChartLibrary in src/charts/lazy.ts).
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type Locator, type Page, type PageScreenshotOptions, type Request } from '@playwright/test'
+import { recordDemoRefusals, withoutDemoRefusals } from './target.ts'
 
 export const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -37,24 +38,29 @@ export const GALLERY_VIEWPORTS: readonly GalleryViewport[] = [
 
 export interface GalleryWatch {
   readonly requests: Request[]
+  /** Console errors as `<text> <url of the source>` (the URL names the resource of a "Failed to load resource" line), and page errors. */
   readonly errors: string[]
+  /** URLs the offline demo API declined (its refusal header); always empty against the fixture backend. */
+  readonly demoRefused: Set<string>
 }
 
 /** Start recording requests, console errors, page errors and CSP reports. Call before openGallery. */
 export async function watchGallery(page: Page): Promise<GalleryWatch> {
   const requests: Request[] = []
   const errors: string[] = []
+  const demoRefused = new Set<string>()
   page.on('request', (r) => requests.push(r))
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text())
+    if (m.type() === 'error') errors.push(`${m.text()} ${m.location().url}`)
   })
   page.on('pageerror', (e) => errors.push(String(e)))
+  recordDemoRefusals(page, demoRefused)
   await page.addInitScript(() => {
     const seen: string[] = []
     Object.defineProperty(window, '__nqtCsp', { value: seen, configurable: true })
     document.addEventListener('securitypolicyviolation', (e) => seen.push(`${e.violatedDirective} ${e.blockedURI}`))
   })
-  return { requests, errors }
+  return { requests, errors, demoRefused }
 }
 
 /** Load one entry at the given size and wait until it is ready; returns the gallery's <main>. */
@@ -111,7 +117,7 @@ export async function expectGalleryAxeClean(page: Page): Promise<void> {
 /** axe clean, no console or page errors, no CSP report, and every request a same-origin GET. */
 export async function expectGalleryClean(page: Page, watch: GalleryWatch): Promise<void> {
   await expectGalleryAxeClean(page)
-  expect(watch.errors).toEqual([])
+  expect(withoutDemoRefusals(watch.errors, watch.demoRefused)).toEqual([])
   const csp = await page.evaluate(() => (window as unknown as { __nqtCsp?: string[] }).__nqtCsp ?? [])
   expect(csp).toEqual([])
   const origin = new URL(page.url()).origin

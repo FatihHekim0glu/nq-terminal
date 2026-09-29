@@ -4,6 +4,7 @@
 // every request a same-origin GET carrying the client header, no console error, no page error, no
 // CSP report, and no served price point past the fence.
 import { expect, type Locator, type Page, type Request, type Response } from '@playwright/test'
+import { recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
 import { isPriceEndpoint, nonGetRequests, pointsPastFence } from './scan.ts'
 
 export const CLIENT_HEADER = 'x-nqt-client'
@@ -17,6 +18,8 @@ export interface FlowWatch {
   readonly fence: string[]
   /** Price responses read so far (bodies are read as they arrive). */
   readonly priceReads: Array<Promise<void>>
+  /** URLs the offline demo API declined (its refusal header); always empty against the fixture backend. */
+  readonly demoRefused: Set<string>
 }
 
 function watchPrices(page: Page, fence: string[], priceReads: Array<Promise<void>>): void {
@@ -40,18 +43,20 @@ export async function watchFlow(page: Page): Promise<FlowWatch> {
   const errors: string[] = []
   const fence: string[] = []
   const priceReads: Array<Promise<void>> = []
+  const demoRefused = new Set<string>()
   page.on('request', (r) => requests.push(r))
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(`${m.text()} ${m.location().url}`)
   })
   page.on('pageerror', (e) => errors.push(String(e)))
   watchPrices(page, fence, priceReads)
+  recordDemoRefusals(page, demoRefused)
   await page.addInitScript(() => {
     const seen: string[] = []
     Object.defineProperty(window, '__nqtCsp', { value: seen, configurable: true })
     document.addEventListener('securitypolicyviolation', (e) => seen.push(`${e.violatedDirective} ${e.blockedURI}`))
   })
-  return { requests, errors, fence, priceReads }
+  return { requests, errors, fence, priceReads, demoRefused }
 }
 
 export const commandLine = (page: Page): Locator => page.getByRole('combobox', { name: 'Command line' })
@@ -135,7 +140,9 @@ export async function expectCleanFlow(page: Page, watch: FlowWatch): Promise<voi
   const streams = watch.requests.filter(isStream)
   const accepts = await Promise.all(streams.map((r) => r.headerValue('accept')))
   expect(accepts.filter((a) => a !== 'text/event-stream')).toEqual([])
-  expect(watch.errors).toEqual([])
+  // The offline demo API answers a request its dataset cannot serve with a 404 and a refusal header: the
+  // browser's console line for exactly those URLs is not an error of the page. Nothing else is dropped.
+  expect(withoutDemoRefusals(watch.errors, watch.demoRefused)).toEqual([])
   expect(await page.evaluate(() => (window as unknown as { __nqtCsp: string[] }).__nqtCsp)).toEqual([])
   await Promise.all(watch.priceReads)
   expect(watch.fence).toEqual([])

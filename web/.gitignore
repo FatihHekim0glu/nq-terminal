@@ -4,3 +4,5 @@ dist
 e2e/.results
 dist-gallery
 dist-demo
+e2e/__screenshots__/offline-*
+e2e/offline/__screenshots__
