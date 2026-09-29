@@ -1,8 +1,8 @@
-// Copy for the dossier (roadmap #15 part 2): the evidence pack and the print dossier made from the tear
-// sheet or DES. Read only by the lazy code in src/export: nothing in the shell imports this file, so the
-// words stay out of the first load. UK spelling, no em or en dashes. `{name}` slots are filled by
-// fillCopy() (copy/workspace.ts). Words that already exist in DES, DES_REPORT, TEAR and TEAR_SV7 are reused
-// from there, not repeated here.
+// Copy for the dossier (roadmap #15 parts 2 and 3): the evidence pack and the print dossier made from the
+// tear sheet or DES. Read only by the lazy code in src/export and by the Workspace's export menu
+// (chrome/panelExport.ts): nothing in the shell imports this file, so the words stay out of the first load.
+// UK spelling, no em or en dashes. `{name}` slots are filled by fillCopy() (copy/workspace.ts). Words that
+// already exist in DES, DES_REPORT, TEAR and TEAR_SV7 are reused from there, not repeated here.
 
 export const DOSSIER = {
   menuPack: 'Evidence pack (HTML)',
@@ -12,6 +12,13 @@ export const DOSSIER = {
   packSavedOne: 'Saved the evidence pack as {file} with 1 chart, built from the answers already on screen.',
   packSavedNone: 'Saved the evidence pack as {file} with no charts, built from the answers already on screen.',
   failed: 'The dossier could not be made: {detail}.',
+  /** The Options row that opens the browser's print dialog for the dossier (roadmap 15 part 3). */
+  menuPrint: 'Print dossier',
+  /** Said as the print dialog opens; `{name}` is the dossier's title. The skipped-chart note of GRAB may follow. */
+  printOpened: 'Print dialog opened for {name}. Choose Save as PDF to keep a copy.',
+  printUnavailable: 'This browser cannot print from here.',
+  /** The printed page's accessible name; `{title}` is the dossier's title. */
+  printLabel: 'Print dossier: {title}',
   tearMissing: 'The tear sheet of {name} is not loaded, so it is not in this dossier. Open {name} EQ first; the dossier makes no request.',
   descriptive: 'Descriptive: the terminal adds no verdict. Verdicts, pass checks and hashes are read from the research files.',
   generated: 'Made {time} ET from GET answers already in this browser; nothing was recomputed.',

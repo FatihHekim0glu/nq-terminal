@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-// The Options rows and the runner behind GRAB <GO> (roadmap 15), and the Evidence pack row (roadmap 15 part 2).
-// panelExport.ts is what the Workspace imports; the grab itself (src/export/grab/run.ts) and the pack
-// (src/export/pack/run.ts) are reached only through dynamic imports, mocked here.
+// The Options rows and the runner behind GRAB <GO> (roadmap 15), the Evidence pack row (roadmap 15 part 2)
+// and the Print dossier row (roadmap 15 part 3). panelExport.ts is what the Workspace imports; the grab
+// itself (src/export/grab/run.ts), the pack (src/export/pack/run.ts) and the print dossier
+// (src/export/print/run.tsx) are reached only through dynamic imports, mocked here.
 import { QueryClient } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiQueryKey } from '../api/queryKey'
@@ -10,14 +11,28 @@ import { GRAB } from '../copy/grab'
 import { fillCopy } from '../copy/workspace'
 import type { GrabRequest } from '../export/grab/run'
 import type { PackRequest } from '../export/pack/run'
+import type { PrintRequest } from '../export/print/run'
 import { resetMessage, useMessage } from './MessageLine.store'
-import { panelExportEntries, panelTarget, readHealth, resetGrabRunner, resetPackRunner, runGrab, runPack, type PanelExportTarget } from './panelExport'
+import {
+  panelExportEntries,
+  panelTarget,
+  readHealth,
+  resetGrabRunner,
+  resetPackRunner,
+  resetPrintRunner,
+  runGrab,
+  runPack,
+  runPrint,
+  type PanelExportTarget,
+} from './panelExport'
 import { registerPanelSource, resetPanelSources } from './panelSources'
 
 const grabPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
 vi.mock('../export/grab/run', () => ({ grabPanel }))
 const packPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
 vi.mock('../export/pack/run', () => ({ packPanel }))
+const printPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
+vi.mock('../export/print/run', () => ({ printPanel }))
 
 const TARGET: PanelExportTarget = { panelId: 'panel_3', code: 'EQ', number: 3, group: 'A' }
 const HEALTH = { now_utc: '2026-09-26T12:00:00Z', fixture_mode: true }
@@ -34,8 +49,11 @@ beforeEach(() => {
   grabPanel.mockImplementation(async () => true)
   packPanel.mockClear()
   packPanel.mockImplementation(async () => true)
+  printPanel.mockClear()
+  printPanel.mockImplementation(async () => true)
   resetGrabRunner()
   resetPackRunner()
+  resetPrintRunner()
   resetPanelSources()
   resetMessage()
 })
@@ -234,13 +252,20 @@ function packed(): PackRequest {
 
 const labels = (target: PanelExportTarget = TARGET) => panelExportEntries(target, () => null).map((e) => e.label)
 
+/** The row called `label`, so a test does not depend on where the rows sit in the list. */
+function rowOf(label: string, health: () => typeof HEALTH | null = () => null) {
+  const row = panelExportEntries(TARGET, health).find((e) => e.label === label)
+  if (!row) throw new Error(`no ${label} row`)
+  return row
+}
+
 describe('the Evidence pack row', () => {
   it('is offered only for a panel whose screen registered a dossier', () => {
     expect(labels()).toEqual([GRAB.menuImage])
     registerPanelSource('panel_9', { provenance: null, dossier: () => null })
     expect(labels()).toEqual([GRAB.menuImage])
     registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
-    expect(labels()).toEqual([GRAB.menuImage, DOSSIER.menuPack])
+    expect(labels()).toEqual([GRAB.menuImage, DOSSIER.menuPack, DOSSIER.menuPrint])
   })
 
   it('is not offered for a panel that registered only a provenance', () => {
@@ -259,7 +284,7 @@ describe('the Evidence pack row', () => {
   it('comes after Grab as image and Copy image', () => {
     supportClipboardImages()
     registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
-    expect(labels()).toEqual([GRAB.menuImage, GRAB.menuCopy, DOSSIER.menuPack])
+    expect(labels()).toEqual([GRAB.menuImage, GRAB.menuCopy, DOSSIER.menuPack, DOSSIER.menuPrint])
   })
 
   it('is called Evidence pack (HTML)', () => {
@@ -269,19 +294,20 @@ describe('the Evidence pack row', () => {
   it('packs the panel with the health read at that moment, and nothing else', async () => {
     registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
     let health: typeof HEALTH | null = null
-    const pack = panelExportEntries(TARGET, () => health).at(-1)
+    const pack = rowOf(DOSSIER.menuPack, () => health)
     health = HEALTH
-    pack?.onSelect()
+    pack.onSelect()
     await vi.waitFor(() => expect(packPanel).toHaveBeenCalled())
     expect(packed()).toEqual({ panelId: 'panel_3', health: HEALTH })
     expect(grabPanel).not.toHaveBeenCalled()
+    expect(printPanel).not.toHaveBeenCalled()
   })
 
   it('leaves the check of the dossier to the runner, so a row built earlier still works when chosen', async () => {
     registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
-    const pack = panelExportEntries(TARGET, () => null).at(-1)
+    const pack = rowOf(DOSSIER.menuPack)
     resetPanelSources()
-    pack?.onSelect()
+    pack.onSelect()
     await vi.waitFor(() => expect(packPanel).toHaveBeenCalled())
   })
 })
@@ -458,7 +484,7 @@ describe('the lazy pack runner is loaded only when it can be used, and a failed 
       return { packPanel: ok }
     })
     exported.sources.registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
-    const pack = exported.panelExportEntries(TARGET, () => null).at(-1)
+    const pack = exported.panelExportEntries(TARGET, () => null).find((e) => e.label === DOSSIER.menuPack)
     await settleImport()
     expect(exported.message.getState().text).toBe('')
     pack?.onSelect()
@@ -470,7 +496,7 @@ describe('the lazy pack runner is loaded only when it can be used, and a failed 
     const ok = vi.fn(async () => true)
     const exported = await fresh(() => ({ packPanel: ok }))
     exported.sources.registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
-    const pack = exported.panelExportEntries(TARGET, () => HEALTH).at(-1)
+    const pack = exported.panelExportEntries(TARGET, () => HEALTH).find((e) => e.label === DOSSIER.menuPack)
     await settleImport()
     pack?.onSelect()
     expect(ok).toHaveBeenCalledTimes(1)
@@ -489,5 +515,191 @@ describe('the lazy pack runner is loaded only when it can be used, and a failed 
     exported.panelExportEntries(TARGET, () => null)
     await settleImport()
     expect(loads).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------- the Print dossier row (roadmap 15 part 3)
+
+/** The call the mocked print runner received, typed as the request the real one takes. */
+function printed(): PrintRequest {
+  const call = printPanel.mock.calls.at(-1)
+  if (!call) throw new Error('the print runner was not called')
+  return call[0] as PrintRequest
+}
+
+describe('the Print dossier row', () => {
+  it('is called Print dossier', () => {
+    expect(DOSSIER.menuPrint).toBe('Print dossier')
+  })
+
+  it('is offered only for a panel whose screen registered a dossier', () => {
+    expect(labels()).not.toContain(DOSSIER.menuPrint)
+    registerPanelSource('panel_9', { provenance: null, dossier: () => null })
+    expect(labels()).not.toContain(DOSSIER.menuPrint)
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    expect(labels()).toContain(DOSSIER.menuPrint)
+  })
+
+  it('is not offered for a panel that registered only a provenance', () => {
+    registerPanelSource(TARGET.panelId, { provenance: { tags: [], basis: null, unit: null, window: null, n: null, source: null, specSha: null } })
+    expect(labels()).toEqual([GRAB.menuImage])
+  })
+
+  it('comes straight after the Evidence pack row', () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    const all = labels()
+    expect(all.indexOf(DOSSIER.menuPrint)).toBe(all.indexOf(DOSSIER.menuPack) + 1)
+    expect(all.at(-1)).toBe(DOSSIER.menuPrint)
+    supportClipboardImages()
+    expect(labels()).toEqual([GRAB.menuImage, GRAB.menuCopy, DOSSIER.menuPack, DOSSIER.menuPrint])
+  })
+
+  it('prints the panel with the health read at that moment, and nothing else', async () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    let health: typeof HEALTH | null = null
+    const row = rowOf(DOSSIER.menuPrint, () => health)
+    health = HEALTH
+    row.onSelect()
+    await vi.waitFor(() => expect(printPanel).toHaveBeenCalled())
+    expect(printed()).toEqual({ panelId: 'panel_3', health: HEALTH })
+    expect(grabPanel).not.toHaveBeenCalled()
+    expect(packPanel).not.toHaveBeenCalled()
+  })
+
+  it('leaves the check of the dossier to the runner, so a row built earlier still works when chosen', async () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    const row = rowOf(DOSSIER.menuPrint)
+    resetPanelSources()
+    row.onSelect()
+    await vi.waitFor(() => expect(printPanel).toHaveBeenCalled())
+  })
+
+  it('does not load the print code when the rows are built: only choosing the row does', async () => {
+    registerPanelSource(TARGET.panelId, { provenance: null, dossier: () => null })
+    panelExportEntries(TARGET, () => null)
+    await settleImport()
+    expect(printPanel).not.toHaveBeenCalled()
+    await runPrint(TARGET, null)
+    expect(printPanel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('runPrint', () => {
+  it('hands the request to the lazy print runner and makes no request of its own', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    await runPrint(TARGET, HEALTH)
+    expect(printed()).toEqual({ panelId: 'panel_3', health: HEALTH })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('passes a missing health answer through as null', async () => {
+    await runPrint(TARGET, null)
+    expect(printed().health).toBeNull()
+  })
+
+  it('says so on the message line when the runner breaks, and never rejects', async () => {
+    printPanel.mockRejectedValueOnce(new Error('print policy.'))
+    await expect(runPrint(TARGET, null)).resolves.toBeUndefined()
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'print policy' }))
+    expect(useMessage.getState().tone).toBe('error')
+  })
+
+  it('reads a thrown value that is not an Error', async () => {
+    printPanel.mockRejectedValueOnce('boom')
+    await runPrint(TARGET, null)
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'boom' }))
+  })
+
+  it('leaves the message line alone when the print went well (the runner speaks for itself)', async () => {
+    await runPrint(TARGET, null)
+    expect(useMessage.getState().text).toBe('')
+  })
+
+  it('once loaded, a later runPrint calls printPanel synchronously', async () => {
+    await runPrint(TARGET, null)
+    printPanel.mockClear()
+    void runPrint(TARGET, null)
+    expect(printPanel).toHaveBeenCalledTimes(1)
+  })
+
+  it('says so on the message line when a warm runner breaks synchronously, and never rejects', async () => {
+    await runPrint(TARGET, null)
+    printPanel.mockImplementationOnce(() => {
+      throw new Error('no print')
+    })
+    await expect(runPrint(TARGET, null)).resolves.toBeUndefined()
+    expect(useMessage.getState().text).toBe(fillCopy(DOSSIER.failed, { detail: 'no print' }))
+  })
+
+  it('keeps the print runner apart from the grab runner and the pack runner', async () => {
+    await runPrint(TARGET, null)
+    expect(grabPanel).not.toHaveBeenCalled()
+    expect(packPanel).not.toHaveBeenCalled()
+    await runPack(TARGET, null)
+    expect(printPanel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the lazy print runner: a failed load is not remembered', () => {
+  afterEach(() => {
+    vi.doUnmock('../export/print/run')
+    vi.resetModules()
+  })
+
+  async function fresh(factory: () => Record<string, unknown>) {
+    vi.resetModules()
+    vi.doMock('../export/print/run', factory)
+    const exported = await import('./panelExport')
+    const { useMessage: message } = await import('./MessageLine.store')
+    return { ...exported, message }
+  }
+
+  it('posts DOSSIER.failed when the chunk cannot load, and imports again on the next attempt', async () => {
+    let loads = 0
+    const ok = vi.fn(async () => true)
+    const exported = await fresh(() => {
+      loads += 1
+      if (loads === 1) throw new Error('Failed to fetch dynamically imported module')
+      return { printPanel: ok }
+    })
+    await expect(exported.runPrint(TARGET, null)).resolves.toBeUndefined()
+    expect(exported.message.getState().text).toMatch(/^The dossier could not be made: .+\.$/)
+    expect(exported.message.getState().tone).toBe('error')
+    expect(ok).not.toHaveBeenCalled()
+    await exported.runPrint(TARGET, null)
+    expect(loads).toBe(2)
+    expect(ok).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the print code is reached only by a dynamic import (shell cap 0)', () => {
+  const SOURCES = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}'], {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  })
+  const importsOf = (needle: RegExp) =>
+    Object.entries(SOURCES)
+      .filter(([, text]) => needle.test(text))
+      .map(([file]) => file)
+
+  it('finds the sources it looks through', () => {
+    expect(Object.keys(SOURCES).length).toBeGreaterThan(50)
+    expect(SOURCES['/src/chrome/panelExport.ts']).toContain("import('../export/print/run')")
+  })
+
+  it('has no static import of export/print anywhere', () => {
+    const staticImport = /^(import|export)\b[^\n]*\bfrom\s+['"][^'"]*\/export\/print\//m
+    expect(importsOf(staticImport)).toEqual([])
+    const sideEffect = /^import\s+['"][^'"]*\/export\/print\//m
+    expect(importsOf(sideEffect)).toEqual([])
+  })
+
+  it('has one dynamic import of export/print, in panelExport.ts', () => {
+    expect(importsOf(/import\(\s*['"][^'"]*export\/print\//)).toEqual(['/src/chrome/panelExport.ts'])
+  })
+
+  it('has one importer of panelExport, the Workspace', () => {
+    expect(importsOf(/from\s+['"]\.\/panelExport['"]/)).toEqual(['/src/chrome/Workspace.tsx'])
   })
 })
