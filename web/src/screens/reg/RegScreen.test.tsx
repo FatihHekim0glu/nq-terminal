@@ -5,8 +5,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
+import { resetMessage, useMessage } from '../../chrome/MessageLine.store'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { captureDownloads } from '../../chrome/download.testUtil'
+import type { LineStackProps } from '../../charts/LineStack.types'
 import { stubLayout } from '../../grids/testing'
 import { HOME_PANEL_IDS } from '../layouts/layouts'
 import { REGISTRY } from './regFixtures'
@@ -18,10 +20,23 @@ import { DEFLATED_REAL } from './deflatedFixtures'
 import RegEvidence from './RegEvidence'
 import RegScreen from './RegScreen'
 import type { EvidenceRow } from './evidenceModel'
-import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
+import { PANEL_ID, mountScreen, panelParams, stubApi, type Seen } from './testHarness'
+
+// REG's compare view draws through LineStack (uPlot needs a canvas): a stand-in that records what it was given.
+const charts = vi.hoisted(() => ({ props: [] as LineStackProps[] }))
+vi.mock('../../charts/LineStack', () => ({
+  default: (props: LineStackProps) => {
+    charts.props.push(props)
+    return <div data-testid="linestack" />
+  },
+}))
 
 beforeAll(() => stubLayout(1200))
-beforeEach(() => resetNumbered())
+beforeEach(() => {
+  resetNumbered()
+  resetMessage()
+  charts.props = []
+})
 afterEach(() => cleanup())
 
 function board(): HTMLElement {
@@ -410,5 +425,258 @@ describe('RegEvidence: #21 the status line is one stable role=status node', () =
     expect(screen.getByRole('status')).toBe(status)
     expect(status.textContent).toBe(fillCopy(EVIDENCE.failed, { n: 1, name: 'y_v0', detail: 'not found' }))
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+})
+
+describe('REG: registry failure and loading through PanelFault and PanelLoading (roadmap #7, W6-R9b)', () => {
+  it('shows the registry error as a PanelFault: the same text, a retry, and the reg-msg box', async () => {
+    stubApi({ '/api/registry': 503 })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain(fillCopy(REG.failed, { detail: 'stub 503 for /api/registry' }))
+    expect(alert.classList.contains('reg-msg')).toBe(true)
+    expect(alert.classList.contains('panel-fault-failed')).toBe(true)
+    expect(within(alert).getByRole('button', { name: /retry/i })).toBeTruthy()
+  })
+
+  it('retries the registry read when the retry button is pressed', async () => {
+    const seen = stubApi({ '/api/registry': 503 })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const alert = await screen.findByRole('alert')
+    const before = seen.filter((s) => s.url === '/api/registry').length
+    fireEvent.click(within(alert).getByRole('button', { name: /retry/i }))
+    await waitFor(() => expect(seen.filter((s) => s.url === '/api/registry').length).toBe(before + 1))
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('shows the loading line as a PanelLoading: busy, the same text, the reg-msg box, then the board', async () => {
+    stubApi()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(REG.loading)
+    expect(status.getAttribute('aria-busy')).toBe('true')
+    expect(status.classList.contains('reg-msg')).toBe(true)
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    expect(screen.queryByText(REG.loading)).toBeNull()
+  })
+})
+
+describe('REG: 95) Compare basket (roadmap #9 phase B, W6-R9b)', () => {
+  const SERIES_URL = /^\/api\/hypotheses\/([^/]+)\/series\?cost=(\d)$/
+
+  /** stubApi plus the series GETs: a body for volmanaged_v0 and overnight_v0, a 404 for every other name. */
+  function stubWithSeries(): Seen[] {
+    const seen = stubApi()
+    const spy = vi.spyOn(globalThis, 'fetch')
+    const base = spy.getMockImplementation()!
+    spy.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const m = SERIES_URL.exec(url)
+      if (!m) return base(input, init)
+      seen.push({ url, method: init?.method ?? 'GET' })
+      const name = m[1]!
+      const cost = Number(m[2])
+      if (name !== 'volmanaged_v0' && name !== 'overnight_v0') {
+        return Promise.resolve(new Response(JSON.stringify({ detail: 'not in the demo dataset' }), { status: 404, headers: { 'content-type': 'application/json' } }))
+      }
+      const body = { basis: 'A', bench_label: null, cost, equity: [1, 2, 3], kind: 'trades', name, r: [1, 1, 1], r_bench: null, source: 'fixture', t: [100, 200, 300], unit: 'points per trade (NQ)' }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
+    })
+    return seen
+  }
+
+  /** The grid's active row, which starts on the first: Space acts on it, and the arrows move it. */
+  let cursor = 0
+  beforeEach(() => {
+    cursor = 0
+  })
+
+  /** Space on each named row, walking the active row down or up the board (the grid keeps its own cursor). */
+  function markWithSpace(names: readonly string[]): void {
+    const g = board()
+    act(() => g.focus())
+    for (const name of names) {
+      const target = bodyRows().indexOf(rowOf(name))
+      for (; cursor < target; cursor += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+      for (; cursor > target; cursor -= 1) fireEvent.keyDown(g, { key: 'ArrowUp' })
+      fireEvent.keyDown(g, { key: ' ' })
+    }
+  }
+
+  const compareButton = () => screen.getByRole('button', { name: /^95\) Compare/ })
+  const markedNames = () => bodyRows().filter((r) => r.getAttribute('data-marked') === 'true').map((r) => within(r).getAllByRole('gridcell').map((c) => c.textContent).find((t) => /_v\d/.test(t ?? '')))
+
+  it('starts with an empty basket: 95) Compare is disabled and not a numbered action', async () => {
+    stubWithSeries()
+    await ready()
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(compareButton().getAttribute('aria-disabled')).toBe('true')
+    expect(numberedItems(PANEL_ID).some((i) => i.n === 95)).toBe(false)
+  })
+
+  it('marks a row with Space and counts it on the bar: two rows give 95) Compare 2', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    markWithSpace(['overnight_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    expect(compareButton().getAttribute('aria-disabled')).toBeNull()
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+    expect(rowOf('overnight_v0').getAttribute('data-marked')).toBe('true')
+    expect(bodyRows().filter((r) => r.getAttribute('data-marked') === 'true')).toHaveLength(2)
+    expect(numberedItems(PANEL_ID).some((i) => i.n === 95 && i.label === 'Compare 2')).toBe(true)
+  })
+
+  it('unmarks a marked row when Space is pressed on it again', async () => {
+    stubWithSeries()
+    await ready()
+    const g = board()
+    act(() => g.focus())
+    const at = bodyRows().indexOf(rowOf('volmanaged_v0'))
+    for (let i = 0; i < at; i += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(bodyRows().some((r) => r.hasAttribute('data-marked'))).toBe(false)
+  })
+
+  it('refuses a ninth hypothesis with the message line, and keeps the eight', async () => {
+    stubWithSeries()
+    await ready()
+    const names = REGISTRY.rows.map((r) => r.name).filter((n) => !n.endsWith('_confirm')).slice(0, 9)
+    markWithSpace(names)
+    expect(compareButton().textContent).toBe('95) Compare 8')
+    expect(useMessage.getState().text).toBe(REG.compare.full)
+    expect(useMessage.getState().tone).toBe('error')
+    expect(bodyRows().filter((r) => r.getAttribute('data-marked') === 'true')).toHaveLength(8)
+    // Unmarking one is always allowed, and then the ninth fits.
+    markWithSpace([names[0]!])
+    expect(compareButton().textContent).toBe('95) Compare 7')
+  })
+
+  it('keeps the basket when the board is filtered, so a marked row that is hidden still counts', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    fireEvent.change(screen.getByRole('textbox', { name: REG.filterLabel }), { target: { value: 'zzz_no_such' } })
+    await screen.findByText(REG.empty)
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    fireEvent.change(screen.getByRole('textbox', { name: REG.filterLabel }), { target: { value: '' } })
+    await waitFor(() => expect(bodyRows()).toHaveLength(REGISTRY.counts.rows))
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+  })
+
+  it('95 <GO> replaces the board with the compare view, hides the tab strip, and reads each series at 1 tick', async () => {
+    const seen = stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    expect(screen.getByText(fillCopy(REG.compare.note, { cost: REG.compare.costs['1'] }))).toBeTruthy()
+    expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+    expect(screen.queryByRole('tablist', { name: REG_VIEW_COPY.label })).toBeNull()
+    expect(screen.queryByRole('tabpanel')).toBeNull()
+    expect(screen.queryByRole('navigation', { name: 'Rounds' })).toBeNull()
+    expect(screen.getByRole('combobox', { name: REG.compare.costLabel })).toBeTruthy()
+    await waitFor(() => expect(charts.props.at(-1)?.panes[0]?.series.map((s) => s.name)).toEqual(['volmanaged_v0 (1 tick)', 'overnight_v0 (1 tick)']))
+    const series = seen.filter((s) => SERIES_URL.test(s.url))
+    expect(new Set(series.map((s) => s.url))).toEqual(new Set(['/api/hypotheses/volmanaged_v0/series?cost=1', '/api/hypotheses/overnight_v0/series?cost=1']))
+    expect(seen.every((s) => s.method === 'GET')).toBe(true)
+  })
+
+  it('opens the compare view from a click on 95) Compare as well, and hands the panel link group to the chart', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    fireEvent.click(compareButton())
+    await screen.findByRole('region', { name: REG.compare.chartTitleOne })
+    await waitFor(() => expect(charts.props.at(-1)?.link).toBe('-'))
+  })
+
+  it('lists a hypothesis the API cannot answer next to the drawn ones, with no alert', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'za_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByText(fillCopy(REG.compare.failed, { name: 'za_v0', detail: 'not in the demo dataset' }))
+    await waitFor(() => expect(charts.props.at(-1)?.panes[0]?.series.map((s) => s.name)).toEqual(['volmanaged_v0 (1 tick)']))
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+  })
+
+  it('Back returns to the board with the tab strip and the same basket', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    fireEvent.click(await screen.findByRole('button', { name: REG.compare.back }))
+    expect(board()).toBeTruthy()
+    expect(screen.getByRole('tablist', { name: REG_VIEW_COPY.label })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })).toBeNull()
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+  })
+
+  it('97) Settings > Clear the basket empties it and, while comparing, returns to the board', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.compare.clear }))
+    expect(await screen.findByRole('grid', { name: /Registry board/ })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: /Screen series/ })).toBeNull()
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(compareButton().getAttribute('aria-disabled')).toBe('true')
+    expect(bodyRows().some((r) => r.hasAttribute('data-marked'))).toBe(false)
+  })
+
+  it('Clear the basket also unmarks the rows on the board itself, and Clear filters leaves the basket alone', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0'])
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.settings.clear }))
+    expect(compareButton().textContent).toBe('95) Compare 1')
+    fireEvent.click(screen.getByRole('button', { name: /97\) Settings/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: REG.compare.clear }))
+    expect(compareButton().textContent).toBe('95) Compare')
+    expect(markedNames()).toEqual([])
+  })
+
+  it("marks and compares inside HOME's REG cell too, where the tab strip never shows", async () => {
+    stubWithSeries()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />, { panelId: HOME_PANEL_IDS.reg })
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    expect(compareButton().textContent).toBe('95) Compare 2')
+    fireEvent.click(compareButton())
+    await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: REG.compare.back }))
+    expect(board()).toBeTruthy()
+  })
+
+  it('shows no p value, verdict or statistic in the compare view', async () => {
+    stubWithSeries()
+    await ready()
+    markWithSpace(['volmanaged_v0', 'overnight_v0'])
+    act(() => {
+      activateNumbered(PANEL_ID, 95)
+    })
+    const region = await screen.findByRole('region', { name: fillCopy(REG.compare.chartTitle, { n: 2 }) })
+    await waitFor(() => expect(charts.props.length).toBeGreaterThan(0))
+    const text = (region.textContent ?? '').replace(fillCopy(REG.compare.note, { cost: REG.compare.costs['1'] }), '')
+    expect(text).not.toMatch(/\[(PASS|FAIL|CHECK)\]|\bp\s*[=<]|Sharpe|DSR|Holm|BH q/i)
   })
 })

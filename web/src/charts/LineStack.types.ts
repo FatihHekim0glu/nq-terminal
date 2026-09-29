@@ -23,8 +23,14 @@ export const COMPARE_STYLES: readonly LineStyleKey[] = [
 export interface LineStackSeries {
   readonly name: string
   readonly style: LineStyleKey
-  /** One value per time; null, NaN and Infinity are gaps and no line crosses them. */
+  /** One value per time; null, NaN and Infinity are gaps and no line crosses them, unless spanGaps is set. */
   readonly values: ReadonlyArray<number | null | undefined>
+  /**
+   * True joins this series' own values across the nulls between them: a compare basket drawn on the union of
+   * several series' times, where a null only means this series has no row at that time. Default false: a
+   * null is a gap.
+   */
+  readonly spanGaps?: boolean
 }
 
 /** 'white' is the honest zero line of EQ and DD; 'grey' the RR zero line (look spec 6.2 and 7.5). */
@@ -41,6 +47,11 @@ export interface LineStackPane {
   readonly unit?: '' | '%'
   /** Print an explicit + on positive values (changes and differences). */
   readonly signed?: boolean
+  /**
+   * False leaves out the High on, Average and Low on rows a single-series pane's legend adds, for a view that
+   * shows served values only. Default true.
+   */
+  readonly legendStats?: boolean
   /** Whether the Log toggle applies to this pane (only when every value is above zero). */
   readonly logAllowed?: boolean
   /**
