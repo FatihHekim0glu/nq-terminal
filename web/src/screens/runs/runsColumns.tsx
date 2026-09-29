@@ -2,6 +2,7 @@
 // Anchor`, plus kind, window, fees, hit rate, coverage and the tags). Names amber, numbers right-aligned
 // with fixed decimals, badges in colour and text. Sharpe and max drawdown are the compare stats.
 import type { MonitorColumn } from '../../grids/MonitorGrid'
+import { DEFLATED } from '../../copy/deflated'
 import { RUNS } from '../../copy/runs'
 import {
   balanceBadge,
@@ -46,7 +47,10 @@ function baseColumns(): MonitorColumn<RunSummary>[] {
       format: (r) => formatUsd(r.pnl_total, true), tone: (r) => signTone(r.pnl_total),
     },
     { id: 'fees', header: C.fees, width: 92, kind: 'num', value: (r) => r.fees_total, format: (r) => formatUsd(r.fees_total) },
-    { id: 'hit', header: C.hitRate, width: 70, kind: 'num', value: (r) => r.hit_rate, format: (r) => formatFraction(r.hit_rate, 1) },
+    // U17: RUNS counts a hit per trade, unlike the tear sheet's per non-zero session (TEAR_RET.rows.hitRate,
+    // already labelled); the override lives in copy/deflated.ts since copy/runs.ts is another worker's
+    // file this wave.
+    { id: 'hit', header: DEFLATED.runsHitRateColumn, width: 70, kind: 'num', value: (r) => r.hit_rate, format: (r) => formatFraction(r.hit_rate, 1) },
   ]
 }
 

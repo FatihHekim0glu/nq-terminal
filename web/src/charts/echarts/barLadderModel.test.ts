@@ -96,11 +96,15 @@ describe('barLadderOption (look spec 6.3 BarLadder)', () => {
     expect([option.yAxis].flat()[0]).toMatchObject({ type: 'value', position: 'right' })
   })
 
-  it('prints the unit on the value axis labels, so a bare number is never read in the wrong unit', () => {
+  // U18: a long unit (the cost ladder's phrase) repeated on every tick took about 200px, 18% of the
+  // card, and squeezed the bars at 1366. '%' still attaches to the tick (short and self-evident, spec
+  // 6.3); any other unit, long or short, is left to the axis name or the card's existing 'Unit:' line
+  // (barLadderModel.u18.test.ts covers the axis name; the caller's card owns the 'Unit:' line).
+  it("attaches '%' to the value axis labels; leaves any other unit off them", () => {
     const pct = barLadderOption({ ...blocks, unit: '%' }, T) as Record<string, any>
     expect([pct.yAxis].flat()[0].axisLabel.formatter(0.05)).toBe('0.05%')
     const r = barLadderOption(blocks, T) as Record<string, any>
-    expect([r.yAxis].flat()[0].axisLabel.formatter(-0.2)).toBe('-0.2 R')
+    expect([r.yAxis].flat()[0].axisLabel.formatter(-0.2)).toBe('-0.2')
   })
 
   it('takes every colour from the tokens', () => {

@@ -60,6 +60,10 @@ function functionCandidate(m: MnemonicDef): Candidate {
 }
 
 const CHROME_CANDIDATES: readonly Candidate[] = Object.entries(CHROME_WORDS).map(([word, detail]) => ({ label: word, detail, group: 'function' }))
+/** D13: after NXTW, line.ts's parseRest never runs chromeAction, so none of these bare chrome words
+ * parse there, only MAIN (aliased to HOME inside parseRest). Suggesting the others would Tab-complete
+ * a line parseLine then rejects (e.g. 'NXTW N' + Tab landing on 'NXTW NO '). */
+const NXTW_BARRED = new Set(Object.keys(CHROME_WORDS).filter((w) => w !== 'MAIN'))
 
 function contextCandidates(index: CommandIndexData | null): Candidate[] {
   if (!index) return []
@@ -122,24 +126,39 @@ function searchRow(prefix: string): Suggestion {
   return { value: line, label: line, detail: SUGGESTION_DETAILS.search, group: 'search' }
 }
 
-export function suggest(line: string, index: CommandIndexData | null): Suggestion[] {
-  const trimmed = line.trimStart()
-  if (trimmed.trim() === '') return []
-  const tokens = trimmed.split(/\s+/)
-  const prefix = /\s$/.test(trimmed) ? '' : (tokens.pop() ?? '')
-  const done = tokens.filter((t) => t !== '')
+/** The suggestion list for the tokens at and after `done`, given the token still being typed.
+ * `includeSearch` is false inside NXTW, whose grammar (line.ts) has no bare HL: `parseRest` never runs
+ * `chromeAction`. `afterNxtw` is also true only inside NXTW: `parseRest` runs there too, so besides HL,
+ * NO, MENU and a second NXTW must be dropped from the candidates as well (D13), MAIN excepted (it is
+ * aliased to HOME inside parseRest, so it still parses). */
+function suggestFrom(done: readonly string[], prefix: string, index: CommandIndexData | null, includeSearch: boolean, afterNxtw = false): Suggestion[] {
   const before = done.length > 0 ? `${done.join(' ')} ` : ''
   const seen = new Set<string>()
   const out: Suggestion[] = []
-  for (const c of rank(candidatesAt(normalised(done, index), index), prefix)) {
+  const candidates = candidatesAt(normalised(done, index), index).filter((c) => !afterNxtw || !NXTW_BARRED.has(c.label))
+  for (const c of rank(candidates, prefix)) {
     const value = `${before}${c.label}${c.group === 'argument' ? '' : ' '}`
     if (seen.has(value)) continue
     seen.add(value)
     out.push({ value, label: c.label, detail: c.detail, group: c.group })
     if (out.length === MAX_SUGGESTIONS) break
   }
-  if (done.length === 0 && prefix.length >= SEARCH_MIN) out.push(searchRow(prefix))
+  if (includeSearch && done.length === 0 && prefix.length >= SEARCH_MIN) out.push(searchRow(prefix))
   return out
+}
+
+export function suggest(line: string, index: CommandIndexData | null): Suggestion[] {
+  const trimmed = line.trimStart()
+  if (trimmed.trim() === '') return []
+  const tokens = trimmed.split(/\s+/)
+  const prefix = /\s$/.test(trimmed) ? '' : (tokens.pop() ?? '')
+  const done = tokens.filter((t) => t !== '')
+  // NXTW opens whatever follows it in a new panel (line.ts); once it is a complete token, suggest and
+  // Tab-complete the rest of the grammar as usual, prefixed so choosing one still leaves 'NXTW ...'.
+  if (done[0]?.toUpperCase() === 'NXTW') {
+    return suggestFrom(done.slice(1), prefix, index, false, true).map((s) => ({ ...s, value: `NXTW ${s.value}` }))
+  }
+  return suggestFrom(done, prefix, index, true)
 }
 
 /** The sheet's groups in order of first appearance; `expanded` shows one group in full. */

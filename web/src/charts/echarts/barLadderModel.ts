@@ -178,7 +178,10 @@ export function barLadderOption(input: BarLadderInput, tokens: ChartTokens = DEF
     },
     yAxis: {
       ...y,
-      axisLabel: { ...y.axisLabel, ...textFont(tokens), formatter: (value: number) => withUnit(String(value), input.unit) },
+      // U18: a long unit (the cost ladder's phrase) repeated on every tick took about 200px, 18% of the
+      // card, and squeezed the bars at 1366. '%' still attaches (short, self-evident); any other unit is
+      // left to the card's existing 'Unit:' line, never repeated here.
+      axisLabel: { ...y.axisLabel, ...textFont(tokens), formatter: (value: number) => withUnit(String(value), input.unit === '%' ? '%' : undefined) },
       type: 'value',
       // ECharts rounds its own range to nice ticks; a reference line outside the data widens it.
       ...(ref === undefined ? {} : {

@@ -132,7 +132,8 @@ export const TEAR_RET = {
     bestMonth: 'Best month',
     worstMonth: 'Worst month',
     pctPositiveMonths: 'Positive months',
-    skew: 'Skew',
+    // U17: bias-corrected (unlike the CF moments' population skew, copy/tearP1.ts TEAR_P1.cf.moments).
+    skew: 'Skew (bias-corrected)',
     excessKurtosis: 'Excess kurtosis',
     var95: 'VaR 95',
     cvar95: 'CVaR 95',
