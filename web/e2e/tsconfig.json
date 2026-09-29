@@ -13,5 +13,5 @@
     "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["./*.ts", "../playwright.config.ts"]
+  "include": ["./*.ts", "../playwright.config.ts", "../playwright.offline.config.ts"]
 }

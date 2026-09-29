@@ -17,6 +17,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page, type Request } from '@playwright/test'
 import { MASK_COLOR } from './gallery.ts'
+import { recordDemoRefusals, withoutDemoRefusals } from './target.ts'
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
@@ -53,18 +54,23 @@ const MULTI_PANEL_SCREENS: Readonly<Record<string, readonly string[]>> = {
 
 interface Watch {
   readonly requests: Request[]
+  /** Console errors as `<text> <url of the source>`, and page errors. */
   readonly errors: string[]
+  /** URLs the offline demo API declined (its refusal header); always empty against the fixture backend. */
+  readonly demoRefused: Set<string>
 }
 
 function watch(page: Page): Watch {
   const requests: Request[] = []
   const errors: string[] = []
+  const demoRefused = new Set<string>()
   page.on('request', (r) => requests.push(r))
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text())
+    if (m.type() === 'error') errors.push(`${m.text()} ${m.location().url}`)
   })
   page.on('pageerror', (e) => errors.push(String(e)))
-  return { requests, errors }
+  recordDemoRefusals(page, demoRefused)
+  return { requests, errors, demoRefused }
 }
 
 const commandLine = (page: Page) => page.getByRole('combobox', { name: 'Command line' })
@@ -148,7 +154,7 @@ test.describe('terminal shell', () => {
     await expect(status).toContainText('A NQ1 Index')
     await expect(status).toContainText('B volmanaged_v0')
     await expectSameOriginGets(watched, baseURL ?? '')
-    expect(watched.errors).toEqual([])
+    expect(withoutDemoRefusals(watched.errors, watched.demoRefused)).toEqual([])
     await expectNoCspViolations(page)
   })
 
@@ -251,7 +257,7 @@ test.describe('terminal shell', () => {
       } else await expect(panel.locator(`[data-placeholder="${code}"]`), line).toContainText('Not built yet.')
     }
     await expectSameOriginGets(watched, baseURL ?? '')
-    expect(watched.errors).toEqual([])
+    expect(withoutDemoRefusals(watched.errors, watched.demoRefused)).toEqual([])
     await expectNoCspViolations(page)
   })
 

@@ -1,14 +1,15 @@
-// Saves text as a file in the viewer's downloads folder (98) Export on REG and OOS). A local object URL
-// only: no request leaves the page and nothing is written anywhere else. Returns false where the
-// browser has no object URLs or refuses one, so the caller never reports a save that did not happen.
+// Saves what the page holds as a file in the viewer's downloads folder: text (98) Export on REG and OOS)
+// or a blob (GRAB's chart image). A local object URL only: no request leaves the page and nothing is
+// written anywhere else. Both return false where the browser has no object URLs or refuses one, so the
+// caller never reports a save that did not happen.
 
 const CSV_TYPE = 'text/csv;charset=utf-8'
 
-export function saveText(fileName: string, text: string, type: string = CSV_TYPE): boolean {
+export function saveBlob(fileName: string, blob: Blob): boolean {
   if (typeof URL.createObjectURL !== 'function') return false
   let url: string
   try {
-    url = URL.createObjectURL(new Blob([text], { type }))
+    url = URL.createObjectURL(blob)
   } catch {
     return false
   }
@@ -22,4 +23,8 @@ export function saveText(fileName: string, text: string, type: string = CSV_TYPE
   } finally {
     URL.revokeObjectURL(url)
   }
+}
+
+export function saveText(fileName: string, text: string, type: string = CSV_TYPE): boolean {
+  return saveBlob(fileName, new Blob([text], { type }))
 }

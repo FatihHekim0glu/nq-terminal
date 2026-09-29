@@ -44,8 +44,11 @@ function isStreamUrl(url: string | URL): boolean {
   }
 }
 
-/** What the stream sends on connect, in order: the fixture backend's opening, then its journal replay. */
-function opening(): StreamEvent[] {
+/**
+ * What the stream sends on connect, in order: the fixture backend's opening, then its journal replay. Exported
+ * for src/demo/serve.ts, which plays the same events over HTTP for the offline Playwright project.
+ */
+export function demoStreamOpening(): StreamEvent[] {
   const hello: StreamEvent = {
     kind: 'hello',
     schema_version: 1,
@@ -120,7 +123,7 @@ export class DemoEventSource {
     } catch (error) {
       report(error)
     }
-    for (const event of opening()) this.send(event)
+    for (const event of demoStreamOpening()) this.send(event)
     // A handler may have closed the stream already; a heartbeat then would outlive close().
     if (this.readyState !== OPEN) return
     this.heartbeat = setInterval(() => {
