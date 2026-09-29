@@ -19,18 +19,31 @@
 //   context a contextless command takes. Whether Enter replaces a panel or loads a layout still
 //   follows real focus (UI_SPEC section 5).
 // - Focus moving into another panel closes the related functions menu; focus on the chrome does not.
+// - The layout on screen belongs to a screen or to a named workspace (roadmap #14). A screen keeps its
+//   layout in nqt.layouts as above. A workspace (SAVE NAME, LOAD NAME) is a recipe of command lines
+//   (WorkspaceRecipe): while it owns the layout nothing is written to nqt.layouts, and the edited mark
+//   means the panels no longer give the recipe they were saved or loaded as. Loading a screen's layout
+//   gives the layout back to the screen. UNDO restores the owner along with the panels. RESET on a
+//   workspace discards the edits and puts the workspace's own panels back (the dock and link group
+//   contexts kept when it was saved or loaded); it never reads or writes nqt.layouts.
 import type { DockviewApi, DockviewGroupPanel, SerializedDockview } from 'dockview-react'
 import { flushSync } from 'react-dom'
+import type { LineResult } from '../commands/line'
+import { describeError } from '../commands/messages'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
+import { WORKSPACES } from '../copy/workspaces'
+import { WORKSPACE, fillCopy } from '../copy/workspace'
 import { layoutFor as savedLayoutFor, type LayoutsStore } from '../state/layouts'
-import { LINK_GROUPS, type LinkGroupsStore } from '../state/linkGroups'
+import { LINK_GROUPS, type GroupRecord, type LinkContext, type LinkGroupsStore } from '../state/linkGroups'
+import { MAX_WORKSPACES, isWorkspaceName, type WorkspacesStore } from '../state/workspaces'
 import { syncRoving } from './WorkspaceFocus'
 import { EMPTY_HISTORY, recordVisit, stepBack, stepForward, type HistoryStep, type PanelHistory } from './WorkspaceHistory'
 import { layoutFor } from './WorkspaceLayouts'
 import { applyPlan, effectiveContext, panelTitle, planOpen, sanitiseParams, type DockApiLike, type OpenPlan, type PanelParams } from './WorkspaceModel'
 import { describePlan, type PreviewInput, type RunPreview } from './WorkspacePreview'
+import { layoutFromRecipe, recipeFromDock, recipeSignature, type Recipe } from './WorkspaceRecipe'
 import { fromStored, layoutSignature, readDock, toStored } from './WorkspaceStorage'
 import { EMPTY_RING, popUndo, pushUndo, type UndoCause, type UndoEntry, type UndoRing } from './WorkspaceUndo'
 import { createWorkspaceView, patchView, readingOrder, type WorkspaceView } from './WorkspaceView'
@@ -48,19 +61,35 @@ export interface FocusedPanel {
 }
 
 /** The screen whose layout the panels are arranged under, for the chrome to show an edited mark and
- * offer RESET and UNDO. `workspace` is reserved for a named-workspace feature not built yet: null. */
+ * offer RESET and UNDO. `workspace` names the workspace that owns the layout (then `code` is the screen
+ * its first panel shows, and `edited` means the panels no longer give its recipe), else null. */
 export interface ShownLayout {
   readonly code: MnemonicCode
   readonly edited: boolean
   readonly workspace: string | null
 }
 
+/** Who the layout on screen belongs to: a screen (saved per screen in nqt.layouts) or a named workspace,
+ * with the signature of the recipe it was saved or loaded as, to tell whether it has been edited since,
+ * and the panels (`dock`) and link group contexts as they were then, which RESET puts back. */
+type Owner =
+  | { readonly kind: 'screen' }
+  | {
+      readonly kind: 'workspace'
+      readonly name: string
+      readonly base: string
+      readonly dock: SerializedDockview
+      readonly contexts: GroupRecord<LinkContext | null>
+    }
+
+const SCREEN_OWNER: Owner = { kind: 'screen' }
+
 export interface ControllerEnv {
   readonly initialScreen: MnemonicCode
   readonly layouts: LayoutsStore
   readonly linkGroups: LinkGroupsStore
+  readonly workspaces: WorkspacesStore
   readonly root: () => HTMLElement | null
-  readonly onScreenChange?: (code: MnemonicCode) => void
   readonly onFocusedPanelChange?: (panel: FocusedPanel | null) => void
   /** The shown screen and whether it is edited, after every change that could affect either. */
   readonly onLayoutChange?: (shown: ShownLayout) => void
@@ -104,12 +133,28 @@ export interface WorkspaceController {
   /** Open a function in a panel, keeping its link group and, when the function takes it, its context. */
   openInPanel(panelId: string, code: MnemonicCode): boolean
   toggleMaximise(panelId: string): void
-  /** Reset the shown screen to its default layout. 'reset' when a saved layout was cleared (UNDO can
-   * bring it back), 'default' when it already showed the default, null with no dockview api yet. */
+  /** Reset the layout on screen. A screen goes back to its default layout; a workspace goes back to the
+   * panels it was saved or loaded with, stays the owner, and leaves every saved screen layout alone. 'reset'
+   * when something changed (UNDO can bring it back), 'default' when nothing needed to, null with no dockview
+   * api yet. */
   resetLayout(): 'reset' | 'default' | null
-  /** Undo the last of up to 10 layout changes (a replace, add, back, forward, related-menu open, RESET
-   * or a dropped saved layout). The screen it restored, or null when there is nothing to undo. */
+  /** Undo the last of up to 10 layout changes (a replace, add, back, forward, related-menu open, RESET,
+   * a workspace load or a dropped saved layout). The screen it restored, or null when there is nothing to
+   * undo. The layout's owner (screen or workspace) comes back with the panels. */
   undo(): MnemonicCode | null
+  /** The recipe of the panels on screen; the workspace `name` then owns the layout, unedited. Null (and
+   * nothing changes) for a name that is not a workspace name, with no dockview api yet, or when a panel
+   * cannot be written as a command line. */
+  saveRecipe(name: string): Recipe | null
+  /** Rebuild the panels from `recipe`, whose lines were parsed into `commands` (panel for panel); the
+   * workspace `name` then owns the layout, unedited. Snapshots undo first. False, with nothing changed,
+   * when there is no dockview api, the name is not a workspace name or the commands do not fit the recipe. */
+  loadRecipe(name: string, recipe: Recipe, commands: readonly ParsedCommand[]): boolean
+  /** SAVE: keep the panels on screen under `name`. The message to show: saved, or why not. */
+  saveWorkspace(name: string): string
+  /** LOAD: parse every line of the saved workspace `name` with `parse` and, when all are screen commands,
+   * rebuild the panels from them. The message to show: loaded, or why not (nothing changes then). */
+  loadWorkspace(name: string, parse: (line: string) => LineResult): string
 }
 
 function adapt(api: DockviewApi): DockApiLike {
@@ -188,6 +233,12 @@ interface ControllerState {
   ranIn: string | null
   /** The screen whose layout the panels are currently arranged under (what a save keys on). */
   shown: MnemonicCode
+  /** Who the layout on screen belongs to; a screen load, RESET or an UNDO to a screen entry sets it back. */
+  owner: Owner
+  /** The owner each undo entry has to give back (an entry not listed here belongs to a screen). */
+  readonly owners: WeakMap<UndoEntry, Owner>
+  /** True while the controller itself moves link group contexts (a load, an undo), which are not edits. */
+  applying: boolean
   histories: ReadonlyMap<string, PanelHistory>
   undo: UndoRing
   readonly view: WorkspaceView
@@ -250,7 +301,10 @@ function prepareAll(st: ControllerState, dock: DockviewApi): void {
   refreshView(st)
 }
 
+/** Remember the panels as the shown screen's layout. Suspended while a workspace owns the layout: the
+ * screen's own layout is not touched by edits made in a workspace, which stay edits until SAVE. */
 function saveShown(st: ControllerState, env: ControllerEnv, dock: DockviewApi): void {
+  if (st.owner.kind === 'workspace') return
   env.layouts.getState().saveLayout(st.shown, toStored(st.shown, dock.toJSON()))
 }
 
@@ -258,17 +312,40 @@ function saveShown(st: ControllerState, env: ControllerEnv, dock: DockviewApi): 
 function snapshot(st: ControllerState, env: ControllerEnv, cause: UndoCause): void {
   const api = st.api
   if (!api) return
-  st.undo = pushUndo(st.undo, {
+  const entry: UndoEntry = {
     screen: st.shown,
     dock: api.toJSON() as unknown as Readonly<Record<string, unknown>>,
     stored: savedLayoutFor(env.layouts.getState(), st.shown),
     contexts: env.linkGroups.getState().contexts,
     cause,
-  })
+  }
+  st.undo = pushUndo(st.undo, entry)
+  // pushUndo skips an entry that repeats the newest one; only a new entry needs its owner remembered.
+  if (st.undo.at(-1) === entry) st.owners.set(entry, st.owner)
 }
 
-/** Tells the chrome what screen is shown and whether it is edited (a saved layout exists for it). */
+/** The recipe for the panels on screen: each line is the panel's title with the context it shows now. */
+function deriveRecipe(st: ControllerState, env: ControllerEnv): Recipe | null {
+  const api = st.api
+  if (!api) return null
+  const contexts = env.linkGroups.getState().contexts
+  const lineOf = (params: PanelParams): string => {
+    const groupContext = params.group === '-' ? null : contexts[params.group]
+    return panelTitle({ ...params, context: effectiveContext(params, groupContext) })
+  }
+  return recipeFromDock(api.toJSON(), (id) => paramsOf(st, id), lineOf, contexts)
+}
+
+/** Tells the chrome what screen is shown and whether it is edited: for a screen, that a saved layout
+ * exists for it; for a workspace, that the panels no longer give the recipe it was saved or loaded as. */
 function reportShown(st: ControllerState, env: ControllerEnv): void {
+  const { owner } = st
+  if (owner.kind === 'workspace') {
+    const now = deriveRecipe(st, env)
+    const edited = now === null || recipeSignature(now) !== owner.base
+    env.onLayoutChange?.({ code: st.shown, edited, workspace: owner.name })
+    return
+  }
   const edited = savedLayoutFor(env.layouts.getState(), st.shown) !== null
   env.onLayoutChange?.({ code: st.shown, edited, workspace: null })
 }
@@ -292,6 +369,7 @@ function loadScreen(st: ControllerState, env: ControllerEnv, dock: DockviewApi, 
   prepareAll(st, dock)
   seedLinkGroups(dock, linkGroups)
   st.shown = code
+  st.owner = SCREEN_OWNER
   if (dropped && stored && droppedDock) {
     st.undo = pushUndo(st.undo, { screen: code, dock: droppedDock as unknown as Readonly<Record<string, unknown>>, stored, contexts, cause: 'dropped' })
     env.onLayoutDropped?.(code)
@@ -358,6 +436,14 @@ function layoutKey(dock: Readonly<Record<string, unknown>>): string {
   return JSON.stringify({ grid, panels: sortedPanels(panels) })
 }
 
+function ownerOf(st: ControllerState, e: UndoEntry): Owner {
+  return st.owners.get(e) ?? SCREEN_OWNER
+}
+
+function sameOwner(a: Owner, b: Owner): boolean {
+  return a.kind === 'screen' ? b.kind === 'screen' : b.kind === 'workspace' && a.name === b.name && a.base === b.base
+}
+
 /** True when undo entry `e` (the state snapshotted before a command ran) already equals the state the
  * workspace is in right now: same screen, dock layout, link-group contexts and saved layout. A command
  * whose net effect was a no-op (e.g. a bare restore of the layout already shown) leaves nothing worth
@@ -367,6 +453,7 @@ function unchanged(st: ControllerState, env: ControllerEnv, e: UndoEntry): boole
   if (!api) return false
   return (
     e.screen === st.shown &&
+    sameOwner(ownerOf(st, e), st.owner) &&
     layoutKey(e.dock) === layoutKey(api.toJSON() as unknown as Readonly<Record<string, unknown>>) &&
     JSON.stringify(e.contexts) === JSON.stringify(env.linkGroups.getState().contexts) &&
     JSON.stringify(e.stored) === JSON.stringify(savedLayoutFor(env.layouts.getState(), st.shown))
@@ -396,7 +483,6 @@ function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, ta
   else applyToPanel(st, env, plan, command)
   st.ranIn = ranInAfter(plan, before, api)
   if (!focusedId(st)) st.lastFocused = null
-  env.onScreenChange?.(command.mnemonic.code)
   announce(st, env)
   reportShown(st, env)
   // Restoring ringBefore wholesale, instead of slicing off just the newest entry, also keeps the
@@ -525,7 +611,6 @@ function onReady(st: ControllerState, env: ControllerEnv, dock: DockviewApi): vo
   dock.onDidAddGroup((group) => prepareGroup(group))
   dock.onDidLayoutChange(() => refreshView(st))
   loadScreen(st, env, dock, { kind: 'load', layout: layoutFor(env.initialScreen) }, 'restore')
-  env.onScreenChange?.(env.initialScreen)
   announce(st, env)
   reportShown(st, env)
 }
@@ -556,10 +641,37 @@ function toggleMaximise(st: ControllerState, id: string): void {
   refreshView(st)
 }
 
-/** Reset the shown screen's layout to its default. Snapshotted first, so UNDO can bring it back. */
+/** RESET on a workspace: the edits go, and the panels and link group contexts the workspace was saved or
+ * loaded with come back (the pattern UNDO uses). The workspace stays the owner and nqt.layouts is never
+ * read or written on this path. 'default' with nothing to undo when the panels already give the recipe.
+ * Should the kept panels not apply, the shown screen's layout is loaded instead: the layout then belongs
+ * to that screen, and its saved layout stays as it was. */
+function resetWorkspace(st: ControllerState, env: ControllerEnv, api: DockviewApi, owner: Extract<Owner, { kind: 'workspace' }>): 'reset' | 'default' {
+  const now = deriveRecipe(st, env)
+  if (now !== null && recipeSignature(now) === owner.base) return 'default'
+  snapshot(st, env, 'reset')
+  const validated = readDock({ dock: owner.dock })
+  if (validated && applyDock(api, validated)) {
+    setGroupContexts(st, env, owner.contexts)
+    st.histories = new Map()
+    prepareAll(st, api)
+  } else {
+    loadScreen(st, env, api, { kind: 'load', layout: layoutFor(st.shown) }, 'restore')
+  }
+  st.ranIn = null
+  if (!focusedId(st)) st.lastFocused = null
+  announce(st, env)
+  reportShown(st, env)
+  return 'reset'
+}
+
+/** Reset the layout on screen. A screen's goes back to its default: its saved layout is cleared, after a
+ * snapshot so UNDO can bring it back. A workspace's goes back to the panels it was saved or loaded with
+ * (resetWorkspace), leaving every screen's saved layout alone. */
 function resetLayout(st: ControllerState, env: ControllerEnv): 'reset' | 'default' | null {
   const api = st.api
   if (!api) return null
+  if (st.owner.kind === 'workspace') return resetWorkspace(st, env, api, st.owner)
   const code = st.shown
   if (savedLayoutFor(env.layouts.getState(), code) === null) return 'default'
   snapshot(st, env, 'reset')
@@ -592,15 +704,128 @@ function undo(st: ControllerState, env: ControllerEnv): MnemonicCode | null {
     env.layouts.getState().resetLayout(entry.screen)
     applyPlan(adapt(api), { kind: 'load', layout: layoutFor(entry.screen) })
   }
-  for (const group of LINK_GROUPS) env.linkGroups.getState().setContext(group, entry.contexts[group])
+  setGroupContexts(st, env, entry.contexts)
   st.histories = new Map()
   prepareAll(st, api)
   st.shown = entry.screen
+  // A layout restored from the ring gives back its owner; the default fallback above is a screen's.
+  st.owner = ok ? ownerOf(st, entry) : SCREEN_OWNER
   st.ranIn = null
   st.lastFocused = null
   announce(st, env)
   reportShown(st, env)
   return entry.screen
+}
+
+/** Set every link group's context without reporting each one as an edit of a workspace. */
+function setGroupContexts(st: ControllerState, env: ControllerEnv, contexts: GroupRecord<LinkContext | null>): void {
+  st.applying = true
+  try {
+    for (const group of LINK_GROUPS) env.linkGroups.getState().setContext(group, contexts[group])
+  } finally {
+    st.applying = false
+  }
+}
+
+function saveRecipe(st: ControllerState, env: ControllerEnv, name: string): Recipe | null {
+  const api = st.api
+  const recipe = api && isWorkspaceName(name) ? deriveRecipe(st, env) : null
+  if (!api || !recipe) return null
+  st.owner = { kind: 'workspace', name, base: recipeSignature(recipe), dock: api.toJSON(), contexts: env.linkGroups.getState().contexts }
+  reportShown(st, env)
+  return recipe
+}
+
+/** True when loading changed nothing worth undoing: the same workspace, the same panels and the same link
+ * group contexts as before it. */
+function loadChangedNothing(before: { owner: Owner; signature: string | null; contexts: string }, st: ControllerState, env: ControllerEnv): boolean {
+  if (!sameOwner(before.owner, st.owner) || before.contexts !== JSON.stringify(env.linkGroups.getState().contexts)) return false
+  const now = deriveRecipe(st, env)
+  return before.signature !== null && now !== null && before.signature === recipeSignature(now)
+}
+
+function loadRecipe(st: ControllerState, env: ControllerEnv, name: string, recipe: Recipe, commands: readonly ParsedCommand[]): boolean {
+  const api = st.api
+  const first = commands[0]
+  const panels = api && first && isWorkspaceName(name) ? layoutFromRecipe(recipe, commands) : null
+  if (!api || !first || !panels) return false
+  const currentRecipe = deriveRecipe(st, env)
+  const before = {
+    owner: st.owner,
+    signature: currentRecipe ? recipeSignature(currentRecipe) : null,
+    contexts: JSON.stringify(env.linkGroups.getState().contexts),
+  }
+  const ringBefore = st.undo
+  snapshot(st, env, 'change')
+  const pushed = st.undo === ringBefore ? null : (st.undo.at(-1) ?? null)
+  applyPlan(adapt(api), { kind: 'load', layout: { screen: first.mnemonic.code, panels } })
+  setGroupContexts(st, env, recipe.groups)
+  st.histories = new Map()
+  prepareAll(st, api)
+  seedLinkGroups(api, env.linkGroups)
+  st.shown = first.mnemonic.code
+  // The base is what the panels give now, not the recipe as stored: they are compared like with like.
+  const loaded = deriveRecipe(st, env)
+  st.owner = { kind: 'workspace', name, base: recipeSignature(loaded ?? recipe), dock: api.toJSON(), contexts: env.linkGroups.getState().contexts }
+  st.ranIn = null
+  if (!focusedId(st)) st.lastFocused = null
+  announce(st, env)
+  reportShown(st, env)
+  if (pushed && st.undo.at(-1) === pushed && loadChangedNothing(before, st, env)) st.undo = ringBefore
+  return true
+}
+
+/** Why a saved line cannot be run, in words; null when it is a screen command. */
+function lineProblem(result: LineResult): string | null {
+  if (!result.ok) return describeError(result.error).replace(/\.+$/, '')
+  return result.action.kind === 'run' ? null : WORKSPACES.notScreen
+}
+
+/** The first panel, in reading order, that takes a subject and shows none. Its line would be a bare
+ * mnemonic ("DES"), which LOAD parses with no fallback context and refuses, so SAVE refuses it first. */
+function firstBarePanel(st: ControllerState, env: ControllerEnv): PanelParams | null {
+  for (const id of st.view.getState().order) {
+    const shown = shownParams(st, env, id)
+    if (shown && shown.context === null && (findMnemonic(shown.code)?.accepts.length ?? 0) > 0) return shown
+  }
+  return null
+}
+
+function saveWorkspace(st: ControllerState, env: ControllerEnv, text: string): string {
+  const name = text.trim().toUpperCase()
+  if (!isWorkspaceName(name)) return WORKSPACES.badName
+  const { list } = env.workspaces.getState()
+  if (!Object.hasOwn(list, name) && Object.keys(list).length >= MAX_WORKSPACES) return WORKSPACES.full
+  const recipe = deriveRecipe(st, env)
+  if (!recipe) return WORKSPACES.notKept
+  const bare = firstBarePanel(st, env)
+  if (bare) return fillCopy(WORKSPACES.noContext, { name, line: panelTitle(bare) })
+  if (!env.workspaces.getState().save(name, recipe)) return WORKSPACES.notKept
+  // Read before setLast writes again: it says whether this save reached storage.
+  const { persisted } = env.workspaces.getState()
+  saveRecipe(st, env, name)
+  env.workspaces.getState().setLast(name)
+  if (!persisted) return fillCopy(WORKSPACES.savedSession, { name })
+  const n = recipe.panels.length
+  return n === 1 ? fillCopy(WORKSPACES.savedOne, { name }) : fillCopy(WORKSPACES.saved, { name, n })
+}
+
+function loadWorkspace(st: ControllerState, env: ControllerEnv, text: string, parse: (line: string) => LineResult): string {
+  const name = text.trim().toUpperCase()
+  const { list } = env.workspaces.getState()
+  const recipe = isWorkspaceName(name) && Object.hasOwn(list, name) ? list[name] : undefined
+  if (!recipe) return fillCopy(WORKSPACES.missing, { name: name === '' ? text : name })
+  // A recipe is untrusted: every line is parsed again, and one that no longer runs refuses the whole load.
+  const commands: ParsedCommand[] = []
+  for (const line of recipe.panels.map((p) => p.line)) {
+    const result = parse(line)
+    const problem = lineProblem(result)
+    if (problem !== null) return fillCopy(WORKSPACES.lineFailed, { name, line, reason: problem })
+    if (result.ok && result.action.kind === 'run') commands.push(result.action.command)
+  }
+  if (!loadRecipe(st, env, name, recipe, commands)) return WORKSPACE.notReady
+  env.workspaces.getState().setLast(name)
+  return fillCopy(WORKSPACES.loaded, { name })
 }
 
 /** `env` is read on every call, so the controller always sees the Workspace's latest props. */
@@ -612,6 +837,9 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     shown: env().initialScreen,
     histories: new Map(),
     undo: EMPTY_RING,
+    owner: SCREEN_OWNER,
+    owners: new WeakMap(),
+    applying: false,
     view: createWorkspaceView(),
   }
   return {
@@ -619,7 +847,11 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     onReady: (dock) => onReady(st, env(), dock),
     run: (command, target) => run(st, env(), command, target),
     preview: (command, target) => preview(st, env(), command, target),
-    refreshFocused: () => announce(st, env()),
+    refreshFocused: () => {
+      announce(st, env())
+      // A link group retarget changes the lines and groups a workspace would be saved as.
+      if (st.owner.kind === 'workspace' && !st.applying) reportShown(st, env())
+    },
     focusPanel: () => focusPanel(st, env()),
     focusPanelNumber: (n) => {
       const id = Number.isInteger(n) && n > 0 ? st.view.getState().order[n - 1] : undefined
@@ -654,5 +886,9 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     toggleMaximise: (id) => toggleMaximise(st, id),
     resetLayout: () => resetLayout(st, env()),
     undo: () => undo(st, env()),
+    saveRecipe: (name) => saveRecipe(st, env(), name),
+    loadRecipe: (name, recipe, commands) => loadRecipe(st, env(), name, recipe, commands),
+    saveWorkspace: (name) => saveWorkspace(st, env(), name),
+    loadWorkspace: (name, parse) => loadWorkspace(st, env(), name, parse),
   }
 }

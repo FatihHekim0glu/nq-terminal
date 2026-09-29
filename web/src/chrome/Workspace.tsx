@@ -8,17 +8,20 @@
 // - Panels are numbered in reading order (`1-GP`); the focused one carries the 1px focus line; the
 //   related functions menu dims only its own panel; back and forward walk each panel's history.
 // - dockview's own live announcements are off: the command line's message is the one voice.
-// This file is the React shell; what commands and focus do lives in WorkspaceController.
+// - Named workspaces (SAVE, LOAD) are methods on the handle; the command line only supplies the parser.
+// This file is the React shell; what commands, focus and workspaces do lives in WorkspaceController.
 import { DockviewReact, type DockviewTheme, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { Suspense, createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, type Ref, type RefObject } from 'react'
 import { flushSync } from 'react-dom'
 import { useStore } from 'zustand'
+import type { LineResult } from '../commands/line'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
 import { WORKSPACE } from '../copy/workspace'
 import { useLayouts, type LayoutsStore } from '../state/layouts'
 import { useLinkGroups, type LinkGroupsStore } from '../state/linkGroups'
+import { useWorkspaces, type WorkspacesStore } from '../state/workspaces'
 import { copyLinkEntries } from './copyLink'
 import { markWorkspaceGone, markWorkspaceReady } from './deepLink'
 import { registerNumbered } from './NumberedActions'
@@ -30,6 +33,7 @@ import ScreenBoundary from './ScreenBoundary'
 import { createWorkspaceController, type ControllerEnv, type FocusedPanel, type RunTarget, type ShownLayout, type WorkspaceController } from './WorkspaceController'
 import { PANEL_COMPONENT, effectiveContext, panelSubject, panelTitle, sanitiseParams } from './WorkspaceModel'
 import type { RunPreview } from './WorkspacePreview'
+import type { Recipe } from './WorkspaceRecipe'
 import WorkspacePlaceholder from './WorkspacePlaceholder'
 import { createWorkspaceView, type WorkspaceView } from './WorkspaceView'
 import { BUILT_SCREENS, type ScreenRegistry } from './WorkspaceScreens'
@@ -64,10 +68,25 @@ export interface WorkspaceHandle {
   openRelatedMenu(panelId?: string): boolean
   /** Close the related functions menu wherever it is open. */
   closeRelatedMenu(): void
-  /** Reset the shown screen to its default layout ('reset'), or report it already is ('default'). */
+  /** Reset the layout on screen ('reset'), or report there is nothing to reset ('default'). A screen goes
+   * back to its default layout; a workspace goes back to the panels it was saved or loaded with and stays
+   * the owner, and no saved screen layout is touched. */
   resetLayout(): 'reset' | 'default' | null
-  /** Undo the last layout change. The screen it restored, or null when there was nothing to undo. */
+  /** Undo the last layout change. The screen it restored, or null when there was nothing to undo. The
+   * layout's owner (a screen or a named workspace) comes back with the panels. */
   undo(): MnemonicCode | null
+  /** The recipe of the panels on screen, with the workspace `name` then owning the layout, unedited.
+   * Null (nothing changes) for a bad name or when the panels cannot be written as command lines. */
+  saveRecipe(name: string): Recipe | null
+  /** Rebuild the panels from a recipe whose lines were parsed into `commands`, panel for panel. False,
+   * with nothing changed, when they do not fit. Snapshots undo first. */
+  loadRecipe(name: string, recipe: Recipe, commands: readonly ParsedCommand[]): boolean
+  /** SAVE NAME: keep the panels on screen as a named workspace. The message to show: WORKSPACES.saved,
+   * or badName, full or notKept. A name is trimmed and put in capitals. */
+  saveWorkspace(name: string): string
+  /** LOAD NAME: parse every line of the saved workspace with `parse`; if all are screen commands rebuild
+   * the panels, else change nothing. The message to show: WORKSPACES.loaded, missing or lineFailed. */
+  loadWorkspace(name: string, parse: (line: string) => LineResult): string
 }
 
 export interface WorkspaceProps {
@@ -76,7 +95,7 @@ export interface WorkspaceProps {
   readonly screens?: ScreenRegistry
   readonly layouts?: LayoutsStore
   readonly linkGroups?: LinkGroupsStore
-  readonly onScreenChange?: (code: MnemonicCode) => void
+  readonly workspaces?: WorkspacesStore
   readonly onFocusedPanelChange?: (panel: FocusedPanel | null) => void
   readonly onLayoutChange?: (shown: ShownLayout) => void
   readonly onLayoutDropped?: (code: MnemonicCode) => void
@@ -198,8 +217,8 @@ function useController(props: WorkspaceProps, rootRef: RefObject<HTMLElement | n
     initialScreen: props.initialScreen ?? 'HOME',
     layouts: props.layouts ?? useLayouts,
     linkGroups,
+    workspaces: props.workspaces ?? useWorkspaces,
     root: () => rootRef.current,
-    onScreenChange: props.onScreenChange,
     onFocusedPanelChange: props.onFocusedPanelChange,
     onLayoutChange: props.onLayoutChange,
     onLayoutDropped: props.onLayoutDropped,
@@ -237,6 +256,10 @@ export default function Workspace(props: WorkspaceProps) {
     closeRelatedMenu: controller.closeRelatedMenu,
     resetLayout: controller.resetLayout,
     undo: controller.undo,
+    saveRecipe: controller.saveRecipe,
+    loadRecipe: controller.loadRecipe,
+    saveWorkspace: controller.saveWorkspace,
+    loadWorkspace: controller.loadWorkspace,
   }))
   const env = { screens: props.screens ?? BUILT_SCREENS, linkGroups: props.linkGroups ?? useLinkGroups, controller, view: controller.view }
   return (

@@ -57,13 +57,13 @@ function renderWorkspace(props: Partial<Parameters<typeof Workspace>[0]> = {}) {
   const ref = createRef<WorkspaceHandle>()
   const layouts = createLayoutsStore(memoryStorage())
   const linkGroups = createLinkGroupsStore(memoryStorage())
-  const onScreenChange = vi.fn()
+  const onLayoutChange = vi.fn()
   const utils = render(
     <div style={{ width: 1200, height: 800 }}>
-      <Workspace ref={ref} screens={SHELL_SCREENS} layouts={layouts} linkGroups={linkGroups} onScreenChange={onScreenChange} {...props} />
+      <Workspace ref={ref} screens={SHELL_SCREENS} layouts={layouts} linkGroups={linkGroups} onLayoutChange={onLayoutChange} {...props} />
     </div>,
   )
-  return { ...utils, ref, layouts, linkGroups, onScreenChange }
+  return { ...utils, ref, layouts, linkGroups, onLayoutChange }
 }
 
 const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
@@ -78,10 +78,10 @@ function panelNumbers(): string[] {
 
 describe('Workspace (dockview) with the default layouts', () => {
   it('opens HOME as the 2x2 home layout and reports the screen', async () => {
-    const { onScreenChange } = renderWorkspace()
+    const { onLayoutChange } = renderWorkspace()
     await waitFor(() => expect(panelTitles()).toHaveLength(4))
     expect(panelTitles()).toEqual(HOME_TITLES)
-    expect(onScreenChange).toHaveBeenCalledWith('HOME')
+    expect(onLayoutChange).toHaveBeenCalledWith({ code: 'HOME', edited: false, workspace: null })
   })
 
   it('shows a labelled placeholder for an unbuilt screen', async () => {
@@ -98,14 +98,15 @@ describe('Workspace (dockview) with the default layouts', () => {
   })
 
   it('loads a multi-panel screen on Enter and renders HELP from the registry', async () => {
-    const { ref, onScreenChange } = renderWorkspace()
+    const { ref, onLayoutChange } = renderWorkspace()
     await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => ref.current?.run(command('REG'), 'replace'))
     await waitFor(() => expect(panelTitles()).toEqual(['REG', 'MT']))
     act(() => ref.current?.run(command('HELP'), 'new-panel'))
     await waitFor(() => expect(panelTitles()).toContain('HELP'))
     await waitFor(() => expect(screen.getByRole('table', { name: HELP.mnemonicsCaption })).toBeTruthy(), { timeout: 5000 })
-    expect(onScreenChange).toHaveBeenLastCalledWith('HELP')
+    // A panel added beside the layout is an edit of the screen shown, not a new screen.
+    expect(onLayoutChange).toHaveBeenLastCalledWith({ code: 'REG', edited: true, workspace: null })
   })
 
   it('replaces the focused panel in place and retargets its link group', async () => {
@@ -170,12 +171,12 @@ describe('Workspace (dockview) with the default layouts', () => {
   })
 
   it('does not wipe a customised HOME layout when HOME is typed again afterwards (D01)', async () => {
-    const { ref, layouts, onScreenChange } = renderWorkspace()
+    const { ref, layouts, onLayoutChange } = renderWorkspace()
     await waitFor(() => expect(panelTitles()).toHaveLength(4))
     act(() => screen.getByRole('group', { name: 'volmanaged_v0 EQ content' }).focus())
     act(() => ref.current?.run(command('RUNS'), 'replace'))
     await waitFor(() => expect(panelTitles()).toContain('RUNS'))
-    expect(onScreenChange).toHaveBeenLastCalledWith('RUNS')
+    expect(onLayoutChange).toHaveBeenLastCalledWith({ code: 'HOME', edited: true, workspace: null })
     expect(layouts.getState().layouts.HOME).toBeDefined()
     act(() => ref.current?.run(command('HOME'), 'replace'))
     await waitFor(() => expect(panelTitles()).toContain('RUNS'))
