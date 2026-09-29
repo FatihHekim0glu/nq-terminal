@@ -4,7 +4,8 @@
 // selection navy; it opens upward when there is no room below. Inside a ParamRow each field shows
 // its label as amber text before it; elsewhere the label is the accessible name only.
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { FIELD, fillCopy } from '../copy/workspace'
+import { fillCopy } from '../copy/workspace'
+import { FIELD } from '../copy/panelParts'
 import { usePanelActions } from './PanelChrome.actions'
 import { ROVING_ATTR } from './WorkspaceFocus'
 import './Field.css'

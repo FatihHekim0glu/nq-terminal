@@ -85,10 +85,9 @@ export function retryDelay(attempt: number): number {
   return Math.min(LIVE_STREAM.retryMinMs * 2 ** steps, LIVE_STREAM.retryMaxMs)
 }
 
-/** Whether the live queries poll: only while no stream is open or on its way. */
-export function pollIntervalFor(mode: StreamMode, pollMs: number): number | false {
-  return mode === 'polling' || mode === 'off' ? pollMs : false
-}
+// pollIntervalFor (whether the live queries poll) sits in liveMode.ts with the mode the shell reads, so the
+// shell need not load this file for it.
+export { pollIntervalFor } from './liveMode'
 
 function parse(kind: StreamKind, text: string): StreamEvent | null {
   try {

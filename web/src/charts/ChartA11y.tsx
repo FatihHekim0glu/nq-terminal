@@ -9,7 +9,7 @@
 // scrolling table are Tab stops on their own (WCAG 2.1.1; axe scrollable-region-focusable); inside a
 // panel, the roving focus (chrome/WorkspaceFocus) leaves one Tab stop per panel.
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CHART } from '../copy/workspace'
+import { CHART } from '../copy/panelParts'
 import { ROVING_ATTR, ROVING_DEFAULT_ATTR } from '../chrome/WorkspaceFocus'
 import './ChartA11y.css'
 

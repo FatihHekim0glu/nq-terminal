@@ -4,7 +4,7 @@
 // GET /api/hypotheses/{name}, printed exactly as DES prints it; `98) Export` saves them at full precision.
 // A sealed-window confirmation has no in-sample blocks and says where to look instead.
 import { useMemo, useRef } from 'react'
-import { useHypothesis } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'

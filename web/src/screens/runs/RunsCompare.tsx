@@ -5,7 +5,7 @@
 // left out and listed under Not drawn. Every number is the API's, formatted; the terminal adds no test,
 // no p value and no pass or fail on runs the reader picked. [POST HOC]
 import { useId, useMemo } from 'react'
-import { useRunsCompare } from '../../api/queries'
+import { useRunsCompare } from '../../api/queries.screens'
 import LineStack from '../../charts/LineStack'
 import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import type { LinkGroup } from '../../chrome/WorkspaceLayouts'

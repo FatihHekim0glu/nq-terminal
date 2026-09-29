@@ -6,7 +6,8 @@
 // asked, since it would only answer 422.
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { ApiError } from '../../api/client'
-import { useApiQuery, useHypothesis, useRun } from '../../api/queries'
+import { useApiQuery, useRun } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 import type { Analytics } from './tearKpis'
 

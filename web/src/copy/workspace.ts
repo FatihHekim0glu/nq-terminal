@@ -1,6 +1,7 @@
-// Copy for the workspace and its panels, including the chart wrapper (UI_SPEC sections 2 and 7 to 9,
-// look spec sections 4.3 to 4.8). UK spelling, no em or en dashes. `{name}` slots are filled by
-// fillCopy().
+// Copy for the workspace and its panels (UI_SPEC sections 2 and 7 to 9, look spec sections 4.3 to 4.8). UK
+// spelling, no em or en dashes. `{name}` slots are filled by fillCopy(). This file is part of the first-paint
+// shell: the copy that only the panels' parts read (export, related menu, quote header, field, chart wrapper,
+// tab sets) is in copy/panelParts.ts.
 
 export const WORKSPACE = {
   label: 'Workspace',
@@ -43,33 +44,8 @@ export const FUNCTION_BAR = {
   menuLabel: '{label} menu',
 } as const
 
-/** 98) Export on every screen that has it: the shown rows as a CSV download (nothing is requested). */
-export const EXPORT = {
-  csv: 'Shown rows as CSV',
-  done: 'Saved {n} rows as {file}.',
-  doneOne: 'Saved {n} row as {file}.',
-  empty: 'Nothing to export on this screen yet.',
-  unavailable: 'This browser cannot save a file here.',
-} as const
-
 /** House numbering for red-bar buttons (look spec 4.4). */
 export const FUNCTION_NUMBERS = { compare: 95, actions: 96, settings: 97, export: 98, help: 99 } as const
-
-export const RELATED = {
-  title: 'Related functions',
-  root: 'Main menu of functions',
-  cancel: '<Cancel>',
-  cancelLabel: 'Cancel: close the related functions menu',
-  listLabel: 'Functions for {context}',
-  noContext: 'no context',
-  categories: {
-    prices: 'Prices and markets',
-    research: 'Research',
-    runs: 'Runs and performance',
-    live: 'Live and audit',
-    terminal: 'Terminal',
-  },
-} as const
 
 export const PLACEHOLDER = {
   heading: '{code}: {screen}',
@@ -91,47 +67,6 @@ export const PLACEHOLDER = {
   rowArgument: 'Argument',
   missing: '--',
   none: 'none',
-} as const
-
-/** Screens that share one panel as tabs (look spec 7.5): the tab labels by mnemonic. */
-export const TAB_SETS = {
-  analytics: {
-    label: 'Performance views',
-    tabs: { EQ: 'Equity', DD: 'Drawdown', RET: 'Returns', RR: 'Rolling', MRET: 'Monthly' },
-  },
-} as const
-
-export const QUOTE = {
-  label: 'Quote for {ticker}',
-  at: 'At',
-  vol: 'Vol',
-  open: 'O',
-  high: 'H',
-  low: 'L',
-  rv: 'RV22',
-  delayed: 'd',
-  delayedLabel: 'served, delayed, in-sample',
-  tickUp: 'last tick up',
-  tickDown: 'last tick down',
-  sparkLabel: 'Intraday price line',
-  t: 't',
-  p: 'p',
-  round: 'round',
-} as const
-
-export const FIELD = {
-  listLabel: '{label} choices',
-  disabled: 'not available',
-} as const
-
-export const CHART = {
-  /** Visible label of the chart's table-view toggle; aria-pressed carries its state (WCAG 2.5.3). */
-  tableToggle: 'Table',
-  readoutLabel: 'Crosshair readout',
-  keysHint: 'T toggles the table view while the chart has focus.',
-  emptySeries: '{name}: no data.',
-  seriesSummary: '{name}: {count} points from {start} to {end}; first {first}, last {last}, low {min}, high {max}{unit}.',
-  seriesSummaryDrawdown: '{name}: {count} points from {start} to {end}; first {first}, last {last}, low {min}, high {max}{unit}; max drawdown {drawdown} ({basis}).',
 } as const
 
 /** Replaces each `{name}` slot with its value; unknown slots are left as they are. */

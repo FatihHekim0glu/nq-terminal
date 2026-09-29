@@ -1,6 +1,6 @@
 // EVT response types: aliases of the generated contract (src/api/schema.d.ts, from backend/nq_terminal/
 // models/events.py through contract/openapi.json), plus the screen's request state.
-import type { EventStudyQuery } from '../../api/queries'
+import type { EventStudyQuery } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 
 export type EventType = NonNullable<EventStudyQuery['event']>

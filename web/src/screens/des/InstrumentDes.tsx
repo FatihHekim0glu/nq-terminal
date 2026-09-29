@@ -9,7 +9,8 @@
 // `98) Report` saves the description as Markdown. Nothing is filled in from outside knowledge: a field
 // nq-lab does not record stays empty and the page says so.
 import { useId, useRef, useState, type ReactNode } from 'react'
-import { useCommands, useInstrument } from '../../api/queries'
+import { useCommands } from '../../api/queries'
+import { useInstrument } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 import { saveText } from '../../chrome/download'
 import { postMessage } from '../../chrome/MessageLine.store'

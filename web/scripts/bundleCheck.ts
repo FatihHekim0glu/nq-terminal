@@ -15,8 +15,19 @@ import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 export const BUNDLE_BUDGET = {
-  /** The shell was 120.4 kB gzip before Phase 5 (index, vendor, react and the runtime). */
-  shellGzip: 135_000,
+  /**
+   * The shell was 120.4 kB gzip before Phase 5 (index, vendor, react and the runtime), 132.1 kB after wave 5,
+   * and 125.2 kB after the wave 6 shell diet, which moved everything first paint does not need behind a dynamic
+   * import (scripts/shellBudget.test.ts names each piece and pins this ceiling). The ceiling is that size plus
+   * 1.5 kB, so a later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else
+   * out first, or raise this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.
+   */
+  shellGzip: 126_800,
+  /**
+   * The gallery build's shell (the E2E build, `--gallery`) is about 0.8 kB larger: its entry loads the API client
+   * and the connection state eagerly, so those two split out of index. Measured 126.1 kB after the diet, plus 1.5 kB.
+   */
+  galleryShellGzip: 127_600,
   libraryGzip: {
     uplot: 30_000,
     'lightweight-charts': 75_000,
@@ -127,6 +138,11 @@ function checkDemo(files: ReadonlyArray<readonly [string, string]>, opts: Bundle
   return { demoFiles, violations }
 }
 
+/** The shell budget of a build: the gallery build has its own (see BUNDLE_BUDGET.galleryShellGzip). */
+export function shellBudgetFor(opts: BundleOptions): number {
+  return opts.gallery ? BUNDLE_BUDGET.galleryShellGzip : BUNDLE_BUDGET.shellGzip
+}
+
 export function analyseBundle(distDir: string, opts: BundleOptions): BundleReport {
   const assets = path.join(distDir, 'assets')
   const names = readdirSync(assets)
@@ -143,7 +159,8 @@ export function analyseBundle(distDir: string, opts: BundleOptions): BundleRepor
   for (const [f, t] of js) {
     if (t.includes(REACT_MARKER) && !f.startsWith('react-')) violations.push(`react code is in ${f}, outside its own react-*.js chunk`)
   }
-  if (shellGzip > BUNDLE_BUDGET.shellGzip) violations.push(`shell JS is ${shellGzip} bytes gzip, over its ${BUNDLE_BUDGET.shellGzip} budget`)
+  const shellBudget = shellBudgetFor(opts)
+  if (shellGzip > shellBudget) violations.push(`shell JS is ${shellGzip} bytes gzip, over its ${shellBudget} budget`)
   if (!opts.gallery && galleryFiles.length > 0) violations.push(`production bundle holds gallery code: ${galleryFiles.join(', ')}`)
   if (opts.gallery && galleryFiles.length === 0) violations.push('gallery build holds no gallery code')
   return { initial, shellGzip, libraries: libs.libraries, libraryGzip: libs.libraryGzip, galleryFiles, demoFiles: demo.demoFiles, violations }
@@ -155,9 +172,10 @@ function main(argv: readonly string[]): number {
     process.stderr.write('usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]\n')
     return 2
   }
-  const report = analyseBundle(path.resolve(dir), { gallery: argv.includes('--gallery'), demo: argv.includes('--demo') })
+  const opts = { gallery: argv.includes('--gallery'), demo: argv.includes('--demo') }
+  const report = analyseBundle(path.resolve(dir), opts)
   const kb = (n: number) => `${(n / 1000).toFixed(1)} kB`
-  process.stdout.write(`bundle check: shell ${kb(report.shellGzip)} gzip of ${kb(BUNDLE_BUDGET.shellGzip)} (${report.initial.join(', ')})\n`)
+  process.stdout.write(`bundle check: shell ${kb(report.shellGzip)} gzip of ${kb(shellBudgetFor(opts))} (${report.initial.join(', ')})\n`)
   for (const [lib, size] of Object.entries(report.libraryGzip)) {
     process.stdout.write(`bundle check: ${lib} ${kb(size)} gzip of ${kb(BUNDLE_BUDGET.libraryGzip[lib as LibraryName])}\n`)
   }

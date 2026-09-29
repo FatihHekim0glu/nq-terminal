@@ -37,7 +37,7 @@ import {
   unitsText,
   windowOptions,
 } from './model'
-import { useEventCalendar, useEventStudy } from '../../api/queries'
+import { useEventCalendar, useEventStudy } from '../../api/queries.screens'
 import type { EventCalendar, EventMode, EventRow, EventStudy, EventType } from './types'
 import './evt.css'
 

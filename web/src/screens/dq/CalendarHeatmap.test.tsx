@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useRef, type ReactNode } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { usePanelRoving } from '../../chrome/WorkspaceFocus'
-import { CHART } from '../../copy/workspace'
+import { CHART } from '../../copy/panelParts'
 import CalendarHeatmap from './CalendarHeatmap'
 import type { DqCounts, DqDay } from './types'
 

@@ -19,6 +19,7 @@
 // table in a fixed column) carries `data-roving-scroll`: it takes the Tab stop from the body when both
 // render as stops, since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
 import { useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react'
+import { registerRovingSync } from './KeyToolbar.panels'
 
 export const ROVING_ATTR = 'data-roving'
 export const ROVING_DEFAULT_ATTR = 'data-roving-default'
@@ -275,3 +276,6 @@ export function usePanelRoving(ref: RefObject<HTMLElement | null>): (event: Reac
     [ref],
   )
 }
+
+// Alt+N (KeyToolbar.panels.ts, part of the shell) focuses a panel through syncRoving without importing this file.
+registerRovingSync(syncRoving)

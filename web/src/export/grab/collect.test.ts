@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import ChartA11y, { type ChartTable } from '../../charts/ChartA11y'
-import { CHART } from '../../copy/workspace'
+import { CHART } from '../../copy/panelParts'
 import { collectFigures } from './collect'
 
 afterEach(() => {

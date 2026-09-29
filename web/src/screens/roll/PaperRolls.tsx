@@ -4,7 +4,7 @@
 import { ROLL } from '../../copy/roll'
 import { fillCopy } from '../../copy/workspace'
 import QueryStatus from '../mon/QueryStatus'
-import type { usePaperRolls } from '../../api/queries'
+import type { usePaperRolls } from '../../api/queries.screens'
 
 export default function PaperRolls({ query }: { readonly query: ReturnType<typeof usePaperRolls> }) {
   const schedule = query.data

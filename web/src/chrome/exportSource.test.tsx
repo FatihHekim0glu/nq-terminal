@@ -4,7 +4,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { EXPORT } from '../copy/workspace'
+import { EXPORT } from '../copy/panelParts'
 import { captureDownloads } from './download.testUtil'
 import { ExportSlotProvider, useExportSlot, useExportSource, type ExportSource } from './exportSource'
 import { useMessage } from './MessageLine.store'

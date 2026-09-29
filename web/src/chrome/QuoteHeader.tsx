@@ -4,7 +4,8 @@
 // sparkline. Line 2: amber labels with white values; a `d` flag after the time means served,
 // delayed, in-sample. No tick flash. Inside a panel it renders into the panel's quote slot, above the
 // red bar, the slot the reference terminal gives it in place of the command zone.
-import { QUOTE, fillCopy } from '../copy/workspace'
+import { fillCopy } from '../copy/workspace'
+import { QUOTE } from '../copy/panelParts'
 import { useSlot } from './PanelChrome.slots'
 import { formatPercent, formatPercentChange, formatPrice, formatSignedChange, formatThousands } from './QuoteHeader.format'
 import './QuoteHeader.css'

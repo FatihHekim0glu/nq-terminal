@@ -3,7 +3,8 @@
 // date, the journal's own non-plumbing close rows (/api/live/journal?type=close), so a plumbing row can
 // never reach the chart even if the server let one through.
 import { useEffect, useMemo, useState } from 'react'
-import { useApiQuery, useLivePerformance } from '../../api/queries'
+import { useApiQuery } from '../../api/queries'
+import { useLivePerformance } from '../../api/queries.screens'
 import { useLivePollInterval } from '../../api/useLiveStream'
 import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'

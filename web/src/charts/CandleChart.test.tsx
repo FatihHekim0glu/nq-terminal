@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useRef, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHART } from '../copy/workspace'
+import { CHART } from '../copy/panelParts'
 import { usePanelRoving } from '../chrome/WorkspaceFocus'
 import { FAKE_DAY, FAKE_T0, fakeBars, fakeLib } from './CandleChart.fake'
 

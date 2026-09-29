@@ -6,7 +6,8 @@
 // `98) Export` saves what the screen shows at full precision. A sealed-window confirmation has its costs
 // in its own result and says where to look. Every request is a GET.
 import { useMemo, useRef } from 'react'
-import { useApiQuery, useHypothesis, useRun } from '../../api/queries'
+import { useApiQuery, useRun } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'

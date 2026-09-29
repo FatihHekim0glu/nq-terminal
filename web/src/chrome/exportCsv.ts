@@ -3,7 +3,8 @@
 // leaves it and nothing is written anywhere else (saveText uses a local object URL). Cells are RFC 4180
 // fields; numbers keep the precision the API sent; a text a spreadsheet would run as a formula is
 // prefixed with an apostrophe, while a signed figure such as `+1.23` or `-0.52%` stays as shown.
-import { EXPORT, fillCopy } from '../copy/workspace'
+import { fillCopy } from '../copy/workspace'
+import { EXPORT } from '../copy/panelParts'
 import { saveText } from './download'
 import { postMessage } from './MessageLine.store'
 

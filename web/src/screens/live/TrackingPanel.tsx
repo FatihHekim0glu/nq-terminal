@@ -2,7 +2,7 @@
 // closes, [POST HOC] and descriptive, performance rows only. One GET, /api/analytics/paper-tracking, refreshed
 // by the live stream like the other journal views. The chart is a LineStack (its own summary and table view).
 import { useMemo } from 'react'
-import { usePaperTracking } from '../../api/queries'
+import { usePaperTracking } from '../../api/queries.screens'
 import LineStack from '../../charts/LineStack'
 import { TRACKING } from '../../copy/tracking'
 import { fillCopy } from '../../copy/workspace'

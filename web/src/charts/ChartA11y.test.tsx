@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHART } from '../copy/workspace'
+import { CHART } from '../copy/panelParts'
 import ChartA11y, { type ChartTable } from './ChartA11y'
 import { describeSeries } from './ChartA11ySummary'
 

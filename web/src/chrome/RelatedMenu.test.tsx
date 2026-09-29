@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BUILT_CODES } from '../commands/built'
 import { MNEMONIC_SCREENS } from '../copy/commands'
-import { RELATED } from '../copy/workspace'
+import { RELATED } from '../copy/panelParts'
 import { NumberingContext, type NumberedItem } from './PanelChrome.numbers'
 import RelatedMenu, { relatedEntries } from './RelatedMenu'
 import { ROVING_OVERLAY_ATTR, panelTabStops, syncRoving } from './WorkspaceFocus'

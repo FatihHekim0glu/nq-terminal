@@ -1,9 +1,22 @@
 // The workspace panels as the chrome sees them (spec 4.2 and 5.2): numbered 1, 2, 3 in reading order
 // (the DOM order of the panel elements), focused by number (Alt+1 to Alt+9), and paged (PgUp, PgDn).
 // Reads the DOM only; the workspace keeps its own state.
-import { syncRoving } from './WorkspaceFocus'
+//
+// SHELL RULE: this file is part of the first-paint shell, so it must not import WorkspaceFocus.ts, the roving
+// focus code of the panels (about 1.2 kB gzip that only the Workspace chunk and the screens need). That file
+// hands its syncRoving to registerRovingSync as it loads, always before a panel exists to focus
+// (chrome/KeyToolbar.panels.focus.test.ts; scripts/shellBudget.test.ts checks the build).
 
 const PANEL_ATTR = 'data-nqt-panel'
+
+/** WorkspaceFocus.syncRoving: leaves one Tab stop in a panel and returns it. */
+type SyncRoving = (panel: HTMLElement, prefer?: HTMLElement) => HTMLElement | undefined
+let syncRoving: SyncRoving | null = null
+
+/** WorkspaceFocus.ts calls this as it loads. Until then no panel has been drawn, so focusPanelAt finds none. */
+export function registerRovingSync(sync: SyncRoving): void {
+  syncRoving = sync
+}
 
 export function panelElements(root: ParentNode = document): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(`[${PANEL_ATTR}]`))
@@ -28,7 +41,7 @@ export function panelNumberOf(id: string | null): number | null {
 export function focusPanelAt(n: number): boolean {
   const panel = panelElements()[n - 1]
   if (!panel) return false
-  const stop = syncRoving(panel)
+  const stop = syncRoving?.(panel)
   stop?.focus()
   return stop !== undefined && panel.contains(document.activeElement)
 }

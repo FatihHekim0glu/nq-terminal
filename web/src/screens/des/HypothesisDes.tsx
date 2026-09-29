@@ -5,7 +5,7 @@
 // A registered risk overlay carries [OVERLAY] beside its verdict. `98) Report` saves the description as
 // Markdown. Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
 import { useId, useMemo, useRef, useState } from 'react'
-import { useHypothesis } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { saveText } from '../../chrome/download'
 import { postMessage } from '../../chrome/MessageLine.store'

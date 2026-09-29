@@ -21,12 +21,11 @@ import type { ResolvedContext } from './commands/types'
 import type { CommandLineHandle } from './chrome/CommandLine'
 import { useTerminalKeys, type KeyWhere } from './chrome/CommandLine.keys'
 import ConnectionStrip from './chrome/ConnectionStrip'
-import { LiveEventTape } from './chrome/EventTape.live'
 import { toggleTape, useTapeOn } from './chrome/EventTape.store'
 import { FrameStrip, type ColourScheme } from './chrome/FrameStrip'
 import { KeyToolbar } from './chrome/KeyToolbar'
+import { LazyBoundary } from './chrome/LazyBoundary'
 import { createChromeActions, runGlobalKey, runKey, runNav, type ChromeActions, type ChromeEnv, type ChromeWorkspace } from './chrome/KeyToolbar.actions'
-import { KeyMapOverlay } from './chrome/KeyToolbar.overlay'
 import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
@@ -47,6 +46,14 @@ import './chrome/FrameStrip.frame.css'
 // imports WorkspacePreview itself, so waiting for both costs no extra request, and the row is ready with
 // the first render of the Workspace.
 let previewer: typeof previewText | null = null
+
+// The event tape (off by default, decision D4) and the key map overlay (Alt+K) are shown only when asked for,
+// so they load as chunks of their own and render nothing until they have arrived; the shell carries neither
+// (scripts/shellBudget.test.ts). The tape reads the gate log only once mounted, as before. A chunk that
+// cannot be fetched is caught by a LazyBoundary and reported on the message line; the terminal stays up, and
+// a saved "tape on" is left alone so it works after a reload.
+const LiveEventTape = lazy(() => import('./chrome/EventTape.live').then((m) => ({ default: m.LiveEventTape })))
+const KeyMapOverlay = lazy(() => import('./chrome/KeyToolbar.overlay').then((m) => ({ default: m.KeyMapOverlay })))
 
 const Workspace = lazy(async () => {
   const [workspace, preview] = await Promise.all([import('./chrome/Workspace'), import('./chrome/WorkspacePreview')])
@@ -221,9 +228,26 @@ function Terminal() {
       <Suspense fallback={<WorkspaceLoading />}>
         <Workspace ref={refs.workspace} onLayoutChange={setShown} onLayoutDropped={(code) => postMessage(fillCopy(LAYOUT.dropped, { screen: code }))} onFocusedPanelChange={setFocused} />
       </Suspense>
-      {tapeOn ? <LiveEventTape /> : null}
+      {tapeOn ? (
+        <LazyBoundary onError={() => postMessage(MESSAGES.tapeFailed)}>
+          <Suspense fallback={null}>
+            <LiveEventTape />
+          </Suspense>
+        </LazyBoundary>
+      ) : null}
       <LiveStatusBar screen={shown.code} edited={shown.edited} watch={watch} />
-      {keymapOpen ? <KeyMapOverlay onClose={() => setKeymapOpen(false)} /> : null}
+      {keymapOpen ? (
+        <LazyBoundary
+          onError={() => {
+            setKeymapOpen(false)
+            postMessage(MESSAGES.keymapFailed)
+          }}
+        >
+          <Suspense fallback={null}>
+            <KeyMapOverlay onClose={() => setKeymapOpen(false)} />
+          </Suspense>
+        </LazyBoundary>
+      ) : null}
       {idle ? <RecordWatchReader /> : null}
     </div>
   )

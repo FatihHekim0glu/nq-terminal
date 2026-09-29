@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gzipSync } from 'node:zlib'
 import { afterAll, describe, expect, it } from 'vitest'
 import { CHUNK_GROUPS, DEMO_MODE, DEMO_OUT_DIR, GALLERY_MODE, GALLERY_OUT_DIR, LIBRARY_CHUNKS, PRELOAD_HELPER, outDirFor } from '../vite.config.ts'
 import { BUNDLE_BUDGET, DEMO_MARKERS, GALLERY_MARKERS, LIBRARY_MARKERS, analyseBundle } from './bundleCheck.ts'
@@ -33,6 +34,20 @@ function fakeDist(files: Readonly<Record<string, string>>, preload: readonly str
   writeFileSync(path.join(dir, 'index.html'), `<script type="module" crossorigin src="/assets/index.js"></script>\n${links}`, 'utf-8')
   for (const [name, text] of Object.entries(files)) writeFileSync(path.join(dir, 'assets', name), text, 'utf-8')
   return dir
+}
+
+/** Random base64 text whose gzip size (level 9, as bundleCheck measures it) is within 200 bytes of `target`. */
+function textGzipping(target: number): string {
+  const pool = randomBytes(Math.ceil(target * 1.4)).toString('base64')
+  const size = (n: number) => gzipSync(Buffer.from(pool.slice(0, n), 'utf-8'), { level: 9 }).length
+  let low = 0
+  let high = pool.length
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2)
+    if (size(mid) > target) high = mid
+    else low = mid
+  }
+  return pool.slice(0, low)
 }
 
 describe('analyseBundle on hand-made bundles', () => {
@@ -107,6 +122,24 @@ describe('analyseBundle on hand-made bundles', () => {
     expect(analyseBundle(bootOnly, { gallery: false, demo: true }).violations.join('\n')).toMatch(/demo build lacks nt_volmanaged_v0_fixture_m1/)
     const none = fakeDist({ 'index.js': '' })
     expect(analyseBundle(none, { gallery: false, demo: true }).violations.join('\n')).toMatch(/demo build lacks nqt-demo, nt_volmanaged_v0_fixture_m1/)
+  })
+
+  it('holds a gallery build to its own, slightly larger shell budget (its entry loads the API client eagerly)', () => {
+    expect(BUNDLE_BUDGET.galleryShellGzip).toBeGreaterThan(BUNDLE_BUDGET.shellGzip)
+    expect(BUNDLE_BUDGET.galleryShellGzip - BUNDLE_BUDGET.shellGzip).toBeLessThanOrEqual(2_000)
+    // A shell between the two budgets: too big for production and the demo, fine for the gallery.
+    const between = textGzipping((BUNDLE_BUDGET.shellGzip + BUNDLE_BUDGET.galleryShellGzip) / 2)
+    const dir = fakeDist({ 'index.js': between, 'entry-1.js': 'const p="/__gallery"' })
+    expect(analyseBundle(dir, { gallery: false }).violations.join('\n')).toMatch(/shell JS is \d+ bytes gzip, over its 1\d+ budget/)
+    expect(analyseBundle(dir, { gallery: true }).violations).toEqual([])
+    expect(analyseBundle(dir, { gallery: false, demo: true }).violations.join('\n')).toMatch(/shell JS/)
+  })
+
+  it('names the budget it applied when the shell is over it', () => {
+    const over = textGzipping(BUNDLE_BUDGET.galleryShellGzip + 3_000)
+    const dir = fakeDist({ 'index.js': over, 'entry-1.js': 'const p="/__gallery"' })
+    expect(analyseBundle(dir, { gallery: true }).violations.join('\n')).toContain(`over its ${BUNDLE_BUDGET.galleryShellGzip} budget`)
+    expect(analyseBundle(dir, { gallery: false }).violations.join('\n')).toContain(`over its ${BUNDLE_BUDGET.shellGzip} budget`)
   })
 
   it('does not hold a gallery build to the demo rule (gallery entries may show fixture captures)', () => {

@@ -39,7 +39,7 @@ import {
   smallView,
   symbolOf,
 } from './model'
-import { useVolCone, useVolConeUniverse } from '../../api/queries'
+import { useVolCone, useVolConeUniverse } from '../../api/queries.screens'
 import SmallMultiples from './SmallMultiples'
 import type { GateInfo, VolCone, VolConeUniverse } from './types'
 import './vcone.css'

@@ -5,7 +5,7 @@
 // The fence is checked here before any request: a window that leaves [2010-01-01, 2022-01-01) is
 // refused in the terminal with the gate's own rule text (nq_lab.oos_gate.check_window), so no price
 // request past 2021-12-31 ever leaves the page. A 403 from the server is still shown verbatim.
-import type { BarsQuery } from '../../api/queries'
+import type { BarsQuery } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 import type { CandleBars, CandleFill, CandleIndicator, CandleRoll } from '../../charts/CandleChart.model'
 import type { QuoteData } from '../../chrome/QuoteHeader'

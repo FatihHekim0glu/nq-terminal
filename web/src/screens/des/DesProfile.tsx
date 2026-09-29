@@ -4,7 +4,8 @@
 // and the round summary. Numbers in box
 // titles are the panel's Number <GO> items (HypothesisDes registers them).
 import type { ReactNode } from 'react'
-import { useConfirmations, useDeflated, useSealedIndex } from '../../api/queries'
+import { useConfirmations, useDeflated } from '../../api/queries'
+import { useSealedIndex } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { PanelLink } from '../../state/linkGroups'

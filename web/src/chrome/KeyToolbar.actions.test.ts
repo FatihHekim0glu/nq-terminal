@@ -5,7 +5,7 @@
 // U20: F1 pressed twice routes through the same path as typed HELP: its own panel, not the focused
 // one, so paramsFromCommand's HELP carve-out (WorkspaceModel.test.ts) keeps it unlinked.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RESERVED_F_MESSAGES } from '../copy/help'
+import { RESERVED_F_MESSAGES } from '../copy/navKeys'
 import type { CommandLineHandle } from './CommandLine'
 import { createChromeActions, HELP_TWICE_MS, runGlobalKey, type ChromeEnv, type ChromeWorkspace } from './KeyToolbar.actions'
 import { useMessage, resetMessage } from './MessageLine.store'

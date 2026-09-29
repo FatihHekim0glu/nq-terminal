@@ -3,7 +3,8 @@
 // The drawdown is never derived from the plotted values: a Basis A curve (1 plus a cumulative sum)
 // has no honest peak ratio, and exposure or contract series have no drawdown at all. Gaps (null, NaN,
 // Inf) are skipped, never read as zero. One loop, no Math.min(...values): a 250k-point series works.
-import { CHART, fillCopy } from '../copy/workspace'
+import { fillCopy } from '../copy/workspace'
+import { CHART } from '../copy/panelParts'
 
 export interface SeriesSummaryInput {
   readonly name: string

@@ -4,7 +4,7 @@
 // been on screen (every symbol is a gated 1m read in the backend, so rows never scrolled to cost nothing);
 // the query cache keeps the answer for the session.
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { useTwoDay } from '../../api/queries'
+import { useTwoDay } from '../../api/queries.screens'
 import { MON } from '../../copy/market'
 import { formatLast } from './model'
 import { sparkline, sparkText } from './twoDay'

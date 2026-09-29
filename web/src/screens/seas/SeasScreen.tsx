@@ -7,7 +7,7 @@
 // red bar holds the amber context field (Enter runs `<text> SEAS`), 96) Actions, 98) Export (the
 // shown tab as CSV) and 99) Help.
 import { useId, useMemo, useRef, useState } from 'react'
-import { useHypothesis } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import { requestLine } from '../../chrome/CommandLine.bus'

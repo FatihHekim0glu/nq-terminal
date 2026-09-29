@@ -2,7 +2,7 @@
 // 98) Export (look spec 4.4 house numbering): what a screen shows, saved as CSV in the viewer's browser.
 // Nothing is requested and nothing is written anywhere but the downloads folder.
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EXPORT } from '../copy/workspace'
+import { EXPORT } from '../copy/panelParts'
 import { csvCell, csvFileName, exportCsv, toCsv } from './exportCsv'
 import { useMessage } from './MessageLine.store'
 

@@ -1,6 +1,6 @@
 // The SEAS query (TASKS Phase 11): the screen's request state mapped onto the shared, typed hook in
 // src/api/queries.ts (one GET through apiGet: GET only, same origin, X-NQT-Client header).
-import { useSeasonality as useSeasonalityQuery, type SeasonalityRequest } from '../../api/queries'
+import { useSeasonality as useSeasonalityQuery, type SeasonalityRequest } from '../../api/queries.screens'
 import type { SeasQuery } from './types'
 
 /** The request for a query: variant only for instruments (null asks for the API's default), cost only for hypotheses. */

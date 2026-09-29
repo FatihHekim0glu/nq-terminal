@@ -1,6 +1,7 @@
 // Page 4 of the DES tear sheet: the Nautilus runs linked to the hypothesis (each opens RUN through the
 // command line, and is Number <GO> item 14 on), its sealed-window confirmations and its sealed files.
-import { useConfirmations, useSealedIndex } from '../../api/queries'
+import { useConfirmations } from '../../api/queries'
+import { useSealedIndex } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'

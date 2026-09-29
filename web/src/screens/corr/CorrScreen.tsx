@@ -8,7 +8,7 @@
 // [27F] field and 98) Export (the shown matrix as CSV); 95) Create new is not built (a house choice:
 // the universe is the frozen 27F, and a matrix over another set would be a new computation).
 import { useId, useMemo, useState } from 'react'
-import { usePairCorr, useUniverse } from '../../api/queries'
+import { usePairCorr, useUniverse } from '../../api/queries.screens'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import LineStack from '../../charts/LineStack'
 import type { LineStackPane } from '../../charts/LineStack.types'

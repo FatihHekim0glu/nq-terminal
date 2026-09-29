@@ -108,6 +108,9 @@ export const MESSAGES = {
   theme: 'New theme applied. Rerun the screen to see the changes.',
   newLayout: 'Type a screen mnemonic, for example REG, then <GO>.',
   keymapOpen: 'Key map open. <Alt+K> or <Esc> closes it.',
+  /** The key map or the event tape is fetched on demand; when the fetch fails the terminal stays up and says so. */
+  keymapFailed: 'The key map could not load. Reload the page to try again.',
+  tapeFailed: 'The event tape could not load. Reload the page to try again.',
 } as const
 
 export const STATUS_BAR = {

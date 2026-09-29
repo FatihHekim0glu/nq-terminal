@@ -6,7 +6,7 @@
 // for the screen's 98) Export. Trades and fills also open in the Perspective pivot grid (TASKS 9.1),
 // which reads every page of the run's rows.
 import { useMemo, useState, type ReactNode } from 'react'
-import { useRunFills, useRunLog, useRunTrades } from '../../api/queries'
+import { useRunFills, useRunLog, useRunTrades } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 import { csvFileName } from '../../chrome/exportCsv'
 import { useExportSource } from '../../chrome/exportSource'

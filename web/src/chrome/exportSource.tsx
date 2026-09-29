@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { exportCsv } from './exportCsv'
 import { postMessage } from './MessageLine.store'
-import { EXPORT } from '../copy/workspace'
+import { EXPORT } from '../copy/panelParts'
 
 export interface ExportSource {
   readonly fileName: string

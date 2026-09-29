@@ -9,8 +9,9 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useSyncExternalStore } from 'react'
 import { openEventStream } from './client'
-import { LiveStream, OFF_SNAPSHOT, pollIntervalFor, type StreamEvent, type StreamMode, type StreamSnapshot } from './liveStream'
-import { LIVE_POLL_MS, apiQueryKey } from './queryKey'
+import { LiveStream, OFF_SNAPSHOT, type StreamEvent, type StreamSnapshot } from './liveStream'
+import { setStreamMode } from './liveMode'
+import { apiQueryKey } from './queryKey'
 import type { ApiPath, Schemas } from './types'
 
 /** The GETs that read the journals: refreshed when the stream reports a change. */
@@ -118,6 +119,8 @@ class LiveStreamHub {
   }
 
   private notify(): void {
+    // The shell's live hooks poll by this mode (liveMode.ts), so it is written before anyone else is told.
+    setStreamMode(this.getSnapshot().mode)
     for (const listener of [...this.listeners]) listener()
   }
 
@@ -168,14 +171,6 @@ export function useLiveStream(): StreamSnapshot {
   return useLiveStreamState()
 }
 
-const getMode = (): StreamMode => liveStreamHub.getSnapshot().mode
-
-/** The live queries' polling interval: none while the stream is open or on its way, P0's otherwise.
- *  Subscribes to the mode only, not the whole StreamSnapshot (useLiveStreamState): LiveStream.onMessage
- *  patches the snapshot (lastEventAt, rows) on every event, and every live hook calls this through
- *  useLive, so a full-snapshot subscription here would re-render every LIVE and JRNL screen tree once
- *  per streamed row or heartbeat even though the returned interval almost never changes (D30). */
-export function useLivePollInterval(): number | false {
-  const mode = useSyncExternalStore(liveStreamHub.subscribe, getMode, getMode)
-  return pollIntervalFor(mode, LIVE_POLL_MS)
-}
+// The live queries' polling interval reads the mode from liveMode.ts, which the shell holds; it is exported
+// here too, where the stream's own hooks and tests have always found it.
+export { useLivePollInterval } from './liveMode'

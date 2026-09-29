@@ -10,7 +10,7 @@
 // the whole body, so the row budget of look spec 7 holds; the notes sit under the grid, reached by
 // scrolling the body. Enter on a row opens that symbol's functions (GP, GIP, DES, CORR).
 import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { useUniverse } from '../../api/queries'
+import { useUniverse } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
 import { postMessage } from '../../chrome/MessageLine.store'

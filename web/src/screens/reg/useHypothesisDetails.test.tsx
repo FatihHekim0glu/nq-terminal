@@ -4,7 +4,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { useHypothesis } from '../../api/queries'
+import { useHypothesis } from '../../api/queries.screens'
 import { mountScreen, stubApi } from './testHarness'
 import { useHypothesisDetails, type HypothesisDetails } from './useHypothesisDetails'
 
