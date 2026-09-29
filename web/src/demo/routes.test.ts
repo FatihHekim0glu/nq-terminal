@@ -277,6 +277,20 @@ describe('no body is served under another context', () => {
     expect(ok('/api/seasonality/instrument/{root}', { path: { root: 'NQ' }, query: { start_year: 2020, end_year: 2021 } }).subject).toBe('NQ.V.0')
     expect(ok('/api/market/rolls').markets.map((m) => m.root)).toEqual(['NQ', 'CL'])
   })
+
+  it('reads every Phase 11 demo gate (VCONE, ROLL, EVT study, SEAS) as zero reads, consistent with the status bar (no real gate read backs the demo)', () => {
+    const zeroGate = { caller: 'demo', served_years: [], cached: false, reads_this_process: 0 }
+    const cone = ok('/api/market/vcone', { query: { symbol: 'NQ.V.0' } })
+    expect(cone.gate).toEqual(zeroGate)
+    const universe = ok('/api/market/vcone/universe', { query: { horizon: 21 } })
+    expect(universe.gate).toEqual(zeroGate)
+    const rolls = ok('/api/market/rolls')
+    expect(rolls.gate).toEqual(zeroGate)
+    const study = ok('/api/events/study', { query: { symbol: 'NQ.V.0', event: 'FOMC', mode: 'daily', pre: 2, post: 2 } })
+    expect(study.gate).toEqual(zeroGate)
+    const seas = ok('/api/seasonality/instrument/{root}', { path: { root: 'NQ' }, query: { start_year: 2020, end_year: 2021 } })
+    expect(seas.gate).toEqual(zeroGate)
+  })
 })
 
 describe('pages, filters and fillers', () => {
