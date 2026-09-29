@@ -1,8 +1,11 @@
 // REG's sub views (look spec 7.2, roadmap #5): the data each one needs, and the switch that draws it.
-// RegViewBody's props already carry what slices 2 and 3 (Cost survival, Effect map) will need, so
-// RegScreen itself needs no further change once they land.
+// RegViewBody's props already carry what slice 3 (the Effect map) will need, so RegScreen itself
+// needs no further change once it lands.
 import { useMemo, type ReactNode } from 'react'
 import type { Schemas } from '../../api/types'
+import { COST_BOARD } from '../../copy/evidence'
+import CostBoard from './CostBoard'
+import { buildCostBoard } from './costBoardModel'
 import { buildEvidenceRows, type EvidenceRow } from './evidenceModel'
 import { needsDetails, type RegView } from './regViews'
 import RegEvidence from './RegEvidence'
@@ -52,9 +55,19 @@ export interface RegViewBodyProps {
 }
 
 export function RegViewBody(p: RegViewBodyProps): ReactNode {
+  // Built only for 93) Cost survival itself: cheap and pure, but there is no reason to sort and scale
+  // every tile while another view is showing.
+  const costs = useMemo(() => (p.view === 'costs' ? buildCostBoard(p.rows, p.details) : null), [p.view, p.rows, p.details])
   switch (p.view) {
     case 'evidence':
       return <RegEvidence rows={p.evidence ?? []} width={p.width} />
+    case 'costs':
+      return costs ? (
+        <>
+          <p className="reg-msg reg-muted">{COST_BOARD.note}</p>
+          <CostBoard panelId={p.panelId} view={costs} />
+        </>
+      ) : null
     case 'board':
     default:
       return p.board

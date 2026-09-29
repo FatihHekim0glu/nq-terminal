@@ -42,3 +42,21 @@ export const EVIDENCE = {
   ],
   export: { csv: 'Evidence matrix as CSV', fileName: 'evidence_matrix' },
 } as const
+
+export const COST_BOARD = {
+  label: 'Cost survival',
+  note: 'Each tile has its own scale: compare break-even ticks, never bar heights.',
+  summary: '{name}: {n} ladders, sorted by break-even; {missing} without a ladder.',
+  scale: 'own scale {min} to {max} {unit}',
+  tileOpen: 'Open {name} COST',
+  missing: 'No ladder ({n}): {names}.',
+  failed: 'Records not read for {n} hypotheses (first {name}: {detail}); they draw no tile.',
+  caption: 'Cost ladders by hypothesis',
+  cols: {
+    name: 'Hypothesis',
+    ticks: 'Ticks per side',
+    value: 'Value',
+    unit: 'Unit',
+    breakEven: 'Break-even',
+  },
+} as const

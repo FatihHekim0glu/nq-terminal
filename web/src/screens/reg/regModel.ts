@@ -9,6 +9,7 @@
 // The terminal never produces a verdict: badges come from the card, or else from the registry's text.
 import type { Schemas } from '../../api/types'
 import { formatP } from '../../charts/echarts/format'
+import { csvCell } from '../../chrome/exportCsv'
 import { REG } from '../../copy/reg'
 import { fillCopy } from '../../copy/workspace'
 
@@ -267,16 +268,12 @@ const CSV_HEAD = [
   'spec_sha256', 'spec_sha_ok', 'spec_rehash_ok', 'amendments', 'amendments_ok', 'dsr',
 ] as const
 
-function csvField(value: string | number | boolean | null): string {
-  const text = value === null ? '' : String(value)
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
-}
-
-/** The rows as CSV (RFC 4180 line ends), every number at the precision the API sent. */
+/** The rows as CSV (RFC 4180 line ends), every number at the precision the API sent; csvCell (98)
+ *  Export's own guard) prefixes a formula-looking name with an apostrophe. */
 export function toCsv(rows: readonly RegRow[]): string {
   const lines = rows.map((r) =>
     [r.name, r.registered, r.tag, r.round, r.badge, r.n, r.p, r.controlP, r.bonferroni, r.holm, r.bhQ, r.sha, r.shaOk, r.rehashOk, r.amendments, r.amendmentsOk, r.dsr]
-      .map(csvField)
+      .map(csvCell)
       .join(','),
   )
   return [CSV_HEAD.join(','), ...lines].join('\r\n')

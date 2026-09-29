@@ -199,6 +199,12 @@ describe('toCsv: the export', () => {
     const odd = { ...rows[0]!, name: 'a,b' }
     expect(toCsv([odd]).split('\r\n')[1]!.startsWith('"a,b",')).toBe(true)
   })
+
+  it('guards a name that would run as a spreadsheet formula (91) Board 98) Export, pre-existing)', () => {
+    const odd = { ...rows[0]!, name: '=HYPERLINK("x")' }
+    const first = toCsv([odd]).split('\r\n')[1]!
+    expect(first.startsWith('"\'=HYPERLINK(""x"")"')).toBe(true)
+  })
 })
 
 describe('tags and amendments (registry rounds 13 and 14; Phase 8)', () => {

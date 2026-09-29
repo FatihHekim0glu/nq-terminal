@@ -6,8 +6,8 @@ import { HOME_PANEL_IDS } from '../layouts/layouts'
 
 export type RegView = 'board' | 'evidence' | 'costs' | 'map'
 
-/** Slice 1 of 3: Board and Evidence only; later slices append Cost survival and Effect map. */
-export const REG_VIEWS: readonly RegView[] = ['board', 'evidence']
+/** Slice 2 of 3: Board, Evidence and Cost survival; a later slice appends the Effect map. */
+export const REG_VIEWS: readonly RegView[] = ['board', 'evidence', 'costs']
 
 /** House numbering for REG's sub tab strip (look spec 4.4): 91) Board, 92) Evidence, ... */
 export const REG_VIEW_START = 91

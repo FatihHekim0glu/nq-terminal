@@ -1,5 +1,32 @@
-/* REG's sub views (look spec 7.2, roadmap #5): the tabpanel that swaps between the board and the
-   evidence matrix, and the evidence grid's own box inside it. Colours come from reg.css's shared
-   classes (reg-msg, reg-muted, reg-warn, reg-tag); this file only shapes the layout. */
+/* REG's sub views (look spec 7.2, roadmap #5): the tabpanel that swaps between the board, the
+   evidence matrix and the cost survival board, and each view's own box inside it. Colours come from
+   reg.css's shared classes (reg-msg, reg-muted, reg-warn, reg-tag) and the tokens below; this file
+   only shapes the layout. */
 .reg-view { display: flex; flex-direction: column; min-width: 0; }
 .reg-evidence-grid { flex: 0 0 auto; }
+
+/* 93) Cost survival (EX4): a wrapping grid of tiles, each on its own stated scale. The SVG is
+   aria-hidden (ChartA11y names the figure); every printed number sits beside it in plain text. */
+.reg-cost-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 4px 6px;
+  list-style: none;
+}
+.reg-cost-tile { padding: 2px 4px 4px; background: var(--bg); border-top: 1px solid var(--th-rule); }
+.reg-cost-head { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; line-height: var(--row-h); }
+.reg-cost-n { color: var(--muted); }
+.reg-cost-name { color: var(--data); }
+.reg-cost-badge { color: var(--white); }
+.reg-cost-be { margin-left: auto; color: var(--muted); }
+.reg-cost-svg { display: block; width: 100%; height: 56px; }
+.reg-cost-pos { fill: var(--bar-pos); }
+.reg-cost-neg { fill: var(--bar-neg); }
+.reg-cost-zero { stroke: var(--zero-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.reg-cost-even { stroke: var(--data); stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.reg-cost-scale { margin: 0; color: var(--muted); }
+.reg-cost-rungs { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 0; padding: 0; list-style: none; }
+.reg-cost-rung-label { color: var(--muted); }
+.reg-cost-rung-value { color: var(--white); font-variant-numeric: tabular-nums lining-nums; }
