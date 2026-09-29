@@ -185,6 +185,48 @@ describe('accessible summary, readout and table view (UI_SPEC section 9)', () =>
     )
   })
 
+  it('describes every series of a pane that sets summaryAll, in series order, joined like the panes', () => {
+    const peers: LineStackPane[] = [
+      {
+        id: 'rebased',
+        summaryAll: true,
+        series: [
+          { name: 'Run A', style: 'compare1', values: [1, 1.1, 0.99, null, 1.2] },
+          { name: 'Run B', style: 'compare2', values: [1, 1.01, 1.02, 1.03, 1.04] },
+        ],
+      },
+    ]
+    expect(stackSummary(t5, peers)).toBe(
+      'Run A: 4 points from 2019-01-01 to 2019-01-07; first 1.00, last 1.20, low 0.99, high 1.20. ' +
+        'Run B: 5 points from 2019-01-01 to 2019-01-07; first 1.00, last 1.04, low 1.00, high 1.04.',
+    )
+  })
+
+  it('gives the pane drawdown to the first series only, when summaryAll describes several', () => {
+    const peers: LineStackPane[] = [
+      {
+        id: 'eq',
+        summaryAll: true,
+        summaryDrawdown: { value: '-12.00%', basis: 'Basis A' },
+        series: [
+          { name: 'Run A', style: 'compare1', values: [1, 1.1, 0.99, null, 1.2] },
+          { name: 'Run B', style: 'compare2', values: [1, 1.01, 1.02, 1.03, 1.04] },
+        ],
+      },
+    ]
+    const label = stackSummary(t5, peers)
+    expect(label.match(/max drawdown/g)).toHaveLength(1)
+    expect(label).toContain('high 1.20; max drawdown -12.00% (Basis A). Run B:')
+  })
+
+  it('describes only the first series of a pane that does not set summaryAll, and skips an empty pane', () => {
+    const plain: LineStackPane[] = [
+      { id: 'one', series: PANES[0]!.series },
+      { id: 'empty', summaryAll: true, series: [] },
+    ]
+    expect(stackSummary(t5, plain)).toBe('Strategy: 4 points from 2019-01-01 to 2019-01-07; first 1.00, last 1.20, low 0.99, high 1.20.')
+  })
+
   it('summarises a quarter of a million points without spreading them into arguments', () => {
     const n = 250_000
     const t = Array.from({ length: n }, (_, i) => utc(2019, 1, 2) + i * 60)

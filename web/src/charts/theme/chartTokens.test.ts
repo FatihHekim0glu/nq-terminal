@@ -62,6 +62,19 @@ describe('chart token defaults (look spec sections 2 and 6)', () => {
     ])
   })
 
+  it('carry the regime ramp of the LineStack context strip, mirrored from tokens.css', () => {
+    const c = DEFAULT_CHART_TOKENS.color
+    expect([c.regimeLow, c.regimeMid, c.regimeHigh]).toEqual(['#3A6EA5', '#5FA8E8', '#CFE8FF'])
+    expect([CHART_TOKENS.regimeLow.css, CHART_TOKENS.regimeMid.css, CHART_TOKENS.regimeHigh.css]).toEqual([
+      '--regime-low', '--regime-mid', '--regime-high',
+    ])
+  })
+
+  it('read a minified regime ramp back to the same colours', () => {
+    const t = readChartTokens(fakeStyle({ '--regime-low': '#3a6ea5', '--regime-mid': '#5fa8e8', '--regime-high': '#cfe8ff' }))
+    expect([t.color.regimeLow, t.color.regimeMid, t.color.regimeHigh]).toEqual(['#3A6EA5', '#5FA8E8', '#CFE8FF'])
+  })
+
   it('are all upper-case 6-digit hex and never a banned pre-flat-black value', () => {
     const banned = ['#070A0E', '#94D53C', '#FFB000', '#063856', '#0B51A8']
     for (const [key, value] of Object.entries(DEFAULT_CHART_TOKENS.color)) {
@@ -124,11 +137,51 @@ describe('readChartTokens', () => {
     expect(t.color.candleUp).toBe('#FFFFFF')
   })
 
-  it('falls back to the default when a value is empty or not a 6-digit hex', () => {
-    const t = readChartTokens(fakeStyle({ '--chart-vol': '', '--chart-grid': 'rgb(1, 2, 3)', '--last-line': '#FFF' }))
+  it('falls back to the default when a value is empty or not a hex colour', () => {
+    const t = readChartTokens(fakeStyle({ '--chart-vol': '', '--chart-grid': 'rgb(1, 2, 3)', '--last-line': 'orange', '--perf-pos': '#12' }))
     expect(t.color.chartVol).toBe('#7189AA')
     expect(t.color.chartGrid).toBe('#505050')
     expect(t.color.lastLine).toBe('#F09000')
+    expect(t.color.perfPos).toBe('#007219')
+  })
+
+  it('falls back on hex of the wrong length (4, 5, 7 and 8 digits) and on stray characters', () => {
+    const t = readChartTokens(fakeStyle({
+      '--chart-vol': '#7189', '--chart-grid': '#50505', '--last-line': '#F090000', '--perf-pos': '#00721980', '--perf-neg': '#GGGGGG', '--zero-line': '#84 84 84',
+    }))
+    expect(t.color.chartVol).toBe('#7189AA')
+    expect(t.color.chartGrid).toBe('#505050')
+    expect(t.color.lastLine).toBe('#F09000')
+    expect(t.color.perfPos).toBe('#007219')
+    expect(t.color.perfNeg).toBe('#6A1020')
+    expect(t.color.zeroLine).toBe('#848484')
+  })
+
+  // A production build minifies the CSS: #3399FF is written #39f and #FF5566 #f56 (verified in the
+  // built app's stylesheet), so a reader that only knew 6 digits fell back to the default green and
+  // red under data-cvd in every built app while the unminified dev server worked.
+  it('expands the 3-digit hex a minified stylesheet writes, each digit doubled', () => {
+    const t = readChartTokens(fakeStyle({ '--c-up': '#39f', '--c-down': ' #F56 ', '--marker': '#ff0', '--corr-0': '#000', '--white': '#fff' }))
+    expect(t.color.cUp).toBe('#3399FF')
+    expect(t.color.cDown).toBe('#FF5566')
+    expect(t.color.marker).toBe('#FFFF00')
+    expect(t.color.corr0).toBe('#000000')
+    expect(t.color.white).toBe('#FFFFFF')
+  })
+
+  it('reads the same colour whether the stylesheet writes it in 3 digits, 6 digits or lower case', () => {
+    const forms = ['#39f', '#39F', '#3399ff', '#3399FF']
+    for (const form of forms) expect(readChartTokens(fakeStyle({ '--c-up': form })).color.cUp, form).toBe('#3399FF')
+  })
+
+  it('builds the CVD colours from a minified deuteranopia block, not the default green and red', () => {
+    // What getComputedStyle returns under data-cvd="deut" in a built app: --c-up resolves the var() alias.
+    const t = readChartTokens(fakeStyle({ '--c-up': '#39f', '--c-down': '#f56', '--heat-up-2': '#6bceff', '--heat-up-1': '#399cff' }))
+    expect(t.color.cUp).toBe('#3399FF')
+    expect(t.color.cUp).not.toBe(CHART_TOKENS.cUp.value)
+    expect(t.color.cDown).toBe('#FF5566')
+    expect(t.color.heatUp2).toBe('#6BCEFF')
+    expect(t.color.heatUp1).toBe('#399CFF')
   })
 
   it('reads the font stack and size', () => {

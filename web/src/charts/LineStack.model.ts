@@ -319,21 +319,24 @@ function endLabels(t: readonly number[], v: Values, intraday: boolean): string[]
   return labels
 }
 
-/** The accessible name: the first series of every pane, with the drawdown an equity pane passes. */
+/**
+ * The accessible name: the first series of every pane, or every series of a pane that sets summaryAll
+ * (a pane of peers), in series order. The drawdown a pane passes belongs to its first series only.
+ */
 export function stackSummary(t: readonly number[], panes: readonly LineStackPane[]): string {
   const intraday = isIntraday(t)
   return panes
-    .filter((p) => p.series.length > 0)
-    .map((p) => {
-      const s = p.series[0]!
-      const v = cleanValues(s.values)
+    .flatMap((p) => {
       const format = paneFormat(p)
-      return describeSeries({
-        name: s.name,
-        t: endLabels(t, v, intraday),
-        v,
-        format: (x) => format(x),
-        drawdown: p.summaryDrawdown,
+      return (p.summaryAll ? p.series : p.series.slice(0, 1)).map((s, i) => {
+        const v = cleanValues(s.values)
+        return describeSeries({
+          name: s.name,
+          t: endLabels(t, v, intraday),
+          v,
+          format: (x) => format(x),
+          drawdown: i === 0 ? p.summaryDrawdown : undefined,
+        })
       })
     })
     .join(LINE_STACK.summaryJoin)

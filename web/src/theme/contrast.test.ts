@@ -118,6 +118,23 @@ describe('tokens.css passes section 8.2', () => {
     }
   })
 
+  it('checks the three regime ramp steps as 3:1 chart marks on the black background', () => {
+    for (const fg of ['regime-low', 'regime-mid', 'regime-high']) {
+      expect(hasPair(fg, 'bg', COMPONENT_MIN), `${fg} on bg`).toBe(true)
+      expect(ratioOf(fg, 'bg'), `${fg} on bg`).toBeGreaterThanOrEqual(COMPONENT_MIN)
+    }
+    expect(ratioOf('regime-low', 'bg')).toBeCloseTo(3.95, 1)
+  })
+
+  it('checks the regime steps in both CVD themes too, where the blocks leave them unchanged', () => {
+    for (const cvd of ['deut', 'prot'] as const) {
+      const themed = readTokens(tokensCss, cvd)
+      const pairs = CONTRAST_PAIRS.filter((p) => p.fg.startsWith('regime-'))
+      expect(pairs).toHaveLength(3)
+      expect(auditContrast(themed, pairs), cvd).toEqual([])
+    }
+  })
+
   it('checks the CVD up and down colours on the four surfaces', () => {
     for (const fg of ['c-up', 'c-down-raised']) {
       for (const bg of ['bg', 'raised', 'th-bg', 'sel-bg']) {
@@ -199,6 +216,13 @@ describe('born-failing cases (rule 5): the checker must reject these reference v
     const broken = readTokens(swapToken(tokensCss, 'cvd-up', '#0089E9'), 'deut')
     const bgs = auditContrast(broken, CVD_PAIRS).filter((f) => f.fg === 'c-up').map((f) => f.bg).sort()
     expect(bgs).toEqual(['sel-bg', 'th-bg'])
+  })
+
+  it('fails a regime step that sinks under 3:1 on black (a dark blue #1F3A5A is 1.7)', () => {
+    const broken = readTokens(swapToken(tokensCss, 'regime-low', '#1F3A5A'))
+    expect(contrastRatio('#1F3A5A', '#000000')).toBeLessThan(COMPONENT_MIN)
+    expect(auditContrast(broken)).toContainEqual(
+      expect.objectContaining({ fg: 'regime-low', bg: 'bg', min: COMPONENT_MIN }))
   })
 
   it('reports a token that is missing from the file instead of skipping it', () => {
