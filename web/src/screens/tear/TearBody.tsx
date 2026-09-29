@@ -5,6 +5,8 @@
 // open tab's view and, for a run, its trades, costs and exposure panels. Under the tab view, the tab's P1
 // views (TearP1: SV5 and SV6 on EQ; PF7 to PF9, RK3, RD3, RD4 and the RK5 stress panel on RET; RL3, RL4, BR3,
 // BR4 and RG1 on RR), and RR's rolling Sharpe carries each window's RL1 range (the API's rolling.sharpe_bands).
+// EQ and DD also read /extended for their Market context (RK5 stress bands, RG1 regime strip): the same body,
+// under the same query key, that RET and RR read, so a series is asked once whichever tab asks first.
 import { useMemo, useState } from 'react'
 import { useRun } from '../../api/queries'
 import type { ApiError } from '../../api/client'
@@ -23,7 +25,7 @@ import { TearView } from './TearViews'
 import { tearExport } from './tearExport'
 import { formatNumber } from './tearFormat'
 import { kpiTiles, tearTags, type Analytics } from './tearKpis'
-import { defaultCost, useRecordedCosts, useTearAnalytics, type Freq, type TearTarget } from './tearQueries'
+import { defaultCost, useRecordedCosts, useTearAnalytics, useTearExtended, type Extended, type Freq, type TearTarget } from './tearQueries'
 
 export interface TearBodyProps {
   readonly target: TearTarget
@@ -125,15 +127,18 @@ function Kpis({ data }: { readonly data: Analytics }) {
 
 interface LoadedProps extends TearBodyProps {
   readonly data: Analytics
+  /** EQ and DD: the /extended body their market context is drawn from, once it has arrived. */
+  readonly extended: Extended | null
+  readonly extendedError: ApiError | null
 }
 
-function Loaded({ target, tab, link, data }: LoadedProps) {
+function Loaded({ target, tab, link, data, extended, extendedError }: LoadedProps) {
   useExportSource(useMemo(() => tearExport(tab, data, target.name), [tab, data, target.name]))
   return (
     <div className="tear-view">
       <Kpis data={data} />
       {data.dropped.length > 0 ? <p className="tear-note">{fillCopy(TEAR.dropped, { n: data.dropped.length })}</p> : null}
-      <TearView tab={tab} data={data} name={target.name} link={link} />
+      <TearView tab={tab} data={data} name={target.name} link={link} extended={extended} extendedError={extendedError} />
     </div>
   )
 }
@@ -145,6 +150,10 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
   const cost = chosenCost !== null && recorded.costs.includes(chosenCost) ? chosenCost : defaultCost(recorded.costs)
   const query = useTearAnalytics(target, freq, cost)
   const error = query.error ?? (target.kind === 'hypothesis' ? recorded.error : null)
+  // The market context of EQ and DD (RK5, RG1). Asked for only once the analytics have answered, so a run
+  // whose balance check failed (rule 4) or a card with no series is never asked, and the chart never waits
+  // for it. RET and RR ask for the same body themselves (TearP1); the key is the same, so it is fetched once.
+  const extended = useTearExtended(target, freq, cost, (tab === 'EQ' || tab === 'DD') && !query.unusable && !error && query.data !== undefined)
   // The probe and anchor honesty tags (UI_SPEC section 6) travel with the run wherever it is shown, so
   // they are labelled here exactly as on RUN and RUNS (D20). The other runTags() cases (balance,
   // readability, ledger) already have their own treatment on this screen (Unusable, Refusal) and are
@@ -165,7 +174,7 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
         ) : error ? (
           <Refusal error={error} />
         ) : query.data ? (
-          <Loaded target={target} tab={tab} link={link} data={query.data} />
+          <Loaded target={target} tab={tab} link={link} data={query.data} extended={extended.data ?? null} extendedError={extended.error} />
         ) : recorded.noSeries && target.kind === 'hypothesis' ? (
           <NoSeries name={target.name} parent={recorded.parent} tab={tab} />
         ) : (

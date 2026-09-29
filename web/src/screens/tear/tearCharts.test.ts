@@ -1,18 +1,25 @@
 import { describe, expect, it } from 'vitest'
+import { contextTables } from '../../charts/LineStack.context'
+import type { Schemas } from '../../api/types'
 import { HYP_ANALYTICS, RUN_ANALYTICS, SMOKE_ANALYTICS } from './tear.fixtures'
+import { HYP_EXTENDED } from './tearP1.fixtures'
 import { displayUnit, formatValue } from './tearFormat'
 import {
   basisLine,
+  contextLines,
   ddStack,
   distributionInput,
   drawdownRows,
+  epochOfDate,
   eqStack,
   mretHeatmap,
+  regimeRibbon,
   rrEmpty,
   rrBandNote,
   rrStack,
   statsNotes,
   statsSections,
+  stressSpans,
   tailsNote,
   yearlyLadder,
 } from './tearCharts'
@@ -267,5 +274,230 @@ describe('RR when the series is shorter than the rolling windows', () => {
     expect(rrEmpty(some)).toEqual({ panes: [], longNote: 'The 252-session lines need 252 sessions; this series has 39.' })
     const full = { ...some, rolling: { ...some.rolling, sharpe_long: some.rolling.sharpe_short } }
     expect(rrEmpty(full)).toEqual({ panes: [], longNote: null })
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Roadmap 12, part B: market context on EQ and DD (RK5 stress spans, RG1 regime ribbon)
+
+type Extended = Schemas['ExtendedAnalytics']
+type StressRow = Extended['stress']['rows'][number]
+type RegimeState = 'low' | 'mid' | 'high'
+
+/** HYP_EXTENDED with its stress rows and regimes replaced, so a test states exactly what it feeds in. */
+function extendedWith(over: { readonly rows?: readonly Partial<StressRow>[]; readonly regimes?: Extended['regimes'] }): Extended {
+  const base = HYP_EXTENDED.stress.rows[0]!
+  const rows = over.rows ? over.rows.map((r) => ({ ...base, ...r })) : HYP_EXTENDED.stress.rows
+  return { ...HYP_EXTENDED, stress: { ...HYP_EXTENDED.stress, rows }, regimes: over.regimes === undefined ? HYP_EXTENDED.regimes : over.regimes }
+}
+
+/** A served RG1 block over the given sessions, with the given labels in the given order. */
+function regimesOf(t: readonly number[], regime: ReadonlyArray<RegimeState | null>): NonNullable<Extended['regimes']> {
+  return { ...HYP_EXTENDED.regimes!, t: [...t], date: t.map((x) => new Date(x * 1000).toISOString().slice(0, 10)), regime: [...regime] }
+}
+
+const SERIES_T = HYP_ANALYTICS.equity.t
+const DAY = 86400
+
+describe('epochOfDate: a session date as the UTC epoch second of its 00:00 (the tear sheet t)', () => {
+  it('reads YYYY-MM-DD as UTC midnight', () => {
+    expect(epochOfDate('1970-01-01')).toBe(0)
+    expect(epochOfDate('1970-01-02')).toBe(DAY)
+    expect(epochOfDate('2011-04-25')).toBe(SERIES_T[0])
+    expect(epochOfDate(HYP_ANALYTICS.last)).toBe(SERIES_T[SERIES_T.length - 1])
+    expect(epochOfDate('2020-02-29')).toBe(1582934400)
+  })
+
+  it('is NaN for anything that is not a real calendar date, so a bad date can never be drawn', () => {
+    for (const bad of ['', 'x', '2011-4-25', '2011-04-25T00:00:00Z', '2011-02-30', '2011-13-01', '20110425']) {
+      expect(Number.isNaN(epochOfDate(bad)), bad).toBe(true)
+    }
+  })
+})
+
+describe('stressSpans (RK5): peak to recovery, or to the trough while unrecovered', () => {
+  it('gives one span per frozen window, in served order, with epoch second bounds', () => {
+    const spans = stressSpans(HYP_EXTENDED)
+    expect(spans).toHaveLength(5)
+    expect(spans.map((s) => s.label)).toEqual(HYP_EXTENDED.stress.rows.map((r) => r.label))
+    expect(spans.map((s) => [s.from, s.to])).toEqual(
+      HYP_EXTENDED.stress.rows.map((r) => [epochOfDate(r.peak), epochOfDate(r.recovery!)]),
+    )
+    expect(spans[0]).toEqual({ from: epochOfDate('2020-02-19'), to: epochOfDate('2020-06-05'), label: '2020 COVID crash' })
+  })
+
+  it('ends an unrecovered window at its trough, not at the end of the data', () => {
+    const [span] = stressSpans(extendedWith({ rows: [{ label: 'Open fall', peak: '2011-05-02', trough: '2011-05-20', recovery: null }] }))
+    expect(span).toEqual({ from: epochOfDate('2011-05-02'), to: epochOfDate('2011-05-20'), label: 'Open fall' })
+  })
+
+  it('carries the [SPENT] tag on the chip label of a spent window only', () => {
+    const spans = stressSpans(extendedWith({
+      rows: [{ label: 'Frozen one', spent: false }, { label: '2022 bear market', spent: true, peak: '2022-01-03', trough: '2022-10-12', recovery: null }],
+    }))
+    expect(spans.map((s) => s.label)).toEqual(['Frozen one', '2022 bear market [SPENT]'])
+  })
+
+  it('is empty without the extended body, and leaves out a window whose dates are not real', () => {
+    expect(stressSpans(null)).toEqual([])
+    const spans = stressSpans(extendedWith({ rows: [{ label: 'Bad', peak: 'soon', trough: '2011-05-20', recovery: null }, { label: 'Good', peak: '2011-05-02', trough: '2011-05-20', recovery: null }] }))
+    expect(spans.map((s) => s.label)).toEqual(['Good'])
+  })
+})
+
+describe('regimeRibbon (RG1): the served labels, aligned to the series by exact time', () => {
+  it('is null without the extended body or without a served regime block', () => {
+    expect(regimeRibbon(null, SERIES_T)).toBeNull()
+    expect(regimeRibbon({ ...HYP_EXTENDED, regimes: null }, SERIES_T)).toBeNull()
+  })
+
+  it('gives 39 nulls for the captured series, which sits before the 252 sessions RG1 needs', () => {
+    expect(HYP_EXTENDED.regimes!.t).toEqual(SERIES_T)
+    const ribbon = regimeRibbon(HYP_EXTENDED, SERIES_T)!
+    expect(ribbon.values).toHaveLength(39)
+    expect(ribbon.values.every((v) => v === null)).toBe(true)
+  })
+
+  it('names the strip and gives every state its words and its one letter glyph, plus the missing text', () => {
+    const ribbon = regimeRibbon(HYP_EXTENDED, SERIES_T)!
+    expect(ribbon.name).toBe('Regime')
+    expect(ribbon.missing).toBe('unlabelled')
+    expect(ribbon.states).toEqual({
+      low: { label: 'low volatility', glyph: 'L' },
+      mid: { label: 'mid volatility', glyph: 'M' },
+      high: { label: 'high volatility', glyph: 'H' },
+    })
+  })
+
+  it('aligns by time, not by position: shuffled regime rows land on their own sessions', () => {
+    const t = [0, 1, 2, 3, 4, 5].map((i) => SERIES_T[i]!)
+    const labels: RegimeState[] = ['low', 'mid', 'high', 'high', 'mid', 'low']
+    const order = [3, 0, 5, 2, 4, 1]
+    const shuffled = regimesOf(order.map((i) => t[i]!), order.map((i) => labels[i]!))
+    expect(regimeRibbon(extendedWith({ regimes: shuffled }), t)!.values).toEqual(labels)
+  })
+
+  it('leaves a session the served block does not hold as null, and ignores a served time the series lacks', () => {
+    const t = [0, 1, 2, 3].map((i) => SERIES_T[i]!)
+    const served = regimesOf([t[1]!, t[3]!, t[3]! + DAY / 2], ['high', 'low', 'mid'])
+    expect(regimeRibbon(extendedWith({ regimes: served }), t)!.values).toEqual([null, 'high', null, 'low'])
+  })
+
+  it('treats a served label that is not low, mid or high as no state', () => {
+    const t = [0, 1].map((i) => SERIES_T[i]!)
+    const served = { ...regimesOf(t, ['low', 'mid']), regime: ['low', 'extreme'] as unknown as NonNullable<Extended['regimes']>['regime'] }
+    expect(regimeRibbon(extendedWith({ regimes: served }), t)!.values).toEqual(['low', null])
+  })
+
+  it('handles a long series (10,000 sessions) in one pass', () => {
+    const t = Array.from({ length: 10_000 }, (_, i) => i * DAY)
+    const labels = t.map((_, i) => (['low', 'mid', 'high'] as const)[i % 3]!)
+    const values = regimeRibbon(extendedWith({ regimes: regimesOf(t, labels) }), t)!.values
+    expect(values[9_999]).toBe(labels[9_999])
+    expect(values.filter((v) => v !== null)).toHaveLength(10_000)
+  })
+})
+
+describe('contextLines: the layers in words, with counts, basis and tag', () => {
+  it('says 0 of 5 windows and 0 of 39 sessions for the captured series', () => {
+    const [spans, ribbon] = contextLines(HYP_EXTENDED, SERIES_T)
+    expect(spans).toBe(
+      `0 of 5 frozen stress windows (RK5, ${HYP_EXTENDED.stress.frozen}) fall in this series; bands run from peak to recovery, or to the trough while unrecovered. [POST HOC]`,
+    )
+    expect(ribbon).toBe(`Strip under the time axis: RG1 volatility regime of each session; 0 of 39 sessions labelled. ${HYP_EXTENDED.regimes!.label} [POST HOC]`)
+    expect(contextLines(HYP_EXTENDED, SERIES_T)).toHaveLength(2)
+  })
+
+  it('counts the windows that touch the series, ends included, and the sessions that carry a label', () => {
+    const t = SERIES_T
+    const ext = extendedWith({
+      rows: [
+        { label: 'inside', peak: '2011-05-02', trough: '2011-05-20', recovery: '2011-06-01' },
+        { label: 'touches the last session', peak: '2011-06-17', trough: '2011-06-20', recovery: '2011-07-01' },
+        { label: 'ends the day before', peak: '2011-03-01', trough: '2011-04-01', recovery: '2011-04-24' },
+        { label: 'far away', peak: '2020-02-19', trough: '2020-03-20', recovery: null },
+      ],
+      regimes: regimesOf(t, t.map((_, i) => (i < 10 ? null : i < 25 ? 'mid' : 'high'))),
+    })
+    const [spans, ribbon] = contextLines(ext, t)
+    expect(spans).toMatch(/^2 of 4 frozen stress windows \(RK5, /)
+    expect(ribbon).toMatch(/; 29 of 39 sessions labelled\. /)
+  })
+
+  it('formats large counts with a thousands separator', () => {
+    const t = Array.from({ length: 2686 }, (_, i) => i * DAY)
+    const [, ribbon] = contextLines(extendedWith({ regimes: regimesOf(t, t.map(() => 'low')) }), t)
+    expect(ribbon).toContain('2,686 of 2,686 sessions labelled')
+  })
+
+  it('says no window falls in the series when RK5 serves none, naming the series range', () => {
+    const [spans] = contextLines(extendedWith({ rows: [] }), SERIES_T)
+    expect(spans).toBe('No frozen stress window falls in this series (2011-04-25 to 2011-06-17).')
+  })
+
+  it('names the served reason when there is no regime block, or says none was given', () => {
+    const none = { ...HYP_EXTENDED, regimes: null, regimes_note: 'needs 252 earlier sessions' }
+    expect(contextLines(none, SERIES_T)[1]).toBe('No volatility regime is served for this series: needs 252 earlier sessions')
+    expect(contextLines({ ...none, regimes_note: null }, SERIES_T)[1]).toBe('No volatility regime is served for this series: the API gives no reason')
+  })
+
+  it('is empty without the extended body, and copes with an empty series', () => {
+    expect(contextLines(null, SERIES_T)).toEqual([])
+    const [spans, ribbon] = contextLines(HYP_EXTENDED, [])
+    expect(spans).toMatch(/^0 of 5 frozen stress windows/)
+    expect(ribbon).toContain('0 of 0 sessions labelled')
+  })
+})
+
+describe('EQ and DD stacks with the market context', () => {
+  const NAME = 'volmanaged_v0'
+
+  it('are unchanged without the extended body: no spans and no ribbon, not even as undefined keys', () => {
+    for (const build of [eqStack, ddStack]) {
+      const plain = build(HYP_ANALYTICS, NAME)
+      expect(build(HYP_ANALYTICS, NAME, null)).toStrictEqual(plain)
+      expect(Object.keys(plain).sort()).toEqual(['panes', 't', 'title'])
+    }
+  })
+
+  it('attach the five spans and the ribbon for their own t, leaving the panes exactly as they were', () => {
+    const eq = eqStack(HYP_ANALYTICS, NAME, HYP_EXTENDED)
+    expect(eq.spans).toEqual(stressSpans(HYP_EXTENDED))
+    expect(eq.ribbon!.values).toHaveLength(HYP_ANALYTICS.equity.t.length)
+    expect(eq.panes).toEqual(eqStack(HYP_ANALYTICS, NAME).panes)
+    expect(eq.t).toBe(HYP_ANALYTICS.equity.t)
+    const dd = ddStack(HYP_ANALYTICS, NAME, HYP_EXTENDED)
+    expect(dd.spans).toHaveLength(5)
+    expect(dd.ribbon!.values).toHaveLength(HYP_ANALYTICS.drawdown.t.length)
+    expect(dd.panes).toEqual(ddStack(HYP_ANALYTICS, NAME).panes)
+  })
+
+  it('attach only the layer the body holds', () => {
+    const noRegimes = eqStack(HYP_ANALYTICS, NAME, { ...HYP_EXTENDED, regimes: null })
+    expect(noRegimes.spans).toHaveLength(5)
+    expect('ribbon' in noRegimes).toBe(false)
+    const noWindows = ddStack(HYP_ANALYTICS, NAME, extendedWith({ rows: [] }))
+    expect('spans' in noWindows).toBe(false)
+    expect(noWindows.ribbon).toBeDefined()
+  })
+
+  it("list the five windows as not in view in the chart's T table when the series lies outside them", () => {
+    const eq = eqStack(HYP_ANALYTICS, NAME, HYP_EXTENDED)
+    const [windows] = contextTables(eq.title, eq.t, eq.spans, eq.ribbon)
+    expect(windows!.rows).toHaveLength(5)
+    expect(windows!.rows.map((r) => r.inView)).toEqual(['no', 'no', 'no', 'no', 'no'])
+    expect(windows!.rows.map((r) => r.window)).toEqual(HYP_EXTENDED.stress.rows.map((r) => r.label))
+  })
+
+  it('tables a labelled strip by runs and the windows in view as yes', () => {
+    const t = SERIES_T
+    const ext = extendedWith({
+      rows: [{ label: 'inside', peak: '2011-05-02', trough: '2011-05-20', recovery: '2011-06-01' }],
+      regimes: regimesOf(t, t.map((_, i) => (i < 10 ? null : i < 25 ? 'mid' : 'high'))),
+    })
+    const eq = eqStack(HYP_ANALYTICS, NAME, ext)
+    const [windows, runs] = contextTables(eq.title, eq.t, eq.spans, eq.ribbon)
+    expect(windows!.rows.map((r) => r.inView)).toEqual(['yes'])
+    expect(runs!.rows.map((r) => [r.state, r.sessions])).toEqual([['mid volatility', 15], ['high volatility', 14]])
   })
 })

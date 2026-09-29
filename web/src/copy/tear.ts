@@ -106,6 +106,27 @@ export const TEAR_RR = {
   extremesLabel: 'Rolling volatility extremes',
 } as const
 
+/** Market context on EQ and DD (roadmap 12, part B): the RK5 stress windows as bands and the RG1 regime as a strip. */
+export const TEAR_CONTEXT = {
+  toggle: 'Market context',
+  shown: 'Shown',
+  hidden: 'Hidden',
+  spansNote: '{inside} of {n} frozen stress windows (RK5, {frozen}) fall in this series; bands run from peak to recovery, or to the trough while unrecovered. {tag}',
+  spansNone: 'No frozen stress window falls in this series ({first} to {last}).',
+  /** A spent window's chip: its label, then the [SPENT] tag. */
+  spentLabel: '{label} {tag}',
+  ribbonName: 'Regime',
+  ribbonNote: 'Strip under the time axis: RG1 volatility regime of each session; {labelled} of {n} sessions labelled. {label} {tag}',
+  ribbonNone: 'No volatility regime is served for this series: {note}',
+  /** Stands in for the served reason when the API gives none. */
+  noReason: 'the API gives no reason',
+  states: { low: 'low volatility', mid: 'mid volatility', high: 'high volatility' },
+  glyphs: { low: 'L', mid: 'M', high: 'H' },
+  unlabelled: 'unlabelled',
+  loading: 'Market context loading.',
+  failed: 'Market context unavailable: {detail}',
+} as const
+
 export const TEAR_MRET = {
   heatmapName: '{name} monthly returns',
   months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
@@ -285,4 +306,6 @@ export const TEAR_GALLERY = {
   hypothesisTitle: 'Tear sheet of a hypothesis',
   unusableTitle: 'Tear sheet of an unusable run',
   sv7Title: 'Returns tab of a hypothesis with its Sharpe difference card',
+  contextTitle: 'Equity tab of a hypothesis with its market context',
+  contextNote: 'Gallery data only: the fixture hypothesis with its stress windows and regime labels placed by hand inside its 39 sessions, so that the bands and the strip are drawn.',
 } as const

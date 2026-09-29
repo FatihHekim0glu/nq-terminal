@@ -117,7 +117,7 @@ describe('EQ: SV5 intervals and the SV6 cone', () => {
     expect(cone.steps).toHaveLength(39)
     // The percentiles are pointwise, and the card says so in words, not only in the chart's accessible name.
     expect(p1.textContent).toContain('Pointwise percentiles 5, 25, 50, 75 and 95 at each step, not a band that whole paths stay inside')
-    expect(calls.some((u) => u.includes('/extended'))).toBe(false)
+    await waitFor(() => expect(calls.filter((u) => u.includes('/extended'))).toEqual(['/api/analytics/hypothesis/volmanaged_v0/extended?cost=1']))
   })
 
   it('shows a refusal the API sends', async () => {
@@ -197,12 +197,12 @@ describe('RR: relative views and the bootstrap band', () => {
 })
 
 describe('DD and MRET have no P1 view', () => {
-  it('asks for nothing more on DD', async () => {
+  it('asks only for the market context on DD and draws no P1 view', async () => {
     mount('DD', hyp)
     await waitFor(() => expect(calls.some((u) => u.startsWith('/api/analytics/hypothesis/volmanaged_v0?'))).toBe(true))
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => expect(calls.filter((u) => u.includes('/extended'))).toEqual(['/api/analytics/hypothesis/volmanaged_v0/extended?cost=1']))
     expect(screen.queryByRole('region', { name: `Extended analytics for ${hyp.value}` })).toBeNull()
-    expect(calls.some((u) => u.includes('/extended') || u.includes('/bootstrap'))).toBe(false)
+    expect(calls.some((u) => u.includes('/bootstrap'))).toBe(false)
   })
 })
 

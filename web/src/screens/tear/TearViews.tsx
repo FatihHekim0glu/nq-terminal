@@ -2,24 +2,29 @@
 // the API section it draws. EQ: equity against the benchmark. DD: equity over the underwater curve,
 // then the top drawdowns. RET: the return histogram with its normal fit and VaR lines, beside the one
 // statistics scroll box, which also holds the SV7 Sharpe difference card. RR: rolling Sharpe over rolling volatility.
-// MRET: the year by month heat map, then the yearly totals (a house addition, labelled so).
-import { Fragment, useId, useMemo, type JSX, type ReactNode } from 'react'
+// MRET: the year by month heat map, then the yearly totals (a house addition, labelled so). EQ and DD also
+// carry a Market context toggle: the RK5 stress windows as bands and the RG1 regime as a strip, from /extended.
+import { Fragment, useId, useMemo, useState, type JSX, type ReactNode } from 'react'
+import type { ApiError } from '../../api/client'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { Distribution } from '../../charts/echarts/Distribution'
 import { Heatmap } from '../../charts/echarts/Heatmap'
 import LineStack from '../../charts/LineStack'
+import { ToggleGroup } from '../../chrome/Field.buttons'
 import { ROVING_ATTR, ROVING_SCROLL_ATTR } from '../../chrome/WorkspaceFocus'
-import { TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
+import { TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import { Card } from './TearCard'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, statsNotes, statsSections, tailsNote, yearlyLadder,
+  basisLine, contextLines, ddStack, distributionInput, drawdownRows, eqStack, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, stackContext, statsNotes, statsSections,
+  tailsNote, yearlyLadder,
   type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
 import type { Analytics } from './tearKpis'
+import type { Extended } from './tearQueries'
 import { readSv7, sv7Empty, sv7Ladder, sv7Notes, sv7Table, sv7Title, type Sv7 } from './tearSv7Model'
 import '../../grids/grid.css'
 
@@ -27,7 +32,10 @@ interface ViewProps {
   readonly data: Analytics
   readonly name: string
   readonly link: PanelLink
-  /** RR only: the full-sample SV5 Sharpe interval, drawn as two dashed bounds (null until it arrives). */
+  /** EQ and DD only: the /extended body their market context is drawn from (null or absent until it arrives). */
+  readonly extended?: Extended | null
+  /** EQ and DD only: why /extended failed, when it did. */
+  readonly extendedError?: ApiError | null
 }
 
 const scrollBox = { [ROVING_ATTR]: '', [ROVING_SCROLL_ATTR]: '' }
@@ -58,22 +66,58 @@ function Basis({ data, unit, extra }: { readonly data: Analytics; readonly unit:
   )
 }
 
-function Stack({ spec, link }: { readonly spec: StackSpec; readonly link: PanelLink }) {
+/** `context`: the market context layers to draw (EQ and DD, while Shown); left out, the stack is drawn as it is. */
+function Stack({ spec, link, context }: { readonly spec: StackSpec; readonly link: PanelLink; readonly context?: Pick<StackSpec, 'spans' | 'ribbon'> }) {
   return (
     <div className="tear-chart">
-      <LineStack title={spec.title} t={spec.t} panes={spec.panes} link={link} />
+      <LineStack title={spec.title} t={spec.t} panes={spec.panes} link={link} spans={context?.spans} ribbon={context?.ribbon} />
     </div>
   )
 }
 
-function EqView({ data, name, link }: ViewProps) {
+const CONTEXT_OPTIONS = [{ value: 'shown', label: TEAR_CONTEXT.shown }, { value: 'hidden', label: TEAR_CONTEXT.hidden }] as const
+
+/** The context layers in words; or the note that they are still loading, or why they are not there. */
+function ContextNotes({ lines, error }: { readonly lines: readonly string[]; readonly error: ApiError | null }) {
+  if (lines.length > 0) return <>{lines.map((line) => <p key={line} className="tear-note">{line}</p>)}</>
+  if (error) return <p className="tear-note" role="status">{fillCopy(TEAR_CONTEXT.failed, { detail: error.detail })}</p>
+  return <p className="tear-note" role="status" aria-busy="true">{TEAR_CONTEXT.loading}</p>
+}
+
+/**
+ * The Market context of EQ and DD (roadmap 12, part B): a Shown / Hidden toggle and, while Shown, the context
+ * lines and the layers for the chart. The chart never waits for /extended: until it answers the layers are
+ * simply absent and a note says so. The stack's panes are built without the layers, so switching them never
+ * rebuilds the panes; only the spans and the ribbon change.
+ */
+function useMarketContext(t: readonly number[], extended: Extended | null | undefined, error: ApiError | null | undefined) {
+  const [mode, setMode] = useState<'shown' | 'hidden'>('shown')
+  const ext = extended ?? null
+  const layers = useMemo(() => stackContext(ext, t), [ext, t])
+  const lines = useMemo(() => contextLines(ext, t), [ext, t])
+  const shown = mode === 'shown'
+  const controls = (
+    <>
+      <div className="param-row">
+        <span className="param-label">{TEAR_CONTEXT.toggle}</span>
+        <ToggleGroup label={TEAR_CONTEXT.toggle} options={CONTEXT_OPTIONS} value={mode} onChange={(v) => setMode(v === 'hidden' ? 'hidden' : 'shown')} />
+      </div>
+      {shown ? <ContextNotes lines={lines} error={error ?? null} /> : null}
+    </>
+  )
+  return { controls, layers: shown && ext !== null ? layers : undefined }
+}
+
+function EqView({ data, name, link, extended, extendedError }: ViewProps) {
   const spec = useMemo(() => eqStack(data, name), [data, name])
+  const market = useMarketContext(spec.t, extended, extendedError)
   const { bench, perf_diff: diff, perf_diff_unit: diffUnit } = data.equity
   const note = !bench ? TEAR_EQ.benchmarkNone : diff && diffUnit ? fillCopy(TEAR_EQ.diffUnit, { unit: diffUnit }) : TEAR_EQ.diffMissing
   return (
     <>
       <Basis data={data} unit={data.equity.unit} extra={note} />
-      <Stack spec={spec} link={link} />
+      {market.controls}
+      <Stack spec={spec} link={link} context={market.layers} />
     </>
   )
 }
@@ -111,8 +155,9 @@ function DrawdownTable({ data }: { readonly data: Analytics }) {
   )
 }
 
-function DdView({ data, name, link }: ViewProps) {
+function DdView({ data, name, link, extended, extendedError }: ViewProps) {
   const spec = useMemo(() => ddStack(data, name), [data, name])
+  const market = useMarketContext(spec.t, extended, extendedError)
   const dd = data.drawdown
   const max = fillCopy(TEAR_DD.maxLine, {
     value: formatValue(dd.max_drawdown, dd.unit, 2),
@@ -121,7 +166,8 @@ function DdView({ data, name, link }: ViewProps) {
   return (
     <>
       <Basis data={data} unit={dd.unit} extra={max} />
-      <Stack spec={spec} link={link} />
+      {market.controls}
+      <Stack spec={spec} link={link} context={market.layers} />
       <DrawdownTable data={data} />
     </>
   )

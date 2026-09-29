@@ -10,6 +10,7 @@ import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome
 import type { MnemonicCode } from '../../commands/registry'
 import type { ResolvedContext } from '../../commands/types'
 import { BOOK_TRADES, HYP_ANALYTICS, NO_EXPOSURE, RUN_ANALYTICS, RUN_COSTS, RUN_EXPOSURE, RUN_TRADES, SMOKE_ANALYTICS } from './tear.fixtures'
+import { HYP_EXTENDED } from './tearP1.fixtures'
 import TearSheet, { TEAR_CODES } from './TearSheet'
 
 // The chart components draw on canvas through lazily loaded libraries; here each is a stand-in that
@@ -38,6 +39,19 @@ vi.mock('../../charts/echarts/BarLadder', () => ({
   BarLadder: (props: { data: { name: string } }) => {
     seen.charts.push({ kind: 'barladder', props })
     return <div data-chart="barladder">{props.data.name}</div>
+  },
+}))
+// The P1 cards under RET and RR draw these once /extended answers.
+vi.mock('../../charts/echarts/XyScatter', () => ({
+  XyScatter: (props: { data: { name: string } }) => {
+    seen.charts.push({ kind: 'xyscatter', props })
+    return <div data-chart="xyscatter">{props.data.name}</div>
+  },
+}))
+vi.mock('../../charts/echarts/Cone', () => ({
+  Cone: (props: { data: { name: string } }) => {
+    seen.charts.push({ kind: 'cone', props })
+    return <div data-chart="cone">{props.data.name}</div>
   },
 }))
 
@@ -78,6 +92,9 @@ const ROUTES: ReadonlyArray<readonly [RegExp, () => Response]> = [
   [/^\/api\/analytics\/run\/nt_volmanaged_v0_fixture_m1\?/, () => json(RUN_ANALYTICS)],
   [/^\/api\/hypotheses\/volmanaged_v0$/, () => json(HYP_DETAIL)],
   [/^\/api\/analytics\/hypothesis\/volmanaged_v0\?/, () => json(HYP_ANALYTICS)],
+  // The extended body (RK5 and RG1 among others): the captured hypothesis response, for the run as well.
+  [/^\/api\/analytics\/hypothesis\/volmanaged_v0\/extended\?/, () => json(HYP_EXTENDED)],
+  [/^\/api\/analytics\/run\/nt_volmanaged_v0_fixture_m1\/extended\?/, () => json(HYP_EXTENDED)],
   // A check row (the real card's shape): 200 with no recorded series, so no analytics are asked.
   [/^\/api\/hypotheses\/za_v0_C3_gao_momentum$/, () => json(CHECK_DETAIL)],
   [/^\/api\/hypotheses\/noseries_v0$/, () => json(NO_SERIES_DETAIL)],
@@ -323,6 +340,113 @@ describe('SV7 on the tear sheet of a run', () => {
     await screen.findByText('nt_volmanaged_v0_fixture_m1 return distribution')
     expect(screen.getByText('Sharpe difference (m - BH): not recorded for this series.')).toBeTruthy()
     expect(chartsOf('barladder').some((c) => (c.props.data as { name: string }).name.includes('Sharpe difference'))).toBe(false)
+  })
+})
+
+// Roadmap 12, part B: EQ and DD draw the market context from /extended, the body RET and RR already read.
+const extendedCalls = (re: RegExp = /\/extended\?/) => urls().filter((u) => re.test(u))
+// The tab's own stack (a run's books draw LineStacks of their own below it).
+const lastStack = () => {
+  const own = chartsOf('linestack').filter((c) => / (equity|drawdown)$/.test(String(c.props.title)))
+  return own.at(-1)!.props as { spans?: unknown[]; ribbon?: { values: unknown[] } }
+}
+
+describe('market context on EQ and DD (roadmap 12, part B)', () => {
+  for (const code of ['EQ', 'DD'] as const) {
+    it(`${code} of a hypothesis adds one /extended GET, and hands the chart the five windows and the strip`, async () => {
+      show(code, HYP)
+      await screen.findByText(code === 'EQ' ? 'volmanaged_v0 equity' : 'volmanaged_v0 drawdown')
+      await waitFor(() => expect(lastStack().spans).toHaveLength(5))
+      expect(lastStack().ribbon!.values).toHaveLength(HYP_ANALYTICS.equity.t.length)
+      expect(extendedCalls()).toEqual(['/api/analytics/hypothesis/volmanaged_v0/extended?cost=1'])
+      expect(screen.getByText(/^0 of 5 frozen stress windows/)).toBeTruthy()
+      expect(screen.getByText(/; 0 of 39 sessions labelled\./)).toBeTruthy()
+      for (const call of fetchSpy.mock.calls) expect((call[1] as RequestInit).method).toBe('GET')
+    })
+
+    it(`${code} of a run adds one /extended GET at the run's Freq`, async () => {
+      show(code, RUN)
+      await waitFor(() => expect(extendedCalls()).toEqual(['/api/analytics/run/nt_volmanaged_v0_fixture_m1/extended?freq=D']))
+      await waitFor(() => expect(lastStack().spans).toHaveLength(5))
+      for (const call of fetchSpy.mock.calls) expect((call[1] as RequestInit).method).toBe('GET')
+    })
+
+    it(`${code} draws its chart before /extended answers, and says the context is loading`, async () => {
+      const held = new Promise<Response>(() => {})
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (/\/extended\?/.test(url)) return held
+        const hit = ROUTES.find(([re]) => re.test(url))
+        return hit ? hit[1]() : json({ detail: `no route ${url}` }, 404)
+      })
+      show(code, HYP)
+      await screen.findByText(code === 'EQ' ? 'volmanaged_v0 equity' : 'volmanaged_v0 drawdown')
+      expect(await screen.findByText('Market context loading.')).toBeTruthy()
+      expect(lastStack().spans).toBeUndefined()
+    })
+
+    it(`${code} says the context is unavailable when /extended fails, keeps the chart, and raises no alert`, async () => {
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (/\/extended\?/.test(url)) return json({ detail: 'extended analytics are down' }, 500)
+        const hit = ROUTES.find(([re]) => re.test(url))
+        return hit ? hit[1]() : json({ detail: `no route ${url}` }, 404)
+      })
+      show(code, HYP)
+      const note = await screen.findByText('Market context unavailable: extended analytics are down', {}, SOON)
+      expect(note.getAttribute('role')).toBe('status')
+      expect(chartsOf('linestack').length).toBeGreaterThan(0)
+      expect(lastStack().spans).toBeUndefined()
+      expect(screen.queryAllByRole('alert').filter((a) => /Market context/.test(a.textContent ?? ''))).toEqual([])
+    })
+  }
+
+  it('shares one /extended GET with RET and with RR, and MRET asks none', async () => {
+    show('RET', HYP)
+    await screen.findByText('volmanaged_v0 return distribution')
+    await screen.findByRole('heading', { name: /Stress windows \(RK5\)/ })
+    expect(extendedCalls()).toHaveLength(1)
+    cleanup()
+    fetchSpy.mockClear()
+    show('RR', HYP)
+    await screen.findByRole('heading', { name: /Volatility regimes \(RG1\)/ })
+    expect(extendedCalls()).toHaveLength(1)
+    cleanup()
+    fetchSpy.mockClear()
+    show('MRET', HYP)
+    await screen.findByText('volmanaged_v0 monthly returns')
+    expect(extendedCalls()).toHaveLength(0)
+    for (const call of fetchSpy.mock.calls) expect((call[1] as RequestInit).method).toBe('GET')
+  })
+
+  it('asks one /extended GET when the tab moves from EQ to RET on the same series (one key)', async () => {
+    const client = createApiQueryClient()
+    const params = (code: MnemonicCode) => ({ code, context: HYP, args: {}, group: 'B' as const })
+    const view = (code: MnemonicCode) => (
+      <QueryClientProvider client={client}><TearSheet params={params(code)} context={HYP} /></QueryClientProvider>
+    )
+    const { rerender } = render(view('EQ'))
+    await waitFor(() => expect(lastStack().spans).toHaveLength(5))
+    rerender(view('RET'))
+    await screen.findByText('volmanaged_v0 return distribution')
+    await screen.findByRole('heading', { name: /Stress windows \(RK5\)/ })
+    expect(extendedCalls()).toHaveLength(1)
+  })
+
+  it('never asks /extended for a run whose balance check failed, or before the analytics answer', async () => {
+    show('EQ', { kind: 'run', value: 'nt_za_v0_fixture_unbalanced' })
+    expect(await screen.findByText('[UNUSABLE: BALANCE]')).toBeTruthy()
+    expect(extendedCalls()).toEqual([])
+    cleanup()
+    show('DD', { kind: 'run', value: 'nt_za_v0_fixture_negative' })
+    expect(await screen.findByText('[UNUSABLE: BALANCE]')).toBeTruthy()
+    expect(extendedCalls()).toEqual([])
+  })
+
+  it('asks no /extended for a check row or a card with no series', async () => {
+    show('EQ', { kind: 'hypothesis', value: 'noseries_v0' })
+    await screen.findByText('No return series is recorded for noseries_v0, so there is nothing to draw.', {}, SOON)
+    expect(extendedCalls()).toEqual([])
   })
 })
 

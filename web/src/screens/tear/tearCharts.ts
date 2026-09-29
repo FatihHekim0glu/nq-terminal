@@ -7,17 +7,22 @@ import type { BarLadderInput } from '../../charts/echarts/barLadderModel'
 import type { DistributionInput } from '../../charts/echarts/distributionModel'
 import { mretRows, type HeatmapInput } from '../../charts/echarts/heatmapModel'
 import type { Callout } from '../../charts/LineStack.draw'
-import type { LineStackPane } from '../../charts/LineStack.types'
-import { TEAR, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
+import type { LineStackPane, RibbonSpec, RibbonState, StackSpan } from '../../charts/LineStack.types'
+import { TEAR, TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
 import { TEAR_P1 } from '../../copy/tearP1'
 import { fillCopy } from '../../copy/workspace'
 import type { Analytics } from './tearKpis'
-import { decimalsForUnit, formatNumber, formatShare, formatValue, isPercentUnit, scaleSeries, summaryDrawdown, toDisplay } from './tearFormat'
+import type { Extended } from './tearQueries'
+import { decimalsForUnit, formatNumber, formatShare, formatValue, isPercentUnit, MISSING, scaleSeries, summaryDrawdown, toDisplay } from './tearFormat'
 
 export interface StackSpec {
   readonly title: string
   readonly t: readonly number[]
   readonly panes: readonly LineStackPane[]
+  /** EQ and DD with the market context: the RK5 stress windows as bands. Absent without them. */
+  readonly spans?: readonly StackSpan[]
+  /** EQ and DD with the market context: the RG1 regime strip. Absent without it. */
+  readonly ribbon?: RibbonSpec
 }
 
 const paneUnit = (unit: string): '' | '%' => (isPercentUnit(unit) ? '%' : '')
@@ -45,13 +50,14 @@ function perfDiffPane(data: Analytics): LineStackPane | null {
   }
 }
 
-export function eqStack(data: Analytics, name: string): StackSpec {
+export function eqStack(data: Analytics, name: string, ext: Extended | null = null): StackSpec {
   const diff = perfDiffPane(data)
   const panes = diff ? [equityPane(data, name, 2), diff] : [equityPane(data, name, 1)]
-  return { title: fillCopy(TEAR_EQ.title, { name }), t: data.equity.t, panes }
+  const t = data.equity.t
+  return { title: fillCopy(TEAR_EQ.title, { name }), t, panes, ...stackContext(ext, t) }
 }
 
-export function ddStack(data: Analytics, name: string): StackSpec {
+export function ddStack(data: Analytics, name: string, ext: Extended | null = null): StackSpec {
   const { drawdown } = data
   const series: LineStackPane['series'][number][] = [
     { name: TEAR_DD.underwater, style: 'underwater', values: scaleSeries(drawdown.dd, drawdown.unit) },
@@ -60,7 +66,119 @@ export function ddStack(data: Analytics, name: string): StackSpec {
     series.push({ name: TEAR_DD.benchUnderwater, style: 'benchmark', values: scaleSeries(drawdown.bench_dd, drawdown.unit) })
   }
   const under: LineStackPane = { id: 'underwater', weight: 1.3, zero: 'white', unit: paneUnit(drawdown.unit), decimals: 2, series }
-  return { title: fillCopy(TEAR_DD.title, { name }), t: drawdown.t, panes: [equityPane(data, name, 2), under] }
+  return { title: fillCopy(TEAR_DD.title, { name }), t: drawdown.t, panes: [equityPane(data, name, 2), under], ...stackContext(ext, drawdown.t) }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Market context (roadmap 12, part B). The served RK5 windows and RG1 labels, drawn as they came:
+// nothing here computes a statistic. Both are the terminal's [POST HOC] descriptions and each line of
+// words below carries the tag the API sent.
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * The UTC epoch second of a session date (`YYYY-MM-DD`): the tear sheet's `t` are 00:00 UTC sessions.
+ * NaN for anything that is not a real calendar date, which no chart draws.
+ */
+export function epochOfDate(date: string): number {
+  const m = ISO_DATE.exec(date)
+  if (m === null) return Number.NaN
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const at = new Date(Date.UTC(year, month - 1, day))
+  // A date that rolls over (2011-02-30, month 13) is not a date.
+  if (at.getUTCFullYear() !== year || at.getUTCMonth() !== month - 1 || at.getUTCDate() !== day) return Number.NaN
+  return at.getTime() / 1000
+}
+
+/** The `YYYY-MM-DD` of an epoch second. */
+function dateOfEpoch(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().slice(0, 10)
+}
+
+/**
+ * The RK5 frozen windows as bands, in the order served: each runs from its peak to its recovery, or to its
+ * trough while it has not recovered. A spent window (the 2022 row) carries [SPENT] on its chip. A row with
+ * a date that is not real is left out, since no band can be placed for it.
+ */
+export function stressSpans(ext: Extended | null): StackSpan[] {
+  if (ext === null) return []
+  const spans: StackSpan[] = []
+  for (const row of ext.stress.rows) {
+    const from = epochOfDate(row.peak)
+    const to = epochOfDate(row.recovery ?? row.trough)
+    if (!Number.isFinite(from) || !Number.isFinite(to)) continue
+    const label = row.spent ? fillCopy(TEAR_CONTEXT.spentLabel, { label: row.label, tag: TEAR_P1.stress.spentTag }) : row.label
+    spans.push({ from, to, label })
+  }
+  return spans
+}
+
+const RIBBON_STATES: RibbonSpec['states'] = {
+  low: { label: TEAR_CONTEXT.states.low, glyph: TEAR_CONTEXT.glyphs.low },
+  mid: { label: TEAR_CONTEXT.states.mid, glyph: TEAR_CONTEXT.glyphs.mid },
+  high: { label: TEAR_CONTEXT.states.high, glyph: TEAR_CONTEXT.glyphs.high },
+}
+
+const isState = (value: unknown): value is RibbonState => value === 'low' || value === 'mid' || value === 'high'
+
+/**
+ * The RG1 regime of each session of `t`, aligned by exact time: a session the served block does not hold,
+ * or holds without a label, is null and draws nothing. Null without the extended body or a served block.
+ */
+export function regimeRibbon(ext: Extended | null, t: readonly number[]): RibbonSpec | null {
+  const served = ext?.regimes
+  if (!served) return null
+  const byTime = new Map<number, RibbonState>()
+  served.t.forEach((time, i) => {
+    const state: unknown = served.regime[i]
+    if (isState(state)) byTime.set(time, state)
+  })
+  return { name: TEAR_CONTEXT.ribbonName, values: t.map((time) => byTime.get(time) ?? null), states: RIBBON_STATES, missing: TEAR_CONTEXT.unlabelled }
+}
+
+/**
+ * The market context for a stack over `t`: spans when RK5 serves any window, a ribbon when RG1 is served.
+ * Empty without the extended body, so a stack built without it is exactly what it was before.
+ */
+export function stackContext(ext: Extended | null, t: readonly number[]): Pick<StackSpec, 'spans' | 'ribbon'> {
+  if (ext === null) return {}
+  const spans = stressSpans(ext)
+  const ribbon = regimeRibbon(ext, t)
+  return { ...(spans.length > 0 ? { spans } : {}), ...(ribbon ? { ribbon } : {}) }
+}
+
+/** How many of the served windows touch the series (its first to its last session, ends included), in words. */
+function spansLine(ext: Extended, t: readonly number[]): string {
+  const n = ext.stress.rows.length
+  const first = t[0]
+  const last = t[t.length - 1]
+  if (n === 0) {
+    const range = first !== undefined && last !== undefined ? { first: dateOfEpoch(first), last: dateOfEpoch(last) } : { first: MISSING, last: MISSING }
+    return fillCopy(TEAR_CONTEXT.spansNone, range)
+  }
+  const touching = (s: StackSpan) => first !== undefined && last !== undefined && s.to >= first && s.from <= last
+  return fillCopy(TEAR_CONTEXT.spansNote, { inside: stressSpans(ext).filter(touching).length, n, frozen: ext.stress.frozen, tag: ext.stress.tag })
+}
+
+/** How many sessions carry a regime label, in words; or the reason RG1 is not served. */
+function ribbonLine(ext: Extended, t: readonly number[]): string {
+  const ribbon = regimeRibbon(ext, t)
+  if (ribbon === null || !ext.regimes) return fillCopy(TEAR_CONTEXT.ribbonNone, { note: ext.regimes_note || TEAR_CONTEXT.noReason })
+  return fillCopy(TEAR_CONTEXT.ribbonNote, {
+    labelled: formatNumber(ribbon.values.filter((v) => v !== null).length, 0, { thousands: true }),
+    n: formatNumber(t.length, 0, { thousands: true }),
+    label: ext.regimes.label,
+    tag: ext.regimes.tag,
+  })
+}
+
+/**
+ * The context layers in words, under the basis line: how many frozen windows touch the series and how many
+ * sessions carry a regime label, each with the API's own frozen-list text, label and tag; or, where a layer
+ * is not served, the reason. Empty without the extended body.
+ */
+export function contextLines(ext: Extended | null, t: readonly number[]): string[] {
+  return ext === null ? [] : [spansLine(ext, t), ribbonLine(ext, t)]
 }
 
 type Band = Analytics['rolling']['sharpe_bands'][number]
