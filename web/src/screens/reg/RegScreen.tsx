@@ -14,6 +14,7 @@ import { AmberField } from '../../chrome/Field'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
+import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
@@ -153,7 +154,7 @@ export default function RegScreen(_props: ScreenProps) {
       <ConfirmBlock
         panelId={actions.panelId}
         rows={confirmRows}
-        error={confirmations.isError ? confirmations.error.detail : null}
+        error={confirmations.isError ? confirmations.error : null}
         onOpen={openDes}
       />
     </>
@@ -191,9 +192,9 @@ export default function RegScreen(_props: ScreenProps) {
         />
       ) : null}
       {registry.isError ? (
-        <p className="reg-msg down" role="alert">{fillCopy(REG.failed, { detail: registry.error.detail })}</p>
+        <PanelFault error={registry.error} failedText={REG.failed} className="reg-msg" />
       ) : rows === null ? (
-        <p className="reg-msg" role="status">{REG.loading}</p>
+        <PanelLoading text={REG.loading} className="reg-msg" />
       ) : (
         <div className="reg-body">
           <RoundRail panelId={actions.panelId} groups={groups} selected={f.round} onSelect={(round) => setF((x) => ({ ...x, round }))} />

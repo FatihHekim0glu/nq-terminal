@@ -2,14 +2,23 @@
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { resetConnection } from './api/connection'
+import { resetRecordWatchBoot, resetRecordWatchView } from './chrome/RecordWatch.live'
 import { layoutFor } from './chrome/WorkspaceLayouts'
 import { COMMAND_LINE } from './copy/commands'
+import { CONNECTION } from './copy/connection'
 import { FRAME_STRIP, KEY_TOOLBAR, NAV_TOOLBAR, STATUS_BAR, TAPE } from './copy/chrome'
 import { LAYOUT } from './copy/layout'
+import { WATCH } from './copy/watch'
+import { WATCH_DETAIL } from './copy/watchDetail'
 import { WORKSPACE, fillCopy } from './copy/workspace'
+import { CONFIRMATIONS, REGISTRY } from './screens/reg/regFixtures'
+import { LEDGER, RUNS } from './screens/runs/runs.fixtures'
+import type { WatchSnapshot } from './state/recordWatch.schema'
+import { useRecordWatchStore } from './state/recordWatch.store'
 import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
-import { resetMessage } from './chrome/MessageLine.store'
+import { resetMessage, useMessage } from './chrome/MessageLine.store'
 
 // The Workspace (and dockview) is a lazy chunk: the first import in a test run takes a moment.
 configure({ asyncUtilTimeout: 5000 })
@@ -88,9 +97,19 @@ beforeEach(() => {
   useLayouts.getState().resetAll()
   localStorage.clear()
   resetMessage()
+  useRecordWatchStore.setState({ checkpoint: null })
+  resetRecordWatchView()
+  resetRecordWatchBoot()
 })
 
-afterEach(cleanup)
+// The connection state is one store for the whole page, so every test leaves it as it found it; the idle
+// callback a test installs is removed again.
+afterEach(() => {
+  cleanup()
+  resetConnection()
+  Reflect.deleteProperty(window, 'requestIdleCallback')
+  Reflect.deleteProperty(window, 'cancelIdleCallback')
+})
 
 /** The status-bar segment whose whole text is `text` (values sit in their own <b>). */
 function segment(root: HTMLElement, text: string): HTMLElement | undefined {
@@ -483,5 +502,194 @@ describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, comma
       vi.doUnmock('./chrome/Workspace')
       vi.resetModules()
     }
+  })
+})
+
+function health503(): Response {
+  return new Response('{"detail":"down"}', { status: 503, headers: { 'content-type': 'application/json' } })
+}
+
+/** What Vite's dev proxy answers when nothing listens on the backend port: an empty text 500. */
+function proxy500(): Response {
+  return new Response(null, { status: 500 })
+}
+
+const strips = () => document.querySelectorAll('[data-chrome="connection"][role="alert"]')
+
+/** The status-bar segment whose text matches `pattern`. */
+function segmentLike(root: HTMLElement, pattern: RegExp): HTMLElement | undefined {
+  return Array.from(root.querySelectorAll<HTMLElement>('.seg')).find((el) => pattern.test(el.textContent ?? ''))
+}
+
+describe('connection supervisor and strip (roadmap 7)', { timeout: 20_000 }, () => {
+  it.each([
+    ['three 503 health answers', health503],
+    ['three bodiless 500 health answers (the dev proxy with no backend)', proxy500],
+  ])('%s give one API DOWN strip under the header and API DOWN since in the status line', async (_name, failure) => {
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return url.startsWith('/api/health') ? failure() : reply(url)
+    })
+    render(<App />)
+    await waitFor(() => expect(strips()).toHaveLength(1), { timeout: 10_000 })
+    const strip = strips()[0]!
+    expect(strip.textContent).toContain(CONNECTION.lead)
+    const banner = screen.getByRole('banner')
+    expect(banner.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(strip.compareDocumentPosition(screen.getByRole('main', { name: 'Workspace' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const status = screen.getByRole('contentinfo')
+    await waitFor(() => expect(segmentLike(status, /API DOWN since \d{2}:\d{2}:\d{2} ET$/)).toBeTruthy())
+    expect(within(status).queryByText(STATUS_BAR.healthDown)).toBeNull()
+    expect(segment(status, 'KILL unknown')).toBeTruthy()
+    // One strip, however many checks fail after the third.
+    expect(strips()).toHaveLength(1)
+  }, 20_000)
+
+  it('drops the strip and says the backend is back when a health check answers again', async () => {
+    let up = false
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      return url.startsWith('/api/health') && !up ? health503() : reply(url)
+    })
+    render(<App />)
+    await waitFor(() => expect(strips()).toHaveLength(1), { timeout: 10_000 })
+    up = true
+    await waitFor(() => expect(strips()).toHaveLength(0), { timeout: 10_000 })
+    expect(useMessage.getState().text).toMatch(/^Backend back at \d{2}:\d{2}:\d{2} ET; \d+ requests retried\.$/)
+    const status = screen.getByRole('contentinfo')
+    await waitFor(() => expect(segment(status, 'KILL off')).toBeTruthy())
+    expect(status.textContent).not.toContain('API DOWN')
+  }, 25_000)
+
+  it('shows no strip and no alert of its own while the backend answers', async () => {
+    render(<App />)
+    await homeLoaded()
+    expect(strips()).toHaveLength(0)
+    expect(screen.getByRole('contentinfo').textContent).not.toContain('API DOWN')
+  })
+})
+
+const OPENINGS = { label: 'openings', openings: [{ opened_utc: '2026-09-26T10:00:00Z', by: 'user' }], openings_closed: true }
+const WATCH_OOS = { entries: [{ line_no: 1, caller: 'terminal' }, { line_no: 2, caller: 'terminal' }, { line_no: 3, caller: 'sealed' }], total: 3 }
+const GATE_LOG_READ = '/api/audit/oos-log?limit=5000'
+const WATCH_BODIES: Readonly<Record<string, unknown>> = {
+  '/api/registry': REGISTRY,
+  '/api/confirmations': CONFIRMATIONS,
+  '/api/audit/openings': OPENINGS,
+  '/api/ledger': LEDGER,
+  [GATE_LOG_READ]: WATCH_OOS,
+  '/api/runs': RUNS,
+}
+
+/** The app's usual answers, with the six records of the watch answered from the fixtures. */
+function replyWithRecords(url: string): Response {
+  const body = WATCH_BODIES[url]
+  return body === undefined ? reply(url) : new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+}
+
+/** jsdom has no requestIdleCallback: install one the test fires by hand (RecordWatch.live falls back to a 2 s timer). */
+function holdIdle(): { readonly fire: () => void; readonly requested: () => number } {
+  let waiting: (() => void) | null = null
+  const request = vi.fn((callback: () => void) => {
+    waiting = callback
+    return 1
+  })
+  Object.assign(window, { requestIdleCallback: request, cancelIdleCallback: vi.fn() })
+  return {
+    fire: () => act(() => waiting?.()),
+    requested: () => request.mock.calls.length,
+  }
+}
+
+type Loose = { sources: Record<string, { count: number; records: Record<string, Record<string, unknown>> }> }
+
+/** A checkpoint the browser "kept earlier", taken from the fixtures and then edited by `change`. */
+async function keepCheckpoint(change: (s: Loose) => void = () => undefined): Promise<void> {
+  const lazy = await import('./chrome/RecordWatch.lazy')
+  const snapshot = lazy.snapshotOf({ registry: REGISTRY, confirmations: CONFIRMATIONS, openings: OPENINGS, ledger: LEDGER, oos: WATCH_OOS, runs: RUNS }, Date.UTC(2026, 8, 20, 14, 0))
+  const copy = JSON.parse(JSON.stringify(snapshot)) as Loose
+  change(copy)
+  expect(useRecordWatchStore.getState().setCheckpoint(copy as unknown as WatchSnapshot)).toBe(true)
+}
+
+const gateLogReads = () => fetchSpy.mock.calls.filter(([url]) => String(url) === GATE_LOG_READ)
+
+describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
+  beforeEach(() => {
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => replyWithRecords(String(input)))
+  })
+
+  it('starts no watch read before the first idle moment, then reads the gate log and shows WATCH from now', async () => {
+    const idle = holdIdle()
+    render(<App />)
+    await homeLoaded()
+    const status = screen.getByRole('contentinfo')
+    expect(idle.requested()).toBe(1)
+    expect(gateLogReads()).toHaveLength(0)
+    expect(segmentLike(status, /^WATCH /)).toBeUndefined()
+    idle.fire()
+    await waitFor(() => expect(gateLogReads()).toHaveLength(1))
+    await waitFor(() => expect(segment(status, 'WATCH from now')).toBeTruthy())
+    const calls = fetchSpy.mock.calls as unknown as Array<[string, RequestInit | undefined]>
+    expect(calls.every(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'GET')).toBe(true)
+  })
+
+  it('reads WATCH no change on a later visit with the same records', async () => {
+    await keepCheckpoint()
+    const idle = holdIdle()
+    render(<App />)
+    await homeLoaded()
+    idle.fire()
+    await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH no change')).toBeTruthy())
+  })
+
+  it('WATCH and WATCH SEEN post the unavailable line while the six reads have not been made', async () => {
+    holdIdle()
+    render(<App />)
+    await homeLoaded()
+    await runLine('WATCH')
+    expect(screen.getByText(COMMAND_LINE.watchUnavailable)).toBeTruthy()
+    resetMessage()
+    await runLine('WATCH SEEN')
+    expect(screen.getByText(COMMAND_LINE.watchUnavailable)).toBeTruthy()
+    expect(screen.queryByRole('listbox', { name: WATCH_DETAIL.menuTitle })).toBeNull()
+  })
+
+  it('shows WATCH 1 changed in amber, WATCH <GO> lists it, choosing it opens the record and WATCH SEEN restores no change', async () => {
+    // volmanaged_v0 is in the command index of this file's fake backend, so choosing its row can run.
+    const name = 'volmanaged_v0'
+    await keepCheckpoint((s) => void (s.sources.registry!.records[name]!.p = 0.987654))
+    const idle = holdIdle()
+    render(<App />)
+    await homeLoaded()
+    const status = screen.getByRole('contentinfo')
+    idle.fire()
+    await waitFor(() => expect(segmentLike(status, /^WATCH 1 changed/)).toBeTruthy())
+    expect(segmentLike(status, /^WATCH 1 changed/)?.className).toMatch(/\bwarn\b/)
+
+    await runLine('WATCH')
+    const list = await screen.findByRole('listbox', { name: WATCH_DETAIL.menuTitle })
+    const rows = within(list).getAllByRole('option')
+    expect(rows[0]?.textContent).toContain(`${name} DES`)
+    expect(rows.at(-1)?.textContent).toContain('WATCH SEEN')
+    fireEvent.click(rows[0]!)
+    await waitFor(() => expect(screen.getByText(`Opened ${name} DES.`)).toBeTruthy())
+
+    await runLine('WATCH SEEN')
+    expect(useMessage.getState().text).toMatch(/^Marked as seen at .+ ET\.$/)
+    await waitFor(() => expect(segment(status, 'WATCH no change')).toBeTruthy())
+    expect(segmentLike(status, /^WATCH 1 changed/)).toBeUndefined()
+  })
+
+  it('posts the start-up line once when a record differs from the kept checkpoint', async () => {
+    const runId = RUNS[0]?.run_id ?? ''
+    await keepCheckpoint((s) => void delete s.sources.runs?.records[runId])
+    const idle = holdIdle()
+    render(<App />)
+    await homeLoaded()
+    idle.fire()
+    await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH 1 new')).toBeTruthy())
+    expect(useMessage.getState().text).toMatch(/^Since .+ ET: 1 run\. WATCH <GO> lists them\.$/)
+    expect(WATCH.news).toBe('{n} new')
   })
 })

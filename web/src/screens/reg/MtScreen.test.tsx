@@ -15,23 +15,29 @@ vi.mock('../../charts/lazy', async (importOriginal) => {
   return { ...actual, loadEcharts: () => Promise.resolve(fake.lib) }
 })
 
+import { resetConnection } from '../../api/connection'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { describePScatter } from '../../charts/echarts/pScatterModel'
 import { stubLayout } from '../../grids/testing'
 import { mtScatterInput } from './mtModel'
 import { DEFLATED } from '../../copy/deflated'
+import { MT } from '../../copy/reg'
+import { fillCopy } from '../../copy/workspace'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import MtScreen from './MtScreen'
 import { MULTIPLE_TESTING } from './regFixtures'
-import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
+import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi } from './testHarness'
 
 beforeAll(() => stubLayout(1200))
 beforeEach(() => {
   resetNumbered()
   fake.chart.setOption.mockClear()
 })
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  resetConnection()
+})
 
 function table(): HTMLElement {
   return screen.getByRole('grid', { name: /Adjusted p-values/ })
@@ -147,6 +153,55 @@ describe('MT: multiple-testing view', () => {
     mountScreen(<MtScreen params={panelParams('MT')} context={null} />)
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('stub 503 for /api/multiple-testing')
+    expect(alert.textContent).toBe(fillCopy(MT.failed, { detail: 'stub 503 for /api/multiple-testing' }))
     expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  // Backend-down acceptance (roadmap #7): a waiting status while the strip owns the outage alert.
+  it('waits for the backend, with no alert, when the family answers 502 while the connection is down', async () => {
+    backendDown()
+    stubApi({ '/api/multiple-testing': 502 })
+    mountScreen(<MtScreen params={panelParams('MT')} context={null} />)
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe('Waiting for the backend: GET /api/multiple-testing answered 502.'),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+
+  it('says the panel is waiting to load, not busy, while the backend is down and the family is pending', () => {
+    backendDown()
+    stubApi()
+    mountScreen(<MtScreen params={panelParams('MT')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Waiting for the backend before loading.')
+    expect(status.hasAttribute('aria-busy')).toBe(false)
+  })
+
+  it('keeps the loading line busy while the backend is up and the family is pending', () => {
+    stubApi()
+    mountScreen(<MtScreen params={panelParams('MT')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(MT.loading)
+    expect(status.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('names the Deflated Sharpe failure in an alert inside its own block while the backend is up', async () => {
+    stubApi({ '/api/analytics/deflated': 503 })
+    await ready()
+    const section = screen.getByRole('region', { name: DEFLATED.label })
+    const alert = await within(section).findByRole('alert')
+    expect(alert.textContent).toBe(fillCopy(DEFLATED.failed, { detail: 'stub 503 for /api/analytics/deflated' }))
+  })
+
+  it('waits for the backend in the Deflated Sharpe block, with no alert, while the connection is down', async () => {
+    backendDown()
+    stubApi({ '/api/analytics/deflated': 502 })
+    await ready()
+    const section = screen.getByRole('region', { name: DEFLATED.label })
+    await waitFor(() =>
+      expect(within(section).getByRole('status').textContent).toBe('Waiting for the backend: GET /api/analytics/deflated answered 502.'),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })

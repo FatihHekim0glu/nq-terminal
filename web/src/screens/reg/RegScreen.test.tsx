@@ -4,6 +4,7 @@
 // Enter or Number <GO> on a row opening DES, and GET requests only.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetConnection } from '../../api/connection'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
 import { captureDownloads } from '../../chrome/download.testUtil'
@@ -18,11 +19,14 @@ import { DEFLATED_REAL } from './deflatedFixtures'
 import RegEvidence from './RegEvidence'
 import RegScreen from './RegScreen'
 import type { EvidenceRow } from './evidenceModel'
-import { PANEL_ID, mountScreen, panelParams, stubApi } from './testHarness'
+import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi } from './testHarness'
 
 beforeAll(() => stubLayout(1200))
 beforeEach(() => resetNumbered())
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  resetConnection()
+})
 
 function board(): HTMLElement {
   return screen.getByRole('grid', { name: /Registry board/ })
@@ -207,7 +211,57 @@ describe('REG: registry board', () => {
     mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('stub 503 for /api/registry')
+    expect(alert.textContent).toBe(fillCopy(REG.failed, { detail: 'stub 503 for /api/registry' }))
     expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+  })
+
+  // Backend-down acceptance (roadmap #7): the connection strip owns the outage alert, so a panel on
+  // HOME shows a waiting status, never a second role=alert.
+  it('waits for the backend, with no alert in the panel, when the registry answers 502 while the connection is down', async () => {
+    backendDown()
+    stubApi({ '/api/registry': 502 })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toBe('Waiting for the backend: GET /api/registry answered 502.'),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('grid', { name: /Registry board/ })).toBeNull()
+  })
+
+  it('says the panel is waiting to load, not busy, while the backend is down and the registry is still pending', () => {
+    backendDown()
+    stubApi()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe('Waiting for the backend before loading.')
+    expect(status.hasAttribute('aria-busy')).toBe(false)
+  })
+
+  it('keeps the loading line busy while the backend is up and the registry is pending', () => {
+    stubApi()
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    const status = screen.getByRole('status')
+    expect(status.textContent).toBe(REG.loading)
+    expect(status.getAttribute('aria-busy')).toBe('true')
+  })
+
+  it('names the failure of the sealed confirmations in an alert while the backend is up', async () => {
+    stubApi({ '/api/confirmations': 503 })
+    await ready()
+    const block = screen.getByRole('region', { name: /Sealed confirmations/ })
+    const alert = await within(block).findByRole('alert')
+    expect(alert.textContent).toBe(fillCopy(CONFIRM.failed, { detail: 'stub 503 for /api/confirmations' }))
+  })
+
+  it('waits for the backend in the sealed confirmations block, with no alert, while the connection is down', async () => {
+    backendDown()
+    stubApi({ '/api/confirmations': 502 })
+    await ready()
+    const block = screen.getByRole('region', { name: /Sealed confirmations/ })
+    await waitFor(() =>
+      expect(within(block).getByRole('status').textContent).toBe('Waiting for the backend: GET /api/confirmations answered 502.'),
+    )
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('still lists the registry when the hypothesis cards fail, with verdicts from the registry text and a note', async () => {

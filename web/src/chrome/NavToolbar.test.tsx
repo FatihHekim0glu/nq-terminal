@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { HealthData } from '../commands/types'
 import { NAV_TOOLBAR } from '../copy/chrome'
 import { NavToolbar, type NavToolbarProps } from './NavToolbar'
+import { StatusBar, type HealthState } from './StatusBar'
+import { killState } from './StatusBar.format'
 
 afterEach(cleanup)
 
@@ -44,6 +47,14 @@ describe('NavToolbar: the 22px nav toolbar for the focused panel (spec 4.2)', ()
     expect(within(bar).getByText('TWS not monitored')).toBeTruthy()
   })
 
+  it('reads KILL reading while the health poll has not answered, and marks it as its own state', () => {
+    const { bar } = setup({ kill: 'reading' })
+    expect(within(bar).getByText('KILL reading')).toBeTruthy()
+    expect(within(bar).getByText(NAV_TOOLBAR.killReading)).toBeTruthy()
+    expect(within(bar).queryByText(NAV_TOOLBAR.killUnknown)).toBeNull()
+    expect(bar.querySelector('.nav-msg')?.getAttribute('data-kill')).toBe('reading')
+  })
+
   it('labels the envelope with a visible Message word (spec 4.2)', () => {
     const { bar } = setup()
     const word = within(bar).getByText(NAV_TOOLBAR.message)
@@ -65,5 +76,23 @@ describe('NavToolbar: the 22px nav toolbar for the focused panel (spec 4.2)', ()
     const { bar } = setup({ focused: null })
     expect(bar.querySelector('.ctx-chip')).toBeNull()
     expect(within(bar).getByRole('button', { name: NAV_TOOLBAR.noContext })).toBeTruthy()
+  })
+})
+
+describe('NavToolbar and StatusBar read the kill switch the same way', () => {
+  const DATA: HealthData = { fence: { is_start: '2010-01-01', is_end: '2022-01-01' }, kill_switch_on: false, gate_reads_this_process: 0, fixture_mode: false }
+  const STATES: ReadonlyArray<readonly [string, HealthState]> = [
+    ['loading', { status: 'loading' }],
+    ['failed', { status: 'error' }],
+    ['off', { status: 'ok', data: DATA }],
+    ['on', { status: 'ok', data: { ...DATA, kill_switch_on: true } }],
+  ]
+
+  it.each(STATES)('%s: the nav toolbar and the status line print the same KILL text', (_name, health) => {
+    render(<StatusBar screen="HOME" contexts={{ A: null, B: null, C: null }} health={health} />)
+    const line = Array.from(document.querySelectorAll('.nqt-status .seg')).find((el) => el.querySelector('b')?.textContent === 'KILL')
+    cleanup()
+    const { bar } = setup({ kill: killState(health) })
+    expect(bar.querySelector('.nav-kill')?.textContent).toBe(line?.textContent)
   })
 })

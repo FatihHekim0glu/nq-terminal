@@ -11,6 +11,7 @@ import type { ResolvedContext } from '../commands/types'
 import { NAV_TOOLBAR } from '../copy/chrome'
 import type { PanelLink } from '../state/linkGroups'
 import { LinkChip } from './ContextStrip'
+import type { KillState } from './StatusBar.format'
 import './NavToolbar.css'
 
 export type NavAction = 'back' | 'forward' | 'context' | 'mnemonic' | 'related' | 'favourites' | 'export' | 'help'
@@ -24,7 +25,8 @@ export interface NavFocus {
 export interface NavToolbarProps {
   /** The focused panel, or null when none has focus. */
   readonly focused: NavFocus | null
-  readonly kill: 'off' | 'on' | 'unknown'
+  /** killState() of the health poll, so this reads the same as the status line. */
+  readonly kill: KillState
   readonly onAction: (action: NavAction) => void
 }
 
@@ -55,7 +57,12 @@ function contextButton(focused: NavFocus | null, onAction: (a: NavAction) => voi
   )
 }
 
-const KILL_TEXT = { off: NAV_TOOLBAR.killOff, on: NAV_TOOLBAR.killOn, unknown: NAV_TOOLBAR.killUnknown } as const
+const KILL_TEXT: Readonly<Record<KillState, string>> = {
+  off: NAV_TOOLBAR.killOff,
+  on: NAV_TOOLBAR.killOn,
+  reading: NAV_TOOLBAR.killReading,
+  unknown: NAV_TOOLBAR.killUnknown,
+}
 
 export function NavToolbar({ focused, kill, onAction }: NavToolbarProps) {
   const code = focused?.code

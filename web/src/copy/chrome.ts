@@ -68,6 +68,8 @@ export const NAV_TOOLBAR = {
   messageGlyph: '✉',
   killOff: 'KILL off',
   killOn: 'KILL ON',
+  /** The health poll has not answered yet; the status line says the same (STATUS_BAR.killLoading). */
+  killReading: 'KILL reading',
   killUnknown: 'KILL unknown',
   tws: 'TWS not monitored',
   favourites: 'Favourite layouts',
@@ -126,6 +128,8 @@ export const STATUS_BAR = {
   killUnknown: 'unknown',
   healthDown: 'HEALTH unavailable',
   healthDownNote: 'GET /api/health did not answer, so the kill switch state is unknown.',
+  /** Replaces healthDown once the connection state machine calls the backend down; {value} is the Eastern time. */
+  apiDown: 'API DOWN since {value} ET',
   gateReads: 'Gate reads',
   missing: '--',
   fixture: 'FIXTURE DATA',

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import { connectionStore, DOWN_AFTER, INITIAL_CONNECTION, resetConnection, type ConnectionState } from '../api/connection'
 import { CONNECTION } from '../copy/connection'
+import { CONNECTION_PANEL } from '../copy/connectionPanel'
 import { MARKET } from '../copy/market'
 import { fillCopy } from '../copy/workspace'
 import PanelFault, { PanelLoading, useWaitingForBackend } from './PanelFault'
@@ -32,8 +33,8 @@ describe('PanelFault: failed', () => {
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toContain('Could not load disk read failed')
     expect(alert.className).toContain('panel-fault-failed')
-    const button = screen.getByRole('button', { name: CONNECTION.retryLabel })
-    expect(button.textContent).toBe(CONNECTION.retry)
+    const button = screen.getByRole('button', { name: CONNECTION_PANEL.retryLabel })
+    expect(button.textContent).toBe(CONNECTION_PANEL.retry)
     fireEvent.click(button)
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
@@ -42,7 +43,7 @@ describe('PanelFault: failed', () => {
     const onRetry = vi.fn()
     const error = new ApiError({ kind: 'http', path: '/api/x', status: 500, body: null, detail: 'failed' })
     render(<PanelFault error={error} failedText="failed: {detail}" onRetry={onRetry} />)
-    fireEvent.click(screen.getByRole('button', { name: CONNECTION.retryLabel }))
+    fireEvent.click(screen.getByRole('button', { name: CONNECTION_PANEL.retryLabel }))
     expect(onRetry.mock.calls[0]).toEqual([])
   })
 
@@ -56,7 +57,7 @@ describe('PanelFault: failed', () => {
     )
     const panel = container.firstElementChild as HTMLElement
     syncRoving(panel)
-    const button = screen.getByRole('button', { name: CONNECTION.retryLabel })
+    const button = screen.getByRole('button', { name: CONNECTION_PANEL.retryLabel })
     expect(button.hasAttribute(ROVING_ATTR)).toBe(true)
     expect(button.tabIndex).toBe(0)
   })
@@ -96,7 +97,7 @@ describe('PanelFault: waiting', () => {
     goDown()
     render(<PanelFault error={error} failedText="failed: {detail}" />)
     const status = screen.getByRole('status')
-    expect(status.textContent).toBe(fillCopy(CONNECTION.waiting, { request: 'GET /api/bars', answer: '502' }))
+    expect(status.textContent).toBe(fillCopy(CONNECTION_PANEL.waiting, { request: 'GET /api/bars', answer: '502' }))
     expect(status.className).toContain('panel-fault-waiting')
     expect(screen.queryByRole('alert')).toBeNull()
   })
@@ -105,7 +106,7 @@ describe('PanelFault: waiting', () => {
     const error = new ApiError({ kind: 'http', path: '/api/health', status: 500, body: null, detail: '500' })
     goDown()
     render(<PanelFault error={error} failedText="failed: {detail}" />)
-    expect(screen.getByRole('status').textContent).toBe(fillCopy(CONNECTION.waiting, { request: 'GET /api/health', answer: '500' }))
+    expect(screen.getByRole('status').textContent).toBe(fillCopy(CONNECTION_PANEL.waiting, { request: 'GET /api/health', answer: '500' }))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -113,7 +114,7 @@ describe('PanelFault: waiting', () => {
     const error = new ApiError({ kind: 'network', path: '/api/bars', detail: 'the request failed' })
     goDown()
     render(<PanelFault error={error} failedText="failed: {detail}" />)
-    expect(screen.getByRole('status').textContent).toBe(fillCopy(CONNECTION.waiting, { request: 'GET /api/bars', answer: CONNECTION.noAnswer }))
+    expect(screen.getByRole('status').textContent).toBe(fillCopy(CONNECTION_PANEL.waiting, { request: 'GET /api/bars', answer: CONNECTION.noAnswer }))
   })
 
   it('does not wait for a 403 even while down (never an outage)', () => {
@@ -146,7 +147,7 @@ describe('PanelLoading', () => {
     render(<PanelLoading text="Loading overnight_v0..." />)
     const status = screen.getByRole('status')
     expect(status.hasAttribute('aria-busy')).toBe(false)
-    expect(status.textContent).toBe(CONNECTION.waitingLoad)
+    expect(status.textContent).toBe(CONNECTION_PANEL.waitingLoad)
   })
 })
 

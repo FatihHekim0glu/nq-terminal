@@ -2,6 +2,10 @@
 // amber label, then segments of a bold white key and a value, divided by 1px rules.
 //   Status | Screen HOME* | A NQ1 Index | B rebal_v0 | C - | DATA 2010-01-01..2021-12-31 | TWS not monitored
 //          | KILL off | Gate reads 7 | READ ONLY | NO ORDER PATH | 14:02:11 ET | <Esc> command
+// Two segments come from outside the health poll. When the connection state machine says the backend is
+// down (roadmap 7), the amber HEALTH unavailable segment reads `API DOWN since 10:05:07 ET` instead. The
+// research-record watch (roadmap 16) adds `WATCH no change` (or from now, N new, N changed) right after
+// the context segments; it stays out of the way until the six record reads have settled.
 // The safety segments (TWS, KILL, gate reads, READ ONLY, NO ORDER PATH) never shrink; contexts and
 // the data window give way first. The kill and health segments sit in one live region (assertive
 // while the kill switch is on), so a change of safety state is announced; the clock stays outside it.
@@ -11,18 +15,18 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { MnemonicCode } from '../commands/registry'
 import { displayContext } from '../commands/sectors'
-import type { CommandIndexData, HealthData } from '../commands/types'
+import type { ConnectionState } from '../api/connection'
+import type { CommandIndexData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
+import { fillCopy } from '../copy/workspace'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
 import { KeyText } from './MessageLine'
-import { dataWindowValue, etClock } from './StatusBar.format'
+import { WatchSegment, type RecordWatchView } from './RecordWatch.live'
+import { dataWindowValue, etClock, type HealthState } from './StatusBar.format'
 import './StatusBar.css'
 
-export type HealthState =
-  | { readonly status: 'loading' }
-  | { readonly status: 'error' }
-  | { readonly status: 'ok'; readonly data: HealthData }
+export type { HealthState }
 
 export interface StatusBarProps {
   readonly screen: MnemonicCode
@@ -31,6 +35,10 @@ export interface StatusBarProps {
   readonly contexts: LinkContexts
   readonly health: HealthState
   readonly index?: CommandIndexData | null
+  /** The backend connection (roadmap 7): while it is down the health segment names the time it went quiet. */
+  readonly connection?: Pick<ConnectionState, 'status' | 'downSince'>
+  /** The research-record watch (roadmap 16): its segment follows the context segments. */
+  readonly watch?: RecordWatchView
 }
 
 const CLOCK_TICK_MS = 1000
@@ -70,7 +78,13 @@ function KillSegment({ health }: { readonly health: HealthState }) {
   )
 }
 
-function SafetySegments({ health }: { readonly health: HealthState }) {
+/** The amber words beside a failed health poll: the time the backend went quiet once it is down, else HEALTH unavailable. */
+function healthDownText(connection: StatusBarProps['connection']): string {
+  if (connection?.status === 'down' && connection.downSince !== null) return fillCopy(STATUS_BAR.apiDown, { value: etClock(new Date(connection.downSince)) })
+  return STATUS_BAR.healthDown
+}
+
+function SafetySegments({ health, connection }: { readonly health: HealthState; readonly connection: StatusBarProps['connection'] }) {
   const killOn = health.status === 'ok' && health.data.kill_switch_on
   return (
     <span className="seg-live" role="status" aria-live={killOn ? 'assertive' : 'polite'}>
@@ -78,7 +92,7 @@ function SafetySegments({ health }: { readonly health: HealthState }) {
       {health.status === 'error' ? (
         <span className="seg keep warn">
           <span className="sr-only">. </span>
-          {STATUS_BAR.healthDown}
+          {healthDownText(connection)}
         </span>
       ) : null}
     </span>
@@ -96,7 +110,7 @@ function ContextSegments({ contexts, index }: { readonly contexts: LinkContexts;
   })
 }
 
-export function StatusBar({ screen, edited, contexts, health, index = null }: StatusBarProps) {
+export function StatusBar({ screen, edited, contexts, health, index = null, connection, watch }: StatusBarProps) {
   const clock = useEtClock()
   const data = health.status === 'ok' ? health.data : null
   const range = data ? dataWindowValue(data.fence) : STATUS_BAR.dataFallbackValue
@@ -112,10 +126,11 @@ export function StatusBar({ screen, edited, contexts, health, index = null }: St
         ) : null}
       </Seg>
       <ContextSegments contexts={contexts} index={index} />
+      {watch ? <WatchSegment view={watch} /> : null}
       <Seg k={STATUS_BAR.data} kind="shrink">{range}</Seg>
       {data?.fixture_mode ? <span className="seg keep warn">{STATUS_BAR.fixture}</span> : null}
       <Seg k={STATUS_BAR.tws}>{STATUS_BAR.twsValue}</Seg>
-      <SafetySegments health={health} />
+      <SafetySegments health={health} connection={connection} />
       <Seg k={STATUS_BAR.gateReads}>{data ? String(data.gate_reads_this_process) : STATUS_BAR.missing}</Seg>
       <span className="seg keep flag">{STATUS_BAR.readOnly}</span>
       <span className="seg keep flag">{STATUS_BAR.noOrderPath}</span>

@@ -10,6 +10,7 @@ import type { Schemas } from '../../api/types'
 import { PScatter } from '../../charts/echarts/PScatter'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
+import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { CONFIRM, MT } from '../../copy/reg'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
@@ -114,14 +115,14 @@ export default function MtScreen(_props: ScreenProps) {
     <div className="reg-screen" data-screen="MT">
       <MtBar actions={actions} scale={scale} onScale={setScale} />
       {mt.isError ? (
-        <p className="reg-msg down" role="alert">{fillCopy(MT.failed, { detail: mt.error.detail })}</p>
+        <PanelFault error={mt.error} failedText={MT.failed} className="reg-msg" />
       ) : mt.data ? (
         <>
           <MtBody mt={mt.data} scale={scale} />
           <DeflatedPanel />
         </>
       ) : (
-        <p className="reg-msg" role="status">{MT.loading}</p>
+        <PanelLoading text={MT.loading} className="reg-msg" />
       )}
     </div>
   )

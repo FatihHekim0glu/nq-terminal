@@ -5,8 +5,8 @@
 import { useId, useMemo } from 'react'
 import { useDeflated } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
+import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import { DEFLATED } from '../../copy/deflated'
-import { fillCopy } from '../../copy/workspace'
 import { deflatedFacts, deflatedLadder, deflatedNullFacts, deflatedRows, type DeflatedView } from './deflatedModel'
 
 const C = DEFLATED.cols
@@ -61,11 +61,11 @@ export default function DeflatedPanel() {
         <span className="reg-muted">{DEFLATED.extra}</span>
       </p>
       {query.isError ? (
-        <p className="reg-msg down" role="alert">{fillCopy(DEFLATED.failed, { detail: query.error.detail })}</p>
+        <PanelFault error={query.error} failedText={DEFLATED.failed} className="reg-msg" />
       ) : query.data ? (
         <DeflatedBody view={query.data} />
       ) : (
-        <p className="reg-msg" role="status">{DEFLATED.loading}</p>
+        <PanelLoading text={DEFLATED.loading} className="reg-msg" />
       )}
     </section>
   )

@@ -3,7 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ApiError } from '../../api/client'
 import { connectionStore, DOWN_AFTER, INITIAL_CONNECTION, resetConnection } from '../../api/connection'
-import { CONNECTION } from '../../copy/connection'
+import { CONNECTION_PANEL } from '../../copy/connectionPanel'
 import { fillCopy } from '../../copy/workspace'
 import { MARKET } from '../../copy/market'
 import QueryStatus from './QueryStatus'
@@ -45,7 +45,7 @@ describe('QueryStatus (MON and CORR loading and error lines)', () => {
     const error = new ApiError({ kind: 'http', path: '/api/market/universe', status: 502, body: null, detail: '502' })
     render(<QueryStatus loading={false} error={error} />)
     const status = screen.getByRole('status')
-    expect(status.textContent).toBe(fillCopy(CONNECTION.waiting, { request: 'GET /api/market/universe', answer: '502' }))
+    expect(status.textContent).toBe(fillCopy(CONNECTION_PANEL.waiting, { request: 'GET /api/market/universe', answer: '502' }))
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -57,6 +57,6 @@ describe('QueryStatus (MON and CORR loading and error lines)', () => {
     render(<QueryStatus loading error={null} />)
     const status = screen.getByRole('status')
     expect(status.hasAttribute('aria-busy')).toBe(false)
-    expect(status.textContent).toBe(CONNECTION.waitingLoad)
+    expect(status.textContent).toBe(CONNECTION_PANEL.waitingLoad)
   })
 })

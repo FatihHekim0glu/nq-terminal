@@ -2,6 +2,22 @@
 import type { HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 
+/** The health query as the chrome shows it: a failed poll is unknown, never an earlier answer. */
+export type HealthState =
+  | { readonly status: 'loading' }
+  | { readonly status: 'error' }
+  | { readonly status: 'ok'; readonly data: HealthData }
+
+/** The kill switch as the nav toolbar and the status line both word it (KILL off, ON, reading or unknown). */
+export type KillState = 'off' | 'on' | 'reading' | 'unknown'
+
+/** One reading of the health state for every place that prints the kill switch; loading is reading, not unknown. */
+export function killState(health: HealthState): KillState {
+  if (health.status === 'loading') return 'reading'
+  if (health.status === 'error') return 'unknown'
+  return health.data.kill_switch_on ? 'on' : 'off'
+}
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /** The calendar day before an ISO date (the fence end is exclusive), or the input when unreadable. */
