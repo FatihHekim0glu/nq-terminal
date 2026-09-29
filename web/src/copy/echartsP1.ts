@@ -15,6 +15,7 @@ export const XY_SCATTER = {
 export const CONE = {
   summary: '{name}: {label}; {horizon} steps; at the last step the 5th percentile is {low}, the median {median} and the 95th {high}; realised {realised} at {realisedDate}.',
   summaryNoRealised: '{name}: {label}; {horizon} steps; at the last step the 5th percentile is {low}, the median {median} and the 95th {high}.',
+  summaryOverlay: ' {label} {value} at step {step}.',
   percentile: 'p{p}',
   median: 'Median',
   realised: 'Realised',
