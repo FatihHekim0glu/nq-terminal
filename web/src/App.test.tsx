@@ -20,6 +20,11 @@ import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
 import { resetMessage, useMessage } from './chrome/MessageLine.store'
 
+// GRAB itself (src/export/grab/run.ts) is reached through a dynamic import from the Workspace chunk; the
+// tests below check what the frame hands it, so the runner is replaced by a spy.
+const grabPanel = vi.hoisted(() => vi.fn<(req: unknown) => Promise<boolean>>(async () => true))
+vi.mock('./export/grab/run', () => ({ grabPanel }))
+
 // The Workspace (and dockview) is a lazy chunk: the first import in a test run takes a moment.
 configure({ asyncUtilTimeout: 5000 })
 
@@ -88,6 +93,7 @@ beforeAll(async () => {
 }, 30_000)
 
 beforeEach(() => {
+  grabPanel.mockClear()
   vi.stubGlobal('ResizeObserver', NoopResizeObserver)
   vi.stubGlobal('fetch', fetchSpy)
   Element.prototype.scrollIntoView = () => {}
@@ -502,6 +508,66 @@ describe('terminal frame (spec 4.1: frame strip, key toolbar, nav toolbar, comma
       vi.doUnmock('./chrome/Workspace')
       vi.resetModules()
     }
+  })
+})
+
+/** homeLoaded() for a test that may render the app first: the lazy Workspace has replaced its loading placeholder. */
+async function workspaceLoaded(): Promise<HTMLElement> {
+  await waitFor(() => expect(document.querySelector('main[aria-busy="true"]')).toBeNull())
+  return homeLoaded()
+}
+
+describe('GRAB <GO> (roadmap 15)', { timeout: 20_000 }, () => {
+  it('with no panel to grab, posts the no-panel message and starts no grab', async () => {
+    vi.resetModules()
+    vi.doMock('./chrome/Workspace', () => new Promise(() => {}))
+    try {
+      const { default: FreshApp } = await import('./App')
+      render(<FreshApp />)
+      await runLine('GRAB')
+      // The message line colours its <Key> tokens, so the sentence is split over elements: read its text.
+      expect(document.body.textContent).toContain(COMMAND_LINE.grabUnavailable)
+      expect(grabPanel).not.toHaveBeenCalled()
+    } finally {
+      vi.doUnmock('./chrome/Workspace')
+      vi.resetModules()
+    }
+  })
+
+  it('with a focused panel, asks the Workspace to grab it as a file, without any request', async () => {
+    render(<App />)
+    const main = await workspaceLoaded()
+    await focusPanel(main, 3)
+    // Requests made while GRAB runs: the caption is built from what the page holds, so there must be none.
+    const during: string[] = []
+    let running = false
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      if (running) during.push(String(input))
+      return reply(String(input))
+    })
+    running = true
+    await runLine('GRAB')
+    await waitFor(() => expect(grabPanel).toHaveBeenCalledTimes(1))
+    running = false
+    expect(grabPanel.mock.calls[0]?.[0]).toMatchObject({
+      panelId: main.querySelectorAll('[data-nqt-panel]')[2]?.getAttribute('data-nqt-panel'),
+      code: 'EQ',
+      number: 3,
+      group: 'B',
+      target: 'file',
+    })
+    expect(document.body.textContent).not.toContain(COMMAND_LINE.grabUnavailable)
+    expect(during).toEqual([])
+  })
+
+  it('reads the health answer the status line already holds for the caption', async () => {
+    render(<App />)
+    const main = await workspaceLoaded()
+    await focusPanel(main, 1)
+    await waitFor(() => expect(within(screen.getByRole('contentinfo')).getByText(STATUS_BAR.fixture)).toBeTruthy())
+    await runLine('GRAB')
+    await waitFor(() => expect(grabPanel).toHaveBeenCalledTimes(1))
+    expect(grabPanel.mock.calls[0]?.[0]).toMatchObject({ code: 'GP', number: 1, health: { now_utc: HEALTH.now_utc, fixture_mode: true } })
   })
 })
 

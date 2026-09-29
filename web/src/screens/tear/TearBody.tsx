@@ -12,6 +12,7 @@ import { useRun } from '../../api/queries'
 import type { ApiError } from '../../api/client'
 import { useExportSource } from '../../chrome/exportSource'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
+import { usePanelSource } from '../../chrome/panelSources'
 import { RUN_TAGS } from '../../copy/runs'
 import { TEAR } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
@@ -24,8 +25,10 @@ import type { TearCode } from './TearSheet'
 import { TearView } from './TearViews'
 import { tearExport } from './tearExport'
 import { formatNumber } from './tearFormat'
+import { tearProvenance } from './tearGrab'
 import { kpiTiles, tearTags, type Analytics } from './tearKpis'
-import { defaultCost, useRecordedCosts, useTearAnalytics, useTearExtended, type Extended, type Freq, type TearTarget } from './tearQueries'
+import { bootstrapPossible, defaultCost, useRecordedCosts, useTearAnalytics, useTearExtended, type Extended, type Freq, type HypothesisCard, type TearTarget } from './tearQueries'
+import { tearSources } from './tearSource'
 
 export interface TearBodyProps {
   readonly target: TearTarget
@@ -127,13 +130,30 @@ function Kpis({ data }: { readonly data: Analytics }) {
 
 interface LoadedProps extends TearBodyProps {
   readonly data: Analytics
+  /** A hypothesis's card, for the spec hash on GRAB's caption; null for a run or before the card arrives. */
+  readonly card: HypothesisCard | null
   /** EQ and DD: the /extended body their market context is drawn from, once it has arrived. */
   readonly extended: Extended | null
   readonly extendedError: ApiError | null
+  /** A run's probe and anchor tags, already bracketed; they travel with the run onto GRAB's caption. */
+  readonly honestyTags: readonly string[]
 }
 
-function Loaded({ target, tab, link, data, extended, extendedError }: LoadedProps) {
+function Loaded({ target, tab, link, data, card, extended, extendedError, honestyTags }: LoadedProps) {
   useExportSource(useMemo(() => tearExport(tab, data, target.name), [tab, data, target.name]))
+  // What the sheet's numbers came from, for GRAB's caption (roadmap 15); read from the answers, nothing asked:
+  // the analytics GET, the bootstrap GET behind EQ's cone, the /extended GET behind the market context and the
+  // RET and RR cards, and a run's books. The memo keys are primitives: honestyTags is rebuilt every render.
+  const specSha = card?.spec_sha256 ?? null
+  const { kind, name } = target
+  const bootstrap = tab === 'EQ' && bootstrapPossible(data.n)
+  const hasExtended = tab === 'RET' || tab === 'RR' || ((tab === 'EQ' || tab === 'DD') && extended !== null)
+  const honestyKey = honestyTags.join('\n')
+  usePanelSource(useMemo(() => {
+    const sources = tearSources({ kind, name }, tab, data.context, { bootstrap, extended: hasExtended })
+    const extraTags = honestyKey === '' ? [] : honestyKey.split('\n')
+    return { provenance: tearProvenance(data, { kind, name }, specSha, { extraTags, alsoSources: sources.slice(1) }) }
+  }, [data, kind, name, specSha, tab, bootstrap, hasExtended, honestyKey]))
   return (
     <div className="tear-view">
       <Kpis data={data} />
@@ -174,7 +194,7 @@ export default function TearBody({ target, tab, link }: TearBodyProps) {
         ) : error ? (
           <Refusal error={error} />
         ) : query.data ? (
-          <Loaded target={target} tab={tab} link={link} data={query.data} extended={extended.data ?? null} extendedError={extended.error} />
+          <Loaded target={target} tab={tab} link={link} data={query.data} card={recorded.card} extended={extended.data ?? null} extendedError={extended.error} honestyTags={runHonestyTags} />
         ) : recorded.noSeries && target.kind === 'hypothesis' ? (
           <NoSeries name={target.name} parent={recorded.parent} tab={tab} />
         ) : (

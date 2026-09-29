@@ -114,4 +114,23 @@ describe('App does not import the on-demand chunks statically', () => {
     expect(staticImport(name), `${name} is imported statically`).toBe(false)
     expect(app.includes(`import('./chrome/${name}')`), `${name} has no dynamic import`).toBe(true)
   })
+
+  /** The module specifier of every static import in App.tsx, side-effect and multi-line ones too; type-only imports leave no code. */
+  const staticSpecifiers = [...app.matchAll(/^import\b(?!\s+type\b)(?:[^'"]*?\bfrom\s*|\s*)['"]([^'"]+)['"]/gm)].map((m) => m[1] ?? '')
+
+  it('finds the static imports it looks through (so an empty list cannot pass)', () => {
+    expect(staticSpecifiers.length).toBeGreaterThan(10)
+    // A named import, and a side-effect import (no `from`), are both seen; a type-only import is not one.
+    expect(staticSpecifiers).toContain('./chrome/KeyToolbar')
+    expect(staticSpecifiers).toContain('./chrome/FrameStrip.frame.css')
+    expect(staticSpecifiers).not.toContain('./chrome/Workspace')
+  })
+
+  // GRAB (roadmap 15): the panel image export is reached through the Workspace chunk (panelExport.ts) and, from
+  // there, a dynamic import of export/grab/run. A static import from App would put its code and copy in the shell.
+  it('has no static import of the panel image export (chrome/panelExport) or of anything under export/', () => {
+    expect(app.length).toBeGreaterThan(0)
+    expect(staticSpecifiers.filter((specifier) => specifier.endsWith('/panelExport')), 'panelExport is imported statically').toEqual([])
+    expect(staticSpecifiers.filter((specifier) => specifier.includes('/export/')), 'export/ code is imported statically').toEqual([])
+  })
 })

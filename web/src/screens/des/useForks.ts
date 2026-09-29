@@ -3,7 +3,7 @@
 // cache with the tear sheet and a Sharpe interval never diverges by request shape. A run id a server
 // returned reaches only apiGet's path parameters (buildApiUrl), never a hand-built URL string.
 import { useQueries, type QueryFunction } from '@tanstack/react-query'
-import { ApiError, apiGet } from '../../api/client'
+import { ApiError, apiGet, buildApiUrl } from '../../api/client'
 import { apiQueryKey, type ApiQueryKey } from '../../api/queries'
 import type { Analytics } from '../tear/tearKpis'
 import { forkPoint, type ForkPoint, type ForkSpec } from './forkModel'
@@ -26,6 +26,16 @@ const analyticsQueryFn = (spec: ForkSpec): QueryFunction<Analytics> => ({ signal
     ? apiGet('/api/analytics/hypothesis/{name}', screenRequest(spec), { signal })
     : apiGet('/api/analytics/run/{run_id}', runRequest(spec), { signal })
 )
+
+/**
+ * The relative URL of the GET a fork sends, built from the same request shapes as the hook below, so a GRAB
+ * caption names exactly the request the fork's numbers came from. Pure: nothing is asked.
+ */
+export function forkRequestPath(spec: ForkSpec): string {
+  return spec.engine === 'screen'
+    ? buildApiUrl('/api/analytics/hypothesis/{name}', screenRequest(spec))
+    : buildApiUrl('/api/analytics/run/{run_id}', runRequest(spec))
+}
 
 function errorOf(error: unknown): ApiError | null {
   return error instanceof ApiError ? error : null

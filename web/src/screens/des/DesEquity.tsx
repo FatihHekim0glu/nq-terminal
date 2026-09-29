@@ -7,11 +7,13 @@ import { useMemo, useState } from 'react'
 import { useApiQuery } from '../../api/queries'
 import LineStack from '../../charts/LineStack'
 import { ToggleGroup } from '../../chrome/Field.buttons'
+import { usePanelSource } from '../../chrome/panelSources'
 import type { PanelLink } from '../../state/linkGroups'
 import { DES } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import { panelDrawdown } from '../home/homeEquity.model'
 import { decimalsFor, defaultCost, ticksLabel, type HypothesisCard } from './desModel'
+import { desEquityProvenance } from './desGrab'
 import { LoadError, Status } from './DesParts'
 
 export interface DesEquityProps {
@@ -31,6 +33,10 @@ export default function DesEquity({ card, link }: DesEquityProps) {
   const [cost, setCost] = useState<number | null>(() => defaultCost(card))
   const query = usePanel(card.name, cost)
   const data = query.data
+  // What this chart's numbers came from, for GRAB's caption (roadmap 15): the terminal's own panel answer
+  // ([POST HOC], its unit, its GET), not the card. Registered once the answer is in; the page's own
+  // registration (HypothesisDes) stays null on Profile so it never shadows this one.
+  usePanelSource(useMemo(() => (data && cost !== null ? { provenance: desEquityProvenance(card, data, cost) } : null), [card, data, cost]))
   const panes = useMemo(() => {
     if (!data) return null
     const bench = data.bench_label && data.bench_equity ? { name: data.bench_label, values: data.bench_equity } : null

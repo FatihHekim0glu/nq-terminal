@@ -9,7 +9,10 @@
 //   related functions menu dims only its own panel; back and forward walk each panel's history.
 // - dockview's own live announcements are off: the command line's message is the one voice.
 // - Named workspaces (SAVE, LOAD) are methods on the handle; the command line only supplies the parser.
+// - GRAB <GO> is grab() on the handle and each panel's Options menu lists the same image export
+//   (panelExport.ts, imported by this file alone); the grab code itself loads only when someone asks.
 // This file is the React shell; what commands, focus and workspaces do lives in WorkspaceController.
+import { QueryClientContext } from '@tanstack/react-query'
 import { DockviewReact, type DockviewTheme, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { Suspense, createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, type Ref, type RefObject } from 'react'
@@ -28,6 +31,7 @@ import { registerNumbered } from './NumberedActions'
 import PanelChrome from './PanelChrome'
 import { PanelActionsContext, type PanelActions } from './PanelChrome.actions'
 import { NumberingContext } from './PanelChrome.numbers'
+import { panelExportEntries, panelTarget, readHealth, runGrab, type GrabTarget } from './panelExport'
 import RelatedMenu from './RelatedMenu'
 import ScreenBoundary from './ScreenBoundary'
 import { createWorkspaceController, type ControllerEnv, type FocusedPanel, type RunTarget, type ShownLayout, type WorkspaceController } from './WorkspaceController'
@@ -64,6 +68,10 @@ export interface WorkspaceHandle {
   /** What panel `panelId` shows right now (U10: the message after goBack/goForward names where it
    * landed, not the stale panel the chrome had focused before the move). Null when it does not exist. */
   shownIn(panelId: string): { readonly code: MnemonicCode; readonly context: ResolvedContext | null } | null
+  /** GRAB <GO>: save the focused panel's charts as an image (`file`, the default) or copy it (`clipboard`),
+   * with the panel's provenance as a caption. False, with nothing done, when no panel is focused; true once
+   * the grab has been started (the message line then says how it went). Makes no request. */
+  grab(target?: GrabTarget): boolean
   /** Open the related functions menu (MENU) in a panel, by default the focused one. */
   openRelatedMenu(panelId?: string): boolean
   /** Close the related functions menu wherever it is open. */
@@ -136,6 +144,8 @@ function usePanelActionsFor(controller: WorkspaceController | null, id: string):
 
 function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
   const { screens, linkGroups, controller, view } = useContext(PanelEnvContext)
+  // The cache the status line fills, read (never fetched) when Grab as image is chosen; absent in a bare Workspace.
+  const client = useContext(QueryClientContext)
   const id = props.api.id
   const params = sanitiseParams(props.params)
   const groupContext = useStore(linkGroups, (s) => (params && params.group !== '-' ? s.contexts[params.group] : null))
@@ -183,7 +193,10 @@ function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
         onRelated={() => actions.related()}
         onBack={() => actions.back()}
         onForward={() => actions.forward()}
-        extraOptions={() => copyLinkEntries(title)}
+        extraOptions={() => [
+          ...panelExportEntries(panelTarget(id, params.code, number, params.group), () => readHealth(client)),
+          ...copyLinkEntries(title),
+        ]}
         overlay={overlay}
         landmark={false}
       >
@@ -239,7 +252,19 @@ function useController(props: WorkspaceProps, rootRef: RefObject<HTMLElement | n
 
 export default function Workspace(props: WorkspaceProps) {
   const rootRef = useRef<HTMLElement>(null)
-  const controller = useController(props, rootRef)
+  const client = useContext(QueryClientContext)
+  // The panel the command line addresses, as the controller last reported it: what GRAB <GO> grabs.
+  const focusedRef = useRef<FocusedPanel | null>(null)
+  const controller = useController(
+    {
+      ...props,
+      onFocusedPanelChange: (panel) => {
+        focusedRef.current = panel
+        props.onFocusedPanelChange?.(panel)
+      },
+    },
+    rootRef,
+  )
   // Terminal links wait for the workspace (deepLink.ts): ready from onReady until this unmounts.
   useEffect(() => () => markWorkspaceGone(), [])
   useImperativeHandle(props.ref, () => ({
@@ -249,6 +274,12 @@ export default function Workspace(props: WorkspaceProps) {
     focusPanelNumber: controller.focusPanelNumber,
     focusPanelShowing: controller.focusPanelShowing,
     focusedContext: controller.focusedContext,
+    grab: (target = 'file') => {
+      const panel = focusedRef.current
+      if (!panel) return false
+      void runGrab(panelTarget(panel.panelId, panel.params.code, panel.number, panel.params.group), readHealth(client), target)
+      return true
+    },
     goBack: controller.goBack,
     goForward: controller.goForward,
     shownIn: controller.shownIn,

@@ -10,7 +10,9 @@
 // The provider supervises the backend connection (roadmap 7): the API DOWN strip sits under the header and
 // the status line names the time the backend went quiet. The research-record watch (roadmap 16) reads its
 // six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
-// through useRecordWatch. The diff and its long copy load with the reader, never with this file.
+// through useRecordWatch. The diff and its long copy load with the reader, never with this file. GRAB <GO> asks
+// the Workspace handle to grab the focused panel; the image code and its copy load with the Workspace and on
+// demand, never through this file.
 import { Suspense, lazy, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { ApiProvider } from './api/ApiProvider'
 import CommandZone from './AppCommandBar'
@@ -186,6 +188,7 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         onTape={() => toggleTape()}
         onBack={() => actions.back(false)}
         onMenu={() => refs.workspace.current?.openRelatedMenu?.(panel.id ?? undefined) ?? false}
+        onGrab={() => refs.workspace.current?.grab() ?? false}
         focusedCode={() => focused?.params.code ?? null}
         watchMenu={() => watch.menu()}
         onWatchSeen={() => watch.accept()}

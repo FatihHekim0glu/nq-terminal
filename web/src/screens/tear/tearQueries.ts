@@ -29,8 +29,12 @@ export function defaultCost(costs: readonly number[]): number | null {
 
 const NO_COSTS: readonly number[] = []
 
+export type HypothesisCard = Schemas['HypothesisCard']
+
 export interface RecordedCosts {
   readonly costs: readonly number[]
+  /** The hypothesis card the costs were read from (its spec hash goes on GRAB's caption); null until it arrives, and for a run. */
+  readonly card: HypothesisCard | null
   readonly error: ApiError | null
   /** The card arrived and records no series: the analytics route is never asked, nothing is pending. */
   readonly noSeries: boolean
@@ -44,7 +48,7 @@ export function useRecordedCosts(target: TearTarget): RecordedCosts {
   const card = query.data?.card
   const noSeries = card !== undefined && card.series_costs.length === 0
   const parent = noSeries && card.tag === 'check' && card.spec !== '' && card.spec !== card.name ? card.spec : null
-  return { costs: card?.series_costs ?? NO_COSTS, error: query.error, noSeries, parent }
+  return { costs: card?.series_costs ?? NO_COSTS, card: card ?? null, error: query.error, noSeries, parent }
 }
 
 export interface TearAnalytics {

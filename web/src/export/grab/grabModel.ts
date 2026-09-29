@@ -11,7 +11,8 @@ import { etClock } from '../../chrome/StatusBar.format'
 /**
  * What a screen knows about the numbers it shows. Every field may be absent; tags are written with
  * their brackets (`[POST HOC]`), basis and window are already worded by the screen (fillCopy over
- * GRAB.caption), and `source` is the path of the GET that fetched the numbers.
+ * GRAB.caption), and `source` is the path of the GET that fetched the numbers, or several joined with
+ * GRAB.caption.pair.
  */
 export interface GrabProvenance {
   readonly tags: readonly string[]

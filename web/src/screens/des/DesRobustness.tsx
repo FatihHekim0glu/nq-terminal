@@ -12,6 +12,7 @@ import { useRuns } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
+import { usePanelSource } from '../../chrome/panelSources'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { DES, DES_ROBUSTNESS } from '../../copy/des'
 import { SPEC } from '../../copy/tiles'
@@ -40,7 +41,8 @@ import {
   type VariantRow,
   type YearRow,
 } from './robustnessModel'
-import { useForkPoints } from './useForks'
+import { desRobustnessProvenance } from './desGrab'
+import { forkRequestPath, useForkPoints } from './useForks'
 import './des.css'
 
 const DECIMALS = 2
@@ -432,6 +434,20 @@ export function ForkCurveView({ points, skipped, name, panelId, runs = NO_RUNS_R
   )
 }
 
+/** The GET path of each fork a drawn ladder uses (a point without an error is a bar); a name the client refuses names none. */
+function drawnForkPaths(points: readonly ForkPoint[]): string[] {
+  const paths: string[] = []
+  for (const p of points) {
+    if (p.error !== null) continue
+    try {
+      paths.push(forkRequestPath(p.spec))
+    } catch {
+      // The fork's own fetch is refused the same way and fails, so it draws no bar and names no source.
+    }
+  }
+  return paths
+}
+
 export interface DesRobustnessProps {
   readonly detail: HypothesisDetail
 }
@@ -442,6 +458,14 @@ export default function DesRobustness({ detail }: DesRobustnessProps) {
   const panelId = usePanelActions().panelId
   const { specs, skipped } = useMemo(() => forkSpecs(detail.card, runsQuery.data), [detail.card, runsQuery.data])
   const points = useForkPoints(specs)
+  // What this page's numbers came from, for GRAB's caption (roadmap 15): the card, and each fork a drawn ladder
+  // uses (every point without an error is a bar). `forks` is a string so the memo has a stable primitive key.
+  const forks = drawnForkPaths(points).join('\n')
+  const card = detail.card
+  usePanelSource(useMemo(
+    () => ({ provenance: desRobustnessProvenance(card, forks === '' ? [] : forks.split('\n')) }),
+    [card, forks],
+  ))
 
   return (
     <div className="des-page des-robustness">

@@ -12,6 +12,7 @@ import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
+import { usePanelSource } from '../../chrome/panelSources'
 import TabStrip from '../../chrome/TabStrip'
 import type { PanelLink } from '../../state/linkGroups'
 import { DES, DES_REPORT } from '../../copy/des'
@@ -22,6 +23,7 @@ import DesLinks from './DesLinks'
 import { DesBar, LoadError, ShaChecks, Status, Tag, VerdictBadge, roving } from './DesParts'
 import DesProfile from './DesProfile'
 import DesRobustness from './DesRobustness'
+import { desTabProvenance } from './desGrab'
 import { hypothesisText, passBarText, shortSha, type HypothesisDetail } from './desModel'
 import { desReport } from './desReport'
 import { DES_NUMBERS, DES_TABS, MAX_NUMBERED_CONFIRMATIONS, MAX_NUMBERED_RUNS, confirmationNumber, runNumber, type DesTab } from './desNumbers'
@@ -109,6 +111,13 @@ export default function HypothesisDes({ name, link }: HypothesisDesProps) {
   const pageId = useId()
   useDesNumbers(query.data, setTab)
   const detail = query.data
+  // What the shown tab's numbers came from, for GRAB's caption (roadmap 15); read from the card, nothing asked.
+  // A panel keeps ONE provenance, so a tab whose own chart registers it (Profile: equity; Robustness: forks)
+  // passes null here (not { provenance: null }), which registers nothing and so never shadows the child.
+  usePanelSource(useMemo(() => {
+    const provenance = detail ? desTabProvenance(detail, tab) : null
+    return provenance ? { provenance } : null
+  }, [detail, tab]))
   return (
     <div className="des" ref={ref} aria-label={fillCopy(DES.bodyLabel, { name })} role="group">
       <DesBar title={DES.title} page={page} current={name} onReport={detail ? () => report(detail) : undefined} />
