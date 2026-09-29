@@ -26,7 +26,7 @@ y=1058  STATUS LINE    22px  #191919  Status | Screen HOME | A NQ1 Index | B vol
 
 With the event tape switched on (`NO <GO>`; off by default, D4), a 57px tape sits above the status line and the workspace shrinks to 860px. There is one global command box, labelled with the focused panel's number (D3); instrument panels carry their own two-line quote header instead. The status line is one 22px line (D7) whose safety segments (KILL, TWS, gate reads, READ ONLY, NO ORDER PATH) never shrink.
 
-Target 1920x1080; minimum 1366x768. Default layouts per screen live in one declarative table, `web/src/chrome/WorkspaceLayouts.ts`. HOME is a 2x2 grid (GP, MON, EQ, REG, numbered 1 to 4 in reading order); LIVE and OOS open with Shift+Enter. Layouts are fixed: dockview group tab strips are hidden (the panel title bar replaces them) and panels do not resize by dragging, because a 4px sash drag has no keyboard or single-pointer equivalent (WCAG 2.1.1, 2.5.7). A user layout is the panel set a command leaves (Enter replacing a panel, Shift+Enter adding one); it is kept in `localStorage` as a per-viewer convenience, saved only after such a command, and tied to the default it came from, so a changed default replaces it (wrapped in try/catch; the default layout renders if storage fails).
+Target 1920x1080; minimum 1366x768. Default layouts per screen live in one declarative table, `web/src/screens/layouts/layouts.ts` (re-exported by chrome/WorkspaceLayouts.ts). HOME is a 2x2 grid (GP, MON, EQ, REG, numbered 1 to 4 in reading order); LIVE and OOS open with Shift+Enter. Layouts are fixed: dockview group tab strips are hidden (the panel title bar replaces them) and panels do not resize by dragging, because a 4px sash drag has no keyboard or single-pointer equivalent (WCAG 2.1.1, 2.5.7). A user layout is the panel set a command leaves (Enter replacing a panel, Shift+Enter adding one); it is kept in `localStorage` as a per-viewer convenience, saved only after such a command, and tied to the default it came from, so a changed default replaces it (wrapped in try/catch; the default layout renders if storage fails).
 
 **Panel chrome** (look spec 4.3 to 4.7, with D1 applied to every control):
 - Title bar, 24px, `--frame-bg` with black 11px text: `<n>-<MNEMONIC>`, a 14px link-group square with a black letter (none when unlinked), then the context and argument (`1-GP [A] NQ1 Index 1d`). On the right: the tag (`[PRE-REG]`, `[POST HOC]`, `[SPENT]`, `[PLUMBING]`, `[UNUSABLE: BALANCE]`), the table toggle `T`, `Options` and maximise.
@@ -188,7 +188,7 @@ Registry counts come from `/api/hypotheses` at runtime (DL12).
 | blocks bar ladder (RL5) | cost ladder 0/1/2 ticks with break-even marker (EX4)             |
 | series equity at the chosen cost (Basis A) with benchmark | [POST HOC] panels labelled       |
 | in-sample against sealed strip [SPENT] where a confirmation exists | linked Nautilus runs    |
-| round summary markdown (Inter 13px)                                                         |
+| round summary markdown (Source Sans 3 13px)                                                 |
 ```
 
 **RUNS and RUN.** `RUNS`: MonitorGrid of every run with badges (probe, anchor, ledgered, balance, MTM, coverage), filter by strategy. `RUN`:

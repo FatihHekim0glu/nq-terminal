@@ -1,6 +1,6 @@
 # nq-lab terminal: architecture
 
-Status: plan, 2026-09-26. Decisions marked DLn are in `PRD.md` section 7. Facts below were read from disk on 2026-09-26 unless marked UNVERIFIED.
+Status: plan, 2026-09-26. Decisions marked DLn are in `PRD.md` section 7. Facts below were read from disk on 2026-09-26 unless marked UNVERIFIED. Sections 1, 2, 4.1 and 11 refreshed on 2026-09-29 to match the code.
 
 ## 1. Stack
 
@@ -8,22 +8,22 @@ Status: plan, 2026-09-26. Decisions marked DLn are in `PRD.md` section 7. Facts 
 |---|---|---|---|
 | Backend | FastAPI 0.141.1, uvicorn 0.54.0 (plain, not `[standard]`) | MIT, BSD-3 | Needs the user's go (U1). Dry run adds `annotated-doc 0.0.5`, `fastapi 0.141.1`, `starlette 1.7.0`, `uvicorn 0.54.0` and changes nothing else |
 | Backend libs already locked | pydantic 2.13.5, orjson 3.12.0, pandas 2.3.3, pyarrow 25.0.1, numpy 2.5.3, scipy 1.18.1 | | No DuckDB, no polars (they would invite ungated parquet reads) |
-| Front end | Vite 8, React 19, TypeScript (pin what the `react-ts` template generates; gate on `tsc -b`), pnpm | MIT | Node 24 satisfies Vite 8 |
+| Front end | Vite 8.3.1, React 19.3.0, TypeScript 6.0.3 (gate on `tsc -b`), pnpm 11.5.1 through corepack | MIT | Node 24 or later: `engines` in `web/package.json`, `web/.nvmrc`, and `engineStrict: true` in `web/pnpm-workspace.yaml` |
 | Docking | dockview-react 8.3.1 | MIT | Not `dockview-enterprise` |
 | Candles | lightweight-charts 5.2.1 | Apache-2.0 | TradingView attribution required: keep `attributionLogo: true` and list it on `HELP` |
 | Dense lines | uPlot 1.6.32 | MIT | Equity, underwater, rolling stats, exposure |
-| Stats charts | ECharts 6.1.0 | Apache-2.0 | Heatmaps, histograms, bars, scatter, correlation |
-| Grids | @tanstack/react-table 9.2.4 and @tanstack/react-virtual 3.14.13 | MIT | P0 (DL3). Perspective 5.5.1 in P1 |
+| Stats charts | ECharts 6.1.0 | Apache-2.0 | Heatmaps, histograms, bars, scatter, correlation, tree-shaken to bar, line, scatter and custom series |
+| Grids | @tanstack/react-table 9.2.4 and @tanstack/react-virtual 3.14.13 (P0, DL3); Perspective 5.5.1 (`@perspective-dev/client`, `viewer`, `viewer-datagrid` and `server`, one version) (P1, built) | MIT, Apache-2.0 | Perspective pivots LEDG, the RUN trades and fills and the OOS log behind a Table or Pivot toggle; its WebAssembly loads only through `src/perspective/engine.ts` |
 | Command line | cmdk 1.1.1, inline | MIT | |
-| Keys | tinykeys 4.0.1 | MIT | |
-| State and fetch | zustand 5.0.15 (link groups, layout), @tanstack/react-query 5.104 | MIT | |
-| Styling | Tailwind 4.3.3 through `@tailwindcss/vite`, SIGNAL `@theme inline` token pattern | MIT | |
-| Fonts | @fontsource JetBrains Mono, Inter, Space Grotesk 5.3.0, self-hosted | OFL-1.1 | Works offline |
-| API types | openapi-typescript, generated from `contract/openapi.json` | MIT | Never hand-edited |
-| Tests | pytest (venv), vitest 5.0.2, @playwright/test 1.63.0, @axe-core/playwright 4.13.0 | | |
+| Keys | The terminal's own handler (`web/src/chrome/CommandLine.keys.ts`), no library | | |
+| State and fetch | zustand 5.0.15 (link groups, layout), @tanstack/react-query 5.103.2 | MIT | One GET client, `web/src/api/client.ts` |
+| Styling | Tailwind 4.3.3 through `@tailwindcss/vite`, every colour from `src/theme/tokens.css` | MIT | No colour literal outside `tokens.css` and `charts/theme/chartTokens.ts` |
+| Fonts | Bergoom (vendored under `src/assets/fonts/bergoom`, OFL-1.1) with @fontsource Source Sans 3 5.3.0 and PT Mono 5.3.0, all self-hosted | OFL-1.1 | Works offline |
+| API types | openapi-typescript 7.13.0, generated from `contract/openapi.json` | MIT | Never hand-edited |
+| Tests | pytest (venv), vitest 5.0.2, @playwright/test 1.63.0 (the `chromium` and `perf` projects against the fixture backend, the `offline`, `offline-perf` and `offline-demo` projects against the demo layer), @axe-core/playwright 4.13.0 | | |
 | QA references | separate uv project `terminal/qa`: quantstats, empyrical-reloaded, arch, statsmodels, scipy | Apache-2.0, NCSA, BSD | Needs U2. Never installed in nq-lab's `.venv` |
 
-Versions came from `npm view` and `uv pip install --dry-run` on 2026-09-26. Phase 4 pins them exactly in `package.json` and `pnpm-lock.yaml`.
+Versions came from `npm view` and `uv pip install --dry-run` on 2026-09-26. Phase 4 pinned them exactly in `package.json` and `pnpm-lock.yaml`. The front-end rows above were re-read from `web/package.json` on 2026-09-29, and `web/scripts/docsSync.test.ts` fails when a version here differs from it.
 
 Perspective's scope, checked with `npm view` on 2026-09-27 (Phase 10 security review): `@finos/perspective` 3.8.0 is deprecated on the registry with the message "no longer maintained. Please upgrade to @perspective-dev/client"; `@perspective-dev/client` 5.5.1 points at github.com/perspective-dev/perspective and is published by timkpaine and texodus, texodus being a maintainer of `@finos/perspective` too; its `pro_self_extracting_wasm` 0.0.9 dependency (github.com/prospectiveco) is published by texodus alone; the lock's integrity hash for `@perspective-dev/client` 5.5.1 equals the registry's. The client's `ws` and `stoppable` dependencies serve its Node server mode and are not in the browser bundle's code path; the browser engine loads only through `src/perspective/engine.ts`, same-origin, under the CSP's `'wasm-unsafe-eval'`.
 
@@ -57,24 +57,43 @@ nq-lab/terminal/
       fixtures/              tiny result.json per shape, screen JSONs, CSVs, journals with NaN and plumbing rows
       test_*.py
   qa/                        separate uv project (U2): reference cross-checks, never imported by the backend
-    pyproject.toml, uv.lock, crosscheck/*.py
+    pyproject.toml, uv.lock, crosscheck/*.py, tests/
+    golden/                  p12_power, p12_expectation and p12_neff JSON: the reference values the browser-side formulas (src/quant, the power, expectation and effective-trials views) are pinned to
   web/
-    package.json, pnpm-lock.yaml, vite.config.ts, playwright.config.ts, tsconfig.json
+    package.json, pnpm-lock.yaml, pnpm-workspace.yaml (engineStrict), .nvmrc, vite.config.ts, tsconfig.json
+    playwright.config.ts     the Windows run against the fixture backend (projects chromium and perf)
+    playwright.offline.config.ts  the offline run on macOS or Linux (projects offline, offline-perf and offline-demo)
+    scripts/                 bundleCheck.ts (chunk budgets), shellBudget.test.ts, docsSync.test.ts (pins section 1 and the endpoint index in 4.1),
+                             start/ (the launcher behind start.sh: plan, doctor, facts, node guard)
     src/
       api/schema.d.ts        generated
       api/openapi.sha256
-      api/client.ts          typed fetch wrappers, react-query hooks
+      api/client.ts          the one GET client (apiGet, and openEventStream for the live stream); a scan fails on any other network call
+      api/queries.ts         the react-query hooks the first-paint shell reads; queries.screens.ts holds every screen's hooks
+      api/connection.ts      the backend connection state machine behind the connection strip
       theme/tokens.css       SIGNAL tokens plus terminal tokens (UI_SPEC.md section 3)
-      chrome/                CommandLine, ContextStrip, StatusBar, Workspace, PanelChrome, HelpScreen
-      charts/                CandleChart, LineStack, Heatmap, Distribution, BarLadder, Scatter, chart a11y wrapper
+      copy/                  every user-facing string, as templates (UK spelling, no dashes)
+      chrome/                CommandLine, ContextStrip, StatusBar, ConnectionStrip, Workspace, PanelChrome, HelpScreen, deep links, panel export
+      charts/                CandleChart, LineStack, Heatmap, Distribution, BarLadder, Scatter, GlyphScatter, chart a11y wrapper
       grids/                 MonitorGrid (TanStack), JournalTable
+      perspective/           the Perspective pivot grid (engine, viewer mount, Table or Pivot toggle)
       tiles/                 KpiTile, SpecCard, BalanceCheck, Countdown
-      screens/               one folder per mnemonic group
-      commands/              grammar, parser, registry of mnemonics (single source for HELP)
-    e2e/                     Playwright specs, screenshot baselines
+      screens/               one folder per mnemonic group; screens/layouts holds the default layouts
+      commands/              grammar, parser, registry of mnemonics (single source for HELP), HL search index
+      state/                 link groups, layouts, named workspaces, the research record watch
+      quant/                 browser-side formulas (normal cdf and quantile, minimum detectable Sharpe and power, trial correlation, clustering, effective N), pinned by qa/golden
+      export/                GRAB (panel image), the HTML evidence pack, the print dossier and their dossier model
+      demo/                  the demo layer: fetch and EventSource replaced in the page, one handler per contract path, captured and seeded data
+      gallery/               the component gallery, built only with `--mode gallery`
+      vendor/                stubs for unused parts of cmdk (dialog, command-score)
+    e2e/                     Playwright specs and screenshot baselines
+    e2e/offline/             the offline-demo smoke spec and the preview config that serves the demo API over HTTP
+    e2e/flows/, perf/, visual/  flow specs, performance budgets, every-screen screenshots and axe
   contract/openapi.json      snapshot of app.openapi()
+  scripts/start.mjs          entry of start.sh: checks the Node version, switches to a Node 24 when it finds one, runs the launcher
   state/                     P2 only (jobs); git-ignored
-  start.ps1                  the one start command
+  start.ps1                  the Windows start command
+  start.sh                   the macOS and Linux start command (section 11)
 ```
 
 The backend runs with `python -m uvicorn nq_terminal.app:app --app-dir terminal/backend`, so the `nq_lab` package layout and `uv_build` settings are untouched.
@@ -197,6 +216,92 @@ Contract rules (Phase 2 improvement run): every response model derives from `mod
 
 Contract discipline: pytest dumps `app.openapi()` and compares it with `contract/openapi.json`; `pnpm gen:api` regenerates `schema.d.ts` and `openapi.sha256`; pytest asserts the sha matches, so a changed backend fails until the types are regenerated and `tsc --noEmit` passes.
 
+### 4.1 Endpoint index
+
+Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 64 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
+
+<!-- endpoint-index:start -->
+**System**
+- `GET /api/health`: the status line, the connection strip and GRAB's caption clock (chrome, every screen)
+- `GET /api/commands`: the command line, HELP and `#go=` links; GP controls, DES for an instrument and the tear sheet's run books
+
+**Runs and ledger**
+- `GET /api/runs`: RUNS, GP fill markers, DES 5) Robustness forks, LIVE expectation cone, the record watch
+- `GET /api/runs/compare`: RUNS 90) Compare
+- `GET /api/runs/stats`: RUNS (table statistics and the compare basket)
+- `GET /api/runs/{run_id}`: RUN, COST, EXPO and the tear sheet's run books
+- `GET /api/runs/{run_id}/equity`: no screen yet (RUN's chart reads the analytics panel)
+- `GET /api/runs/{run_id}/fills`: RUN fills (Table or Pivot), GP fill markers
+- `GET /api/runs/{run_id}/log/{section}`: RUN log tables
+- `GET /api/runs/{run_id}/sidecar/{name}`: no screen yet
+- `GET /api/runs/{run_id}/trades`: RUN trades (Table or Pivot)
+- `GET /api/ledger`: LEDG (Table or Pivot), the record watch
+
+**Research**
+- `GET /api/registry`: REG, MT 86) Replication, the record watch
+- `GET /api/hypotheses`: REG, DES, the OOS log grid
+- `GET /api/hypotheses/{name}`: DES, REG 92) Evidence, 93) Cost survival and 95) Compare, COST, BLK, SEAL, SEAS, the tear sheet
+- `GET /api/hypotheses/{name}/series`: REG 95) Compare
+- `GET /api/confirmations`: REG, DES, COST, SEAL, the record watch
+- `GET /api/sealed`: SEAL, DES
+- `GET /api/sealed/{name}`: SEAL
+- `GET /api/multiple-testing`: MT 85) Family and its power panel, REG
+
+**Analytics**
+- `GET /api/analytics/deflated`: MT 85) Family and 87) Effective trials, REG (DSR column, 92) Evidence, 94) Effect map), DES profile
+- `GET /api/analytics/hypothesis/{name}`: the tear sheet (EQ, DD, RET, RR, MRET), DES equity and 5) Robustness, MT 87) Effective trials, LIVE expectation cone
+- `GET /api/analytics/hypothesis/{name}/bootstrap`: the tear sheet (Sharpe intervals, SV6 cone, SV7 card), LIVE expectation cone
+- `GET /api/analytics/hypothesis/{name}/extended`: the tear sheet (P1 views)
+- `GET /api/analytics/hypothesis/{name}/panel`: HOME equity panel, DES equity
+- `GET /api/analytics/paper-tracking`: LIVE (paper against model, expectation cone)
+- `GET /api/analytics/run/{run_id}`: the tear sheet, DES 5) Robustness forks, LIVE expectation cone
+- `GET /api/analytics/run/{run_id}/bootstrap`: the tear sheet
+- `GET /api/analytics/run/{run_id}/costs`: COST, the tear sheet's run books
+- `GET /api/analytics/run/{run_id}/excursions`: the tear sheet's run books
+- `GET /api/analytics/run/{run_id}/exposure`: EXPO, the tear sheet's exposure composition
+- `GET /api/analytics/run/{run_id}/extended`: the tear sheet (P1 views)
+- `GET /api/analytics/run/{run_id}/panel`: HOME equity panel, RUN chart
+- `GET /api/analytics/run/{run_id}/trade-paths`: the tear sheet's run books
+- `GET /api/analytics/run/{run_id}/trades`: the tear sheet's run books
+
+**Market data**
+- `GET /api/bars`: GP, GIP
+- `GET /api/data/catalog`: GP
+- `GET /api/instruments/{root}`: DES for an instrument
+- `GET /api/market/pair-corr`: CORR
+- `GET /api/market/paper-rolls`: ROLL 3) Paper book MNQ
+- `GET /api/market/rolls`: ROLL
+- `GET /api/market/rv`: GP RV22 pane
+- `GET /api/market/two-day`: MON 2Day sparklines
+- `GET /api/market/universe`: MON, CORR, GP
+- `GET /api/market/vcone`: VCONE
+- `GET /api/market/vcone/universe`: VCONE 27F view
+- `GET /api/qa`: no screen yet
+- `GET /api/qa/{name}`: no screen yet
+
+**Audit**
+- `GET /api/audit/oos-log`: OOS, DES (the read count), the event tape, the record watch
+- `GET /api/audit/openings`: OOS, the record watch
+- `GET /api/audit/spec-hashes`: no screen yet
+
+**Live**
+- `GET /api/live/journal`: JRNL, LIVE performance
+- `GET /api/live/log`: no screen yet
+- `GET /api/live/performance`: LIVE
+- `GET /api/live/routes`: LIVE Routes and Fills
+- `GET /api/live/status`: LIVE, JRNL
+- `GET /api/live/stream`: LIVE and JRNL through the live stream client (Server-Sent Events)
+
+**Events, seasonality and data quality**
+- `GET /api/events/calendar`: EVT
+- `GET /api/events/study`: EVT
+- `GET /api/seasonality/hypothesis/{name}`: SEAS for a hypothesis
+- `GET /api/seasonality/instrument/{root}`: SEAS for an instrument
+- `GET /api/dq/calendar/{symbol}`: DQ
+- `GET /api/dq/guards`: DQ
+- `GET /api/dq/symbols`: DQ
+<!-- endpoint-index:end -->
+
 ## 5. OOS gate design
 
 1. **One door.** The terminal calls only `nq_lab.data.serve(start, end, caller="terminal", reason=..., symbol, timeframe, variant)`. No new gate code; `oos_gate.py` is unchanged; `serve_sealed` is never called.
@@ -260,6 +365,9 @@ All commands run from the nq-lab root, the folder that holds this repository as 
 - Backend tests: `& .venv\Scripts\python.exe -m pytest terminal\backend\tests`
 - QA cross-checks: `uv run --project terminal\qa python -m crosscheck` (reads JSON dumps produced by the backend test run; never imports the backend).
 - Front end: `pnpm --dir terminal\web test:types`, `test` (vitest), `e2e` (Playwright).
+- Front end without Windows: `corepack pnpm --dir web e2e:offline`, `e2e:offline:perf` and `e2e:offline:baseline` (see the macOS and Linux paragraph below).
 - Copy lint: the house style lint (a local tool, not in this repo) over an extracted strings file and every markdown the terminal renders from `terminal/`.
+
+**macOS and Linux.** `./start.sh` in the repository root does what `start.ps1` does, plus `doctor`, `--demo`, `--full` and a Node guard: it finds Node and hands over to `scripts/start.mjs`, which reads `engines` from `web/package.json`. If the default Node is older, it switches to a Node 24 it finds in a fixed list of local places (or takes `NQT_NODE`), or refuses in words instead of the `node:sqlite` crash an older Node gives; it then runs the launcher, `web/scripts/start/launcher.ts`. `./start.sh doctor` checks the machine and names the mode a plain start picks: FULL when the nq-lab venv imports FastAPI, uvicorn and `nq_lab`, FIXTURE when `NQT_FIXTURE_DIR` is also set, otherwise DEMO ONLY (Vite serves the demo on 127.0.0.1:5174; no Python). Its options are `--demo`, `--full`, `--dev`, `--port N`, `--no-browser`, `--no-build` and `--dry-run` (the last five are `start.ps1`'s `-Dev`, `-Port`, `-NoBrowser`, `-NoBuild` and `-DryRun`), and every step is an argv list run without a shell. With no nq-lab checkout at all, the demo, the unit gates (`corepack pnpm test`, `test:types`, `build`, `build:gallery` and `build:demo`, run in `web/`) and the offline E2E (`e2e:offline`, `e2e:offline:perf`, `e2e:offline:baseline`) still run: the offline projects serve the demo route table (`src/demo`) as `GET /api/*` on 127.0.0.1:4373 and 4374 (`NQT_E2E_OFFLINE_PORT`, `NQT_E2E_DEMO_PORT`), and use the installed Chrome when the bundled Chromium is missing. Screenshot baselines are local, under `e2e/__screenshots__/offline-<platform>`. What still needs nq-lab: the backend, fixture mode, `pnpm e2e` (the fixture backend imports `nq_lab`), and `web/src/grids/JournalTable.model.test.ts`, which reads nq-lab's `src/nq_lab/paper_plumbing.py`. The offline suite skips a few tests the demo dataset cannot serve; `TESTING.md` lists them.
 
 Fixture mode: `NQT_FIXTURE_DIR` points the backend at `backend/tests/fixtures/`. The fixture folder holds a two-row registry with its specs, one ledger row, the za_v0 rejected-day files, and the fixture runs with their journals and logs, so every P0 endpoint answers. On its own, fixture mode has no price source (bars and universe answer 503) and its catalog lists `<fixture root>/data/processed`, never the real folder. The E2E harness `backend/tests/fixture_app.py` (run with `python -m uvicorn fixture_app:app --app-dir terminal\backend\tests`, `NQT_FIXTURE_DIR` set) injects the fake serve over synthetic bars with a temporary audit log and the fake catalog, and refuses to start outside fixture mode; the production package never imports it (tested). E2E and screenshots are then deterministic and never touch the real audit log.
