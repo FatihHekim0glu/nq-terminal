@@ -1,11 +1,15 @@
 // The HELP contents rail (look spec 7.12): white group headings with right-aligned counts; under
 // Mnemonics the numbered amber items (the same numbers as the index, Number <GO> targets). The
 // selected heading or item carries aria-current and the selection navy.
-import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
+import { ROVING_ATTR, ROVING_VERTICAL_ATTR } from '../../chrome/WorkspaceFocus'
 import type { MnemonicCode, MnemonicDef } from '../../commands/registry'
 import { HELP } from '../../copy/help'
 
 const roving = { [ROVING_ATTR]: '' }
+// U12: the rail reads top to bottom (group headings, then the nested numbered mnemonics under
+// Mnemonics), so Up/Down rove it like Left/Right already rove a panel's other items, instead of being
+// left to the browser's own scroll (3 to 5 presses could carry the focused row under the header).
+const verticalList = { [ROVING_VERTICAL_ATTR]: '' }
 
 export type SectionId = 'mnemonics' | 'keys' | 'links' | 'keyboard' | 'licences'
 
@@ -44,7 +48,7 @@ function TocItems({ mnemonics, selected, onItem }: Pick<HelpTocProps, 'mnemonics
 
 export default function HelpToc({ entries, mnemonics, selected, onSection, onItem }: HelpTocProps) {
   return (
-    <nav className="help-toc" aria-label={HELP.tocLabel}>
+    <nav className="help-toc" aria-label={HELP.tocLabel} {...verticalList}>
       <ul>
         {entries.map((e) => (
           <li key={e.id} className="toc-group">

@@ -20,6 +20,7 @@
 //   follows real focus (UI_SPEC section 5).
 // - Focus moving into another panel closes the related functions menu; focus on the chrome does not.
 import type { DockviewApi, DockviewGroupPanel, SerializedDockview } from 'dockview-react'
+import { flushSync } from 'react-dom'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
@@ -192,18 +193,30 @@ interface ControllerState {
   readonly view: WorkspaceView
 }
 
+/** G13: while a panel is maximised it is the only one actually on screen, so a stale reference to a
+ * different, now-hidden panel (real DOM focus that landed there before the maximise, or a plain
+ * fallback such as order[0]) must yield to it instead of silently addressing what the user cannot
+ * see. No maximised panel: `id` unchanged. */
+function visibleId(st: ControllerState, id: string | null): string | null {
+  const { maximised } = st.view.getState()
+  if (!maximised) return id
+  return id === maximised ? id : maximised
+}
+
 function focusedId(st: ControllerState): string | null {
-  return st.lastFocused && st.api?.getPanel(st.lastFocused) ? st.lastFocused : null
+  const real = st.lastFocused && st.api?.getPanel(st.lastFocused) ? st.lastFocused : null
+  return visibleId(st, real)
 }
 
 function paramsOf(st: ControllerState, id: string): PanelParams | null {
   return sanitiseParams(st.api?.getPanel(id)?.params)
 }
 
-/** The panel the command line addresses: last focused, else where the last command ran, else panel 1. */
+/** The panel the command line addresses: last focused, else where the last command ran, else panel 1;
+ * never one hidden behind a maximised panel (G13). */
 function targetId(st: ControllerState, order: readonly string[] = st.view.getState().order): string | null {
   const alive = (id: string | null) => (id && st.api?.getPanel(id) ? id : null)
-  return alive(st.lastFocused) ?? alive(st.ranIn) ?? order[0] ?? null
+  return visibleId(st, alive(st.lastFocused) ?? alive(st.ranIn) ?? order[0] ?? null)
 }
 
 function focusedPanel(st: ControllerState, env: ControllerEnv): FocusedPanel | null {
@@ -373,6 +386,11 @@ function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, ta
   const anchor = target === 'new-panel' ? (real ?? targetId(st)) : real
   const focused = { activePanelId: anchor ?? undefined, activeGroup: anchor ? paramsOf(st, anchor)?.group : undefined }
   const plan = planOpen({ ...focused, panelCount: api.panels.length }, command, target === 'new-panel')
+  // G12: only genuine DOM focus still inside the panel being replaced (a grid-row Enter drill, not a
+  // command typed on the command line, which lives outside the workspace) should trigger a refocus;
+  // `real` is the sticky lastFocused and stays set after focus moves elsewhere, so it must not gate this.
+  const focusedBefore = document.activeElement
+  const hadFocus = plan.kind === 'replace' && (panelElement(env.root(), plan.panelId)?.contains(focusedBefore) ?? false)
   const before = new Set(api.panels.map((p) => p.id))
   if (plan.kind === 'load') loadScreen(st, env, api, plan, loadMode(command))
   else applyToPanel(st, env, plan, command)
@@ -384,7 +402,35 @@ function run(st: ControllerState, env: ControllerEnv, command: ParsedCommand, ta
   // Restoring ringBefore wholesale, instead of slicing off just the newest entry, also keeps the
   // oldest entry the ring dropped when it was already full at UNDO_DEPTH.
   if (pushed && st.undo.at(-1) === pushed && unchanged(st, env, pushed)) st.undo = ringBefore
+  // G12: a replace in the panel that held real keyboard focus (a grid-row Enter drill, e.g. REG or
+  // RUNS) unmounts whatever inside it had focus with the old screen, dropping focus to <body>. Land
+  // back on the new screen's Tab stop once it has rendered and the panel's own roving MutationObserver
+  // has synced (both happen after this call returns). A command typed on the command line does not
+  // count: focus was never inside the replaced panel, so it must stay wherever the user left it.
+  if (hadFocus) refocusAfterReplace(env, plan.panelId, focusedBefore)
   return true
+}
+
+/** G12: how long run() keeps trying to land focus back in the panel it replaced. */
+const REFOCUS_DEADLINE_MS = 2000
+
+/**
+ * G12: once the replace has committed, land focus on the replaced panel's Tab stop, checked once per
+ * frame. The first frame can run before React commits the replace (a screen whose lazy chunk loads on
+ * first use, in the real browser), while the old item still has focus: keep waiting for it to unmount
+ * instead of deciding then. Refocus only while focus is lost (<body>), and stop the moment it is
+ * anywhere else, so it never steals focus back from wherever the user or the new screen put it.
+ */
+function refocusAfterReplace(env: ControllerEnv, panelId: string, focusedBefore: Element | null): void {
+  const deadline = performance.now() + REFOCUS_DEADLINE_MS
+  const tick = () => {
+    const a = document.activeElement
+    const lost = a === null || a === document.body
+    if (lost && focusById(env, panelId)) return
+    const pending = a !== null && a === focusedBefore && focusedBefore.isConnected
+    if ((lost || pending) && performance.now() < deadline) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
 }
 
 function preview(st: ControllerState, env: ControllerEnv, command: ParsedCommand, target: RunTarget): RunPreview | null {
@@ -446,7 +492,9 @@ function openInPanel(st: ControllerState, env: ControllerEnv, id: string, code: 
   const next: PanelParams = { code: def.code, context, args: {}, group: current.group }
   remember(st, env, id, next)
   adapt(dock).replacePanel(id, next, panelTitle(next))
-  patchView(st.view, { menu: null })
+  // G05: as in Workspace.tsx's onClose, flush the overlay's unmount before focusById runs syncRoving,
+  // so it never focuses the (about to vanish) overlay's own item instead of the new screen.
+  flushSync(() => patchView(st.view, { menu: null }))
   prepareAll(st, dock)
   saveShown(st, env, dock)
   reportShown(st, env)
@@ -575,11 +623,22 @@ export function createWorkspaceController(env: () => ControllerEnv): WorkspaceCo
     focusPanel: () => focusPanel(st, env()),
     focusPanelNumber: (n) => {
       const id = Number.isInteger(n) && n > 0 ? st.view.getState().order[n - 1] : undefined
-      return id ? focusById(env(), id) : false
+      if (!id) return false
+      // G13: a panel hidden behind a maximised one is never silently focused or addressed while it stays
+      // hidden (a stale real-focus reference, or a plain fallback, must yield to the maximised panel:
+      // visibleId, focusedId, targetId). Alt+N asking for a different, hidden panel by number is a clear
+      // request for that panel, so it exits the maximise first, rather than refusing with a message
+      // ('No panel N on this screen.') that is false: the panel is there, just hidden.
+      const { maximised } = st.view.getState()
+      if (maximised && maximised !== id) toggleMaximise(st, maximised)
+      return focusById(env(), id)
     },
     focusPanelShowing: (code) => {
       const id = st.view.getState().order.find((pid) => paramsOf(st, pid)?.code === code)
-      return id ? focusById(env(), id) : false
+      if (!id) return false
+      const { maximised } = st.view.getState()
+      if (maximised && maximised !== id) toggleMaximise(st, maximised)
+      return focusById(env(), id)
     },
     focusedContext: () => focusedPanel(st, env())?.context ?? null,
     onFocusIn: (target) => onFocusIn(st, env(), target),

@@ -7,6 +7,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react'
 import { FUNCTION_BAR, fillCopy } from '../copy/workspace'
 import DropdownMenu, { type MenuEntry } from './FunctionBar.menu'
+import { usePanelPage } from './PanelChrome.page'
 import { useNumbered } from './PanelChrome.numbers'
 import { useSlot } from './PanelChrome.slots'
 import { ROVING_ATTR } from './WorkspaceFocus'
@@ -88,6 +89,13 @@ function FunctionButton({ item, open, onToggle }: ButtonProps) {
 export default function FunctionBar({ panelId, title, items, page, field }: FunctionBarProps) {
   const [openN, setOpenN] = useState<number | null>(null)
   const place = useSlot('bar')
+  const barRef = useRef<HTMLDivElement>(null)
+  // U27: DES, InstrumentDes, ConfirmationDes and COST already compute and pass their own page; every
+  // other scrolling panel (REG, BLK, EXPO, SEAL, HELP, and any screen not yet built) gets one for free,
+  // read straight off its own body (PanelChrome.page's usePanelPage, generalised to find the body from
+  // this slot too). A screen's own `page` prop always wins, so nothing is shown twice.
+  const auto = usePanelPage(barRef)
+  const shownPage = page ?? auto ?? undefined
   useNumbered(
     panelId,
     'bar',
@@ -100,7 +108,7 @@ export default function FunctionBar({ panelId, title, items, page, field }: Func
       })),
   )
   return place(
-    <div className="fn-bar" role="toolbar" aria-label={fillCopy(FUNCTION_BAR.label, { title })}>
+    <div ref={barRef} className="fn-bar" role="toolbar" aria-label={fillCopy(FUNCTION_BAR.label, { title })}>
       {field ? <div className="fn-field">{field}</div> : null}
       {items.map((item) => (
         <FunctionButton
@@ -111,7 +119,7 @@ export default function FunctionBar({ panelId, title, items, page, field }: Func
         />
       ))}
       <div className="fn-right">
-        {page ? <span className="fn-page">{fillCopy(FUNCTION_BAR.page, { n: page.n, m: page.m })}</span> : null}
+        {shownPage ? <span className="fn-page">{fillCopy(FUNCTION_BAR.page, { n: shownPage.n, m: shownPage.m })}</span> : null}
         <span className="fn-title">{title}</span>
       </div>
     </div>,
