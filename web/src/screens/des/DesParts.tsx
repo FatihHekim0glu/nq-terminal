@@ -8,6 +8,7 @@ import type { ApiError } from '../../api/client'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { DropdownField } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
+import PanelFault from '../../chrome/PanelFault'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { PanelPage } from '../../chrome/PanelChrome.page'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
@@ -158,11 +159,11 @@ export function Status({ children }: { readonly children: ReactNode }) {
 }
 
 export function LoadError({ name, error }: { readonly name: string; readonly error: ApiError | null }) {
-  return (
-    <p className="des-status des-error" role="alert">
-      {fillCopy(DES.errorPrefix, { name, detail: error?.detail ?? '' })}
-    </p>
-  )
+  // {detail} is left in the template: PanelFault fills it from the error itself (roadmap #7). DES has
+  // its own wording for a 403 too (unchanged text; only the unified amber 403 look comes from
+  // PanelFault's default), so refusedText is passed the same template as failedText.
+  const text = fillCopy(DES.errorPrefix, { name })
+  return <PanelFault className="des-status" error={error} failedText={text} refusedText={text} />
 }
 
 /** The guidance an empty DES panel shows, with a runnable example. */

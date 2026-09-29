@@ -1,0 +1,21 @@
+/* ConnectionStrip (roadmap #7, mounted from W4): the API DOWN banner, a 22px row above the status bar
+   while the backend is unreachable. Tokens only: --warn text and rule on --chrome, the lead in bold. */
+.conn-strip {
+  flex: 0 0 auto; display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  min-height: 22px; padding: 2px 8px;
+  background: var(--chrome); box-shadow: inset 0 -1px 0 var(--chrome-rule);
+  color: var(--warn); font-family: var(--font-sans); font-size: var(--fs-nav);
+}
+.conn-strip .conn-lead { color: var(--warn); font-weight: 700; }
+.conn-strip .conn-next { color: var(--muted); }
+.conn-strip .conn-check {
+  flex: 0 0 auto; height: 20px; padding: 0 8px;
+  background: transparent; border: 1px solid var(--warn); border-radius: 0;
+  color: var(--warn); font: inherit; cursor: pointer;
+}
+.conn-strip .conn-check:hover { background: var(--hover-menu); }
+.conn-strip .conn-check:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+@media (max-width: 700px) {
+  .conn-strip { height: auto; }
+}

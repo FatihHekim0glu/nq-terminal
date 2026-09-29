@@ -1,0 +1,20 @@
+/* PanelFault (roadmap #7): the shared fault and waiting line for a panel's status area. The caller's
+   own class (mkt-status, des-status, home-eq-note, ...) sets the box (margin, padding, font); these
+   rules set only colour and the retry button, at two classes' specificity so the state colour wins
+   over the caller's own default colour regardless of import order. Tokens only, square corners. */
+.panel-fault { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.panel-fault.panel-fault-waiting { color: var(--muted); }
+.panel-fault.panel-fault-refused { color: var(--data); }
+.panel-fault.panel-fault-failed { color: var(--c-down); }
+
+.panel-fault-retry {
+  flex: 0 0 auto; height: 20px; padding: 0 8px;
+  background: transparent; border: 1px solid currentColor; border-radius: 0;
+  color: inherit; font: inherit; cursor: pointer;
+}
+.panel-fault-retry:hover { background: var(--hover-menu); }
+.panel-fault-retry:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* The gallery entry only: a plain column of labelled examples on the house background. */
+.panel-fault-gallery { display: flex; flex-direction: column; gap: 16px; padding: 16px; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
+.panel-fault-gallery h2, .panel-fault-gallery h3 { margin: 0 0 4px; font-weight: 700; }

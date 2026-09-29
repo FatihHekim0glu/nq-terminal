@@ -2,6 +2,8 @@
 // `sessions` of /api/bars), the message that replaces the chart (refusal, error, loading, empty) and
 // the footer with the basis, the gate's bookkeeping, the bucket, RV22's basis and the fills note.
 import type { ApiError } from '../../api/client'
+import { useWaitingForBackend, waitingLine } from '../../chrome/PanelFault'
+import { CONNECTION } from '../../copy/connection'
 import { fillCopy } from '../../copy/workspace'
 import { GP_COPY as C } from '../../copy/gp'
 import type { SessionBadges } from './model'
@@ -68,14 +70,27 @@ export interface ChartMessageProps {
   readonly busy?: boolean
 }
 
-/** Shown in the plot area instead of a chart: amber and centred (look spec 7.6). */
+/** Shown in the plot area instead of a chart: amber and centred (look spec 7.6). While the connection
+ *  store is down and the failure (or the still-loading request) is an outage, the waiting sentence
+ *  shows as a status instead of blaming the request (roadmap #7). */
 export function ChartMessage({ refusal, error, text, busy = false }: ChartMessageProps) {
+  // useWaitingForBackend(error) alone is true whenever the store is down, even for guidance or an
+  // empty-state sentence that names nothing being fetched: gate it on a request actually being
+  // pending or having failed (roadmap #7).
+  const waiting = useWaitingForBackend(error) && (error !== null || busy)
   if (refusal) {
     return (
       <div className="gp-message" role="status">
         <p className="gp-message-head">{C.refusedHeading}</p>
         <p>{refusal}</p>
         <p className="gp-muted">{C.refusedLocal}</p>
+      </div>
+    )
+  }
+  if (waiting) {
+    return (
+      <div className="gp-message" role="status">
+        <p>{error ? waitingLine(error) : CONNECTION.waitingLoad}</p>
       </div>
     )
   }

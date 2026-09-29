@@ -7,13 +7,13 @@
 // the fence, then the basis, unit, window and benchmark in words. One GET: the panel endpoint of the
 // hypothesis or run in link group B (GET /api/analytics/{hypothesis|run}/.../panel).
 import { useMemo, useState } from 'react'
-import { ApiError } from '../../api/client'
 import { useApiQuery } from '../../api/queries'
 import type { UplotConstructor } from '../../charts/lazy'
 import LineStack from '../../charts/LineStack'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { AmberField } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
+import PanelFault from '../../chrome/PanelFault'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { HOME_EQ } from '../../copy/home'
@@ -117,10 +117,6 @@ export function HomeEquityView({ panel, group, loader }: ViewProps) {
   )
 }
 
-function errorText(error: unknown): string {
-  return error instanceof ApiError ? error.detail : String(error)
-}
-
 function Body({ target, group, loader }: { readonly target: HomeTarget | null; readonly group: ViewProps['group']; readonly loader?: ViewProps['loader'] }) {
   const query = useHomePanel(target)
   if (!target) {
@@ -130,7 +126,10 @@ function Body({ target, group, loader }: { readonly target: HomeTarget | null; r
       </p>
     )
   }
-  if (query.isError) return <p className="home-eq-note">{fillCopy(HOME_EQ.error, { detail: errorText(query.error) })}</p>
+  // {detail} is left in HOME_EQ.error's template: PanelFault fills it from the error itself (roadmap
+  // #7). HOME has its own 403 wording too (unchanged text; only the unified amber 403 look comes from
+  // PanelFault's default), so refusedText is passed the same template as failedText.
+  if (query.isError) return <PanelFault className="home-eq-note" error={query.error} failedText={HOME_EQ.error} refusedText={HOME_EQ.error} onRetry={query.refetch} />
   if (!query.data) return <p className="home-eq-note" aria-busy="true">{HOME_EQ.loading}</p>
   return <HomeEquityView panel={query.data} group={group} loader={loader} />
 }

@@ -1,6 +1,9 @@
-// Loading and error text for the market screens. A 403 is the OOS gate refusing: its own message is
-// shown as it came (TASKS 7.1 and 7.2 honesty rule), in amber; any other failure names the API detail.
+// Loading and error text for the market screens (MON, CORR, VCONE, SEAS, EVT, ROLL and DQ). A 403 is
+// the OOS gate refusing: its own message is shown as it came (TASKS 7.1 and 7.2 honesty rule), in
+// amber; any other failure names the API detail; while the connection store is down and the failure is
+// an outage, PanelFault shows the waiting line instead (roadmap #7).
 import { ApiError } from '../../api/client'
+import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import { fillCopy } from '../../copy/workspace'
 import { MARKET } from '../../copy/market'
 
@@ -21,16 +24,12 @@ export interface QueryStatusProps {
   readonly failedText?: string
 }
 
-export default function QueryStatus({ loading, error, loadingText = MARKET.loading, failedText }: QueryStatusProps) {
+export default function QueryStatus({ loading, error, loadingText = MARKET.loading, failedText = MARKET.failed }: QueryStatusProps) {
   if (error) {
-    const refused = error instanceof ApiError && error.status === FORBIDDEN
-    return (
-      <p className={refused ? 'mkt-status mkt-refused' : 'mkt-status mkt-error'} role="alert">
-        {errorText(error, failedText)}
-      </p>
-    )
+    return <PanelFault className="mkt-status" error={error} failedText={failedText} refusedText={MARKET.refused} />
   }
-  // Busy while loading, so readers and screenshots wait for the screen, not this line.
-  if (loading) return <p className="mkt-status" role="status" aria-busy="true">{loadingText}</p>
+  // Busy while loading, so readers and screenshots wait for the screen, not this line (not busy while
+  // the backend is down and has not been tried yet: PanelLoading shows the waiting sentence instead).
+  if (loading) return <PanelLoading className="mkt-status" text={loadingText} />
   return null
 }

@@ -7,7 +7,7 @@ export const CONNECTION = {
   down: 'The backend has not answered since {since} ET (GET /api/health: {answer}). Start it with start.ps1, or run pnpm demo for fixture data.',
   next: 'Next check in {seconds} s.',
   checkNow: 'Check now',
-  checkNowLabel: 'Check the backend now',
+  checkNowLabel: 'Check now whether the backend answers',
   back: 'Backend back at {time} ET; {n} requests retried.',
   waiting: 'Waiting for the backend: {request} answered {answer}.',
   waitingLoad: 'Waiting for the backend before loading.',

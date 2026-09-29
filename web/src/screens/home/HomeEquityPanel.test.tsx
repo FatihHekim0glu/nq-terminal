@@ -8,6 +8,7 @@ import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import type { ResolvedContext } from '../../commands/types'
 import { HOME_EQ } from '../../copy/home'
+import { fillCopy } from '../../copy/workspace'
 import { HOME_PANEL_IDS } from '../layouts/layouts'
 import HomeEquityPanel from './HomeEquityPanel'
 import { PANEL_A, PANEL_B } from './homeEquity.fixtures'
@@ -105,6 +106,12 @@ describe('HomeEquityPanel (look spec 7.1, HOME [B])', () => {
     renderPanel({ kind: 'run', value: 'nt_bad' })
     expect(await screen.findByText(/unusable run: balance check failed/)).toBeTruthy()
     expect(screen.queryByRole('list', { name: /Key figures/ })).toBeNull()
+  })
+
+  it("keeps HOME_EQ's own 403 wording, not the generic market refusal text", async () => {
+    replies.set('/api/analytics/run/nt_bad/panel', { status: 403, body: { detail: 'gated' } })
+    renderPanel({ kind: 'run', value: 'nt_bad' })
+    expect(await screen.findByText(fillCopy(HOME_EQ.error, { detail: 'gated' }))).toBeTruthy()
   })
 })
 

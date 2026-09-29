@@ -45,9 +45,6 @@
 .mkt-warn-text { color: var(--warn); }
 
 .mkt-status { margin: 0; padding: 8px 6px; color: var(--muted); }
-.mkt-error { color: var(--c-down); }
-/* The gate's own refusal, amber (look spec 7.6). */
-.mkt-refused { color: var(--data); }
 
 .mkt-check {
   display: inline-flex;
