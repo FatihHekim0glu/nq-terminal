@@ -57,13 +57,16 @@ export interface LineStackPane {
   readonly summaryAll?: boolean
   /** Marked points (RR's volatility Hi and Low): a white dot and its label, in the pane's display unit. */
   readonly callouts?: readonly Callout[]
-  /** An episode-lanes pane (ignored until the context layer is wired). */
+  /**
+   * An episode-lanes pane: drawn in place of series on a fixed [0, n] scale, with no legend, value
+   * labels, tags or zero line.
+   */
   readonly lanes?: LanesSpec
 }
 
 // ---------------------------------------------------------------------------------------------
 // Context layer (roadmap 12): marked windows, a regime strip and episode lanes. Every field is
-// optional on LineStackProps and LineStackPane, and LineStack ignores them until the wiring slice.
+// optional on LineStackProps and LineStackPane, and without them LineStack draws exactly as before.
 
 /** A marked window on the shared time axis (a stress span): a translucent band with a chip. */
 export interface StackSpan {
@@ -127,12 +130,19 @@ export interface LineStackProps {
   readonly loader?: () => Promise<UplotConstructor>
   /** Called once per build with the milliseconds from building the options to every pane drawn. */
   readonly onRender?: (ms: number) => void
-  /** Marked windows across every pane (ignored until the context layer is wired). */
+  /** Marked windows: a band on every pane, chips on the top pane. A new array identity rebuilds every pane, so memoise it. */
   readonly spans?: readonly StackSpan[]
-  /** The regime strip under the time axis (ignored until the context layer is wired). */
+  /**
+   * The regime strip under the bottom pane's time axis, which grows that axis by ribbonHeight +
+   * ribbonGap (8 px). A new object identity rebuilds every pane, so memoise it.
+   */
   readonly ribbon?: RibbonSpec
-  /** The rank of the episode to outline in the lanes panes; null or absent outlines none. */
+  /** The rank of the episode to outline in the lanes panes; null or absent outlines none. Changing it redraws the lanes panes only and never rebuilds. */
   readonly highlightLane?: number | null
-  /** Called with the rank of the lane under the pointer, or null when it leaves the lanes. */
+  /**
+   * Called with the rank of the lane under the pointer, or null when it leaves the lanes. Read at call
+   * time, so a new function never rebuilds. It reports only the pointer's own moves over a lanes pane,
+   * and null when the panes rebuild or unmount while a lane is reported.
+   */
   readonly onLaneHover?: (rank: number | null) => void
 }

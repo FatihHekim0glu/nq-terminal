@@ -1,7 +1,9 @@
 // Builds and owns LineStack's uPlot instances: one per pane, each with its HTML legend, the crosshair
 // sync for the panel's link group, and the draw bookkeeping (the busy flag, the render time and the
 // data attributes the E2E run reads). Pointer moves reach React only through onPointer, which the
-// component throttles; the legend is updated as plain DOM.
+// component throttles; the legend is updated as plain DOM. The context layer adds no state here: the
+// marked windows and the regime strip are build inputs (a change rebuilds the panes), while the
+// highlighted lane and the lane-hover callback are read at use, so changing them never builds a plot.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type uPlot from 'uplot'
 import type { PanelLink } from '../state/linkGroups'
@@ -9,9 +11,10 @@ import { pixelRatio } from './fence'
 import type { UplotConstructor } from './lazy'
 import { createLegend, type LegendHandle, type LegendStats } from './LineStack.legend'
 import { isIntraday, paneFormat, seriesStats, timeLabel, visibleIndexRange, type Values } from './LineStack.model'
+import { laneAt } from './LineStack.context'
 import { sharedGutter, type SharedGutter } from './LineStack.draw'
 import { paneOptions, paneUplotData, type PaneDrawInfo, type PaneSync } from './LineStack.options'
-import type { LineStackPane } from './LineStack.types'
+import type { LanesSpec, LineStackPane, RibbonSpec, StackSpan } from './LineStack.types'
 import { uplotCrosshairSync } from './sync'
 import { lineStackSeries, readChartTokens, type ChartTokens } from './theme'
 
@@ -36,6 +39,14 @@ export interface PlotsArgs {
   readonly onRender?: (ms: number) => void
   /** Milliseconds spent before the build (cleaning the data), added to the first report. */
   readonly takeExtraMs: () => number
+  /** Marked windows over every pane. A new array rebuilds the panes, so pass a stable one. */
+  readonly spans?: readonly StackSpan[]
+  /** The regime strip under the bottom pane's time axis. A new object rebuilds the panes. */
+  readonly ribbon?: RibbonSpec
+  /** The rank of the lane to outline; a change redraws the lanes panes and nothing else. */
+  readonly highlightLane?: number | null
+  /** Called when the lane under the pointer changes (a rank, or null off the lanes). */
+  readonly onLaneHover?: (rank: number | null) => void
 }
 
 export interface PlotsState {
@@ -71,6 +82,8 @@ function writeAttrs(el: HTMLElement, u: uPlot, info: PaneDrawInfo): void {
 
 interface PaneContext {
   readonly a: PlotsArgs
+  /** The latest arguments, for what is read at use rather than at build. */
+  readonly live: { readonly current: PlotsArgs }
   readonly i: number
   readonly el: HTMLDivElement
   readonly tokens: ChartTokens
@@ -110,16 +123,56 @@ function paneLegend(el: HTMLElement, pane: LineStackPane, values: readonly Value
   return { handle, onScale, refresh }
 }
 
-function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legend: LegendHandle } {
-  const { a, i, el, tokens, gutter } = c
+/** A lanes pane draws episodes, not series: it has no legend to keep (the figure's summary and table say the rest). */
+function noLegend(): PaneLegend {
+  return { handle: { element: document.createElement('div'), update: () => undefined, destroy: () => undefined }, onScale: () => undefined, refresh: () => undefined }
+}
+
+interface LaneHover {
+  /** After every cursor move on the pane: reports the lane under the pointer when it changes. */
+  readonly onCursor: (u: uPlot) => void
+  /** The pane is going away: reports "no lane" if one is reported, so the consumer's outline cannot stick. */
+  readonly reset: () => void
+}
+
+/**
+ * The lane under the pointer, reported when it changes. Only the pointer's own move counts: uPlot sets
+ * `cursor.event` to the mouse event that moved the cursor and never clears it (setCursor leaves it
+ * alone), so a pane that a synced move only follows keeps the source pane's relative height and either
+ * no event or a stale one (a mouseleave from the last visit). A crosshair from another library in the
+ * link group reaches the pane the same way (sync.ts calls u.setCursor). Those moves are off the lanes
+ * here, not the lane at that height; uPlot itself tests `cursor.event.type == 'mousemove'` for the same
+ * reason.
+ */
+function laneHover(spec: LanesSpec, live: { readonly current: PlotsArgs }): LaneHover {
+  let reported: number | null = null
+  const report = (rank: number | null) => {
+    if (rank === reported) return
+    reported = rank
+    live.current.onLaneHover?.(rank)
+  }
+  return {
+    onCursor: (u) => {
+      const { left, top, event } = u.cursor
+      const over = event?.type === 'mousemove' && left != null && left >= 0
+      report(over ? laneAt(spec, top ?? -1, u.over.clientHeight) : null)
+    },
+    reset: () => report(null),
+  }
+}
+
+function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legend: LegendHandle; reset: () => void } {
+  const { a, live, i, el, tokens, gutter } = c
   const pane = a.panes[i]!
   const values = a.data[i]!
-  const legend = paneLegend(el, pane, values, a.t, tokens)
+  const legend = pane.lanes === undefined ? paneLegend(el, pane, values, a.t, tokens) : noLegend()
+  const hover = pane.lanes === undefined ? null : laneHover(pane.lanes, live)
+  const isBottom = i === a.panes.length - 1
   const opts = paneOptions({
     pane,
     data: values,
     t: a.t,
-    isBottom: i === a.panes.length - 1,
+    isBottom,
     showFenceLabel: i === 0,
     tokens,
     width: el.clientWidth,
@@ -142,10 +195,14 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
     onCursor: (u) => {
       legend.refresh(u)
       if (i === 0) a.onPointer(cursorIndex(u))
+      hover?.onCursor(u)
     },
+    spans: a.spans,
+    ribbon: isBottom ? a.ribbon : undefined,
+    lanesHighlight: () => live.current.highlightLane ?? null,
   })
   const plot = new Ctor(opts, paneUplotData<readonly (number | null)[]>(a.t, pane, values) as unknown as uPlot.AlignedData, el)
-  return { plot, legend: legend.handle }
+  return { plot, legend: legend.handle, reset: () => hover?.reset() }
 }
 
 export function useLineStackPlots(a: PlotsArgs): PlotsState {
@@ -155,7 +212,7 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
   useLayoutEffect(() => {
     args.current = a
   })
-  const { lib, t, panes, data, link, fence, log, uid, paneEls } = a
+  const { lib, t, panes, data, link, fence, log, uid, paneEls, spans, ribbon, highlightLane } = a
 
   useEffect(() => {
     if (lib === null) return
@@ -180,20 +237,37 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
         cur.onRender?.(performance.now() - start + cur.takeExtraMs())
         setDrawn(true)
       }
-      return buildPane(lib, { a: cur, i, el, tokens, onFirstDraw, gutter })
+      return buildPane(lib, { a: cur, live: args, i, el, tokens, onFirstDraw, gutter })
     })
     plots.current = built.map((b) => b.plot)
     return () => {
       for (const b of built) {
+        b.reset()
         b.plot.destroy()
         b.legend.destroy()
       }
       plots.current = []
     }
-  }, [lib, t, panes, data, link, fence, log, uid, paneEls])
+  }, [lib, t, panes, data, link, fence, log, uid, paneEls, spans, ribbon])
 
+  useLaneHighlight(plots, panes, highlightLane ?? null)
   useResizePanes(plots, args, a.container)
   return { plots, drawn }
+}
+
+/**
+ * Redraws the lanes panes (only) when the highlighted lane changes: the plots read the highlight at
+ * every draw, so this builds nothing. A build made after the change already drew the new one.
+ */
+function useLaneHighlight(plots: { readonly current: uPlot[] }, panes: readonly LineStackPane[], highlight: number | null): void {
+  const drawnFor = useRef(highlight)
+  useEffect(() => {
+    if (drawnFor.current === highlight) return
+    drawnFor.current = highlight
+    plots.current.forEach((u, i) => {
+      if (panes[i]?.lanes !== undefined) u.redraw(false)
+    })
+  }, [plots, panes, highlight])
 }
 
 /** Resizes every pane to its host when the stack's box changes size. */

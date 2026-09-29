@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { Component, type ReactNode } from 'react'
+import { Component, StrictMode, type ReactNode } from 'react'
 import type uPlot from 'uplot'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LINE_STACK } from '../copy/lineStack'
@@ -8,7 +8,7 @@ import { FENCE_TIME } from './fence'
 import type { UplotConstructor } from './lazy'
 import LineStack from './LineStack'
 import { recordingContext } from './LineStack.testUtil'
-import type { LineStackPane, LineStackProps } from './LineStack.types'
+import type { LanesSpec, LineStackPane, LineStackProps, RibbonSpec, StackSpan } from './LineStack.types'
 
 /** A minimal error boundary, the same shape ScreenBoundary gives a panel whose child throws. */
 class Boundary extends Component<{ readonly children: ReactNode }, { readonly error: string | null }> {
@@ -27,7 +27,8 @@ type Hook = (u: FakeUplot) => void
 /** Enough of uPlot for the component: options, scales, cursor, hooks and the calls made on it. */
 class FakeUplot {
   static instances: FakeUplot[] = []
-  readonly cursor = { idx: null as number | null, left: -10, top: -10 }
+  /** As uPlot's: `event` is the pointer's own mouse event, and null on a pane a synced move only follows. */
+  readonly cursor = { idx: null as number | null, left: -10, top: -10, event: null as object | null }
   readonly scales: { x: { min: number; max: number }; y: { min: number; max: number } }
   readonly over = { clientWidth: 600, clientHeight: 200 }
   readonly bbox = { left: 8, top: 8, width: 600, height: 200 }
@@ -86,6 +87,18 @@ class FakeUplot {
     this.cursor.top = o.top
     this.cursor.idx = o.left < 0 ? null : this.posToIdx(o.left)
     if (fire) this.fire('setCursor')
+  }
+
+  /** The pointer moved over this pane (uPlot: a mousemove, which sets the cursor event). */
+  pointer(o: { left: number; top: number }) {
+    this.cursor.event = { type: o.left < 0 ? 'mouseleave' : 'mousemove' }
+    this.setCursor(o, true)
+  }
+
+  /** A move on another pane of the group reached this one: uPlot sets no event, and the top is proportional. */
+  synced(o: { left: number; top: number }) {
+    this.cursor.event = null
+    this.setCursor(o, true)
   }
 
   setScale(key: string, lim: { min: number; max: number }) {
@@ -373,5 +386,302 @@ describe('LineStack (TASKS 5.1)', () => {
     const after = FakeUplot.instances.filter((u) => !before.includes(u))
     expect(after).toHaveLength(2)
     expect(after.every((u) => u.destroyed)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// The context layer (roadmap 12): marked windows, a regime strip and a lanes pane.
+
+const SPANS: StackSpan[] = [
+  { from: T[1]!, to: T[3]!, label: 'Stress A' },
+  { from: T[6]!, to: T[8]!, label: 'Stress B [SPENT]' },
+]
+const RIBBON: RibbonSpec = {
+  name: 'Regime',
+  values: [null, 'low', 'low', 'mid', 'mid', 'mid', 'high', 'high', 'low', 'low'],
+  states: { low: { label: 'low volatility', glyph: 'L' }, mid: { label: 'mid volatility', glyph: 'M' }, high: { label: 'high volatility', glyph: 'H' } },
+  missing: '--',
+}
+const LANES: LanesSpec = {
+  name: 'Episodes',
+  episodes: [
+    { rank: 1, peak: T[1]!, trough: T[3]!, end: T[6]!, open: false, depth: '-3.0%' },
+    { rank: 2, peak: T[5]!, trough: T[7]!, end: T[9]!, open: true, depth: '-1.0%' },
+    { rank: 3, peak: T[2]!, trough: T[4]!, end: T[5]!, open: false, depth: '-0.5%' },
+  ],
+}
+const WITH_LANES: LineStackPane[] = [...PANES, { id: 'lanes', series: [], lanes: LANES }]
+
+function contextStack(extra: Partial<LineStackProps> = {}) {
+  return <LineStack title="Fixture equity" t={T} panes={WITH_LANES} spans={SPANS} ribbon={RIBBON} loader={loader} {...extra} />
+}
+
+/** The lanes pane's newest plot (a rebuild leaves the earlier, destroyed ones in the list). */
+function lanesPlot(): FakeUplot {
+  return FakeUplot.instances.filter((u) => u.el.closest('[data-pane]')!.getAttribute('data-pane') === 'lanes').at(-1)!
+}
+
+describe('LineStack context layer', () => {
+  it('T lists the marked windows, the regime runs and the episodes after the values table', async () => {
+    render(contextStack())
+    await ready()
+    fireEvent.keyDown(screen.getByRole('img'), { key: 't' })
+    const tables = screen.getAllByRole('table')
+    expect(tables.map((table) => table.querySelector('caption')!.textContent)).toEqual([
+      'Fixture equity, every point',
+      'Fixture equity, marked windows',
+      'Fixture equity, Regime runs',
+      'Fixture equity, episodes',
+    ])
+    const cells = (table: HTMLElement) => within(table).getAllByRole('row').slice(1).map((row) => [...row.querySelectorAll('th, td')].map((c) => c.textContent))
+    expect(cells(tables[1]!)).toEqual([
+      ['Stress A', '2021-12-21', '2021-12-23', 'yes'],
+      ['Stress B [SPENT]', '2021-12-28', '2021-12-30', 'yes'],
+    ])
+    expect(within(tables[2]!).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['State', 'From', 'To', 'Sessions'])
+    expect(cells(tables[2]!)[0]).toEqual(['low volatility', '2021-12-21', '2021-12-22', '2'])
+    // Six labels: the sixth is the depth, and the state reads recovered or open.
+    expect(within(tables[3]!).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['#', 'Peak', 'Trough', 'End', 'State', 'Depth'])
+    expect(cells(tables[3]!).map((row) => [row[0], row[4], row[5]])).toEqual([['1', 'recovered', '-3.0%'], ['2', 'open', '-1.0%'], ['3', 'recovered', '-0.5%']])
+  })
+
+  it('names the window, the regime and the episode at the crosshair, after the values', async () => {
+    render(contextStack())
+    await ready()
+    const img = screen.getByRole('img')
+    const readout = screen.getByRole('status')
+    fireEvent.keyDown(img, { key: 'Home' })
+    // The first session has no regime state: the strip gives the missing text, not a state.
+    expect(readout.textContent).toBe('2021-12-20: Strategy 1.00, Benchmark 1.00, Underwater 0.0% | Regime --')
+    for (let i = 0; i < 3; i += 1) fireEvent.keyDown(img, { key: 'ArrowRight' })
+    expect(readout.textContent).toBe(
+      '2021-12-23: Strategy --, Benchmark 1.01, Underwater -- | inside Stress A | Regime: mid volatility (M) | episode 1 falling | episode 3 falling',
+    )
+  })
+
+  it('leaves every label, table and readout as it was without the context props', async () => {
+    renderStack()
+    await ready()
+    const img = screen.getByRole('img')
+    expect(img.getAttribute('aria-label')).not.toMatch(/marked windows|episode lanes/i)
+    fireEvent.keyDown(img, { key: 'Home' })
+    expect(screen.getByRole('status').textContent).toBe('2021-12-20: Strategy 1.00, Benchmark 1.00, Underwater 0.0%')
+    fireEvent.keyDown(img, { key: 't' })
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+    fireEvent.keyDown(screen.getByRole('region'), { key: 't' })
+    await ready()
+    const flex = [...document.querySelectorAll<HTMLElement>('.linestack-pane')].map((el) => el.style.flex)
+    expect(flex).toEqual(['2 1 0px', '1 1 45px'])
+  })
+
+  it('appends the marked windows in view and the episode lanes to the accessible name, following the zoom', async () => {
+    render(contextStack())
+    await ready()
+    const img = screen.getByRole('img')
+    expect(img.getAttribute('aria-label')).toMatch(/Marked windows in view: 2\. Episode lanes: 3\.$/)
+    // The 3D range starts on 2021-12-28: only the second window reaches it.
+    fireEvent.click(within(screen.getByRole('group', { name: LINE_STACK.rangeGroup })).getByRole('button', { name: '3D' }))
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/Marked windows in view: 1\. Episode lanes: 3\.$/)
+    // Zooming with the keys moves the view too, without a range button.
+    fireEvent.click(within(screen.getByRole('group', { name: LINE_STACK.rangeGroup })).getByRole('button', { name: 'Max' }))
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/Marked windows in view: 2\./)
+  })
+
+  it('says nothing about windows or lanes for a strip alone', async () => {
+    render(contextStack({ panes: PANES, spans: undefined }))
+    await ready()
+    expect(screen.getByRole('img').getAttribute('aria-label')).not.toMatch(/marked windows|episode lanes/i)
+  })
+
+  it('makes room for the strip under the bottom pane only when there is one', async () => {
+    const { rerender } = render(contextStack({ ribbon: undefined }))
+    await ready()
+    const flex = () => [...document.querySelectorAll<HTMLElement>('.linestack-pane')].map((el) => el.style.flex)
+    expect(flex()).toEqual(['2 1 0px', '1 1 0px', '1 1 45px'])
+    rerender(contextStack())
+    await ready()
+    // 45px of time axis plus the 6px strip and its 2px gap.
+    expect(flex()).toEqual(['2 1 0px', '1 1 0px', '1 1 53px'])
+  })
+
+  it('gives a lanes pane no legend, and passes the strip to the bottom pane only', async () => {
+    render(contextStack())
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(3)
+    expect(document.querySelectorAll('.chart-legend')).toHaveLength(2)
+    expect(FakeUplot.instances.map((u) => u.opts.axes![0]!.size)).toEqual([45, 45, 53])
+    // The lanes pane is one uPlot with the times alone: it has no series.
+    expect(lanesPlot().data).toHaveLength(1)
+    expect(lanesPlot().opts.scales!.y!.auto).toBe(false)
+  })
+
+  it('draws the marked windows on every pane and the strip under the bottom one', async () => {
+    render(contextStack())
+    await ready()
+    for (const u of FakeUplot.instances) expect(u.ctx.calls.some((c) => c[0] === 'set:globalAlpha' && c[1] === 0.12)).toBe(true)
+    const strip = (u: FakeUplot) => u.ctx.calls.filter((c) => c[0] === 'fillRect' && c[4] === 6).length
+    expect(FakeUplot.instances.map(strip)).toEqual([0, 0, 4])
+  })
+
+  it('rebuilds the panes for new windows or a new strip, and for nothing that stays the same', async () => {
+    const { rerender } = render(contextStack())
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(3)
+    rerender(contextStack())
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(3)
+    const moved = [...SPANS]
+    rerender(contextStack({ spans: moved }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(6)
+    expect(FakeUplot.instances.slice(0, 3).every((u) => u.destroyed)).toBe(true)
+    rerender(contextStack({ spans: moved, ribbon: { ...RIBBON } }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(9)
+  })
+
+  it('redraws the lanes pane alone when the highlighted lane changes, and builds no new plot', async () => {
+    const { rerender } = render(contextStack({ highlightLane: null }))
+    await ready()
+    // Each pane has drawn once (one band pass each): mounting is not a change of highlight.
+    const passes = (u: FakeUplot) => u.ctx.calls.filter((c) => c[0] === 'set:globalAlpha' && c[1] === 0.12).length
+    expect(FakeUplot.instances.map(passes)).toEqual([1, 1, 1])
+    const before = FakeUplot.instances.map((u) => u.ctx.calls.length)
+    expect(lanesPlot().ctx.calls.some((c) => c[0] === 'strokeRect')).toBe(false)
+    rerender(contextStack({ highlightLane: 2 }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(3)
+    expect(FakeUplot.instances.some((u) => u.destroyed)).toBe(false)
+    const after = FakeUplot.instances.map((u) => u.ctx.calls.length)
+    FakeUplot.instances.forEach((u, i) => {
+      if (u === lanesPlot()) expect(after[i]!).toBeGreaterThan(before[i]!)
+      else expect(after[i], `pane ${i}`).toBe(before[i])
+    })
+    // The redraw carries the outline of lane 2.
+    expect(lanesPlot().ctx.calls.filter((c) => c[0] === 'strokeRect')).toHaveLength(1)
+    // New panes with the same highlight draw once each: the highlight did not change.
+    rerender(contextStack({ highlightLane: 2, panes: [...WITH_LANES] }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(6)
+    expect(FakeUplot.instances.slice(3).map(passes)).toEqual([1, 1, 1])
+    rerender(contextStack({ highlightLane: 2 }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(9)
+    expect(FakeUplot.instances.slice(6).map(passes)).toEqual([1, 1, 1])
+    // The same highlight again draws nothing new; clearing it redraws without the outline.
+    rerender(contextStack({ highlightLane: 2 }))
+    await ready()
+    expect(lanesPlot().ctx.calls.filter((c) => c[0] === 'strokeRect')).toHaveLength(1)
+    const drawn = lanesPlot().ctx.calls.length
+    rerender(contextStack({ highlightLane: null }))
+    await ready()
+    expect(lanesPlot().ctx.calls.length).toBeGreaterThan(drawn)
+    expect(lanesPlot().ctx.calls.filter((c) => c[0] === 'strokeRect')).toHaveLength(1)
+  })
+
+  it('calls onLaneHover with the rank of the lane under the pointer, once per change', async () => {
+    const onLaneHover = vi.fn()
+    render(contextStack({ onLaneHover }))
+    await ready()
+    const lanes = lanesPlot()
+    // The plot is 200px tall: three rows of about 67px. The second row is rank 2.
+    lanes.pointer({ left: 100, top: 100 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(2)
+    lanes.pointer({ left: 120, top: 110 })
+    expect(onLaneHover).toHaveBeenCalledTimes(1)
+    lanes.pointer({ left: 120, top: 190 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(3)
+    lanes.pointer({ left: 120, top: 10 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(1)
+    // The pointer leaves the pane.
+    lanes.pointer({ left: -10, top: -10 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(null)
+    expect(onLaneHover).toHaveBeenCalledTimes(4)
+  })
+
+  it('does not report a lane for a crosshair that only follows a move on another pane', async () => {
+    const onLaneHover = vi.fn()
+    render(contextStack({ onLaneHover }))
+    await ready()
+    // A synced cursor keeps the source pane's relative height, so its top can land on any lane.
+    lanesPlot().synced({ left: 100, top: 100 })
+    expect(onLaneHover).not.toHaveBeenCalled()
+    lanesPlot().pointer({ left: 100, top: 100 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(2)
+    lanesPlot().synced({ left: 100, top: 100 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(null)
+  })
+
+  it('does not report a lane for a crosshair from another library after the pointer has left', async () => {
+    const onLaneHover = vi.fn()
+    render(contextStack({ onLaneHover }))
+    await ready()
+    lanesPlot().pointer({ left: 100, top: 100 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(2)
+    lanesPlot().pointer({ left: -10, top: -10 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(null)
+    const calls = onLaneHover.mock.calls.length
+    // sync.ts moves a uPlot cursor for a lightweight-charts crosshair: uPlot leaves the stale event
+    // (the pointer's mouseleave) in place, so the event's type, not its presence, says who moved it.
+    lanesPlot().setCursor({ left: 100, top: 100 }, true)
+    expect(onLaneHover).toHaveBeenCalledTimes(calls)
+  })
+
+  it('reports no lane when the panes rebuild while one is reported, so an outline cannot stick', async () => {
+    const onLaneHover = vi.fn()
+    const { rerender } = render(contextStack({ onLaneHover }))
+    await ready()
+    lanesPlot().pointer({ left: 100, top: 100 })
+    expect(onLaneHover).toHaveBeenLastCalledWith(2)
+    rerender(contextStack({ onLaneHover, spans: [...SPANS] }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(6)
+    expect(onLaneHover.mock.calls).toEqual([[2], [null]])
+    // The new panes start with nothing reported: a second rebuild says nothing more.
+    rerender(contextStack({ onLaneHover, spans: [...SPANS] }))
+    await ready()
+    expect(onLaneHover.mock.calls).toEqual([[2], [null]])
+  })
+
+  it('reports no lane when the stack unmounts while one is reported', async () => {
+    const onLaneHover = vi.fn()
+    const { unmount } = render(contextStack({ onLaneHover }))
+    await ready()
+    lanesPlot().pointer({ left: 100, top: 100 })
+    unmount()
+    expect(onLaneHover.mock.calls).toEqual([[2], [null]])
+  })
+
+  it('says nothing about lanes on mount, on a rebuild or under StrictMode while none is reported', async () => {
+    const onLaneHover = vi.fn()
+    const { rerender } = render(<StrictMode>{contextStack({ onLaneHover })}</StrictMode>)
+    await ready()
+    rerender(<StrictMode>{contextStack({ onLaneHover, spans: [...SPANS] })}</StrictMode>)
+    await ready()
+    expect(onLaneHover).not.toHaveBeenCalled()
+  })
+
+  it('reads the latest onLaneHover and highlight without rebuilding for a new function', async () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const { rerender } = render(contextStack({ onLaneHover: first }))
+    await ready()
+    rerender(contextStack({ onLaneHover: second }))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(3)
+    lanesPlot().pointer({ left: 100, top: 10 })
+    expect(first).not.toHaveBeenCalled()
+    expect(second).toHaveBeenCalledWith(1)
+  })
+
+  it('survives the table view round trip with the context layer on', async () => {
+    render(contextStack())
+    await ready()
+    fireEvent.keyDown(screen.getByRole('img'), { key: 't' })
+    fireEvent.keyDown(screen.getByRole('region', { name: 'Fixture equity, every point' }), { key: 't' })
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(6)
+    expect(FakeUplot.instances.slice(3).every((u) => !u.destroyed)).toBe(true)
+    expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/Marked windows in view: 2\. Episode lanes: 3\.$/)
   })
 })

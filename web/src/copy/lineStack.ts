@@ -35,7 +35,8 @@ export const LINE_STACK = {
   /** The word on an open episode's hatched bar, and the state of an episode in its table. */
   laneOpen: 'open',
   laneRecovered: 'recovered',
-  summaryContext: '{spans} marked windows in view; {lanes} episode lanes.',
+  /** Appended to the chart's accessible name. Count-free grammar, so a count of one reads right at any zoom. */
+  summaryContext: 'Marked windows in view: {spans}. Episode lanes: {lanes}.',
   spansCaption: '{title}, marked windows',
   spansCols: { window: 'Window', from: 'From', to: 'To', inView: 'In view' },
   ribbonCaption: '{title}, {name} runs',

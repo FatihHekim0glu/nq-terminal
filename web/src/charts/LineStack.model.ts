@@ -5,7 +5,7 @@ import { LINE_STACK } from '../copy/lineStack'
 import { fillCopy } from '../copy/workspace'
 import type { ChartTable } from './ChartA11y'
 import { describeSeries } from './ChartA11ySummary'
-import type { LineStackPane, RangeKey } from './LineStack.types'
+import type { LanesSpec, LineStackPane, RangeKey } from './LineStack.types'
 
 const DAY = 86_400
 
@@ -300,6 +300,16 @@ export function readoutText(t: readonly number[], panes: readonly LineStackPane[
     return p.series.map((s) => fillCopy(LINE_STACK.readoutValue, { name: s.name, value: format(s.values[idx]) }))
   })
   return fillCopy(LINE_STACK.readout, { time: timeLabel(t[idx] ?? 0, isIntraday(t)), values: values.join(LINE_STACK.readoutJoin) })
+}
+
+/** The lanes specs of the panes that hold one, in pane order. */
+export function lanesOf(panes: readonly LineStackPane[]): LanesSpec[] {
+  return panes.flatMap((p) => (p.lanes === undefined ? [] : [p.lanes]))
+}
+
+/** The values readout with the context readout after it (LINE_STACK.contextJoin); the values alone without one. */
+export function joinReadout(values: string, context: string): string {
+  return context === '' ? values : `${values}${LINE_STACK.contextJoin}${context}`
 }
 
 /** Labels only at the first and last finite value: describeSeries reads no other index. */

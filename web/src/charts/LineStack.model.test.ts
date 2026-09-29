@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   cleanValues,
   formatValue,
+  joinReadout,
+  lanesOf,
   periodEndIndexes,
   rangeWindow,
   readoutText,
@@ -16,7 +18,7 @@ import {
   yRangeClearOfLegend,
   zoomView,
 } from './LineStack.model'
-import type { LineStackPane } from './LineStack.types'
+import type { LanesSpec, LineStackPane } from './LineStack.types'
 
 const DAY = 86_400
 const utc = (y: number, m: number, d = 1, h = 0) => Date.UTC(y, m - 1, d, h) / 1000
@@ -256,5 +258,41 @@ describe('accessible summary, readout and table view (UI_SPEC section 9)', () =>
     expect(table.columns.map((c) => c.label)).toEqual(['Date', 'Strategy', 'Benchmark', 'Underwater'])
     expect(table.rows[2]).toEqual({ time: '2019-01-03', s0: '0.99', s1: '1.02', s2: '-10.0%' })
     expect(table.rows[3]).toEqual({ time: '2019-01-04', s0: '--', s1: '1.03', s2: '--' })
+  })
+})
+
+describe('the context layer in the stack model', () => {
+  const lanes: LanesSpec = { name: 'Episodes', episodes: [{ rank: 1, peak: 1, trough: 2, end: 3, open: false, depth: '-9.0%' }] }
+  const second: LanesSpec = { name: 'Benchmark episodes', episodes: [] }
+
+  it('lists the lanes panes in pane order and no other pane', () => {
+    const panes: LineStackPane[] = [
+      { id: 'eq', series: [{ name: 'Strategy', style: 'primary', values: [] }] },
+      { id: 'lanes', series: [], lanes },
+      { id: 'dd', series: [{ name: 'Underwater', style: 'underwater', values: [] }] },
+      { id: 'lanes2', series: [], lanes: second },
+    ]
+    expect(lanesOf(panes)).toEqual([lanes, second])
+    expect(lanesOf(panes)[0]).toBe(lanes)
+    expect(lanesOf(panes.slice(0, 1))).toEqual([])
+    expect(lanesOf([])).toEqual([])
+  })
+
+  it('joins the context after the values with a bar, and leaves the values alone when there is none', () => {
+    expect(joinReadout('2019-01-03: Strategy 0.99, Benchmark 1.02', 'inside Stress | Regime: low volatility (L)')).toBe(
+      '2019-01-03: Strategy 0.99, Benchmark 1.02 | inside Stress | Regime: low volatility (L)',
+    )
+    expect(joinReadout('2019-01-03: Strategy 0.99', '')).toBe('2019-01-03: Strategy 0.99')
+  })
+
+  it('leaves the table, summary and readout of a lanes pane out: it has no series', () => {
+    const t = [utc(2019, 1, 2), utc(2019, 1, 3)]
+    const panes: LineStackPane[] = [
+      { id: 'eq', series: [{ name: 'Strategy', style: 'primary', values: [1, 1.1] }] },
+      { id: 'lanes', series: [], lanes },
+    ]
+    expect(stackTable('Equity', t, panes).columns.map((c) => c.label)).toEqual(['Date', 'Strategy'])
+    expect(stackSummary(t, panes)).toMatch(/^Strategy: 2 points/)
+    expect(readoutText(t, panes, 1)).toBe('2019-01-03: Strategy 1.10')
   })
 })

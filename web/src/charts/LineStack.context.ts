@@ -3,8 +3,8 @@
 // pure functions of a plot's geometry and a 2D context, so they are tested with a recording context;
 // colours are passed in from the chart tokens and sizes come from the charts theme. The readout,
 // table and summary helpers give the same facts as text, since a canvas cannot be read by a screen
-// reader (UI_SPEC section 9). Nothing here is mounted yet: LineStack ignores the new props until the
-// wiring slice.
+// reader (UI_SPEC section 9). LineStack.options.ts draws these layers, and LineStack.tsx adds the readout,
+// the tables and the accessible summary.
 import { LINE_STACK } from '../copy/lineStack'
 import { fillCopy } from '../copy/workspace'
 import type { ChartTable } from './ChartA11y'

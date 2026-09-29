@@ -805,8 +805,9 @@ describe('contextTables: the T table view of the context layer', () => {
 
 describe('contextSummary and spansInView', () => {
   it('states the marked windows in view and the episode lanes', () => {
-    expect(contextSummary(2, 6)).toBe('2 marked windows in view; 6 episode lanes.')
-    expect(contextSummary(0, 0)).toBe('0 marked windows in view; 0 episode lanes.')
+    expect(contextSummary(2, 6)).toBe('Marked windows in view: 2. Episode lanes: 6.')
+    expect(contextSummary(1, 1)).toBe('Marked windows in view: 1. Episode lanes: 1.')
+    expect(contextSummary(0, 0)).toBe('Marked windows in view: 0. Episode lanes: 0.')
   })
 
   it('counts the spans that touch a time range, ends included', () => {
