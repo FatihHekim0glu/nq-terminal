@@ -173,6 +173,18 @@
 
 /* Tables inside DES: the grid look, with wrapping value cells where a check holds several values. */
 .des-table { margin: 0; }
+/* A row header (<th scope="row">, WCAG 1.3.1) looks exactly like a body cell: the browser's own <th>
+   styling (bold, centred) would otherwise stand out from the rest of the row. */
+.des-table tbody th {
+  height: var(--row-h);
+  padding: 0 5px;
+  background: var(--bg);
+  font-weight: var(--fw-regular);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .des-caption { padding: 2px 5px; color: var(--data); line-height: var(--row-h); }
 .des-checks col:first-child { width: 48px; }
 .des-checks th:first-child,
