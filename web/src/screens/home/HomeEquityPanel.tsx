@@ -6,7 +6,7 @@
 // benchmark, the underwater curve and the rolling Sharpe over the long window on one time axis with
 // the fence, then the basis, unit, window and benchmark in words. One GET: the panel endpoint of the
 // hypothesis or run in link group B (GET /api/analytics/{hypothesis|run}/.../panel).
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import { useApiQuery } from '../../api/queries'
 import type { UplotConstructor } from '../../charts/lazy'
 import LineStack from '../../charts/LineStack'
@@ -26,6 +26,61 @@ import './home.css'
 export interface HomeEquityPanelProps extends ScreenProps {
   /** Where uPlot comes from; tests pass a stand-in. */
   readonly loader?: () => Promise<UplotConstructor>
+}
+
+/** The chart never draws shorter than this (a legible time axis and pane legends). */
+export const HOME_EQ_CHART_MIN_HEIGHT = 160
+/** home.css's `.home-eq` bottom padding (`padding: 4px 6px 2px`); kept in step with that rule. */
+const HOME_EQ_BOTTOM_PADDING = 2
+/** home.css's `@container home-eq (max-height: 400px)` breakpoint: only below it does the short-panel
+ * rule (a fixed 220px chart, tiles in a row, notes left to scroll) apply, so only there does the
+ * measured fit height override the CSS; a tall panel keeps the chart's ordinary flex fill (flex: 1 1
+ * auto), which already leaves the notes in view, instead of a fit height stretched to the full body. */
+export const HOME_EQ_SHORT_PANEL = 400
+
+/**
+ * U16 (HOME at 1366x768): the KPI tiles wrap to two rows but home.css's short-panel rule kept the
+ * chart at a fixed height, so its own foot (the time axis, the last pane's legend) fell below the
+ * panel body's fold along with the notes. The chart's height is instead the panel body's own height
+ * less whatever the tag and the tiles above it already claimed (`chartTop`, measured from the panel's top),
+ * so the chart's bottom always stays inside the visible body; only the notes below it, which
+ * home.css's comment already means to let scroll, are left to.
+ */
+export function fitChartHeight(containerHeight: number, chartTop: number, bottomPadding: number): number {
+  return Math.max(HOME_EQ_CHART_MIN_HEIGHT, Math.round(containerHeight - chartTop - bottomPadding))
+}
+
+/** Measures `.home-eq` and `.home-eq-chart` and keeps the chart's fit height current with a
+ *  ResizeObserver; null (CSS decides) until a real (non-zero) measurement lands, so jsdom's layout-free
+ *  tests and a mid-mount render never force a wrong height. */
+function useChartFit(): { readonly containerRef: (el: HTMLDivElement | null) => void; readonly chartRef: (el: HTMLDivElement | null) => void; readonly height: number | null } {
+  const [container, setContainer] = useState<HTMLDivElement | null>(null)
+  const [chart, setChart] = useState<HTMLDivElement | null>(null)
+  const [height, setHeight] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (!container || !chart) return undefined
+    const measure = () => {
+      const containerHeight = container.clientHeight
+      if (containerHeight <= 0 || containerHeight > HOME_EQ_SHORT_PANEL) {
+        setHeight(null)
+        return
+      }
+      // getBoundingClientRect, not chart.offsetTop: .pstage (the portalled red bar and tabs slot), not
+      // .home-eq, is the offsetParent, so offsetTop over-counts by their height. Both rects scroll
+      // together, so this stays correct however the workspace is scrolled (U16, 1366x768).
+      const chartTop = chart.getBoundingClientRect().top - container.getBoundingClientRect().top
+      setHeight(fitChartHeight(containerHeight, chartTop, HOME_EQ_BOTTOM_PADDING))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const observer = new ResizeObserver(measure)
+    observer.observe(container)
+    // The KPI row wrapping to two rows (a narrower panel) shifts the chart's top without resizing the
+    // container itself, so it needs its own trigger to re-measure.
+    if (chart.previousElementSibling) observer.observe(chart.previousElementSibling)
+    return () => observer.disconnect()
+  }, [container, chart])
+  return { containerRef: setContainer, chartRef: setChart, height }
 }
 
 /** Both panel endpoints as hooks (hooks cannot be conditional); only the one for the target runs. */
@@ -95,8 +150,9 @@ export function HomeEquityView({ panel, group, loader }: ViewProps) {
   const stack = useMemo(() => homeStack(panel), [panel])
   const notes = useMemo(() => homeNotes(panel), [panel])
   const source = panel.context.kind === 'run' ? HOME_EQ.sourceRun : HOME_EQ.sourceHypothesis
+  const fit = useChartFit()
   return (
-    <div className="home-eq">
+    <div className="home-eq" ref={fit.containerRef}>
       <p className="home-eq-tag">
         <span className="tag">{panel.tag}</span> {fillCopy(HOME_EQ.tagNote, { source })}
       </p>
@@ -105,7 +161,7 @@ export function HomeEquityView({ panel, group, loader }: ViewProps) {
           <KpiTile key={t.kpi.key} kpi={t.kpi} decimals={t.decimals} signed={t.signed} description={t.description} unit={t.unit} />
         ))}
       </KpiRow>
-      <div className="home-eq-chart">
+      <div className="home-eq-chart" ref={fit.chartRef} style={fit.height !== null ? { flex: '0 0 auto', height: fit.height } : undefined}>
         <LineStack title={stack.title} t={stack.t} panes={stack.panes} link={group} loader={loader} />
       </div>
       <ul className="home-eq-notes">

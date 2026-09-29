@@ -44,7 +44,8 @@ export const TEAR_P1 = {
     usedCf: 'Cornish-Fisher',
     usedHistorical: 'historical: Cornish-Fisher not defined here',
     notDefined: 'not defined',
-    moments: 'Population moments: mean {mean}, sigma {sigma}, skew {skew}, excess kurtosis {kurt}.',
+    // U17: sigma here is population, ddof 0 (unlike the Volatility tile's ddof 1).
+    moments: 'Population moments: mean {mean}, sigma (ddof 0) {sigma}, skew {skew}, excess kurtosis {kurt}.',
   },
   jb: {
     title: 'Normality (RD3, RD4)',

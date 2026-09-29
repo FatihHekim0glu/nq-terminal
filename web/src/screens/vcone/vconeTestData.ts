@@ -6,6 +6,8 @@ import type { VolCone, VolConeRow, VolConeUniverse } from './types'
 export const HORIZON_LIST = [5, 10, 21, 63, 126, 252] as const
 export const BASIS = 'sd of log(1 + r) over each window of h sessions (ddof 1, every return defined) x sqrt(252)'
 export const UNIT = 'fraction per year, annualised (0.18 is 18%)'
+// As the real backend's gate would report it for these fixtures (see model.test.ts and VconeScreen.test.tsx).
+// The demo dataset does not read through a real gate, so it overrides this field itself (demo/data/p1.ts).
 export const GATE = { caller: 'terminal', served_years: [2010, 2021], cached: false, reads_this_process: 27 }
 export { LABEL }
 

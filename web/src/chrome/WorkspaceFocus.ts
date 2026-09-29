@@ -7,19 +7,27 @@
 // element, never a native listener, which would run before React's). In a text field they move the
 // caret, and only Right at the end or Left at the start moves on. On a tab they stay in
 // its tablist and wrap, Home and End go to the first and last tab (the ARIA tabs pattern) and Down
-// goes into the panel's content. Up and
-// Down, and Home and End on any other item, are left to the item, because they scroll. While a panel shows an overlay marked
-// `data-roving-overlay` (the related functions menu), the Tab stop is taken from that overlay's items,
-// so Tab from the command line lands in the open menu and its scroll region stays keyboard reachable.
-// A box that scrolls on its own inside the body (a virtualised grid, a statistics table in a fixed
-// column) carries `data-roving-scroll`: it takes the Tab stop from the body when both render as stops,
-// since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
+// goes into the panel's content. Home and End on any other item are left to the item, because they
+// scroll. Up and Down on any other item are left to the item too (they scroll), except inside a
+// container marked `data-roving-vertical-list` (U12: HELP's mnemonic rail, a KPI tile row), where they
+// rove between its items like Left and Right do, clamped at the ends; elsewhere, once the browser's own
+// scroll has run, the still-focused item is nudged back into view (`scrollIntoView({block:'nearest'})`)
+// so 3 to 5 presses can no longer carry it under the header or the command zone. While a panel shows an
+// overlay marked `data-roving-overlay` (the related functions menu), the Tab stop is taken from that
+// overlay's items, so Tab from the command line lands in the open menu and its scroll region stays
+// keyboard reachable. A box that scrolls on its own inside the body (a virtualised grid, a statistics
+// table in a fixed column) carries `data-roving-scroll`: it takes the Tab stop from the body when both
+// render as stops, since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
 import { useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react'
 
 export const ROVING_ATTR = 'data-roving'
 export const ROVING_DEFAULT_ATTR = 'data-roving-default'
 export const ROVING_OVERLAY_ATTR = 'data-roving-overlay'
 export const ROVING_SCROLL_ATTR = 'data-roving-scroll'
+/** U12: a container of `data-roving` items that reads top to bottom (HELP's mnemonic rail, a KPI tile
+ * row), opted in to Up/Down roving instead of leaving those keys to the browser's own scroll, which can
+ * carry the focused item out from under the header or the command zone. */
+export const ROVING_VERTICAL_ATTR = 'data-roving-vertical-list'
 
 const FOCUSABLE = [
   'a[href]', 'area[href]', 'button', 'input', 'select', 'textarea', 'iframe', 'summary',
@@ -29,6 +37,8 @@ const FOCUSABLE = [
 const NEXT_KEY = 'ArrowRight'
 const PREV_KEY = 'ArrowLeft'
 const INTO_KEY = 'ArrowDown'
+const DOWN_KEY = 'ArrowDown'
+const UP_KEY = 'ArrowUp'
 
 function isDisabled(el: HTMLElement): boolean {
   return el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true' || Boolean(el.hidden)
@@ -144,6 +154,49 @@ function moveTo(panel: HTMLElement, event: KeyboardEvent, next: HTMLElement): tr
   return true
 }
 
+/** The roving items of the vertical list (ROVING_VERTICAL_ATTR) nearest `target`, in DOM order; null
+ * when `target` is not inside one, so plain Up/Down still falls through to the browser's own scroll. */
+function verticalGroup(panel: HTMLElement, target: HTMLElement): HTMLElement[] | null {
+  const list = target.closest<HTMLElement>(`[${ROVING_VERTICAL_ATTR}]`)
+  return list ? rovingItems(panel).filter((el) => list.contains(el)) : null
+}
+
+/** Up and Down inside an opted-in vertical list move between its items, clamped at the ends (U12):
+ * HELP's mnemonic rail read top to bottom like any other list, not a region that merely scrolls. */
+function handleVerticalKey(panel: HTMLElement, target: HTMLElement, event: KeyboardEvent): boolean {
+  const items = verticalGroup(panel, target)
+  if (!items) return false
+  const index = items.indexOf(target)
+  if (index === -1) return false
+  const step = event.key === DOWN_KEY ? 1 : -1
+  const next = items[Math.min(Math.max(index + step, 0), items.length - 1)]
+  return next && next !== target ? moveTo(panel, event, next) : false
+}
+
+/** U12: elsewhere, Up and Down are still left to the browser's own scroll (a chart, a long grid), but
+ * that scroll can carry the still-focused control out from under the header or the command zone (3 to
+ * 5 presses, HELP's rail before it opted into handleVerticalKey, a KPI tile row, a RUN range button).
+ * Chrome and Firefox animate arrow-key scrolling, so a single animation frame after keydown checks
+ * visibility before the scroll has actually landed: it misses the first overshoot, then can snap the
+ * control back mid-animation. Wait for the scroll to settle instead: the non-bubbling `scrollend` event
+ * (captured at document, since it does not bubble to a listener on the scrolled element's ancestors), or
+ * a fallback timeout for a browser without it, or a press that did not scroll at all. Once settled,
+ * nudge the still-focused control back into view; `block: 'nearest'` moves nothing when it is already
+ * visible, so a focused control is kept in view, by design (U12); genuine reading scroll with no focused
+ * control left inside the moved region is untouched. */
+const SCROLL_SETTLE_TIMEOUT_MS = 300
+
+function keepScrolledIntoView(el: HTMLElement): void {
+  let timer = 0
+  const done = () => {
+    window.clearTimeout(timer)
+    document.removeEventListener('scrollend', done, true)
+    if (document.activeElement === el) el.scrollIntoView({ block: 'nearest' })
+  }
+  document.addEventListener('scrollend', done, { capture: true, once: true })
+  timer = window.setTimeout(done, SCROLL_SETTLE_TIMEOUT_MS)
+}
+
 /**
  * A tab follows the ARIA tabs pattern its role promises: Left and Right stay inside its tablist and
  * wrap at the ends, Home and End go to the first and last tab. Enter or Space selects (TabStrip).
@@ -177,6 +230,11 @@ export function handleRovingKey(panel: HTMLElement, event: KeyboardEvent): boole
   if (isTextField(target) && !caretAtEdge(target, event.key)) return false
   const tab = handleTabKey(panel, target, event)
   if (tab !== null) return tab
+  if (event.key === UP_KEY || event.key === DOWN_KEY) {
+    if (handleVerticalKey(panel, target, event)) return true
+    if (target.hasAttribute(ROVING_ATTR)) keepScrolledIntoView(target)
+    return false
+  }
   if (event.key !== NEXT_KEY && event.key !== PREV_KEY) return false
   const items = rovingItems(panel)
   const index = items.indexOf(target)

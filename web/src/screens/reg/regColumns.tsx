@@ -25,7 +25,10 @@ export const REG_COLUMNS: readonly MonitorColumn<RegRow>[] = [
     id: 'verdict', header: C.verdict, width: 60, kind: 'text', value: (r) => r.badge,
     format: (r) => badgeText(r.badge), tone: (r) => verdictTone(r.badge),
   },
-  { id: 'n', header: C.n, width: 52, kind: 'num', value: (r) => r.n, format: (r) => formatCount(r.n) },
+  // U17: 'n' alone read as the same unit as MT's DSR table n (always sessions); REG's n can be trades,
+  // months or sessions, so the header names it (DEFLATED.regNColumn: copy/reg.ts is another worker's file
+  // this wave, so the override lives in copy/deflated.ts, already read here for the dsr column below).
+  { id: 'n', header: DEFLATED.regNColumn, width: 52, kind: 'num', value: (r) => r.n, format: (r) => formatCount(r.n) },
   pColumn<RegRow>('p', C.p, (r) => r.p),
   pColumn<RegRow>('controlP', C.controlP, (r) => r.controlP),
   pColumn<RegRow>('bonferroni', C.bonferroni, (r) => r.bonferroni),

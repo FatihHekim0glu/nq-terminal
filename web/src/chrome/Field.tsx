@@ -3,7 +3,7 @@
 // select-only combobox (value, then a ▾ box) opening an amber-text list with the current item in
 // selection navy; it opens upward when there is no room below. Inside a ParamRow each field shows
 // its label as amber text before it; elsewhere the label is the accessible name only.
-import { createContext, useContext, useId, useLayoutEffect, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { FIELD, fillCopy } from '../copy/workspace'
 import { usePanelActions } from './PanelChrome.actions'
 import { ROVING_ATTR } from './WorkspaceFocus'
@@ -98,6 +98,50 @@ function indexOf(options: ReadonlyArray<FieldOption>, value: string): number {
   return Math.max(0, options.findIndex((o) => o.value === value))
 }
 
+/** A held key stops building the type-ahead buffer after this long of silence (ARIA APG). */
+const TYPEAHEAD_IDLE_MS = 800
+
+function isSingleRepeatedChar(buffer: string): boolean {
+  return buffer.length > 1 && [...buffer].every((c) => c === buffer[0])
+}
+
+/**
+ * The index of the first option (U13: CORR's pickers, 'es' left the highlight on NQ, CL took about 13
+ * ArrowDowns) whose label starts with `query`, case insensitive, searching from just after `from` and
+ * wrapping to the start. A query of one letter typed several times in a row (`isSingleRepeatedChar`)
+ * searches by that one letter instead, so repeating it cycles every option that starts with it. -1
+ * when nothing matches, so the caller leaves the highlight where it was.
+ */
+export function typeaheadIndex(options: ReadonlyArray<FieldOption>, query: string, from: number): number {
+  const n = options.length
+  if (query === '' || n === 0) return -1
+  const needle = (isSingleRepeatedChar(query) ? query[0]! : query).toLowerCase()
+  for (let step = 1; step <= n; step += 1) {
+    const i = (from + step) % n
+    if (options[i]!.label.toLowerCase().startsWith(needle)) return i
+  }
+  return -1
+}
+
+/** True for a single printable character with no modifier: what builds the type-ahead buffer, not a
+ *  navigation or editing key (arrows, Enter, Tab, function keys, or a shortcut chord). */
+function isTypeaheadKey(e: KeyboardEvent): boolean {
+  return e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey
+}
+
+/** Builds the type-ahead buffer from keys typed close together (`TYPEAHEAD_IDLE_MS` apart resets it)
+ *  and resolves it against `options` from the given active index. */
+function useTypeahead(options: ReadonlyArray<FieldOption>) {
+  const buffer = useRef('')
+  const last = useRef(0)
+  return (e: KeyboardEvent, from: number): number => {
+    const now = Date.now()
+    buffer.current = now - last.current > TYPEAHEAD_IDLE_MS ? e.key : buffer.current + e.key
+    last.current = now
+    return typeaheadIndex(options, buffer.current, from)
+  }
+}
+
 /** Opens the list upward when there is no room for it below the field. */
 function useListDirection(open: boolean, field: HTMLElement | null, list: HTMLElement | null): 'down' | 'up' {
   const [dir, setDir] = useState<'down' | 'up'>('down')
@@ -124,6 +168,7 @@ export function DropdownField({ label, value, options, onChange, disabled = fals
   const dir = useListDirection(open, field, list)
   const current = options.find((o) => o.value === value)
   const optionId = (i: number) => `${listId}-o${i}`
+  const typeahead = useTypeahead(options)
 
   const openList = () => {
     if (disabled) return
@@ -141,6 +186,15 @@ export function DropdownField({ label, value, options, onChange, disabled = fals
     if (!open && (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Enter' || key === ' ')) {
       event.preventDefault()
       openList()
+      return
+    }
+    // U13: a printable key on the closed field opens it and searches at once, like the open list does.
+    if (!open && isTypeaheadKey(event)) {
+      event.preventDefault()
+      const from = indexOf(options, value)
+      const match = typeahead(event, from)
+      setActive(match >= 0 ? match : from)
+      setOpen(true)
       return
     }
     if (!open) return
@@ -169,6 +223,12 @@ export function DropdownField({ label, value, options, onChange, disabled = fals
       setOpen(false)
     } else if (key === 'Tab') {
       setOpen(false)
+    } else if (isTypeaheadKey(event)) {
+      // U13: type-ahead in the open listbox (CORR's pickers: 'es' left the highlight on NQ, CL took
+      // about 13 ArrowDowns). A match moves the highlight; no match leaves it where it was.
+      event.preventDefault()
+      const match = typeahead(event, active)
+      if (match >= 0) setActive(match)
     }
   }
 

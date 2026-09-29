@@ -20,7 +20,7 @@ import { usePanelActions } from './PanelChrome.actions'
 import { useNumbered } from './PanelChrome.numbers'
 import { usePanelPage } from './PanelChrome.page'
 import { SCREEN_PHASES } from './WorkspaceLayouts'
-import { ROVING_ATTR } from './WorkspaceFocus'
+import { ROVING_ATTR, ROVING_VERTICAL_ATTR } from './WorkspaceFocus'
 import './HelpScreen.css'
 
 export interface HelpScreenProps {
@@ -139,9 +139,13 @@ function TocItems({ mnemonics, selected, onItem }: Pick<TocProps, 'mnemonics' | 
   )
 }
 
+// U12: read top to bottom, like any other list, instead of a region that merely scrolls (3 to 5
+// presses of Down used to carry the focused row under the red bar before this opted in).
+const verticalList = { [ROVING_VERTICAL_ATTR]: '' }
+
 function Toc({ entries, mnemonics, selected, onSection, onItem }: TocProps) {
   return (
-    <nav className="help-toc" aria-label={HELP.tocLabel}>
+    <nav className="help-toc" aria-label={HELP.tocLabel} {...verticalList}>
       <ul>
         {entries.map((e) => (
           <li key={e.id} className="toc-group">

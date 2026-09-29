@@ -91,12 +91,16 @@
 
 /* A short panel (HOME at 1366x768, body about 208px): the chart takes the whole body so the price pane
    stays readable; the parameter row, range row and session line fold away (as the MON parameter row
-   does; the full GP panel, 96) Actions, keeps them) and the basis footer follows in the body's scroll. */
+   does; the full GP panel, 96) Actions, keeps them) and the basis footer follows in the body's scroll.
+   U22: at 200% zoom the container can be shorter still (960x540 CSS px); the chart keeps its 160px
+   floor (CandleChart's price, volume and RV22 panes need that much to stay readable, WCAG 1.4.4)
+   rather than the 0 this rule zeroed it to, and the panel body (already `overflow: auto`) scrolls for
+   whatever that floor then pushes past the fold. */
 @container gp (max-height: 300px) {
   .gp-screen > .param-row,
   .gp-screen > .gp-rangerow,
   .gp-screen > .gp-sessions,
   .gp-screen > .gp-field-msg { display: none; }
   .gp-screen > * { flex-shrink: 0; }
-  .gp-screen > .gp-chart { flex: 0 0 auto; height: 100cqh; min-height: 0; }
+  .gp-screen > .gp-chart { flex: 0 0 auto; height: 100cqh; min-height: 160px; }
 }

@@ -12,6 +12,7 @@
 import { DockviewReact, type DockviewTheme, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { Suspense, createContext, useContext, useEffect, useImperativeHandle, useMemo, useRef, type Ref, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { useStore } from 'zustand'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import type { ResolvedContext } from '../commands/types'
@@ -137,7 +138,11 @@ function ScreenPanel(props: IDockviewPanelProps<Record<string, unknown>>) {
       context={context}
       onOpen={(code) => actions.open(code)}
       onClose={() => {
-        controller?.closeRelatedMenu()
+        // G05: closeRelatedMenu() only patches the view store; React 18 batches the re-render that
+        // unmounts the overlay until this handler returns. Without flushSync, focusPanelNumber below
+        // runs syncRoving while the overlay (data-roving-overlay) is still mounted, so it focuses the
+        // overlay's own first menuitem, which then vanishes a moment later and drops focus to <body>.
+        flushSync(() => controller?.closeRelatedMenu())
         controller?.focusPanelNumber(number)
       }}
     />
