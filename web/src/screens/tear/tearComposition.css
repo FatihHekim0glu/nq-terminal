@@ -1,0 +1,19 @@
+/* The exposure card's composition views (roadmap #13, EX1 by instrument): the box the by-instrument grid
+   and the by-sector stack are drawn in. Sizes and positions only; colour, type and spacing come from the
+   chart and the card, so this file holds no colour. Taller than the Totals stack (.tear-chart-short in
+   tear.css) because 27 instruments and their sector bands need a row each. The box does not use .tear-chart,
+   whose flex and floor it would have to undo in a rule that loads before or after it. */
+.tear-chart-composition {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 0;
+  height: clamp(280px, 44cqh, 420px);
+}
+
+/* The grid gives every row (a sector band or an instrument) 14px, so a label is never drawn over the next,
+   with room for the year labels above; a book of one instrument still gets a box a chart can be read in.
+   --composition-rows is the row count, set on the box by the card. */
+.tear-chart-composition-heat {
+  height: clamp(200px, calc(var(--composition-rows, 12) * 14px + 40px), 560px);
+}

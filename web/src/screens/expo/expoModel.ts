@@ -1,7 +1,7 @@
 // EXPO (TASKS 9.4; ANALYTICS_CATALOG EX1 and EX2): a run's exposure and turnover as the API sends them.
 // The summary rows are the API's own means (the same figures as the run books' exposure card); the
-// per-session rows pair each session's gross and net exposure with that session's turnover by date.
-// Nothing is summed or averaged here. Pure.
+// per-session rows pair each session's gross and net exposure with that session's turnover by date; the
+// CSV adds one column per instrument, as served. Nothing is summed or averaged here. Pure.
 import type { Schemas } from '../../api/types'
 import { toCsv } from '../../chrome/exportCsv'
 import { EXPO } from '../../copy/books'
@@ -57,8 +57,23 @@ export function sessionRows(view: RunExposure): SessionRow[] {
   return rows.reverse()
 }
 
+/** The instrument keys of the served by_instrument field, in plain code unit order (stable on every machine). */
+function instrumentKeys(view: RunExposure): string[] {
+  return Object.keys(view.exposure?.by_instrument ?? {}).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+}
+
+/**
+ * The per-session rows as CSV, newest first: Session, Gross, Net, Turnover, then one column per
+ * by_instrument key (sorted by key, named by it). Each instrument cell is the served value of that
+ * session's index, at the precision the API sent it; a series that is shorter than the sessions leaves
+ * the cell empty. Nothing is summed, signed or rounded.
+ */
 export function exposureCsv(view: RunExposure): { readonly csv: string; readonly rows: number } {
   const rows = sessionRows(view)
   const C = EXPO.cols
-  return { csv: toCsv([C.date, C.gross, C.net, C.turnover], rows.map((r) => [r.date, r.gross, r.net, r.turnover])), rows: rows.length }
+  const keys = instrumentKeys(view)
+  const served = view.exposure?.by_instrument ?? {}
+  const last = rows.length - 1
+  const body = rows.map((r, n) => [r.date, r.gross, r.net, r.turnover, ...keys.map((k) => served[k]?.[last - n] ?? null)])
+  return { csv: toCsv([C.date, C.gross, C.net, C.turnover, ...keys], body), rows: rows.length }
 }
