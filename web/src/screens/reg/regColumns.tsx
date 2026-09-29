@@ -2,7 +2,9 @@
 // figures, verdicts as bracket text in up and down colours (never a fill alone), `--` for missing.
 // Module scope, so MonitorGrid gets a stable array.
 import type { RowData } from '@tanstack/react-table'
+import type { WatchMark } from '../../chrome/RecordWatch.marks'
 import type { MonitorColumn } from '../../grids/MonitorGrid'
+import { withWatchColumn } from '../../grids/watchColumn'
 import { DEFLATED } from '../../copy/deflated'
 import { MT, REG } from '../../copy/reg'
 import { amendmentText, badgeText, formatCount, formatPValue, hashStatus, shortSha, tagText, verdictTone, type RegRow } from './regModel'
@@ -65,6 +67,17 @@ export const MT_COLUMNS: readonly MonitorColumn<MtRow>[] = [
 /** The columns a narrow panel keeps (a 682px HOME cell at 1366x768): no sideways scroll there. */
 const COMPACT_IDS: ReadonlySet<string> = new Set(['name', 'tag', 'verdict', 'n', 'p', 'holm', 'bhQ', 'hash', 'amend'])
 export const REG_COMPACT_COLUMNS: readonly MonitorColumn<RegRow>[] = REG_COLUMNS.filter((c) => COMPACT_IDS.has(c.id))
+/**
+ * The board's columns for the watch's registry marks (useWatchMarks('registry')): the full set, or the
+ * narrow one, with the Seen column first while something is marked. While marked, the narrow set grows by
+ * the 44 px Seen column and keeps Amend, the only board cue for an amendment that does not bind. A clean
+ * watch gives the module arrays themselves, so nothing about the board (its width, its compact threshold)
+ * moves. Call it in a useMemo keyed on the marks map and `compact`.
+ */
+export function regBoardColumns(marks: ReadonlyMap<string, WatchMark>, compact: boolean): readonly MonitorColumn<RegRow>[] {
+  if (marks.size === 0) return compact ? REG_COMPACT_COLUMNS : REG_COLUMNS
+  return withWatchColumn(compact ? REG_COMPACT_COLUMNS : REG_COLUMNS, marks, regRowId)
+}
 
 export const regRowId = (r: RegRow): string => r.name
 export const mtRowId = (r: MtRow): string => r.name

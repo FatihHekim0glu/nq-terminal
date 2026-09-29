@@ -8,11 +8,14 @@ import { resetConnection } from '../../api/connection'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { resetMessage, useMessage } from '../../chrome/MessageLine.store'
 import { activateNumbered, numberedItems, resetNumbered } from '../../chrome/NumberedActions'
+import { RecordWatchReader, resetRecordWatchBoot, resetRecordWatchView, useRecordWatch, type RecordWatchView } from '../../chrome/RecordWatch.live'
 import { captureDownloads } from '../../chrome/download.testUtil'
 import type { LineStackProps } from '../../charts/LineStack.types'
 import { stubLayout } from '../../grids/testing'
+import { gridWidth } from '../../grids/useElementWidth'
+import { useRecordWatchStore } from '../../state/recordWatch.store'
 import { HOME_PANEL_IDS } from '../layouts/layouts'
-import { REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, REGISTRY } from './regFixtures'
 import { CONFIRM, REG } from '../../copy/reg'
 import { DEFLATED } from '../../copy/deflated'
 import { EVIDENCE, REG_VIEW_COPY } from '../../copy/evidence'
@@ -20,6 +23,7 @@ import { fillCopy } from '../../copy/workspace'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import RegEvidence from './RegEvidence'
 import RegScreen from './RegScreen'
+import { REG_COLUMNS, REG_COMPACT_COLUMNS, regBoardColumns } from './regColumns'
 import type { EvidenceRow } from './evidenceModel'
 import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi, type Seen } from './testHarness'
 
@@ -734,5 +738,236 @@ describe('REG: 95) Compare basket (roadmap #9 phase B, W6-R9b)', () => {
     await waitFor(() => expect(charts.props.length).toBeGreaterThan(0))
     const text = (region.textContent ?? '').replace(fillCopy(REG.compare.note, { cost: REG.compare.costs['1'] }), '')
     expect(text).not.toMatch(/\[(PASS|FAIL|CHECK)\]|\bp\s*[=<]|Sharpe|DSR|Holm|BH q/i)
+  })
+})
+
+// The Seen column (roadmap 16, slice 3): the record watch marks a registry row NEW when it is not in this
+// browser's checkpoint and CHG when a field that should never move was rewritten. The marks come through
+// the real watch (RecordWatchReader over a seeded checkpoint), so the key the column reads is the key the
+// watch writes.
+describe('REG: the Seen column from the record watch', () => {
+  let watch: RecordWatchView | undefined
+
+  function WatchProbe() {
+    watch = useRecordWatch()
+    return null
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    useRecordWatchStore.setState({ checkpoint: null })
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    watch = undefined
+  })
+  afterEach(() => {
+    resetRecordWatchView()
+    resetRecordWatchBoot()
+    useRecordWatchStore.setState({ checkpoint: null })
+  })
+
+  type Loose = { sources: { registry: { records: Record<string, Record<string, unknown>> } } }
+
+  /** A checkpoint of the fixtures, edited by `change`, so the watch finds the difference. */
+  async function seed(change: (s: Loose) => void = () => undefined): Promise<void> {
+    const lazy = await import('../../chrome/RecordWatch.lazy')
+    const snapshot = JSON.parse(JSON.stringify(lazy.snapshotOf({ registry: REGISTRY, confirmations: CONFIRMATIONS }, Date.UTC(2026, 8, 20, 14, 0)))) as Loose
+    change(snapshot)
+    expect(useRecordWatchStore.getState().setCheckpoint(snapshot as unknown as Parameters<typeof lazy.diffWatch>[0])).toBe(true)
+  }
+
+  async function mountWatched() {
+    const seen = stubApi()
+    mountScreen(
+      <>
+        <RecordWatchReader />
+        <WatchProbe />
+        <RegScreen params={panelParams('REG')} context={null} />
+      </>,
+    )
+    await waitFor(() => expect(bodyRows().length).toBe(REGISTRY.counts.rows))
+    return seen
+  }
+
+  const heads = () => within(board()).getAllByRole('columnheader').map((h) => h.textContent)
+  const seenOf = (name: string) => within(rowOf(name)).getAllByRole('gridcell')[heads().indexOf('Seen')]
+
+  /** REG's measured width (jsdom lays nothing out) for the main column only. */
+  function stubMainWidth(width: number) {
+    return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return { width: this.classList.contains('reg-main') ? width : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect
+    })
+  }
+
+  it('adds no column when the watch has nothing to mark', async () => {
+    stubApi()
+    await ready()
+    expect(heads()).not.toContain('Seen')
+    expect(heads()[1]).toBe('Name')
+  })
+
+  it('adds no column when the checkpoint matches the records', async () => {
+    await seed()
+    await mountWatched()
+    await waitFor(() => expect(watch?.state).toBe('clean'))
+    expect(heads()).not.toContain('Seen')
+  })
+
+  it('shows CHG on the row whose frozen field was rewritten (volmanaged_v0, p), first after the number', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.123456))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(heads().slice(1, 3)).toEqual(['Seen', 'Name'])
+    expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+    expect(seenOf('overnight_v0')?.textContent).toBe('')
+    expect(within(board()).getAllByText('CHG')).toHaveLength(1)
+    expect(within(board()).queryByText('NEW')).toBeNull()
+  })
+
+  it('shows NEW, toned muted, on a row the checkpoint does not know', async () => {
+    await seed((s) => void delete s.sources.registry.records['rebal_v0'])
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(seenOf('rebal_v0')?.textContent).toBe('NEW')
+    expect(seenOf('rebal_v0')?.classList.contains('muted')).toBe(true)
+    expect(seenOf('za_v0')?.textContent).toBe('')
+  })
+
+  it('shows NEW and CHG side by side on their own rows', async () => {
+    await seed((s) => {
+      delete s.sources.registry.records['rebal_v0']
+      s.sources.registry.records['volmanaged_v0']!['p'] = 0.5
+    })
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    expect(seenOf('rebal_v0')?.textContent).toBe('NEW')
+    expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+  })
+
+  it('keeps the registry name as the Number <GO> label and opens DES for the picked row', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const labels = numberedItems(PANEL_ID).map((i) => i.label)
+    expect(labels).toEqual(expect.arrayContaining(['volmanaged_v0', 'eomtsy_v0']))
+    expect(labels).not.toContain('CHG')
+    expect(labels).not.toContain('')
+    const { lines, stop } = captureLines()
+    try {
+      const item = numberedItems(PANEL_ID).find((i) => i.label === 'eomtsy_v0')
+      act(() => {
+        activateNumbered(PANEL_ID, item!.n)
+      })
+      expect(lines.at(-1)).toEqual({ line: 'eomtsy_v0 DES', newPanel: false })
+    } finally {
+      stop()
+    }
+  })
+
+  it('leaves the sealed confirmations block and the CSV export alone', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const block = screen.getByRole('region', { name: /Sealed confirmations/ })
+    expect(within(block).queryByText('CHG')).toBeNull()
+    const saved = captureDownloads()
+    try {
+      fireEvent.click(screen.getByRole('button', { name: /^98\) Export/ }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: REG.export.csv }))
+      const header = (await saved.text(REG.export.fileName)).split('\r\n')[0]
+      expect(header).not.toContain('Seen')
+    } finally {
+      saved.restore()
+    }
+  })
+
+  it('still marks a row for the compare basket with Space while the column shows', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    const g = board()
+    act(() => g.focus())
+    const target = bodyRows().indexOf(rowOf('volmanaged_v0'))
+    for (let i = 0; i < target; i += 1) fireEvent.keyDown(g, { key: 'ArrowDown' })
+    fireEvent.keyDown(g, { key: ' ' })
+    expect(rowOf('volmanaged_v0').getAttribute('data-marked')).toBe('true')
+    expect(screen.getByRole('button', { name: /^95\) Compare 1$/ })).toBeTruthy()
+  })
+
+  it('drops the column again once WATCH SEEN has marked everything as seen', async () => {
+    await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+    await mountWatched()
+    await waitFor(() => expect(heads()).toContain('Seen'))
+    act(() => void watch?.accept())
+    await waitFor(() => expect(heads()).not.toContain('Seen'))
+    expect(within(board()).queryByText('CHG')).toBeNull()
+  })
+
+  it('moves the narrow-panel threshold by the 44 px column only while the watch has marks', async () => {
+    const between = gridWidth(REG_COLUMNS) + 10
+    const rect = stubMainWidth(between)
+    try {
+      stubApi()
+      await ready()
+      // Clean: the full set fits, exactly as before the column existed.
+      expect(heads()).toContain('Bonf')
+      expect(screen.queryByText(/Columns hidden here/)).toBeNull()
+      cleanup()
+      resetRecordWatchView()
+      await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+      await mountWatched()
+      // Marked: the full set plus Seen no longer fits, so the narrow set shows and says so.
+      await waitFor(() => expect(heads()).toContain('Seen'))
+      expect(heads()).not.toContain('Bonf')
+      expect(screen.getByText(/Columns hidden here/)).toBeTruthy()
+    } finally {
+      rect.mockRestore()
+    }
+  })
+
+  it('in a narrow panel the Seen column is added to the narrow set, which keeps Amend, and the note is the plain one', async () => {
+    const rect = stubMainWidth(660)
+    try {
+      await seed((s) => void (s.sources.registry.records['volmanaged_v0']!['p'] = 0.5))
+      await mountWatched()
+      await waitFor(() => expect(heads()).toContain('Seen'))
+      expect(heads().slice(0, 2)).toEqual(['Number', 'Seen'])
+      expect(heads()).toEqual(expect.arrayContaining(['Seen', 'Name', 'Tag', 'Verdict', 'p', 'Holm', 'BH q', 'Hash ok', 'Amend']))
+      expect(heads()).not.toContain('Bonf')
+      expect(seenOf('volmanaged_v0')?.textContent).toBe('CHG')
+      expect(screen.queryByText(/Seen column replaces Amend/)).toBeNull()
+      expect(screen.getByText(REG.compactNote)).toBeTruthy()
+    } finally {
+      rect.mockRestore()
+    }
+  })
+})
+
+describe('regBoardColumns: the board columns for a set of watch marks', () => {
+  const NONE = new Map<string, 'new' | 'changed'>()
+  const SOME = new Map<string, 'new' | 'changed'>([['volmanaged_v0', 'changed']])
+
+  it('is the plain module arrays for a clean watch, so nothing about the board changes', () => {
+    expect(regBoardColumns(NONE, false)).toBe(REG_COLUMNS)
+    expect(regBoardColumns(NONE, true)).toBe(REG_COMPACT_COLUMNS)
+  })
+
+  it('puts Seen first on the full set and leaves every other column in place', () => {
+    const cols = regBoardColumns(SOME, false)
+    expect(cols.map((c) => c.id)).toEqual(['watch', ...REG_COLUMNS.map((c) => c.id)])
+  })
+
+  it('puts Seen first on the narrow set, keeps Amend, and makes the narrow grid the 44 px column wider', () => {
+    const cols = regBoardColumns(SOME, true)
+    expect(cols.map((c) => c.id)).toEqual(['watch', ...REG_COMPACT_COLUMNS.map((c) => c.id)])
+    expect(cols.map((c) => c.id)).toContain('amend')
+    expect(gridWidth(cols)).toBe(gridWidth(REG_COMPACT_COLUMNS) + 44)
+  })
+
+  it('keys the column by the registry name', () => {
+    const watch = regBoardColumns(SOME, false)[0]!
+    const row = (name: string) => ({ name }) as Parameters<typeof watch.value>[0]
+    expect(watch.value(row('volmanaged_v0'))).toBe('CHG')
+    expect(watch.value(row('overnight_v0'))).toBeNull()
   })
 })

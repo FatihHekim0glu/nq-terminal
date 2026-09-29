@@ -9,11 +9,13 @@
 // double click or Number <GO> on a row opens DES for it. The DSR column is SV3's Deflated Sharpe
 // ([POST HOC], an extra view only, never a verdict) from GET /api/analytics/deflated. Space marks up to
 // eight rows (the basket, also in HOME's REG cell); 95) Compare n then replaces the views with RegCompare,
-// their served Basis A screen series, and 97) Settings can clear the basket. The registry's own error and
-// loading lines are PanelFault and PanelLoading. Read only.
+// their served Basis A screen series, and 97) Settings can clear the basket. While the record watch has
+// marked a registry row (roadmap 16), a Seen column first on the board shows NEW or CHG for it. The
+// registry's own error and loading lines are PanelFault and PanelLoading. Read only.
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
+import { useWatchMarks } from '../../chrome/RecordWatch.marks'
 import { switchKeepingFocus } from '../../chrome/keepFocus'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
 import { postMessage } from '../../chrome/MessageLine.store'
@@ -31,7 +33,7 @@ import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
 import { saveText } from '../../chrome/download'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { toggleMark } from '../runs/basket'
-import { REG_COLUMNS, REG_COMPACT_COLUMNS, regRowId } from './regColumns'
+import { regBoardColumns, regRowId } from './regColumns'
 import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCsv, type CriterionId, type RegRow, type RoundKey } from './regModel'
 import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
@@ -150,7 +152,12 @@ export default function RegScreen(props: ScreenProps) {
   const active = views ? view : 'board'
   const viewId = useId()
   const main = useElementWidth()
-  const compact = main.width !== null && main.width < gridWidth(REG_COLUMNS)
+  // A clean watch adds no column, so the narrow threshold sits where it always did; with marks it counts
+  // the 44 px Seen column too, so the full set never overflows the panel.
+  const watchMarks = useWatchMarks('registry')
+  const fullColumns = useMemo(() => regBoardColumns(watchMarks, false), [watchMarks])
+  const compact = main.width !== null && main.width < gridWidth(fullColumns)
+  const boardColumns = useMemo(() => (compact ? regBoardColumns(watchMarks, true) : fullColumns), [compact, watchMarks, fullColumns])
   const data = useRegData(main.width !== null && needsDeflated(active, compact))
   const { registry, cards, rows, confirmations, confirmRows } = data
   const [f, setF] = useState<Filters>(NO_FILTER)
@@ -185,7 +192,7 @@ export default function RegScreen(props: ScreenProps) {
   const board: ReactNode = (
     <>
       <div className="reg-grid">
-        <MonitorGrid label={REG.gridLabel} rows={shown} columns={compact ? REG_COMPACT_COLUMNS : REG_COLUMNS} rowId={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" marked={marked} onMark={onMark} />
+        <MonitorGrid label={REG.gridLabel} rows={shown} columns={boardColumns} rowId={regRowId} rowLabel={regRowId} onOpen={onOpen} emptyText={REG.empty} scroll="panel" marked={marked} onMark={onMark} />
       </div>
       {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : null}
       {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}

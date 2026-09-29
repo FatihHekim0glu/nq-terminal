@@ -18,4 +18,10 @@ export const WATCH = {
   unsaved: 'This browser could not keep the mark, so nothing was marked as seen.',
   /** The first visit when this browser could not keep the checkpoint: nothing is being compared. */
   unkept: 'This browser could not keep a watch checkpoint, so changes to the records are not being watched.',
+  /** Header of the grid column that marks new and rewritten rows (RUNS, REG, LEDG). */
+  column: 'Seen',
+  /** The column's cue for a record that is new or moved since the checkpoint. */
+  new: 'NEW',
+  /** The column's cue for a record that should not change and was rewritten. */
+  chg: 'CHG',
 } as const
