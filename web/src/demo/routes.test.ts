@@ -11,9 +11,12 @@ import { FENCE_MS, barsQuery, gateRuleText, rangeWindow } from '../screens/gp/mo
 import { RV_WINDOW } from '../screens/gp/useGpData'
 import { PAGE_ROWS } from '../screens/runs/runModel'
 import { BOOK } from '../screens/live/liveFixtures'
+import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../screens/des/desTestData'
+import { OVERNIGHT_SCREEN, VOLMANAGED_SCREEN } from '../screens/des/robustness.fixtures'
 import { intParam } from './data/answer'
 import { DEMO_DETAIL, DEMO_TEXT } from './data/text'
 import { demoLiveJournalRows, demoLiveStatus } from './data/live'
+import { HYPOTHESIS_DETAILS, withScreen } from './data/research'
 import { DEMO_ROUTES, answerDemo, type DemoRoutes } from './routes'
 
 /** What a GET on `path` with `request` answers, the URL built exactly as the API client builds it. */
@@ -276,6 +279,79 @@ describe('no body is served under another context', () => {
     refused(get('/api/seasonality/instrument/{root}', { path: { root: 'NQ' }, query: { start_year: 2010, end_year: 2021 } }), 404)
     expect(ok('/api/seasonality/instrument/{root}', { path: { root: 'NQ' }, query: { start_year: 2020, end_year: 2021 } }).subject).toBe('NQ.V.0')
     expect(ok('/api/market/rolls').markets.map((m) => m.root)).toEqual(['NQ', 'CL'])
+  })
+})
+
+describe('DES cards carry a screen file only under the hypothesis it was recorded for', () => {
+  const screenOf = (name: string) => ok('/api/hypotheses/{name}', { path: { name } }).screen as Record<string, unknown> | null
+
+  it('serves volmanaged_v0 with its screen: the variants and the card spec sha', () => {
+    const detail = ok('/api/hypotheses/{name}', { path: { name: HYP } })
+    const screen = detail.screen as Record<string, unknown>
+    expect(screen['name']).toBe(HYP)
+    expect(screen['spec_sha256']).toBe(detail.card.spec_sha256)
+    expect(Object.keys(screen['variants'] as Record<string, unknown>)).toHaveLength(13)
+    expect(screen['placebo']).toBeTruthy()
+    // The whole file the fixture holds, served unchanged.
+    expect(screen).toEqual(VOLMANAGED_SCREEN)
+  })
+
+  it('serves overnight_v0 with its own screen, subsets included', () => {
+    const detail = ok('/api/hypotheses/{name}', { path: { name: 'overnight_v0' } })
+    const screen = detail.screen as Record<string, unknown>
+    expect(screen['name']).toBe('overnight_v0')
+    expect(screen['spec_sha256']).toBe(detail.card.spec_sha256)
+    expect(screen['subsets']).toBeTruthy()
+    expect(screen).toEqual(OVERNIGHT_SCREEN)
+  })
+
+  it('leaves every other card with the screen it was captured with (its name only)', () => {
+    for (const captured of [REBAL, ZA, ZA_C3]) {
+      expect(screenOf(captured.card.name)).toEqual(captured.screen)
+    }
+  })
+
+  it('never serves a screen file whose name or spec sha is not its card\'s', () => {
+    // A captured stub is just {name} (a card can name a differently named screen, za_v0's is za_v0_repaired);
+    // a whole file carries its spec sha and must be the card's own.
+    const whole = [...HYPOTHESIS_DETAILS].filter(([, detail]) => detail.screen !== null && 'spec_sha256' in detail.screen)
+    expect(whole.map(([name]) => name).sort()).toEqual(['overnight_v0', 'volmanaged_v0'])
+    for (const [name, detail] of whole) {
+      expect(detail.screen?.['name']).toBe(name)
+      expect(detail.screen?.['spec_sha256']).toBe(detail.card.spec_sha256)
+    }
+  })
+
+  it('does not write into the captured cards the tests and the gallery share', () => {
+    expect(VOLMANAGED.screen).toEqual({ name: HYP })
+    expect(OVERNIGHT.screen).toEqual({ name: 'overnight_v0' })
+  })
+
+  describe('withScreen', () => {
+    it('attaches the screen of a matching name and spec sha, as a copy of the card', () => {
+      const attached = withScreen(VOLMANAGED, VOLMANAGED_SCREEN)
+      expect(attached.screen).toBe(VOLMANAGED_SCREEN)
+      expect(attached).not.toBe(VOLMANAGED)
+      expect(attached.card).toBe(VOLMANAGED.card)
+    })
+
+    it('leaves the detail as it is when the screen belongs to another hypothesis', () => {
+      expect(withScreen(VOLMANAGED, OVERNIGHT_SCREEN)).toBe(VOLMANAGED)
+      expect(withScreen(OVERNIGHT, VOLMANAGED_SCREEN)).toBe(OVERNIGHT)
+    })
+
+    it('leaves the detail as it is when only the name matches (a screen of another spec version)', () => {
+      expect(withScreen(VOLMANAGED, { ...VOLMANAGED_SCREEN, spec_sha256: 'f'.repeat(64) })).toBe(VOLMANAGED)
+    })
+
+    it('leaves the detail as it is when only the spec sha matches (a file under another name)', () => {
+      expect(withScreen(VOLMANAGED, { ...VOLMANAGED_SCREEN, name: 'overnight_v0' })).toBe(VOLMANAGED)
+    })
+
+    it('leaves the detail as it is when the screen records no spec sha', () => {
+      const { spec_sha256: _sha, ...unsealed } = VOLMANAGED_SCREEN
+      expect(withScreen(VOLMANAGED, unsealed)).toBe(VOLMANAGED)
+    })
   })
 })
 

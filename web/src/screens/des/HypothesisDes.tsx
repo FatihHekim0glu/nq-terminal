@@ -1,6 +1,6 @@
 // DES for a hypothesis (TASKS 6.2; UI_SPEC section 7 "DES"; look spec 7.3): the red function bar with the
 // amber hypothesis field, the numbered trapezoid tabs `1) Profile 2) Pass checks 3) Costs and blocks
-// 4) Linked runs`, then the registration line (cyan name, verdict, tag, spec hash with its checks, round),
+// 4) Linked runs 5) Robustness`, then the registration line (cyan name, verdict, tag, spec hash with its checks, round),
 // the spec's hypothesis and frozen pass bar verbatim (two lines, More opens them), and the selected page.
 // A registered risk overlay carries [OVERLAY] beside its verdict. `98) Report` saves the description as
 // Markdown. Everything is read from GET /api/hypotheses/{name}; nothing is recomputed.
@@ -21,9 +21,10 @@ import DesCosts from './DesCosts'
 import DesLinks from './DesLinks'
 import { DesBar, LoadError, ShaChecks, Status, Tag, VerdictBadge, roving } from './DesParts'
 import DesProfile from './DesProfile'
+import DesRobustness from './DesRobustness'
 import { hypothesisText, passBarText, shortSha, type HypothesisDetail } from './desModel'
 import { desReport } from './desReport'
-import { DES_NUMBERS, DES_TABS, MAX_NUMBERED_RUNS, confirmationNumber, runNumber, type DesTab } from './desNumbers'
+import { DES_NUMBERS, DES_TABS, MAX_NUMBERED_CONFIRMATIONS, MAX_NUMBERED_RUNS, confirmationNumber, runNumber, type DesTab } from './desNumbers'
 
 export interface HypothesisDesProps {
   readonly name: string
@@ -79,7 +80,7 @@ function useDesNumbers(detail: HypothesisDetail | undefined, setTab: (tab: DesTa
       { n: DES_NUMBERS.registration, label: DES.cards.registration, run: () => actions.open('REG') },
       { n: DES_NUMBERS.runs, label: DES.cards.runs, run: () => setTab('links') },
       ...card.nautilus_runs.slice(0, MAX_NUMBERED_RUNS).map((run, i) => ({ n: runNumber(i), label: run, run: () => requestLine(`${run} RUN`) })),
-      ...card.confirmations.map((name, i) => ({ n: confirmationNumber(i), label: name, run: () => requestLine(`${name} DES`) })),
+      ...card.confirmations.slice(0, MAX_NUMBERED_CONFIRMATIONS).map((name, i) => ({ n: confirmationNumber(i), label: name, run: () => requestLine(`${name} DES`) })),
     ]
   }, [detail, actions, setTab])
   useNumbered(actions.panelId, 'des-links', items)
@@ -89,6 +90,7 @@ function Page({ tab, detail, link, onTab }: { readonly tab: DesTab; readonly det
   if (tab === 'checks') return <DesChecks detail={detail} />
   if (tab === 'costs') return <DesCosts detail={detail} />
   if (tab === 'links') return <DesLinks detail={detail} />
+  if (tab === 'robustness') return <DesRobustness detail={detail} />
   return <DesProfile detail={detail} link={link} onTab={onTab} />
 }
 

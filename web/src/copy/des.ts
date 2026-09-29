@@ -21,6 +21,7 @@ export const DES = {
     checks: 'Pass checks',
     costs: 'Costs and blocks',
     links: 'Linked runs',
+    robustness: 'Robustness',
   },
   actions: 'Actions',
   help: 'Help',

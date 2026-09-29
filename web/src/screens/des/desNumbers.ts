@@ -1,10 +1,13 @@
-// Number <GO> items of the DES tear sheet (look spec 7.3 numbering, UI_SPEC section 5). Tabs take 1 to 4
-// (TabStrip); the boxes and their jumps follow the look spec's DES wireframe from 8; linked runs start at 14
-// and sealed confirmations at 40, so the numbers a user learns stay put whichever page is shown.
+// Number <GO> items of the DES tear sheet (look spec 7.3 numbering, UI_SPEC section 5). Tabs take 1 to 5
+// (TabStrip: Profile, Pass checks, Costs and blocks, Linked runs, Robustness); the boxes and their jumps
+// follow the look spec's DES wireframe from 8; linked runs start at 14, sealed confirmations at 40 (40 to
+// 69), and the Robustness page's fork rows start at FORK_NUMBER_START (70, screens/des/forkModel.ts) and
+// run upward, so the numbers a user learns stay put whichever page is shown and none is used twice.
+import { FORK_NUMBER_START } from './forkModel'
 
-export type DesTab = 'profile' | 'checks' | 'costs' | 'links'
+export type DesTab = 'profile' | 'checks' | 'costs' | 'links' | 'robustness'
 
-export const DES_TABS: readonly DesTab[] = ['profile', 'checks', 'costs', 'links']
+export const DES_TABS: readonly DesTab[] = ['profile', 'checks', 'costs', 'links', 'robustness']
 
 export const DES_NUMBERS = {
   equity: 8,
@@ -19,6 +22,9 @@ export const DES_NUMBERS = {
 
 /** At most this many linked runs are numbered (14 to 39). */
 export const MAX_NUMBERED_RUNS = DES_NUMBERS.firstConfirmation - DES_NUMBERS.firstRun
+
+/** At most this many sealed confirmations are numbered (40 to 69), so none can take a fork row's number. */
+export const MAX_NUMBERED_CONFIRMATIONS = FORK_NUMBER_START - DES_NUMBERS.firstConfirmation
 
 export const runNumber = (i: number): number => DES_NUMBERS.firstRun + i
 export const confirmationNumber = (i: number): number => DES_NUMBERS.firstConfirmation + i

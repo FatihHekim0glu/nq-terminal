@@ -10,12 +10,18 @@ import { NumberingContext, type NumberedItem } from '../../chrome/PanelChrome.nu
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import type { ResolvedContext } from '../../commands/types'
 import { DEFLATED } from '../../copy/deflated'
-import { DES } from '../../copy/des'
+import { DES, DES_ROBUSTNESS } from '../../copy/des'
 import { fillCopy } from '../../copy/workspace'
 import { DEFLATED_REAL } from '../reg/deflatedFixtures'
 import { desDeflatedText } from '../reg/deflatedModel'
+import { RUNS } from '../runs/runs.fixtures'
+import { RUN_ANALYTICS } from '../tear/tear.fixtures'
+import { HYP_ANALYTICS } from '../tear/tearP1.fixtures'
 import DesScreen from './DesScreen'
 import { CONFIRMATION, HYPOTHESES, INSTRUMENT_NQ, OVERNIGHT, PANEL, REBAL, VOLMANAGED, ZA_C3 } from './desTestData'
+import { DES_NUMBERS, DES_TABS, MAX_NUMBERED_CONFIRMATIONS, MAX_NUMBERED_RUNS, confirmationNumber, runNumber } from './desNumbers'
+import { FORK_NUMBER_START } from './forkModel'
+import { OVERNIGHT_SCREEN, VOLMANAGED_SCREEN } from './robustness.fixtures'
 
 vi.mock('../../charts/LineStack', () => ({
   default: (props: { title: string; t: readonly number[]; panes: ReadonlyArray<{ summaryDrawdown?: unknown; series: ReadonlyArray<{ name: string; values: readonly unknown[] }> }> }) => (
@@ -79,14 +85,23 @@ function route(url: URL): Response {
   if (path === '/api/analytics/deflated') return json(DEFLATED_REAL)
   const panel = /^\/api\/analytics\/hypothesis\/([^/]+)\/panel$/.exec(path)
   if (panel) return json(PANEL)
+  // The robustness tab's reads: the run list, the 1 tick screen fork and the daily run fork answer; every
+  // other fork is refused the way the demo refuses it, so a failed fork must stay table text.
+  if (path === '/api/runs') return json(RUNS)
+  if (path === '/api/analytics/hypothesis/volmanaged_v0') return url.search === '?cost=1' ? json(HYP_ANALYTICS) : json({ detail: NOT_IN_DEMO }, 404)
+  if (path === '/api/analytics/run/nt_volmanaged_v0_fixture_m1') return url.search === '?freq=D' ? json(RUN_ANALYTICS) : json({ detail: NOT_IN_DEMO }, 404)
   const detail = /^\/api\/hypotheses\/([^/]+)$/.exec(path)
   const name = decodeURIComponent(detail?.[1] ?? '')
+  if (detail && detailOverrides[name]) return json(detailOverrides[name])
   if (detail && DETAILS[name]) return json(DETAILS[name])
   if (detail) return json({ detail: `unknown hypothesis: ${name}` }, 404)
   return json({ detail: 'not in this test' }, 404)
 }
 
 let calls: Array<{ url: string; method: string }> = []
+// A detail a test serves in place of the captured one (name to body), e.g. one that carries a screen file.
+let detailOverrides: Record<string, unknown> = {}
+const NOT_IN_DEMO = 'not in the demo dataset'
 // The /api/confirmations body a test serves in place of the default (null: [CONFIRMATION]).
 let confirmationBody: unknown[] | null = null
 // When true, /api/confirmations answers 500.
@@ -107,6 +122,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   confirmationBody = null
   confirmationsFail = false
+  detailOverrides = {}
 })
 
 const PARAMS: PanelParams = { code: 'DES', context: null, args: {}, group: '-' }
@@ -272,6 +288,123 @@ describe('DES, hypothesis tear sheet', () => {
     await openHypothesis('rebal_v0')
     expect(screen.getByRole('region', { name: /Round summary: round4_summary.md/ })).toBeTruthy()
     expect(screen.getByRole('columnheader', { name: 'verdict' })).toBeTruthy()
+  })
+})
+
+/** The latest item registered for Number `n` in any source of the panel (the registrar is fed per source). */
+function numbered(registrar: ReturnType<typeof vi.fn>, n: number): NumberedItem | undefined {
+  const batches = registrar.mock.calls as unknown as Array<[string, readonly NumberedItem[]]>
+  for (let i = batches.length - 1; i >= 0; i -= 1) {
+    const item = batches[i]![1].find((x) => x.n === n)
+    if (item) return item
+  }
+  return undefined
+}
+
+function registeredItems(registrar: ReturnType<typeof vi.fn>): NumberedItem[] {
+  return (registrar.mock.calls as unknown as Array<[string, readonly NumberedItem[]]>).flatMap((c) => [...c[1]])
+}
+
+describe('DES, tab 5 Robustness', () => {
+  it('reads 1) Profile to 5) Robustness on the tab strip', async () => {
+    await openHypothesis('volmanaged_v0')
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      '1) Profile', '2) Pass checks', '3) Costs and blocks', '4) Linked runs', '5) Robustness',
+    ])
+    expect(DES.tabs.robustness).toBe('Robustness')
+    expect(DES_TABS).toEqual(['profile', 'checks', 'costs', 'links', 'robustness'])
+  })
+
+  it('leaves the tabs in front of the boxes that start at Number 8', () => {
+    expect(DES_TABS.length).toBeLessThan(DES_NUMBERS.equity)
+  })
+
+  it('asks nothing of the robustness tab before it is opened', async () => {
+    await openHypothesis('volmanaged_v0')
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/sealed')).toBe(true))
+    expect(calls.some((c) => c.url === '/api/runs' || c.url.startsWith('/api/analytics/run/'))).toBe(false)
+    expect(screen.queryByTestId('des-robustness-spec')).toBeNull()
+  })
+
+  it('opens on Number 5 and draws every section the screen file records', async () => {
+    detailOverrides['volmanaged_v0'] = { ...VOLMANAGED, screen: VOLMANAGED_SCREEN }
+    const { registrar } = await openHypothesis('volmanaged_v0')
+    await waitFor(() => expect(numbered(registrar, 5)?.label).toBe('Robustness'))
+    act(() => numbered(registrar, 5)?.run())
+    expect(screen.getByRole('tab', { name: '5) Robustness' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('tabpanel', { name: 'Robustness' })).toBeTruthy()
+    for (const id of ['spec', 'placebo', 'stability', 'quintiles', 'tails']) {
+      expect(await screen.findByTestId(`des-robustness-${id}`)).toBeTruthy()
+    }
+    // Two 14-bar spec-curve ladders (headline plus 13 recorded variants), the terminal's own count line.
+    for (const id of ['des-spec-dsr', 'des-spec-alpha']) {
+      expect((JSON.parse(screen.getByTestId(`ladder-${id}`).dataset['bars'] ?? '[]') as unknown[]).length).toBe(14)
+    }
+    expect(screen.getByTestId('des-robustness-negative-line').textContent).toBe(
+      '9 of 13 recorded variants have a negative Sharpe difference (m - BH) at 1 tick; counted by the terminal from the screen file [POST HOC].',
+    )
+    expect(screen.getByTestId('des-robustness-placebo').textContent).toContain('0.8775')
+    for (const id of ['des-loyo', 'des-per-year']) expect(screen.getByTestId(`ladder-${id}`)).toBeTruthy()
+    expect(screen.queryByTestId('des-robustness-subsets')).toBeNull()
+  })
+
+  it('draws the forks it can read and leaves a refused fork as table text, never an alert', async () => {
+    detailOverrides['volmanaged_v0'] = { ...VOLMANAGED, screen: VOLMANAGED_SCREEN }
+    const { registrar } = await openHypothesis('volmanaged_v0')
+    await waitFor(() => expect(numbered(registrar, 5)).toBeTruthy())
+    act(() => numbered(registrar, 5)?.run())
+    const refused = fillCopy(DES_ROBUSTNESS.notAvailable, { detail: NOT_IN_DEMO })
+    const table = await screen.findByRole('table', { name: DES_ROBUSTNESS.forksTitle })
+    await waitFor(() => expect(within(table).getAllByText(refused)).toHaveLength(3))
+    const rows = within(table).getAllByRole('row').slice(1)
+    expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['70', '71', '72', '73', '74'])
+    // The 1 tick screen fork (71) and the daily run fork (73) are drawn; the other three read as refused.
+    expect(rows.map((r) => r.textContent?.includes(refused))).toEqual([true, false, true, false, true])
+    expect(screen.getByTestId('ladder-des-forks-a')).toBeTruthy()
+    expect(screen.getByTestId('ladder-des-forks-b')).toBeTruthy()
+    expect(screen.queryAllByRole('alert')).toHaveLength(0)
+    expect(calls.every((c) => c.method === 'GET' && c.url.startsWith('/api/'))).toBe(true)
+  })
+
+  it('says nothing is recorded for a bare screen file', async () => {
+    const { registrar } = await openHypothesis('overnight_v0')
+    await waitFor(() => expect(numbered(registrar, 5)).toBeTruthy())
+    act(() => numbered(registrar, 5)?.run())
+    expect(await screen.findByText(DES_ROBUSTNESS.none)).toBeTruthy()
+  })
+
+  it('draws the subsets of overnight_v0 without a p column', async () => {
+    detailOverrides['overnight_v0'] = { ...OVERNIGHT, screen: OVERNIGHT_SCREEN }
+    const { registrar } = await openHypothesis('overnight_v0')
+    await waitFor(() => expect(numbered(registrar, 5)).toBeTruthy())
+    act(() => numbered(registrar, 5)?.run())
+    const subsets = await screen.findByRole('table', { name: DES_ROBUSTNESS.subsetsTitle })
+    expect(Array.from(subsets.querySelectorAll('th')).some((th) => /\bp\b/i.test(th.textContent ?? ''))).toBe(false)
+    expect(screen.queryByTestId('des-robustness-spec')).toBeNull()
+  })
+})
+
+describe('DES, Number <GO> ranges', () => {
+  const CARDS = [OVERNIGHT, VOLMANAGED, REBAL, ZA_C3].map((d) => d.card)
+
+  it('keeps the fork rows (from 70) above every confirmation number in use', () => {
+    expect(FORK_NUMBER_START).toBe(70)
+    const inUse = CARDS.flatMap((card) => card.confirmations.map((_, i) => confirmationNumber(i)))
+    expect(inUse.length).toBeGreaterThan(0)
+    for (const n of inUse) expect(n).toBeLessThan(FORK_NUMBER_START)
+    // The last confirmation slot is 69, and the linked runs (14 to 39) end where the confirmations start.
+    expect(confirmationNumber(MAX_NUMBERED_CONFIRMATIONS - 1)).toBe(FORK_NUMBER_START - 1)
+    expect(runNumber(MAX_NUMBERED_RUNS - 1)).toBeLessThan(DES_NUMBERS.firstConfirmation)
+  })
+
+  it('numbers at most 30 confirmations, so none can take a fork row number', async () => {
+    const names = Array.from({ length: MAX_NUMBERED_CONFIRMATIONS + 3 }, (_, i) => `conf_${i}`)
+    detailOverrides['overnight_v0'] = { ...OVERNIGHT, card: { ...OVERNIGHT.card, confirmations: names } }
+    const { registrar } = await openHypothesis('overnight_v0')
+    await waitFor(() => expect(registeredItems(registrar).some((i) => i.label === 'conf_0')).toBe(true))
+    const confirmations = registeredItems(registrar).filter((i) => i.label.startsWith('conf_'))
+    expect(new Set(confirmations.map((i) => i.label)).size).toBe(MAX_NUMBERED_CONFIRMATIONS)
+    expect(Math.max(...confirmations.map((i) => i.n))).toBe(FORK_NUMBER_START - 1)
   })
 })
 
