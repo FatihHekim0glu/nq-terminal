@@ -21,7 +21,18 @@
 /* The kill and health segments share one live region; it lays out like the segments around it. */
 .nqt-status .seg-live { display: flex; align-items: center; flex: 0 0 auto; }
 
-/* Narrow viewports (about 400% zoom): the line wraps instead of clipping (1.4.10). */
+/* 200% zoom (about 960 CSS px, U22): the line wraps to a second row before a shrink segment (a
+   link-group context, the DATA fence) would need its 28ch ellipsis, which cut the DATA fence to one
+   letter and, under the WCAG 1.4.12 text-spacing override, ellipsised sooner still. Wrapped, a shrink
+   segment has its own line to grow on, so it prints in full instead. */
+@media (max-width: 1100px) {
+  .nqt-status { flex-wrap: wrap; height: auto; min-height: var(--status-h); }
+  .nqt-status .seg.push { margin-left: 0; }
+  .nqt-status .seg.shrink { flex: 0 0 auto; max-width: none; overflow: visible; text-overflow: clip; }
+}
+
+/* Narrower still (about 400% zoom): unchanged from the 1100px break, restated so 1.4.10's own reflow
+   width is never missed if the break above ever changes. */
 @media (max-width: 700px) {
   .nqt-status { flex-wrap: wrap; height: auto; min-height: var(--status-h); }
   .nqt-status .seg.push { margin-left: 0; }

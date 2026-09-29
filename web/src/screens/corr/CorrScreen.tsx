@@ -21,17 +21,61 @@ import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import { MARKET } from '../../copy/market'
+import MonitorGrid, { signTone, type MonitorColumn } from '../../grids/MonitorGrid'
 import UniverseField from '../mon/UniverseField'
 import { DEFAULT_WINDOW, WINDOW_OPTIONS, formatCorr, gateText, type Universe } from '../mon/model'
 import QueryStatus from '../mon/QueryStatus'
 import '../mon/market.css'
 import { CORR } from '../../copy/corr'
-import { blockOf, corrHeatmapInput, defaultPair, matrixCsv, matrixEntry, pairSeries, rootOf, type CorrMatrix, type CorrOrder, type PairView } from './model'
+import { blockOf, corrHeatmapInput, defaultPair, matrixCsv, matrixEntry, pairSeries, rootOf, sectorOrder, type Correlation, type CorrMatrix, type CorrOrder, type PairView } from './model'
 import './corr.css'
 
 const WINDOW_FIELD_OPTIONS = WINDOW_OPTIONS.map((n) => ({ value: String(n), label: fillCopy(MARKET.windowOption, { n }) }))
 const NUMBER_WINDOW = 11
 const NUMBER_FULL = 12
+
+export type CorrView = 'heatmap' | 'table'
+
+export interface PairRow {
+  readonly a: string
+  readonly b: string
+  readonly value: number | null
+}
+
+/**
+ * U13: the matrix flattened to one row per unordered pair (i < j over `order`, the symbols order by
+ * default), so the T table view can be a selectable MonitorGrid, keyboard reachable, rather than the
+ * heatmap's plain (and unselectable) accessible table. Each row is exactly one matrix cell: Enter on it
+ * sets that pair. `order` is the same permutation the Heatmap draws in (block.order when Order is
+ * Clustered, sectorOrder(...) when By sector; see corrHeatmapInput), so the Table view's Order setting
+ * and its accessible name (tableLabel) agree with what is actually shown. The grid scrolls in its own
+ * box (own-scroll, virtualised), not the panel body, so 351 rows never paint over the panel below it.
+ */
+export function pairsRows(block: Pick<Correlation, 'symbols' | 'matrix'>, order?: readonly number[]): PairRow[] {
+  const { symbols, matrix } = block
+  const idx = order ?? symbols.map((_, i) => i)
+  const rows: PairRow[] = []
+  for (let i = 0; i < idx.length; i += 1) {
+    for (let j = i + 1; j < idx.length; j += 1) {
+      const a = idx[i]!
+      const b = idx[j]!
+      rows.push({ a: symbols[a]!, b: symbols[b]!, value: matrix[a]?.[b] ?? null })
+    }
+  }
+  return rows
+}
+
+const PAIR_COLUMNS: readonly MonitorColumn<PairRow>[] = [
+  { id: 'a', header: CORR.colA, width: 64, kind: 'name', value: (r) => rootOf(r.a) },
+  { id: 'b', header: CORR.colB, width: 64, kind: 'name', value: (r) => rootOf(r.b) },
+  { id: 'r', header: CORR.colR, width: 72, kind: 'num', value: (r) => r.value, format: (r) => formatCorr(r.value), tone: (r) => signTone(r.value) },
+]
+
+function tableLabel(s: { readonly matrix: CorrMatrix; readonly order: CorrOrder; readonly window: number }, asOf: string): string {
+  const matrix = s.matrix === 'window' ? fillCopy(CORR.heatNameWindow, { n: s.window }) : fillCopy(CORR.heatNameFull, { asOf })
+  const order = s.order === 'clustered' ? CORR.orderNameClustered : CORR.orderNameSector
+  return fillCopy(CORR.tableName, { matrix, order })
+}
 
 function actionsItem(actions: PanelActions): FunctionBarItem {
   return {
@@ -51,6 +95,8 @@ interface Settings {
   readonly order: CorrOrder
   /** The chosen pair; null until the user picks one (the default pair is then shown). */
   readonly pair: readonly [string, string] | null
+  /** U13: the heatmap, or a selectable MonitorGrid of every pair (Enter on a row sets the pair). */
+  readonly view: CorrView
 }
 
 interface ParamsProps {
@@ -85,6 +131,13 @@ function Params({ s, set, universe, pair }: ParamsProps) {
           value={s.order}
           onChange={(v) => set({ ...s, order: v as CorrOrder })}
           options={[{ value: 'clustered', label: CORR.orderClustered }, { value: 'sector', label: CORR.orderSector }]}
+        />
+        <span className="param-label">{CORR.view}</span>
+        <ToggleGroup
+          label={CORR.view}
+          value={s.view}
+          onChange={(v) => set({ ...s, view: v as CorrView })}
+          options={[{ value: 'heatmap', label: CORR.viewHeatmap }, { value: 'table', label: CORR.viewTable }]}
         />
         <DropdownField label={CORR.pair} value={pair[0]} options={options} onChange={(v) => pick(0, v)} />
         <DropdownField label={CORR.pairVs} value={pair[1]} options={options} onChange={(v) => pick(1, v)} />
@@ -144,11 +197,21 @@ function Notes({ universe }: { readonly universe: Universe }) {
 
 export default function CorrScreen({ params }: ScreenProps) {
   const actions = usePanelActions()
-  const [s, set] = useState<Settings>({ window: DEFAULT_WINDOW, matrix: 'window', order: 'clustered', pair: null })
+  const [s, set] = useState<Settings>({ window: DEFAULT_WINDOW, matrix: 'window', order: 'clustered', pair: null, view: 'heatmap' })
   const query = useUniverse(s.window)
   const universe = query.data
   const heat = useMemo(() => (universe ? corrHeatmapInput(universe, s.matrix, s.order) : null), [universe, s.matrix, s.order])
+  // The table's row order must agree with the Heatmap's order (and tableLabel's accessible name): the
+  // API's clustered order (block.order) when Order is Clustered, sectorOrder(...) when By sector, the
+  // same rule corrHeatmapInput uses.
+  const rows = useMemo(() => {
+    if (!universe) return []
+    const block = blockOf(universe, s.matrix)
+    const idx = s.order === 'clustered' ? [...block.order] : sectorOrder(block.symbols, universe.rows)
+    return pairsRows(block, idx)
+  }, [universe, s.matrix, s.order])
   const pair = s.pair ?? defaultPair(universe ? blockOf(universe, 'window').symbols : [])
+  const pairRowId = (r: PairRow) => `${r.a}-${r.b}`
   const onExport = () => {
     if (!heat) {
       exportCsv('corr.csv', '', 0)
@@ -173,7 +236,18 @@ export default function CorrScreen({ params }: ScreenProps) {
         <>
           <Params s={s} set={set} universe={universe} pair={pair} />
           <div className="corr-matrix">
-            <Heatmap data={heat} chartId="corr-matrix" />
+            {s.view === 'heatmap' ? (
+              <Heatmap data={heat} chartId="corr-matrix" />
+            ) : (
+              <MonitorGrid
+                label={tableLabel(s, universe.as_of)}
+                rows={rows}
+                columns={PAIR_COLUMNS}
+                rowId={pairRowId}
+                onOpen={(r) => set({ ...s, pair: [r.a, r.b] })}
+                numbered={false}
+              />
+            )}
           </div>
           <PairPanel pair={pair} window={s.window} universe={universe} group={params.group} />
           <Notes universe={universe} />
