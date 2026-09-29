@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vitest/config'
@@ -23,6 +24,16 @@ export function outDirFor(mode: string): string {
   if (mode === GALLERY_MODE) return GALLERY_OUT_DIR
   return mode === DEMO_MODE ? DEMO_OUT_DIR : 'dist'
 }
+
+// cmdk imports "@radix-ui/react-dialog" for Command.Dialog, which the terminal never renders (it uses the
+// inline Command list). Because Command.Dialog hangs off the Command object, tree-shaking cannot drop it, and
+// the dialog with its layer, focus and scroll-lock dependencies was about 10 kB gzip of the shell. This alias
+// sends that one import to a stub that throws if it is ever rendered (src/vendor/radixDialogStub.tsx). It is
+// scoped to the exact specifier: the other Radix packages cmdk uses (primitive, id, compose-refs) stay real.
+// scripts/bundleCheck.ts (rule 8) and scripts/shellBudget.test.ts fail if the dialog code comes back.
+export const RESOLVE_ALIASES = [
+  { find: /^@radix-ui\/react-dialog$/, replacement: fileURLToPath(new URL('./src/vendor/radixDialogStub.tsx', import.meta.url)) },
+] as const
 
 /** Matches a file inside one of the named packages, in a flat or a pnpm node_modules. */
 function nodeModule(names: string): RegExp {
@@ -62,6 +73,7 @@ export const CHUNK_GROUPS = [
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+  resolve: { alias: [...RESOLVE_ALIASES] },
   build: {
     outDir: outDirFor(mode),
     emptyOutDir: true,

@@ -6,7 +6,9 @@
 //   4. each library chunk stays under its gzip budget (ECharts must stay tree-shaken);
 //   5. a production build holds no gallery code at all (a gallery build must hold it);
 //   6. React's code sits in the react chunk, so no library chunk is needed to boot the shell;
-//   7. a production build holds no demo code and no fixture data (a demo build must hold both).
+//   7. a production build holds no demo code and no fixture data (a demo build must hold both);
+//   8. no build holds Radix dialog code: cmdk's Command.Dialog is unused, and vite.config.ts aliases its import
+//      to a stub (src/vendor/radixDialogStub.tsx), which took about 10 kB gzip out of the shell.
 // Library code is found by strings only the library itself contains.
 // Usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]
 import { readdirSync, readFileSync } from 'node:fs'
@@ -17,17 +19,18 @@ import { gzipSync } from 'node:zlib'
 export const BUNDLE_BUDGET = {
   /**
    * The shell was 120.4 kB gzip before Phase 5 (index, vendor, react and the runtime), 132.1 kB after wave 5,
-   * and 125.2 kB after the wave 6 shell diet, which moved everything first paint does not need behind a dynamic
-   * import (scripts/shellBudget.test.ts names each piece and pins this ceiling). The ceiling is that size plus
+   * 125.2 kB after the wave 6 shell diet (everything first paint does not need moved behind a dynamic import) and
+   * 115.2 kB after shell diet 2 (wave 7), which aliased cmdk's unused Radix dialog stack to a stub (vite.config.ts,
+   * rule 8 below). scripts/shellBudget.test.ts names each piece and pins this ceiling. The ceiling is that size plus
    * 1.5 kB, so a later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else
    * out first, or raise this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.
    */
-  shellGzip: 126_800,
+  shellGzip: 116_700,
   /**
    * The gallery build's shell (the E2E build, `--gallery`) is about 0.8 kB larger: its entry loads the API client
-   * and the connection state eagerly, so those two split out of index. Measured 126.1 kB after the diet, plus 1.5 kB.
+   * and the connection state eagerly, so those two split out of index. Measured 116.0 kB after shell diet 2, plus 1.5 kB.
    */
-  galleryShellGzip: 127_600,
+  galleryShellGzip: 117_600,
   libraryGzip: {
     uplot: 30_000,
     'lightweight-charts': 75_000,
@@ -51,6 +54,18 @@ export const LIBRARY_MARKERS: Readonly<Record<LibraryName, readonly string[]>> =
 
 /** React's own code; it belongs in the react-*.js vendor chunk only (vite.config.ts CHUNK_GROUPS). */
 export const REACT_MARKER = 'react.transitional.element'
+
+/**
+ * Strings only the Radix dialog stack holds: the dialog itself and the layer, focus scope and focus guard code it
+ * pulls in. None may be in any chunk (rule 8). scripts/shellBudget.test.ts checks each is still in the installed
+ * Radix source, so a renamed string cannot make this rule pass by finding nothing.
+ */
+export const RADIX_DIALOG_MARKERS: readonly string[] = [
+  'DialogContent',
+  'dismissableLayer.pointerDownOutside',
+  'focusScope.autoFocusOnMount',
+  'data-radix-focus-guard',
+]
 
 export const GALLERY_MARKERS: readonly string[] = ['__gallery', 'data-gallery-state', 'nqt-gallery']
 
@@ -158,6 +173,8 @@ export function analyseBundle(distDir: string, opts: BundleOptions): BundleRepor
   const violations = [...libs.violations, ...demo.violations]
   for (const [f, t] of js) {
     if (t.includes(REACT_MARKER) && !f.startsWith('react-')) violations.push(`react code is in ${f}, outside its own react-*.js chunk`)
+    const radix = RADIX_DIALOG_MARKERS.filter((m) => t.includes(m))
+    if (radix.length > 0) violations.push(`Radix dialog code is in ${f} (${radix.join(', ')}); the alias in vite.config.ts should stub it`)
   }
   const shellBudget = shellBudgetFor(opts)
   if (shellGzip > shellBudget) violations.push(`shell JS is ${shellGzip} bytes gzip, over its ${shellBudget} budget`)

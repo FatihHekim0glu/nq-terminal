@@ -4,14 +4,24 @@
 // Vite builds.
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { afterAll, describe, expect, it } from 'vitest'
-import { CHUNK_GROUPS, DEMO_MODE, DEMO_OUT_DIR, GALLERY_MODE, GALLERY_OUT_DIR, LIBRARY_CHUNKS, PRELOAD_HELPER, outDirFor } from '../vite.config.ts'
-import { BUNDLE_BUDGET, DEMO_MARKERS, GALLERY_MARKERS, LIBRARY_MARKERS, analyseBundle } from './bundleCheck.ts'
+import {
+  CHUNK_GROUPS,
+  DEMO_MODE,
+  DEMO_OUT_DIR,
+  GALLERY_MODE,
+  GALLERY_OUT_DIR,
+  LIBRARY_CHUNKS,
+  PRELOAD_HELPER,
+  RESOLVE_ALIASES,
+  outDirFor,
+} from '../vite.config.ts'
+import { BUNDLE_BUDGET, DEMO_MARKERS, GALLERY_MARKERS, LIBRARY_MARKERS, RADIX_DIALOG_MARKERS, analyseBundle } from './bundleCheck.ts'
 
 const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temps: string[] = []
@@ -124,6 +134,18 @@ describe('analyseBundle on hand-made bundles', () => {
     expect(analyseBundle(none, { gallery: false, demo: true }).violations.join('\n')).toMatch(/demo build lacks nqt-demo, nt_volmanaged_v0_fixture_m1/)
   })
 
+  it('fails a bundle holding Radix dialog code, in the shell or in a lazy chunk (rule 8)', () => {
+    expect(RADIX_DIALOG_MARKERS.length).toBeGreaterThan(0)
+    for (const marker of RADIX_DIALOG_MARKERS) {
+      const inShell = fakeDist({ 'index.js': `const m="${marker}"` })
+      expect(analyseBundle(inShell, { gallery: false }).violations.join('\n'), marker).toMatch(/Radix dialog code is in index\.js/)
+      const inLazy = fakeDist({ 'index.js': '', 'Screen-1.js': `const m="${marker}"` })
+      expect(analyseBundle(inLazy, { gallery: false }).violations.join('\n'), marker).toMatch(/Radix dialog code is in Screen-1\.js/)
+    }
+    const clean = fakeDist({ 'index.js': 'const m="cmdk-item"', 'Screen-1.js': 'const m="dialog"' })
+    expect(analyseBundle(clean, { gallery: false }).violations).toEqual([])
+  })
+
   it('holds a gallery build to its own, slightly larger shell budget (its entry loads the API client eagerly)', () => {
     expect(BUNDLE_BUDGET.galleryShellGzip).toBeGreaterThan(BUNDLE_BUDGET.shellGzip)
     expect(BUNDLE_BUDGET.galleryShellGzip - BUNDLE_BUDGET.shellGzip).toBeLessThanOrEqual(2_000)
@@ -165,6 +187,28 @@ describe('the check matches the Vite config', () => {
     expect(outDirFor(GALLERY_MODE)).toBe(GALLERY_OUT_DIR)
     expect(outDirFor(DEMO_MODE)).toBe(DEMO_OUT_DIR)
     expect([GALLERY_OUT_DIR, DEMO_OUT_DIR]).toEqual(['dist-gallery', 'dist-demo'])
+  })
+
+  it('aliases exactly the Radix dialog import to the local stub, and nothing else', () => {
+    // cmdk imports @radix-ui/react-dialog only for Command.Dialog, which the terminal never renders.
+    expect(RESOLVE_ALIASES).toHaveLength(1)
+    const alias = RESOLVE_ALIASES[0]
+    expect(alias.find.test('@radix-ui/react-dialog')).toBe(true)
+    const others = [
+      '@radix-ui/react-dialog/dist/index.mjs',
+      '@radix-ui/react-dialog-extra',
+      'x@radix-ui/react-dialog',
+      '@radix-ui/react-primitive',
+      '@radix-ui/react-id',
+      '@radix-ui/react-compose-refs',
+      '@radix-ui/react-popover',
+      'cmdk',
+      'react',
+      './radixDialogStub',
+    ]
+    for (const other of others) expect(alias.find.test(other), other).toBe(false)
+    expect(path.relative(WEB_DIR, alias.replacement)).toBe(path.join('src', 'vendor', 'radixDialogStub.tsx'))
+    expect(existsSync(alias.replacement)).toBe(true)
   })
 
   it('captures React before any library group, so no library chunk can pull React in', () => {
