@@ -13,6 +13,7 @@ import { isPriceEndpoint } from './scan.ts'
 import {
   commandLine,
   expectCleanFlow,
+  leaveOutOffline,
   openScreen,
   openTerminal,
   panel,
@@ -55,7 +56,10 @@ test.describe('rule flows', () => {
     const gp = panel(page, 'NQ GP').getByRole('img', { name: /^NQ1 Index/ })
     await expect(gp).toHaveAttribute('aria-label', /The 2022-01-01 fence follows the last bar\./)
     await expect(gp).toHaveAttribute('aria-label', /to 2021-12-3[01];/)
-    await Promise.all([answered('/api/bars'), openScreen(page, 'NQ GIP 2019-03-14', 'GIP')])
+    // The demo serves daily bars only, so its GIP (1m) read is refused and there is no 200 answer to scan.
+    if (!leaveOutOffline('1m bars are not in the demo dataset (src/demo/data/market.ts serves daily vendor bars only)')) {
+      await Promise.all([answered('/api/bars'), openScreen(page, 'NQ GIP 2019-03-14', 'GIP')])
+    }
     await openScreen(page, 'NQ DES', 'DES')
     await openScreen(page, '27F MON', 'MON')
     await openScreen(page, '27F CORR', 'CORR')
@@ -94,9 +98,12 @@ test.describe('rule flows', () => {
     await expect(checks.getByRole('cell', { name: /^Sharpe difference \(m - BH\)/ }).first()).toBeVisible()
     await expect(checks.getByRole('cell', { name: /^dsr\b/i })).toHaveCount(0)
 
-    await openScreen(page, `${RUN} EQ`, 'EQ')
-    const tiles = panel(page, `${RUN} EQ`).getByRole('list', { name: 'Tear sheet key figures' })
-    await expect(tiles).toContainText('[POST HOC]')
+    // A run's tear sheet needs its RunDetail, which the demo does not hold: offline this step is left out, by name.
+    if (!leaveOutOffline('GET /api/runs/nt_volmanaged_v0_fixture_m1 (RunDetail) is not in the demo dataset (src/demo/data/runs.ts RUN_DETAILS), so no run tear sheet is served')) {
+      await openScreen(page, `${RUN} EQ`, 'EQ')
+      const tiles = panel(page, `${RUN} EQ`).getByRole('list', { name: 'Tear sheet key figures' })
+      await expect(tiles).toContainText('[POST HOC]')
+    }
     await openScreen(page, 'volmanaged_v0 EQ', 'EQ')
     await expect(panel(page, 'volmanaged_v0 EQ')).toContainText('[PRE-REG]')
 

@@ -13,14 +13,19 @@
 // technology and carry the same values in words beside them, which the audit checks instead.
 // RR on the fixture hypothesis draws no chart (its 39 sessions are shorter than the rolling windows),
 // so RR is also checked on a fixture run whose series is long enough.
+// The offline run (playwright.offline.config.ts) drives OFFLINE_SCREENS against the demo dataset instead of SCREENS:
+// a screen the demo cannot draw carries an `offlineSkip` reason naming the body it lacks and is skipped by name,
+// never dropped, and no assertion below is relaxed for either target.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { MASK_COLOR, expectGalleryClean, watchGallery } from '../gallery.ts'
+import { OFFLINE } from '../target.ts'
 import {
   auditCharts,
   axeViolations,
   closeDropdown,
   openDropdown,
   openScreen,
+  OFFLINE_SCREENS,
   SCREENS,
   showEveryTable,
   VIEWPORTS,
@@ -33,6 +38,8 @@ const TABLE_TOGGLE = 'Table'
 const SUMMARY = /\d/
 
 test.describe.configure({ timeout: 180_000 })
+
+const SCREENS_UNDER_TEST: readonly ScreenCase[] = OFFLINE ? OFFLINE_SCREENS : SCREENS
 
 async function checkCharts(page: Page, screen: ScreenCase): Promise<void> {
   const audit = await auditCharts(page, TABLE_TOGGLE)
@@ -73,8 +80,9 @@ function sizeName(viewport: Viewport): string {
 
 for (const viewport of VIEWPORTS) {
   test.describe(`every screen at ${sizeName(viewport)}`, () => {
-    for (const screen of SCREENS) {
+    for (const screen of SCREENS_UNDER_TEST) {
       test(`${screen.name}: charts, axe at rest, with the dropdown open and in table view; baseline`, async ({ page }) => {
+        test.skip(OFFLINE && screen.offlineSkip !== undefined, screen.offlineSkip)
         const watch = await watchGallery(page)
         await openScreen(page, screen, viewport)
         // LIVE and JRNL: the stream line reads the same on every run once the stream is open (TASKS 9.2).

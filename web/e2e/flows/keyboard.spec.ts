@@ -5,6 +5,7 @@
 // a chart bar by bar and switch it to its table. Each flow ends clean: every request a same-origin
 // GET, no console error, no CSP report, and no served price point past the fence.
 import { expect, test, type Page } from '@playwright/test'
+import { OFFLINE } from '../target.ts'
 import {
   commandLine,
   expectCleanFlow,
@@ -16,10 +17,14 @@ import {
   pressUntil,
   settle,
   status,
+  TEAR_SUBJECT,
   watchFlow,
 } from './support.ts'
 
-const RUN = 'nt_volmanaged_v0_fixture_m1'
+// The demo registry is the real research files' (screens/reg/regFixtures.ts): the row Down lands on is the check
+// za_v0_C3_gao_momentum (a capital in its name, and a DES that reads [CHECK], not [PRE-REG]). Offline only, the walk
+// goes on to volmanaged_v0, a registered hypothesis whose DES card the demo holds whole.
+const DEMO_REGISTERED = 'volmanaged_v0'
 
 /** The name in the grid row the grid's active descendant sits on (the second cell holds the name). */
 async function activeRowName(page: Page): Promise<string> {
@@ -65,6 +70,7 @@ test.describe('keyboard flows', () => {
     expect((await focusInfo(page)).panel).toBe('REG')
     await focusGridIn(page, 'REG')
     await page.keyboard.press('ArrowDown')
+    if (OFFLINE) await pressUntil(page, 'ArrowDown', async () => (await activeRowName(page)) === DEMO_REGISTERED)
     const name = await activeRowName(page)
     expect(name).toMatch(/^[a-z0-9_]+$/)
 
@@ -119,6 +125,7 @@ test.describe('keyboard flows', () => {
   // the GP panel's last item, so a keyboard user reaches it by walking right from the Tab stop.
   for (const line of ['NQ GP', 'NQ GIP 2019-03-14']) {
     test(`${line}: Left and Right from the panel's Tab stop reach the chart`, async ({ page }) => {
+      test.skip(OFFLINE && line.includes('GIP'), '1m bars are not in the demo dataset (src/demo/data/market.ts serves daily vendor bars only)')
       const watch = await watchFlow(page)
       await openTerminal(page)
       await page.keyboard.press('Control+k')
@@ -199,7 +206,7 @@ test.describe('keyboard flows', () => {
     await expect.soft(grid, 'Left in the grid moves the cell, not the focus').toBeFocused()
     expect.soft(await cell()).toBe(start)
 
-    for (const line of ['NQ GP', `${RUN} EQ`]) {
+    for (const line of ['NQ GP', `${TEAR_SUBJECT} EQ`]) {
       await page.keyboard.press('Control+k')
       await typeLine(page, line)
       await settle(page)
@@ -242,12 +249,12 @@ test.describe('keyboard flows', () => {
 
     // A context and a function on the line; then Number <GO> runs the panel's numbered tab.
     await page.keyboard.press('Control+k')
-    await typeLine(page, `${RUN} EQ`)
-    await expect(panel(page, `${RUN} EQ`)).toBeVisible()
+    await typeLine(page, `${TEAR_SUBJECT} EQ`)
+    await expect(panel(page, `${TEAR_SUBJECT} EQ`)).toBeVisible()
     await settle(page)
     await page.keyboard.press('Control+k')
     await typeLine(page, '2')
-    await expect(panel(page, `${RUN} DD`)).toBeVisible()
+    await expect(panel(page, `${TEAR_SUBJECT} DD`)).toBeVisible()
     await settle(page)
 
     // Tab completes the open suggestion list; Enter then runs the completed line.
@@ -257,15 +264,17 @@ test.describe('keyboard flows', () => {
     await page.keyboard.press('Tab')
     await expect(commandLine(page)).toHaveValue(/^LEDG\s*$/)
     await page.keyboard.press('Enter')
-    await expect(status(page)).toContainText('Screen LEDG')
+    // LEDG replaces the panel inside the RUNS layout, so the status line keeps naming the layout (RUNS, edited): the panel is the proof.
+    await expect(panel(page, 'LEDG')).toBeVisible()
+    await expect(message(page)).toContainText('Opened LEDG')
     await settle(page)
 
     // End in the empty line walks the panel history back through DD and EQ.
     await expect(commandLine(page)).toBeFocused()
     await page.keyboard.press('End')
-    await expect(panel(page, `${RUN} DD`)).toBeVisible()
+    await expect(panel(page, `${TEAR_SUBJECT} DD`)).toBeVisible()
     await page.keyboard.press('End')
-    await expect(panel(page, `${RUN} EQ`)).toBeVisible()
+    await expect(panel(page, `${TEAR_SUBJECT} EQ`)).toBeVisible()
     await expect(message(page)).not.toHaveAttribute('data-tone', 'error')
     await settle(page)
     await expectCleanFlow(page, watch)

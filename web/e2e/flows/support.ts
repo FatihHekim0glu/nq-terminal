@@ -3,13 +3,35 @@
 // (synthetic bars through the fake gate, a temporary audit log). Every flow ends with expectCleanFlow:
 // every request a same-origin GET carrying the client header, no console error, no page error, no
 // CSP report, and no served price point past the fence.
-import { expect, type Locator, type Page, type Request, type Response } from '@playwright/test'
-import { recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
+import { expect, test, type Locator, type Page, type Request, type Response } from '@playwright/test'
+import { OFFLINE, recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
 import { isPriceEndpoint, nonGetRequests, pointsPastFence } from './scan.ts'
 
 export const CLIENT_HEADER = 'x-nqt-client'
 export const CLIENT_NAME = 'nq-lab-terminal'
 export const PLUMBING_BANNER = 'PLUMBING TEST, DELAYED DATA: not strategy performance'
+
+/**
+ * The subject of the EQ and DD tear sheets the flows open. The fixture backend serves a tear sheet for its volmanaged run.
+ * The demo serves none for any run: a run's tear sheet needs its RunDetail as well as its analytics, and the runs the demo
+ * holds analytics for have no RunDetail (src/demo/data/runs.ts, analytics.ts). Offline the flows read the hypothesis's tear
+ * sheet instead, which the demo serves whole (EQ, DD and RET at 1 tick), through the same tabs and the same numbered keys.
+ */
+export const TEAR_SUBJECT = OFFLINE ? 'volmanaged_v0' : 'nt_volmanaged_v0_fixture_m1'
+
+/**
+ * Offline only: names a step of a flow that the demo dataset cannot serve, and says to leave it out. The rest of the test still
+ * runs (a whole-test `test.skip` would also drop what the demo can serve), and the reason is kept in the test's annotations, so
+ * the report names it. The list reporter does not print annotations but does print test stdout, so the reason also shows in the
+ * run output as an `[offline-skip] <title>: <reason>` line. Always false against the fixture backend, where the step runs as it
+ * always did (it returns before either line).
+ */
+export function leaveOutOffline(reason: string): boolean {
+  if (!OFFLINE) return false
+  test.info().annotations.push({ type: 'offline-skip', description: reason })
+  console.info(`[offline-skip] ${test.info().title}: ${reason}`)
+  return true
+}
 
 export interface FlowWatch {
   readonly requests: Request[]

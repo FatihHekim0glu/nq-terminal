@@ -13,7 +13,12 @@
 //   fills, so /api/runs/<run>/fills is answered in the page with 8,411 synthetic rows in the API's shape;
 //   the real run's 8,411 fills are measured by the real-data smoke run.
 // Every run also checks there are no console errors and that every request is a same-origin GET.
+// The offline project (`pnpm e2e:offline:perf`, one worker) runs the same budgets against the Node-side demo API. Two
+// differences, both named: HOME's warm-up is left out (its first read, /api/market/universe?window=22, is refused by the
+// demo, which serves the window 252 table only, and the median of three cold loads is what the budget judges), and the
+// GIP test is skipped because the demo serves no 1m bars.
 import { expect, test, type APIRequestContext, type Page, type Route } from '@playwright/test'
+import { OFFLINE } from '../target.ts'
 import { BUDGETS } from './trace.ts'
 import { canvasPrint, measureFills, measureHome, measurePanZoom, median, offOriginOrNotGet, paint, report, runLine, settle, watch } from './pages.ts'
 
@@ -83,7 +88,7 @@ test.describe('performance budgets (fixture backend, CDP trace)', () => {
   test.describe.configure({ timeout: 180_000 })
 
   test('HOME first render is under 1.5 s', async ({ browser, request }, info) => {
-    await warmBackend(request)
+    if (!OFFLINE) await warmBackend(request)
     const loads = []
     for (let i = 0; i < HOME_LOADS; i += 1) loads.push(await measureHome(browser, info, `home-${i + 1}`))
     const ready = median(loads.map((l) => l.readyMs))
@@ -93,6 +98,7 @@ test.describe('performance budgets (fixture backend, CDP trace)', () => {
   })
 
   test('GIP pan and zoom run near 60 fps', async ({ browser, page, baseURL }, info) => {
+    test.skip(OFFLINE, '1m bars are not in the demo dataset (src/demo/data/market.ts serves daily vendor bars only)')
     const w = watch(page)
     await page.goto('/')
     await expect(page.locator('[data-nqt-title]')).toHaveCount(4)

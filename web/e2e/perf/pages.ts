@@ -2,6 +2,7 @@
 // writes performance.mark() calls into the page, so a CDP trace (browser.startTracing) holds the times;
 // trace.ts reads them back. Shared by budgets.spec.ts (fixture backend) and smoke.real.ts (real files).
 import { expect, type Browser, type BrowserContext, type Locator, type Page, type Request, type Response, type TestInfo } from '@playwright/test'
+import { recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
 import { frameStats, judgeFrames, longTasks, markSpanMs, markStartMs, markTs, parseTrace, rendererOf, TRACE_CATEGORIES, type FrameStats } from './trace.ts'
 
 export const FENCE_S = Date.UTC(2022, 0, 1) / 1000
@@ -18,17 +19,23 @@ export const HOME_READY: ReadonlyArray<readonly [string, readonly string[]]> = [
 export interface Watch {
   readonly requests: Request[]
   readonly responses: Response[]
+  /** Console errors (`<text> <url>`) and page errors so far, without the "Failed to load resource" lines of URLs the offline
+   *  demo API refused (e2e/target.ts): that is the demo declining, not a page error. Against the fixture backend nothing is dropped. */
   readonly errors: string[]
 }
 
 export function watch(page: Page): Watch {
-  const w: Watch = { requests: [], responses: [], errors: [] }
+  const raw: string[] = []
+  const refused = new Set<string>()
+  // `errors` is read when asked, not when heard: the browser may log a failed load before or after its response event reaches us.
+  const w: Watch = { requests: [], responses: [], get errors() { return withoutDemoRefusals(raw, refused) } }
+  recordDemoRefusals(page, refused)
   page.on('request', (r) => w.requests.push(r))
   page.on('response', (r) => w.responses.push(r))
   page.on('console', (m) => {
-    if (m.type() === 'error') w.errors.push(m.text())
+    if (m.type() === 'error') raw.push(`${m.text()} ${m.location().url}`)
   })
-  page.on('pageerror', (e) => w.errors.push(String(e)))
+  page.on('pageerror', (e) => raw.push(String(e)))
   return w
 }
 

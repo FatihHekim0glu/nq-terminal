@@ -24,7 +24,7 @@
     "e2e:offline": "playwright test -c playwright.offline.config.ts --project=offline --project=offline-demo",
     "e2e:offline:perf": "playwright test -c playwright.offline.config.ts --project=offline-perf --workers=1",
     "e2e:offline:baseline": "playwright test -c playwright.offline.config.ts --project=offline --project=offline-demo --update-snapshots=all",
-    "test:e2e-types": "tsc -p e2e/tsconfig.json && tsc -p e2e/offline/tsconfig.json"
+    "test:e2e-types": "tsc -p e2e/tsconfig.json && tsc -p e2e/offline/tsconfig.json && tsc -p e2e/flows/tsconfig.json && tsc -p e2e/perf/tsconfig.json && tsc -p e2e/visual/tsconfig.json"
   },
   "dependencies": {
     "@fontsource/pt-mono": "5.3.0",
