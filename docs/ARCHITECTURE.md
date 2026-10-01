@@ -48,11 +48,13 @@ nq-lab/terminal/
         catalog.py           parquet metadata only
         audit.py             OOS log, openings, pin checks
         journals.py          live journal and log tailer
+        jobs.py              the backtest queue (P2): one worker, argv-list subprocess, state under terminal/state; the one module allowed to write
+        ib_readonly_client.py  the one IB client (read only, client id 95); ib_snapshot.py  opt-in snapshot service
       analytics/             pure functions for every metric in ANALYTICS_CATALOG.md, split by family so no file
                              passes 800 lines: _inputs.py (input checks), perf.py, drawdown.py, rolling.py,
                              distribution.py, risk.py, relative.py, validity.py, trades.py, exposure.py; series.py
                              (Basis A and B builders) is the one module that calls the injected services
-      api/                   runs.py research.py data.py analytics.py audit.py live.py system.py
+      api/                   runs.py research.py data.py analytics.py audit.py live.py system.py jobs.py ib.py spa.py risk_extras.py regimes_capacity_term.py
     tests/
       fixtures/              tiny result.json per shape, screen JSONs, CSVs, journals with NaN and plumbing rows
       test_*.py
@@ -158,7 +160,7 @@ A test fails if any served column name matches `px|raw|price|_c$|^[OHLC]$` or if
 
 ## 4. API contract
 
-All endpoints are GET in P0 and P1 (DL5). JSON via orjson. Pagination `offset`, `limit` (default 500, max 5,000). Chart series are columnar: `{"t": [...], "v": [...]}`.
+All endpoints are GET except the two JOBS writes (DL5, PRD U3): `POST /api/jobs` and `DELETE /api/jobs/{job_id}`. JSON via orjson. Pagination `offset`, `limit` (default 500, max 5,000). Chart series are columnar: `{"t": [...], "v": [...]}`.
 
 Contract rules (Phase 2 improvement run): every response model derives from `models.common.ResponseModel`, so every field is required in the schema (defaults included) and the generated types have no optional field the backend always sends. Every error a router raises is declared with the body `ErrorDetail{detail}` (a string, or FastAPI's validation list on a 422): runs 404, 422, 503; research 404, 422, 500, 503; data 403, 404, 422, 502, 503; audit 422, 503; live 404, 413, 422. `tests/test_app.py` pins the route set and GET only; `tests/test_contract_shapes.py` pins these two rules.
 
@@ -212,13 +214,25 @@ Contract rules (Phase 2 improvement run): every response model derives from `mod
 - `GET /api/live/performance?file=` → target against actual from one journal's performance rows only (plumbing rows dropped and counted): `{journal, present, empty_state, basis, banner, plumbing_rows_skipped, t[], line_no[], date[], contract[], target[], expected[], actual[], reconciled_ok[], exposure[], slippage_ticks[], sent[], refused[], error[], halted[]}`. Added in Phase 2 for the LIVE step chart (LV2). `t` is epoch seconds at 00:00 UTC of each date and `line_no` the journal line of each close row, so LIVE matches its rows line for line with `/api/live/journal`.
 - Live updates in P0 use react-query polling every 2 s. From P1 (TASKS 9.2), `GET /api/live/stream` sends the same data as Server-Sent Events (`fastapi.sse.EventSourceResponse`; kinds hello, status, kill_switch, journal_reset, journal_row, heartbeat, bye; each event's id is the journal cursor, sent back as Last-Event-ID on a reconnect). The web client (`web/src/api/liveStream.ts`, `useLiveStream.ts`) opens one stream while LIVE or JRNL is on screen: a status event is written into the status query's cache, a journal event refreshes the journal-derived GETs once a burst settles, and nothing polls while the stream is open. It falls back to the 2 s polling when the browser has no EventSource, the stream is refused (503 when too many are open) or a reconnect takes over 8 s, retries a refused stream after 5 to 60 s, and replaces a stream silent for three heartbeats. Only `web/src/api/client.ts` may open an EventSource (the GET-only source scan). LIVE and JRNL show the stream's state in words.
 
-**P2 only (needs U3):** `POST/GET/DELETE /api/jobs...` and `GET /api/ib/snapshot` (section 8).
+**Jobs (P2, U3)**
+- `GET /api/jobs` -> `JobList{jobs[Job], queued, running, queue_cap:10, enabled}`, newest first. `enabled` is false in fixture mode.
+- `GET /api/jobs/{job_id}` -> `Job{id:"j_<12 hex>", run_id, state:"queued"|"running"|"ok"|"failed"|"error"|"stopped", spec, created, started?, finished?, exit_code?, message, log_tail[<=100 lines]}`.
+- `POST /api/jobs` (201, body `JobSpec{strategy, params, variant, start, end, run_id}`) queues one in-sample backtest. 403 without a loopback peer or `X-NQT: 1`, 415 unless `application/json`, 413 over 8 KB, 422 for a refused spec, 409 for a run id already used, 429 when 10 jobs already wait, 503 in fixture mode.
+- `DELETE /api/jobs/{job_id}` stops a queued or running job, or drops a finished job's record; same 403 and 415 rules; it never removes run output.
+
+**P2 views (U3)**
+- `GET /api/ib/snapshot` -> `IbSnapshot{state:"ok"|"disabled"|"unavailable"|"refused", message, read_only, order_path:"none", client_id:95, accounts_masked[], server_time_utc, fetched_at_utc, cached, age_s, cache_seconds, incomplete[], truncated, notes[], summary[], positions[], open_orders[], executions[]}`. Always 200. Opt-in by `NQT_IB_READONLY=1`; one TWS read is cached 5 s; account ids are masked.
+- `GET /api/analytics/spa` -> `SpaView` (SV8): the SPA, the Reality Check and StepM over the registered NQ family, with the members' differential correlation.
+- `GET /api/analytics/hypothesis/{name}/risk-extras?cost=` and `GET /api/analytics/run/{run_id}/risk-extras?freq=` -> `RiskExtras` (RK4, PF11, BR5 of the tear sheet's own series; the ES, ulcer index and recovery factor on RET, Treynor on RR; 422 under four observations).
+- `GET /api/analytics/hypothesis/{name}/trend-regime?cost=` and `GET /api/analytics/run/{run_id}/trend-regime` -> `TrendRegimeView` (RG2; a run only at the daily frequency).
+- `GET /api/analytics/run/{run_id}/capacity` -> `RunCapacity` (EX5; 422 for an unbalanced run).
+- `GET /api/market/term-structure/{root}` -> `TermStructure` (MV6).
 
 Contract discipline: pytest dumps `app.openapi()` and compares it with `contract/openapi.json`; `pnpm gen:api` regenerates `schema.d.ts` and `openapi.sha256`; pytest asserts the sha matches, so a changed backend fails until the types are regenerated and `tsc --noEmit` passes.
 
 ### 4.1 Endpoint index
 
-Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 64 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
+Every path of `contract/openapi.json` (74; 72 are GET only, and `/api/jobs` and `/api/jobs/{job_id}` also carry the POST and the DELETE), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 74 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
 
 <!-- endpoint-index:start -->
 **System**
@@ -253,14 +267,20 @@ Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the
 - `GET /api/analytics/hypothesis/{name}/bootstrap`: the tear sheet (Sharpe intervals, SV6 cone, SV7 card), LIVE expectation cone
 - `GET /api/analytics/hypothesis/{name}/extended`: the tear sheet (P1 views)
 - `GET /api/analytics/hypothesis/{name}/panel`: HOME equity panel, DES equity
+- `GET /api/analytics/hypothesis/{name}/risk-extras`: the tear sheet RET and RR (RK4, PF11, BR5)
+- `GET /api/analytics/hypothesis/{name}/trend-regime`: the tear sheet RR tab (RG2 trend regime)
 - `GET /api/analytics/paper-tracking`: LIVE (paper against model, expectation cone)
+- `GET /api/analytics/spa`: MT 88) Family test (SV8)
 - `GET /api/analytics/run/{run_id}`: the tear sheet, DES 5) Robustness forks, LIVE expectation cone
 - `GET /api/analytics/run/{run_id}/bootstrap`: the tear sheet
+- `GET /api/analytics/run/{run_id}/capacity`: the tear sheet's run books and EXPO (EX5 capacity)
 - `GET /api/analytics/run/{run_id}/costs`: COST, the tear sheet's run books
 - `GET /api/analytics/run/{run_id}/excursions`: the tear sheet's run books
 - `GET /api/analytics/run/{run_id}/exposure`: EXPO, the tear sheet's exposure composition
 - `GET /api/analytics/run/{run_id}/extended`: the tear sheet (P1 views)
 - `GET /api/analytics/run/{run_id}/panel`: HOME equity panel, RUN chart
+- `GET /api/analytics/run/{run_id}/risk-extras`: the tear sheet RET and RR (RK4, PF11, BR5)
+- `GET /api/analytics/run/{run_id}/trend-regime`: the tear sheet RR tab (RG2 trend regime)
 - `GET /api/analytics/run/{run_id}/trade-paths`: the tear sheet's run books
 - `GET /api/analytics/run/{run_id}/trades`: the tear sheet's run books
 
@@ -271,6 +291,7 @@ Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the
 - `GET /api/market/pair-corr`: CORR
 - `GET /api/market/paper-rolls`: ROLL 3) Paper book MNQ
 - `GET /api/market/rolls`: ROLL
+- `GET /api/market/term-structure/{root}`: ROLL 2) Market (MV6 term structure)
 - `GET /api/market/rv`: GP RV22 pane
 - `GET /api/market/two-day`: MON 2Day sparklines
 - `GET /api/market/universe`: MON, CORR, GP
@@ -291,6 +312,12 @@ Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the
 - `GET /api/live/routes`: LIVE Routes and Fills
 - `GET /api/live/status`: LIVE, JRNL
 - `GET /api/live/stream`: LIVE and JRNL through the live stream client (Server-Sent Events)
+
+**Backtest queue and IB snapshot (P2)**
+- `GET /api/ib/snapshot`: LIVE (the read-only IB panel) and the status line's TWS segment; opt-in `NQT_IB_READONLY=1`, client id 95
+- `GET /api/jobs`: JOBS (the queue list and the queue counts)
+- `GET /api/jobs/{job_id}`: JOBS (one job and its log tail)
+(`POST /api/jobs` and `DELETE /api/jobs/{job_id}` are the only writes; they are described in section 4 and section 8, not in this GET index.)
 
 **Events, seasonality and data quality**
 - `GET /api/events/calendar`: EVT
@@ -325,17 +352,18 @@ Every path of `contract/openapi.json` (64, all GET), grouped by domain, with the
 - Empty states: "no journal yet" per expected file.
 - The terminal shows the kill-switch state and never creates or deletes `live/KILL*`.
 
-## 8. P2 components (not built without U3)
+## 8. P2 components (U3 approved, built)
 
-**Job runner.** `JobSpec(extra="forbid")`: `strategy` literal equal to `run_base.FEEDS` keys (test asserts equality), `params` checked against `strategies.registry.STRATEGIES`, `variant`, `start >= 2010-01-01`, `end <= 2022-01-01`, `run_id` matching `^t_[A-Za-z0-9_.-]{1,80}$`. Runs `subprocess.Popen([PY, "-u", str(ROOT/"backtests"/"run_base.py"), "--config", json.dumps(cfg)], cwd=ROOT, env={..., "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})` in a worker thread, argv list, never `shell=True`. One worker, queue cap 10. Exit 0 ok, 1 failed checks, else error. State under `terminal/state/`. `POST` requires `X-NQT: 1` and `Content-Type: application/json`.
+**Job runner.** `JobSpec(extra="forbid")`: `strategy` literal equal to `run_base.FEEDS` keys (test asserts equality), `params` checked against `strategies.registry.STRATEGIES`, `variant`, `start >= 2010-01-01`, `end <= 2022-01-01`, `run_id` matching `^t_[A-Za-z0-9_.-]{1,80}$`. Runs `subprocess.Popen([PY, "-u", str(ROOT/"backtests"/"run_base.py"), "--config", json.dumps(cfg)], cwd=ROOT, env={..., "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"})` in a worker thread, argv list, never `shell=True`. One worker, queue cap 10. Exit 0 ok, 1 failed checks, else error. State under `terminal/state/`. `POST` requires `X-NQT: 1` and `Content-Type: application/json`. Built in `services/jobs.py`, `models/jobs.py` and `api/jobs.py`. The queue cap counts waiting jobs (one running plus 10 waiting are accepted). `params` may name the strategy's config fields and the keys its feed consumes (`ticks` is required, 0, 1 or 2, for volmanaged, volmanaged_bh, tsmom, dtsmom and eomtsy); `lookahead_probe` and the runner-assigned instrument keys are refused. Text parameters match `[A-Za-z0-9_.:+-]{1,64}`. The state file is `terminal/state/jobs.json` (git-ignored), replaced atomically; after a restart the job that was running becomes an error and queued jobs run again. DELETE stops a queued or running job and drops a finished job's record; it never touches `backtests/output`. A run id is refused when a job or `backtests/output/<run_id>` already uses it. The service is the only module on `WRITE_ALLOWED` in `tests/test_safety_ast.py`. The app is GET only except exactly `jobs.ALLOWED_WRITE_ROUTES` (`app.assert_get_only` takes that allow list; any other non-GET route still refuses the app), and the app's shutdown closes the service so a running child is stopped. In fixture mode the runner is off: the list is empty and POST answers 503; a harness may set `app.state.jobs` to a service over a fake runner. The web client sends the two writes from `web/src/api/jobsClient.ts` alone, and the GET-only source scan allows that one file and those two methods.
 
-**IB snapshot.** `NQT_IB_READONLY=1`, ibapi client id **95** (never 0, nor any taken id: 11, 21, 91, 93), host and port checked by `live_guards.check_ib_host`, account by `live_guards.check_account` (DU only). Calls allowed: `reqAccountSummary`, `reqPositions`, `reqAllOpenOrders`, `reqExecutions`, `reqCurrentTime` and their cancels. The client subclass overrides `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions` and `reqAutoOpenOrders` to raise; an AST test bans those names and `reqOpenOrders` as calls anywhere in `terminal/`. TWS "Read-Only API" cannot be the control, because it would block the paper book's own orders.
+**IB snapshot.** `NQT_IB_READONLY=1`, ibapi client id **95** (never 0, nor any taken id: 11, 21, 91, 93), host and port checked by `live_guards.check_ib_host`, account by `live_guards.check_account` (DU only). Calls allowed: `reqAccountSummary`, `reqPositions`, `reqAllOpenOrders`, `reqExecutions`, `reqCurrentTime` and their cancels. The client subclass overrides `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions` and `reqAutoOpenOrders` to raise; an AST test bans those names and `reqOpenOrders` as calls anywhere in `terminal/`. TWS "Read-Only API" cannot be the control, because it would block the paper book's own orders. Built as `services/ib_readonly_client.py` (the only module under `terminal/` that imports `ibapi`; it holds the client subclass, client id 95 and the checks), `services/ib_snapshot.py` (opt-in, host and port guards, masking, 5 s cache with a lock), `models/ib.py` and `api/ib.py` (`GET /api/ib/snapshot`, a plain `def` so the blocking read runs in the thread pool). Four layers keep orders out: (1) the six order-style calls of the library (the five above and `reqOpenOrders`) are overridden to raise `OrderPathError`; (2) `sendMsg` and `sendMsgProtoBuf` refuse any outgoing message id except start, current time, account summary and its cancel, positions and its cancel, all open orders and executions; (3) client id 95 is fixed and ids 0, 11, 21, 91 and 93 are refused by `check_client_id`; (4) every account TWS reports must pass `live_guards.check_account` (DU only) before the first request, and one live account refuses the whole read. The host must pass `live_guards.check_ib_host` with the remote flag never on (`IB_ALLOW_REMOTE` is not honoured), and the live ports 7496 and 4001 are refused. Time limits: 4 s to the account list, 5 s for the replies; a section without its end marker is listed in `incomplete`; a TWS that is absent, silent or holding client id 95 gives state `unavailable`. Tests use a fake IB server on a loopback socket speaking the modern (protobuf, server version 213) wire format; no test connects to a real TWS or Gateway. The legacy text wire format (server version below 201) is not exercised. The LIVE screen shows the snapshot as a read-only panel (`screens/live/ib`): masked accounts, net liquidation, positions, open orders (view only) and today's executions, with explicit states (off, TWS not reachable, refused, STALE older than 30 s with the last values kept and dated, a failed read). The panel polls only while LIVE is open, and the status line's TWS segment reads `TWS read-only snapshot` only while that panel holds an ok, fresh snapshot.
 
 ## 9. Security
 
 | Risk | Control |
 |---|---|
-| Order placement | No order code; AST ban on order call names across `terminal/`; no IB client in P0 or P1; safety E2E asserts every request is GET and no route or component name matches `order|submit|cancel|modify` |
+| Order placement | No order code; AST ban on order call names across `terminal/` (a def of them is allowed only in the read-only client class, where each is a bare raise); the IB library may be imported only by `services/ib_readonly_client.py` and the test fake server; the client class refuses every outgoing message id outside an 8-id read-only allowlist; safety E2E asserts every request is GET (bar the two JOBS writes) and no route or component name matches `order|submit|cancel|modify` |
+| Writes to the job queue | POST and DELETE under `/api/jobs` only; `X-NQT: 1`, `Content-Type: application/json`, loopback peer, same-origin `Sec-Fetch-Site` and `Origin` checked before the body is read (8 KB cap); the spec is validated against `run_base.FEEDS`, the strategy registry and the in-sample fence; argv list, never a shell; the child writes only what `run_base` writes for an in-sample run, never the ledger |
 | Gate bypass | Section 5: one door, injected serve, AST ban, metadata-only catalog |
 | 2022+ leak | `serve` refuses it; sealed CSVs by allowlist; fence on every axis; E2E asserts no served point after 2021-12-31 |
 | Writes to research files | AST scan (backend and any other Python under `terminal/`): no `open(..., "w"/"a"/"x")`, `io.FileIO` in a writing mode, `write_text`, `write_bytes`, `to_csv`, `to_parquet`, `nq_lab.registry.write`, `scripts.*` imports outside `terminal/state`; sha256 session fixture on `oos_access_log.jsonl` (lines only appended with caller `terminal`), `ledger.csv`, `registry.csv`, `oos_openings.json`, plus `live/KILL` presence; the in-process audit hook refuses any write, remove, rename, mkdir, link or chmod under `results/`, `backtests/output/`, `data/`, `live/` and the fixtures, with paths canonicalised (8.3 aliases, the device prefix, hardlinks) |

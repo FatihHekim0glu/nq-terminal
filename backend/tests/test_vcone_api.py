@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from nq_lab.config import IS_END, IS_START
 from nq_lab.dtsmom_universe import TABLE
+from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import create_app, non_get_routes
 from nq_terminal.services import vcone
 from nq_terminal.settings import load_settings
@@ -51,7 +52,7 @@ def priced(fake) -> TestClient:
 
 def test_router_prefix_and_get_only():
     app = with_vcone(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})))
-    assert non_get_routes(app) == []
+    assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
     paths = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/openapi.json").json()["paths"]
     for path in (CONE, SMALL):
         assert set(paths[path]) == {"get"}, path

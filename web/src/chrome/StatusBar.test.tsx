@@ -1,17 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HealthData } from '../commands/types'
 import { STATUS_BAR } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
+import { IB_STATUS_BAR } from '../copy/ibStatus'
 import { WATCH } from '../copy/watch'
+import { setIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
 import { emptyDiff, type WatchDiff, type WatchItem } from '../state/recordWatch.schema'
 import type { RecordWatchView } from './RecordWatch.live'
 import { StatusBar, type StatusBarProps, type HealthState } from './StatusBar'
 import statusCss from './StatusBar.css?raw'
 import { dataWindow, dayBefore } from './StatusBar.format'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  act(() => setIbSnapshotLive(false))
+})
 
 const HEALTH: HealthData = {
   fence: { is_start: '2010-01-01', is_end: '2022-01-01' },
@@ -51,6 +56,16 @@ describe('StatusBar: the 22px status line (spec 4.10, decision D7)', () => {
     expect(seg(bar, 'Gate reads 7')).toBeTruthy()
     expect(seg(bar, /^\d{2}:\d{2}:\d{2} ET$/)).toBeTruthy()
     expect(seg(bar, '<Esc> command')).toBeTruthy()
+  })
+
+  it('says TWS read-only snapshot only while the LIVE panel holds a fresh snapshot, and not monitored otherwise', () => {
+    const bar = renderBar({ status: 'ok', data: HEALTH })
+    expect(seg(bar, 'TWS not monitored')).toBeTruthy()
+    act(() => setIbSnapshotLive(true))
+    expect(seg(bar, `TWS ${IB_STATUS_BAR.twsLive}`)).toBeTruthy()
+    expect(seg(bar, 'TWS not monitored')).toBeUndefined()
+    act(() => setIbSnapshotLive(false))
+    expect(seg(bar, 'TWS not monitored')).toBeTruthy()
   })
 
   it('marks the screen edited: HOME* to the eye, HOME then the word edited to a screen reader', () => {

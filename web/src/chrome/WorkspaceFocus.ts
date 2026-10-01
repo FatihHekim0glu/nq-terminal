@@ -15,7 +15,8 @@
 // so 3 to 5 presses can no longer carry it under the header or the command zone. While a panel shows an
 // overlay marked `data-roving-overlay` (the related functions menu), the Tab stop is taken from that
 // overlay's items, so Tab from the command line lands in the open menu and its scroll region stays
-// keyboard reachable. A box that scrolls on its own inside the body (a virtualised grid, a statistics
+// keyboard reachable; the panel's body, which the overlay's dim covers, is marked inert meanwhile so it
+// is not a scroll region no key reaches. A box that scrolls on its own inside the body (a virtualised grid, a statistics
 // table in a fixed column) carries `data-roving-scroll`: it takes the Tab stop from the body when both
 // render as stops, since a scroll region no Tab reaches fails WCAG 2.1.1 (axe scrollable-region-focusable).
 // A panel whose main content is one grid behind many controls (REG: 16 round and 8 criteria buttons come
@@ -68,11 +69,11 @@ function isNativeArrowField(el: HTMLElement): boolean {
 
 /**
  * True when a Left or Right in this text field has no caret left to move: Right with the caret at
- * the end, Left with it at the start, and no selection. Selects, text areas and editable content
- * keep the arrows.
+ * the end, Left with it at the start, and no selection. A text area is read the same way (JOBS'
+ * parameters box would otherwise trap the arrows); selects and editable content keep them.
  */
 function caretAtEdge(el: HTMLElement, key: string): boolean {
-  if (!(el instanceof HTMLInputElement)) return false
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return false
   const start = el.selectionStart
   const end = el.selectionEnd
   if (start === null || end === null || start !== end) return false
@@ -135,6 +136,21 @@ function keepBodyReachable(items: readonly HTMLElement[], current: HTMLElement):
 }
 
 /**
+ * While an overlay is open the Tab stop belongs to it, so the panel body (which the overlay's dim covers)
+ * would be left at tabindex -1: a scroll region no key reaches (axe scrollable-region-focusable, WCAG
+ * 2.1.1). Marking it inert for as long as the overlay is open takes it out of the page for the keyboard,
+ * the pointer and assistive technology, and the mark goes with the overlay. Writes only what changes, so the
+ * MutationObserver cannot loop (`inert` is not an attribute it watches in any case).
+ */
+function setBodyInert(items: readonly HTMLElement[], overlay: HTMLElement | null): void {
+  for (const body of items) {
+    if (!body.hasAttribute(ROVING_DEFAULT_ATTR)) continue
+    const shouldBeInert = overlay !== null && !body.contains(overlay) && !overlay.contains(body)
+    if (body.hasAttribute('inert') !== shouldBeInert) body.toggleAttribute('inert', shouldBeInert)
+  }
+}
+
+/**
  * Leaves exactly one Tab stop in the panel: `prefer` when it is an item, else the current one
  * (subject to keepBodyReachable, above, when `prefer` was not given), else the default item, else
  * the first. Writes only attributes that change, so the MutationObserver that calls this on every
@@ -145,6 +161,7 @@ function keepBodyReachable(items: readonly HTMLElement[], current: HTMLElement):
 export function syncRoving(panel: HTMLElement, prefer?: HTMLElement): HTMLElement | undefined {
   const items = rovingItems(panel)
   const overlay = panel.querySelector<HTMLElement>(`[${ROVING_OVERLAY_ATTR}]`)
+  setBodyInert(items, overlay)
   const inOverlay = overlay ? items.filter((el) => overlay.contains(el)) : []
   let current = pickCurrent(inOverlay.length > 0 ? inOverlay : items, prefer)
   if (!overlay && !prefer && current) current = keepBodyReachable(items, current) ?? current

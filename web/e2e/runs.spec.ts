@@ -130,7 +130,9 @@ async function expectUnusableRun(body: Locator, watch: GalleryWatch): Promise<vo
   await expect(body.getByText('No equity line for an unusable run (rule 4).')).toBeVisible()
   await expect(body.locator('canvas')).toHaveCount(0)
   await expect(body.locator('.chart-a11y-figure[role="img"]')).toHaveCount(0)
-  expect(watch.requests.filter((r) => /\/panel|\/equity/.test(r.url())).map((r) => r.url())).toEqual([])
+  // API paths only: a script chunk named panelParts or panelSources is code, not an equity request.
+  const apiReads = watch.requests.map((r) => new URL(r.url()).pathname).filter((path) => path.startsWith('/api/'))
+  expect(apiReads.filter((path) => /\/panel|\/equity/.test(path))).toEqual([])
 }
 
 async function expectUsableRun(page: Page, body: Locator): Promise<void> {

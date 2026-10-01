@@ -9,6 +9,7 @@ from fastapi.routing import iter_route_contexts
 from fastapi.testclient import TestClient
 
 from nq_lab.config import IS_END
+from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import create_app, non_get_routes
 from nq_terminal.settings import load_settings
 
@@ -34,7 +35,7 @@ def test_research_routes_are_registered_and_get_only():
     routes = {ctx.path: ctx.methods for ctx in iter_route_contexts(app.routes) if ctx.path}
     for path in (*RESEARCH_PATHS, "/api/hypotheses/{name}", "/api/hypotheses/{name}/series", "/api/sealed/{name}"):
         assert routes.get(path) == {"GET"}, path
-    assert non_get_routes(app) == []
+    assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
 def test_registry_endpoint_counts_come_from_the_file(real_client):

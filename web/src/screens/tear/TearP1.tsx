@@ -1,10 +1,12 @@
 // The P1 views under the tear sheet's tab view (TASKS Phase 10 on screen), in the body's scroll like the run
 // books, DES-style cards, each [POST HOC] and descriptive (UI_SPEC section 6; ANALYTICS_CATALOG C7):
 //   EQ   SV5 bootstrap intervals (Sharpe, CAGR, max drawdown) and the SV6 resampled cone;
-//   RET  PF7 to PF9 tiles, RK3 normal and Cornish-Fisher VaR (greyed outside the monotone domain), RD4
-//        Jarque-Bera on the whole series with the RD3 QQ plot, then RK5 stress windows as a panel of their own;
-//   RR   RL3 and RL4 rolling beta and correlation, BR3 capture, BR4 scatter, RG1 volatility regimes (Welch t,
-//        no p-value). RR's rolling Sharpe carries the RL1 ranges (TearViews).
+//   RET  PF7 to PF9 tiles, RK3 normal and Cornish-Fisher VaR (greyed outside the monotone domain), PF11 ulcer index
+//        and recovery factor with RK4 modified expected shortfall (P2), RD4 Jarque-Bera on the whole series with
+//        the RD3 QQ plot, then RK5 stress windows as a panel of their own;
+//   RR   RL3 and RL4 rolling beta and correlation, BR3 capture, BR5 Treynor (P2), BR4 scatter, RG1 volatility
+//        regimes (Welch t, no p-value) and RG2 trend regime (P2). RR's rolling Sharpe carries the RL1 ranges
+//        (TearViews).
 // DD and MRET have no P1 view. Each chart keeps its summary and table view.
 import { useId, useMemo, type JSX } from 'react'
 import { Cone } from '../../charts/echarts/Cone'
@@ -13,6 +15,8 @@ import LineStack from '../../charts/LineStack'
 import { TEAR_P1 as P } from '../../copy/tearP1'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
+import { TrendRegimeHost } from '../p2rct/hosts'
+import RiskExtrasLive from '../riskextras/RiskExtrasLive'
 import KpiTile, { KpiRow } from '../../tiles/KpiTile'
 import { Card, Pending, Rows, ScrollRegion, chartId } from './TearCard'
 import type { TearCode } from './TearSheet'
@@ -21,7 +25,9 @@ import {
   bootstrapLine, captureRows, cfMoments, cfRows, coneInput, intervalRows, jarqueBeraRows, qqInput, ratioTiles, regimeRows, relativeEmpty, relativeFull,
   relativeStack, scatterInput, stressMonthlyNote, stressRows, unlabelledLine, welchLine,
 } from './tearP1Model'
-import { BOOTSTRAP_MIN_N, bootstrapPossible, useTearBootstrap, useTearExtended, type Bootstrap, type Extended, type Freq, type TearTarget } from './tearQueries'
+import {
+  BOOTSTRAP_MIN_N, bootstrapPossible, useTearBootstrap, useTearExtended, useTearTrend, type Bootstrap, type Extended, type Freq, type TearTarget,
+} from './tearQueries'
 
 export interface TearP1Props {
   readonly target: TearTarget
@@ -262,6 +268,13 @@ function RegimesCard({ ext }: { readonly ext: Extended }) {
   )
 }
 
+/** RG2: the trend regime beside RG1. A run has no monthly view, so the card is left out for a run at Freq M. */
+function TrendCard({ target, freq, cost, link }: TearP1Props) {
+  const trend = useTearTrend(target, freq, cost, true)
+  if (target.kind === 'run' && freq === 'M') return null
+  return <TrendRegimeHost query={trend} link={link} />
+}
+
 function EqCards({ target, freq, cost, data }: TearP1Props) {
   const possible = bootstrapPossible(data.n)
   const boot = useTearBootstrap(target, freq, cost, possible)
@@ -293,6 +306,7 @@ function TabCards(props: TearP1Props) {
           <>
             <RatiosCard ext={ext} />
             <CfCard ext={ext} />
+            <RiskExtrasLive tab="RET" target={target} freq={props.freq} cost={props.cost} />
             <NormalityCard ext={ext} data={data} name={target.name} />
             <StressPanel ext={ext} />
           </>
@@ -306,8 +320,10 @@ function TabCards(props: TearP1Props) {
         <>
           <RelativeCard ext={ext} name={target.name} link={link} />
           <CaptureCard ext={ext} />
+          <RiskExtrasLive tab="RR" target={target} freq={props.freq} cost={props.cost} />
           <ScatterCard ext={ext} name={target.name} />
           <RegimesCard ext={ext} />
+          <TrendCard {...props} />
         </>
       )}
     </ExtendedCards>

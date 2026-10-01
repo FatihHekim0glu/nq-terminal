@@ -21,6 +21,7 @@ import {
 } from './data/research'
 import { LEDGER, RUNS, RUN_DETAILS, RUN_FILLS, RUN_TRADES, compareStats, logPage, repage } from './data/runs'
 import { COMMAND_INDEX, health } from './data/system'
+import { IB_OFF, JOBS_OFF } from './data/p2'
 import { DEMO_DETAIL } from './data/text'
 
 export type { DemoAnswer }
@@ -137,6 +138,18 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/dq/symbols': () => NOT_IN_DEMO,
   '/api/dq/calendar/{symbol}': () => NOT_IN_DEMO,
   '/api/dq/guards': () => NOT_IN_DEMO,
+
+  // P2: the demo holds no body for these views; the queue and the IB snapshot answer as a server with both off
+  '/api/analytics/hypothesis/{name}/risk-extras': () => NOT_IN_DEMO,
+  '/api/analytics/run/{run_id}/risk-extras': () => NOT_IN_DEMO,
+  '/api/analytics/hypothesis/{name}/trend-regime': () => NOT_IN_DEMO,
+  '/api/analytics/run/{run_id}/trend-regime': () => NOT_IN_DEMO,
+  '/api/analytics/run/{run_id}/capacity': () => NOT_IN_DEMO,
+  '/api/analytics/spa': () => NOT_IN_DEMO,
+  '/api/market/term-structure/{root}': () => NOT_IN_DEMO,
+  '/api/ib/snapshot': () => served(IB_OFF),
+  '/api/jobs': () => served(JOBS_OFF),
+  '/api/jobs/{job_id}': () => NOT_IN_DEMO,
 }
 
 // ---------------------------------------------------------------- matching a URL to a template

@@ -368,7 +368,7 @@ Write-Output "before: log $($before.log_length) bytes; $(($PinnedFiles | ForEach
 
 $started = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $saved = @{}
-foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN')) {
+foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN')) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $testsExit = -1
@@ -380,6 +380,8 @@ try {
     if ($build.ExitCode -ne 0) { throw "vite build failed with code $($build.ExitCode); see $Work\build.err.log" }
 
     [Environment]::SetEnvironmentVariable('NQT_FIXTURE_DIR', $null, 'Process')
+    # A smoke run must never reach the owner's TWS, whatever the shell sets: the IB snapshot stays off.
+    [Environment]::SetEnvironmentVariable('NQT_IB_READONLY', $null, 'Process')
     # The backend's same-origin check accepts the terminal port, which is the preview in front of it.
     $env:NQT_PORT = "$WebPort"
     $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"

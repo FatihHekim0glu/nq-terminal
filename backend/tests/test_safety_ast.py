@@ -36,15 +36,16 @@ Rules
   bound to a module file under `nq_terminal/` (`stored_alpha.extract(...)`) is not a write by its name alone: that
   module is scanned itself. `WRITE_ALLOWED` lists
   modules that may write under
-  `terminal/state`; it is empty until the P2 job runner (U3).
+  `terminal/state`: the P2 job runner (`services/jobs.py`, U3) only.
 - order_call: `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions`, `reqAutoOpenOrders`,
-  `reqOpenOrders` and the Nautilus `submit_order`, `cancel_order`, `modify_order` family, as a call, a
+  `reqOpenOrders`, their six `...ProtoBuf` twins, and the Nautilus `submit_order`, `cancel_order`, `modify_order` family, as a call, a
   reference, an import or a `getattr` string. A `def` of those names is allowed (the P2 read-only client
   overrides them to raise).
 - ledger_append: any import of `scripts.ledger_append` (static, `importlib`, `runpy`). The ledger copy
   command text is a plain string and is fine.
 - ib_client: `ibapi`, `nautilus_trader.live`, `nautilus_trader.adapters.interactive_brokers`,
-  `nq_lab.ib_patches` (no IB client in P0 or P1).
+  `nq_lab.ib_patches`. `ibapi` alone is allowed in `services/ib_readonly_client.py` and `tests/ib_fake_server.py`
+  (the P2 read-only snapshot); the other three stay banned everywhere.
 - gate_door: `oos_gate.close_opening` anywhere; in PROD also `oos_gate.serve_bars` (the one door is
   `nq_lab.data.serve`), and a direct `nq_lab.data.serve` call must pass `caller="terminal"`.
 - test_gate (TEST, OTHER): `serve_bars` must get an explicit `log_path` that is not None, and the real
@@ -82,6 +83,7 @@ PY_SUFFIXES = frozenset({".py"})
 WEB_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs"})
 PROD, TEST, OTHER = "prod", "test", "other"
 CATALOG = "backend/nq_terminal/services/catalog.py"
+IB_CLIENT_ALLOWED = frozenset({"backend/nq_terminal/services/ib_readonly_client.py", "backend/tests/ib_fake_server.py"})
 RULES = ("parquet", "dataset", "duckdb", "polars", "serve_sealed", "data_path", "write", "order_call",
          "ledger_append", "ib_client", "gate_door", "test_gate", "dynamic", "syntax")
 
@@ -97,7 +99,13 @@ class Violation:
         return f"{self.where}:{self.line} [{self.rule}] {self.detail}"
 
 
-WRITE_ALLOWED: frozenset[str] = frozenset()
+WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py"})
+# The qa golden-file tools (`--write PATH` regenerates a golden vector file under terminal/qa) and their tests, which
+# write temporary files and run the tools in a subprocess. They sit outside the terminal's own code, in OTHER scope.
+QA_WRITE_ALLOWED: frozenset[str] = frozenset({
+    "qa/crosscheck/p12_expectation.py", "qa/crosscheck/p12_neff.py", "qa/crosscheck/p12_power.py",
+    "qa/tests/test_p12_expectation.py", "qa/tests/test_p12_neff.py", "qa/tests/test_p12_power.py",
+})
 
 BANNED_MODULES = {
     "pyarrow.parquet": "parquet", "fastparquet": "parquet",
@@ -125,6 +133,8 @@ COLUMNAR_READS = {"read_parquet": "parquet", "ParquetFile": "parquet", "ParquetD
                   "read_feather": "dataset", "read_orc": "dataset"}
 ORDER_NAMES = frozenset({
     "placeOrder", "cancelOrder", "reqGlobalCancel", "exerciseOptions", "reqAutoOpenOrders", "reqOpenOrders",
+    "placeOrderProtoBuf", "cancelOrderProtoBuf", "reqGlobalCancelProtoBuf", "exerciseOptionsProtoBuf",
+    "reqAutoOpenOrdersProtoBuf", "reqOpenOrdersProtoBuf",
     "submit_order", "submit_order_list", "cancel_order", "cancel_orders", "cancel_all_orders", "modify_order",
     "close_position", "close_all_positions",
 })
@@ -306,6 +316,8 @@ class Scanner(ast.NodeVisitor):
     def qualified_rule(self, full: str) -> str | None:
         if self.is_catalog and full in CATALOG_ALLOWED:
             return None
+        if self.where in IB_CLIENT_ALLOWED and (full == "ibapi" or full.startswith("ibapi.")):
+            return None
         if self.scope == PROD and full in PROD_ONLY_OBJECTS:
             return PROD_ONLY_OBJECTS[full]
         if full in BANNED_OBJECTS:
@@ -402,7 +414,7 @@ class Scanner(ast.NodeVisitor):
             self.flag("data_path", node, "builds a path into data/processed, data/raw or data/sealed_cache")
         self.check_dynamic(node, full)
         self.check_serve(node, full)
-        if self.scope in (PROD, OTHER) and self.where not in WRITE_ALLOWED:
+        if self.scope in (PROD, OTHER) and self.where not in WRITE_ALLOWED | QA_WRITE_ALLOWED:
             receiver = self.dotted(node.func.value) if isinstance(node.func, ast.Attribute) else None
             problem = _write_problem(node, full, id(node) in self.pandas_calls, _terminal_module(receiver))
             if problem:
@@ -570,6 +582,9 @@ BANNED_CASES = [
     banned("order_call", "client.exerciseOptions(1, c, 1, 1, '', 0)"),
     banned("order_call", "send = getattr(client, 'placeOrder')"),
     banned("order_call", "send = client.placeOrder"),
+    banned("order_call", "client.placeOrderProtoBuf(proto)"),
+    banned("order_call", "client.reqGlobalCancelProtoBuf(proto)", TEST),
+    banned("order_call", "send = getattr(client, 'cancelOrderProtoBuf')"),
     banned("order_call", "from nq_lab.strategies.za_orb import submit_order"),
     banned("ledger_append", "import scripts.ledger_append"),
     banned("ledger_append", "from scripts import ledger_append"),
@@ -580,6 +595,10 @@ BANNED_CASES = [
     banned("ib_client", "from nautilus_trader.live.node import TradingNode"),
     banned("ib_client", "from nautilus_trader.adapters.interactive_brokers.config import InteractiveBrokersDataClientConfig"),
     banned("ib_client", "from nq_lab import ib_patches", OTHER),
+    banned("ib_client", "from ibapi.client import EClient", where="backend/nq_terminal/services/ib_snapshot.py"),
+    banned("ib_client", "from ibapi.client import EClient", TEST, where="backend/tests/test_ib_snapshot.py"),
+    banned("ib_client", "from nautilus_trader.live.node import TradingNode",
+           where="backend/nq_terminal/services/ib_readonly_client.py"),
     banned("gate_door", "from nq_lab.oos_gate import serve_bars"),
     banned("gate_door", "from nq_lab import oos_gate\nframe = oos_gate.serve_bars(a, b, caller='terminal', reason='r')"),
     banned("gate_door", "from nq_lab import oos_gate\noos_gate.close_opening('rebal_v1_confirm')"),
@@ -652,6 +671,9 @@ def allowed(snippet: str, scope: str = PROD, where: str | None = None):
 
 
 ALLOWED_CASES = [
+    allowed("from ibapi.client import EClient\nfrom ibapi.wrapper import EWrapper",
+            where="backend/nq_terminal/services/ib_readonly_client.py"),
+    allowed("from ibapi.protobuf.Position_pb2 import Position", TEST, where="backend/tests/ib_fake_server.py"),
     allowed("open(path, encoding='utf-8')"),
     allowed("open(path, 'rb')"),
     allowed("open(path, mode='r', encoding='utf-8')"),

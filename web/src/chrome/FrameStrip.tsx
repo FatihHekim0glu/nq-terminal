@@ -6,13 +6,15 @@
 // the saved workspaces (roadmap #14; SAVE NAME, LOAD NAME): a workspace on screen owns the layout, so its
 // tab is the active one and carries the mark. On the right the READ ONLY and
 // NO ORDER PATH chips, always shown, then DEMO DATA in the demo only (src/demo/boot.tsx marks the
-// page), and `≡ Options` (event tape, colour scheme, Undo layout change, Reset this layout). The two chips
+// page), and `≡ Options` (event tape, colour scheme, theme, Undo layout change, Reset this layout). The two chips
 // are plain text; DEMO DATA is a key with a tooltip that opens the About this demo lines on the HELP page
 // (U01). No window glyphs: the browser tab has its own.
 import { useRef, useState, type KeyboardEvent } from 'react'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import { DEMO_DATA, FRAME_STRIP, isDemoPage } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
+import { LookOptions } from '../theme/LookOptions'
+import type { Look } from '../theme/look'
 import './FrameStrip.css'
 
 export type ColourScheme = 'standard' | 'deut' | 'prot'
@@ -24,6 +26,9 @@ export interface FrameStripProps {
   readonly edited?: boolean
   readonly tapeOn: boolean
   readonly scheme: ColourScheme
+  /** The theme (standard or amber-classic); the Theme group of Options shows only when `onLook` is given. */
+  readonly look?: Look
+  readonly onLook?: (look: Look) => void
   /** Open a layout by its screen mnemonic. */
   readonly onOpen: (screen: MnemonicCode) => void
   /** The + tab: start a new layout from the command line. */
@@ -101,7 +106,7 @@ function DemoKey({ onDemo }: { readonly onDemo: () => void }) {
   )
 }
 
-function Options({ tapeOn, scheme, onTape, onScheme, onUndo, onReset }: Pick<FrameStripProps, 'tapeOn' | 'scheme' | 'onTape' | 'onScheme' | 'onUndo' | 'onReset'>) {
+function Options({ tapeOn, scheme, look = 'standard', onTape, onScheme, onLook, onUndo, onReset }: Pick<FrameStripProps, 'tapeOn' | 'scheme' | 'look' | 'onTape' | 'onScheme' | 'onLook' | 'onUndo' | 'onReset'>) {
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
   const close = (e: KeyboardEvent) => {
@@ -131,6 +136,7 @@ function Options({ tapeOn, scheme, onTape, onScheme, onUndo, onReset }: Pick<Fra
               <button key={s} type="button" aria-pressed={scheme === s} onClick={() => onScheme(s)}>{FRAME_STRIP.schemes[s]}</button>
             ))}
           </div>
+          {onLook ? <LookOptions look={look} onLook={onLook} /> : null}
         </div>
       ) : null}
     </div>
@@ -168,7 +174,7 @@ export function FrameStrip(props: FrameStripProps) {
           <span className="frame-flag">{FRAME_STRIP.noOrderPath}</span>
           {isDemoPage() ? <DemoKey onDemo={props.onDemo} /> : null}
         </div>
-        <Options tapeOn={props.tapeOn} scheme={props.scheme} onTape={props.onTape} onScheme={props.onScheme} onUndo={props.onUndo} onReset={props.onReset} />
+        <Options tapeOn={props.tapeOn} scheme={props.scheme} look={props.look} onTape={props.onTape} onScheme={props.onScheme} onLook={props.onLook} onUndo={props.onUndo} onReset={props.onReset} />
       </div>
     </div>
   )

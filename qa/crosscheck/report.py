@@ -14,6 +14,8 @@ def _num(value) -> str:
         return "-"
     if isinstance(value, (list, tuple, dict)):
         return f"<{len(value)} values>"
+    if isinstance(value, str):  # a word reference (for example the SPA superior set), compared exactly
+        return value
     value = float(value)
     return "nan" if math.isnan(value) else f"{value:.17g}"
 

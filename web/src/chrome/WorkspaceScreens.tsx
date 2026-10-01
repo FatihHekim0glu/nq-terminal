@@ -55,6 +55,8 @@ const SeasScreen = lazy(() => import('../screens/seas/SeasScreen'))
 const EvtScreen = lazy(() => import('../screens/evt/EvtScreen'))
 const RollScreen = lazy(() => import('../screens/roll/RollScreen'))
 const DqScreen = lazy(() => import('../screens/dq/DqScreen'))
+// 12 (P2, U3): the backtest queue, the one screen that writes (through api/jobsClient.ts only)
+const JobsScreen = lazy(() => import('../screens/jobs/JobsScreen'))
 
 function HelpPanel() {
   return <HelpScreen built={builtScreens(BUILT_SCREENS)} />
@@ -92,6 +94,7 @@ export const BUILT_SCREENS: ScreenRegistry = {
   EVT: EvtScreen,
   ROLL: RollScreen,
   DQ: DqScreen,
+  JOBS: JobsScreen,
 }
 
 export function builtScreens(registry: ScreenRegistry): ReadonlySet<string> {

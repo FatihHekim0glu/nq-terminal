@@ -13,6 +13,12 @@
 // to its parent's tear sheet on every tab, never an endless load.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
+import { dismissOrientation } from './orientation.ts'
+
+// The bare HOME frame is measured here: start as a viewer who has dismissed the first-run orientation line (e2e/orientation.ts).
+test.beforeEach(async ({ page }) => {
+  await dismissOrientation(page)
+})
 
 const RUN = 'nt_za_v0_fixture_a'
 const HYP = 'volmanaged_v0'
@@ -340,7 +346,11 @@ test.describe('tear sheet of a check row', () => {
       await expect(panel.getByRole('alert'), code).toHaveCount(0)
       await expect(panel.getByRole('button', { name: `${PARENT} ${code} <GO>` })).toBeVisible()
     }
-    expect(watch.requests.filter((r) => r.url().includes('/api/analytics/')).map((r) => r.url())).toEqual([])
+    // HOME's own first-load read of its default hypothesis panel can land after the first command is typed, so it is
+    // not a request of the check row; any other read under /api/analytics/ would be.
+    const homeOwnRead = `/api/analytics/hypothesis/${HYP}/panel`
+    const analytics = watch.requests.map((r) => new URL(r.url())).filter((u) => u.pathname.startsWith('/api/analytics/') && u.pathname !== homeOwnRead)
+    expect(analytics.map((u) => u.pathname)).toEqual([])
     await expectGalleryClean(page, watch)
     const last = page.locator(`[data-nqt-title="${CHECK} MRET"]`).filter({ visible: true })
     await last.getByRole('button', { name: `${PARENT} MRET <GO>` }).click()

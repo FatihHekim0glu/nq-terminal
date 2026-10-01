@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from nq_lab import mnq_roll
 from nq_lab.config import IS_END, IS_START
 from nq_lab.dtsmom_universe import TABLE
+from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import assert_get_only, create_app
 from nq_terminal.services import roll
 from nq_terminal.services.bars import find_rolls
@@ -244,7 +245,7 @@ def client(fake) -> TestClient:
 
 
 def test_the_router_is_get_only(fake):
-    assert_get_only(make_app(serve=fake))
+    assert_get_only(make_app(serve=fake), ALLOWED_WRITE_ROUTES)
 
 
 def test_rolls_endpoint_contract(client, fake):

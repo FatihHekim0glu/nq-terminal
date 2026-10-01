@@ -33,6 +33,7 @@ PINS: Mapping[str, tuple[str, str]] = {
     "VT_HAR_AMEND1_GUARDS": ("tests/test_vt_har_guards.py", "AMEND1_PINNED"),
     "VT_HAR_AMEND2_GUARDS": ("tests/test_vt_har_guards.py", "AMEND2_PINNED"),
     "VRP_GUARDS": ("tests/test_vrp_guards.py", "PINNED"),
+    "FXEOM_GUARDS": ("tests/test_fxeom_guards.py", "PINNED"),
 }
 MAX_PIN_BYTES = 1024 * 1024
 

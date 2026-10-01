@@ -121,6 +121,13 @@ export type PaperRollsQuery = NonNullable<RequestOf<'/api/market/paper-rolls'>['
 export const usePaperRolls = (query: PaperRollsQuery, enabled = true) =>
   useApiQuery('/api/market/paper-rolls', { query }, { enabled })
 
+/** SV8: the SPA, Reality Check and StepM family test (MT 88), [POST HOC]; asked only once its tab is open. */
+export const useSpa = (enabled = true) => useApiQuery('/api/analytics/spa', {}, { enabled })
+
+/** MV6: the term structure of one market from its calendar chains (ROLL 2) Market); [POST HOC], through the gate. */
+export const useTermStructure = (root: string, enabled = true) =>
+  useApiQuery('/api/market/term-structure/{root}', { path: { root } }, { enabled: enabled && hasId(root) })
+
 /** DQ (RI4, RI5): the records only. */
 export const useDqSymbols = () => useApiQuery('/api/dq/symbols', {})
 export const useDqCalendar = (symbol: string) =>

@@ -47,6 +47,7 @@ import { requestHelpTopic } from './screens/help/helpTopic.store'
 import { useLinkGroups } from './state/linkGroups'
 import type { WorkspacesStore } from './state/workspaces'
 import { applyScheme, loadScheme, saveScheme } from './chrome/FrameStrip.scheme'
+import { useLook } from './theme/useLook'
 import './chrome/FrameStrip.frame.css'
 
 // WorkspacePreview (previewText and the plan describer) stays out of the shell, about 480 B gzip: it loads
@@ -265,6 +266,7 @@ interface ChromeHeaderProps {
 function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: ChromeHeaderProps) {
   const tapeOn = useTapeOn()
   const scheme = useScheme()
+  const look = useLook(() => postMessage(MESSAGES.theme))
   const health = useHealthState()
   const group = focused?.params.group ?? null
   const nav = focused ? { code: focused.params.code, group: focused.params.group, context: focused.context } : null
@@ -283,6 +285,8 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         edited={shown.edited}
         tapeOn={tapeOn}
         scheme={scheme.scheme}
+        look={look.look}
+        onLook={look.choose}
         onOpen={(code) => actions.runAndFocus(code)}
         onNew={openNew}
         onTape={() => toggleTape()}

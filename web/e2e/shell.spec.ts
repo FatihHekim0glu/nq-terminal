@@ -45,6 +45,8 @@ const BUILT: ReadonlySet<string> = new Set([
   'COST', 'BLK', 'EXPO', 'SEAL',
   // Phase 11: the P1 market and quality screens.
   'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ',
+  // Phase 12 (U3): the backtest queue; every mnemonic now opens a screen.
+  'JOBS',
 ])
 const MULTI_PANEL_SCREENS: Readonly<Record<string, readonly string[]>> = {
   HOME: HOME_TITLES,

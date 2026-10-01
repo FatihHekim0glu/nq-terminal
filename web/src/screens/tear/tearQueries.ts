@@ -150,6 +150,28 @@ export function useTearBootstrap(target: TearTarget, freq: Freq, cost: number | 
   return useTearP1(run, hypothesis, target)
 }
 
+export type TrendRegime = Schemas['TrendRegimeView']
+
+/**
+ * RG2 of the series the tab shows. A hypothesis is asked at its cost (a monthly book answers `available: false` with
+ * the reason); a run is asked only at the daily frequency, since the route has no monthly view.
+ */
+export function useTearTrend(target: TearTarget, freq: Freq, cost: number | null, enabled: boolean): TearP1Query<TrendRegime> {
+  const isRun = target.kind === 'run'
+  const run = useApiQuery('/api/analytics/run/{run_id}/trend-regime', { path: { run_id: target.name } }, { enabled: enabled && isRun && target.name !== '' && freq === 'D' })
+  const hypothesis = useApiQuery(
+    '/api/analytics/hypothesis/{name}/trend-regime',
+    { path: { name: target.name }, query: cost === null ? {} : { cost } },
+    { enabled: enabled && !isRun && target.name !== '' && cost !== null },
+  )
+  return useTearP1(run, hypothesis, target)
+}
+
+/** EX5 of a run (contracts per session over the session's volume); the route refuses an unbalanced run (422). */
+export function useRunCapacity(runId: string, enabled: boolean) {
+  return useApiQuery('/api/analytics/run/{run_id}/capacity', { path: { run_id: runId } }, { enabled: enabled && runId !== '' })
+}
+
 /** TA2 (MAE and MFE over the run's own gated 1m bars) and TA4, TA5 (holding times, streaks) of a run. */
 export function useRunPaths(runId: string, enabled: boolean) {
   const on = { enabled: enabled && runId !== '' }

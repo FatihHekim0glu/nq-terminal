@@ -94,3 +94,64 @@ def test_the_production_package_never_imports_the_harness_or_the_fakes():
     for path in PACKAGE.rglob("*.py"):
         found = imported_modules(path.read_text(encoding="utf-8")) & {"fakes", "fixture_app", "research_guard"}
         assert not found, (path, found)
+
+
+# ---------------------------------------------------------------- the stand-in runner of the browser tests (P2, U3)
+
+def _queue_body(run_id: str) -> dict:
+    return {"strategy": "za_orb", "params": {}, "variant": "vendor", "start": "2015-01-02", "end": "2015-02-02",
+            "run_id": run_id}
+
+
+def test_the_job_runner_is_off_in_fixture_mode_unless_the_fake_runner_is_asked_for(tmp_path):
+    off = create_fixture_app({"NQT_FIXTURE_DIR": str(FIXTURES)}, log_dir=tmp_path / "off")
+    c = TestClient(off, base_url=LOCAL, client=LOOPBACK)
+    assert c.get("/api/jobs").json()["enabled"] is False
+    refused = c.post("/api/jobs", json=_queue_body("t_fixture_off"), headers={"X-NQT": "1"})
+    assert refused.status_code == 503
+
+
+def test_the_fixture_app_never_reaches_tws_even_when_the_shell_sets_the_ib_flag(tmp_path, monkeypatch):
+    # Invariant 5: the flag, host and port come from the process environment; a fixture backend must ignore them.
+    from nq_terminal.services import ib_readonly_client as client_module
+
+    attempts: list[tuple] = []
+
+    def trap(*args, **kwargs):
+        attempts.append(args)
+        raise AssertionError("the fixture app tried to read a TWS")
+
+    monkeypatch.setenv("NQT_IB_READONLY", "1")
+    monkeypatch.setenv("IB_HOST", "127.0.0.1")
+    monkeypatch.setenv("IB_PORT", "7497")
+    monkeypatch.setattr(client_module, "fetch_raw", trap)
+    app = create_fixture_app({"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_IB_READONLY": "1"}, log_dir=tmp_path / "ib")
+    body = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/ib/snapshot").json()
+    assert attempts == []
+    assert body["state"] == "disabled"
+
+
+def test_the_fake_runner_queues_a_job_runs_the_stand_in_script_and_never_touches_the_research_folders(tmp_path):
+    import time
+
+    env = {"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_FIXTURE_JOBS": "fake"}
+    app = create_fixture_app(env, log_dir=tmp_path / "on")
+    c = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    try:
+        assert c.get("/api/jobs").json()["enabled"] is True
+        posted = c.post("/api/jobs", json=_queue_body("t_fixture_fake"), headers={"X-NQT": "1"})
+        assert posted.status_code == 201
+        job_id = posted.json()["id"]
+        deadline = time.monotonic() + 30
+        job = posted.json()
+        while job["state"] in ("queued", "running") and time.monotonic() < deadline:
+            time.sleep(0.2)
+            job = c.get(f"/api/jobs/{job_id}").json()
+        assert job["state"] == "ok" and job["exit_code"] == 0
+        assert any("fake runner: t_fixture_fake za_orb" in line for line in job["log_tail"])
+        # the stand-in root is a temporary folder: no run output appeared under the real project
+        from nq_lab.config import ROOT
+
+        assert not (ROOT / "backtests" / "output" / "t_fixture_fake").exists()
+    finally:
+        app.state.jobs.close()

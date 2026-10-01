@@ -222,13 +222,23 @@ const OTHER_CHANNELS: ReadonlyArray<readonly [RegExp, string]> = [
 const CLIENT_CHANNELS: ReadonlySet<string> = new Set(['EventSource'])
 
 /**
+ * The one exception to GET only (PRD U3, DL5): the backtest queue client may send exactly a POST (queue a run) and a
+ * DELETE (stop a job), and call fetch to do it. PUT, PATCH and every other request channel stay flagged there too.
+ */
+const JOBS_CLIENT = '/api/jobsClient.ts'
+const JOBS_WRITE_METHODS = /^(post|delete)$/i
+
+/**
  * Source scan used by the GET-only test over every module under src: quoted write methods (any
  * case) anywhere, fetch and EventSource outside src/api/client.ts, and every other request channel.
  */
 export function findWriteRequests(file: string, source: string): string[] {
-  const methods = [...source.matchAll(WRITE_METHOD)].map((m) => `${file}: write method ${(m[2] ?? '').toUpperCase()}`)
+  const isJobsClient = file.endsWith(JOBS_CLIENT)
+  const methods = [...source.matchAll(WRITE_METHOD)]
+    .filter((m) => !(isJobsClient && JOBS_WRITE_METHODS.test(m[2] ?? '')))
+    .map((m) => `${file}: write method ${(m[2] ?? '').toUpperCase()}`)
   const isClient = file.endsWith('/api/client.ts')
-  const strayFetch = !isClient && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
+  const strayFetch = !isClient && !isJobsClient && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
   const channels = OTHER_CHANNELS
     .filter(([pattern, name]) => pattern.test(source) && !(isClient && CLIENT_CHANNELS.has(name)))
     .map(([, name]) => `${file}: uses ${name}`)

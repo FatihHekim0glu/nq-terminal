@@ -30,7 +30,7 @@ for (const port of [API_PORT, WEB_PORT]) {
 // The paper-book settings of this machine are blanked in the fixture backend's environment: LIVE shows
 // whether each is set, so a baseline must not depend on the shell it ran in. Playwright spreads
 // process.env under a web server's env, so each key is overridden with an empty value (read as unset).
-const MACHINE_SETTINGS = ['IB_HOST', 'IB_PORT', 'IB_ACCOUNT_ID', 'IB_BASE_USD_RATE', 'IB_PAPER_DELAYED_DATA', 'VOLMAN_C'] as const
+const MACHINE_SETTINGS = ['NQT_IB_READONLY', 'IB_HOST', 'IB_PORT','IB_ACCOUNT_ID', 'IB_BASE_USD_RATE', 'IB_PAPER_DELAYED_DATA', 'VOLMAN_C'] as const
 const FIXTURE_ENV: Record<string, string> = {
   ...(process.env as Record<string, string>),
   ...Object.fromEntries(MACHINE_SETTINGS.map((key) => [key, ''])),
@@ -93,6 +93,8 @@ export default defineConfig({
       env: {
         ...FIXTURE_ENV,
         NQT_FIXTURE_DIR: FIXTURES,
+        // JOBS runs a stand-in script in a temporary folder, never the real run_base (backend/tests/fixture_app.py).
+        NQT_FIXTURE_JOBS: 'fake',
         // The backend's same-origin check lists the terminal origins by port: the preview is one.
         NQT_PORT: String(WEB_PORT),
         PYTHONUTF8: '1',

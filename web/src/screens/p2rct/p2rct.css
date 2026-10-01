@@ -1,0 +1,7 @@
+/* RG2, EX5 and MV6 cards (look spec 7.3 card bands, as the tear sheet's P1 cards). Tokens only, square corners, hard
+   cuts (no transitions). Tables wrap rather than clip, so a narrow panel keeps every number on screen (1.4.10). */
+.rct-card { min-width: 0; }
+.rct-card .tear-card-body { min-width: 0; }
+.rct-table th, .rct-table td { white-space: normal; overflow-wrap: anywhere; }
+.rct-table caption { text-align: left; }
+.rct-gate { color: var(--muted); }

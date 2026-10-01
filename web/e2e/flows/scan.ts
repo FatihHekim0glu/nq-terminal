@@ -69,10 +69,43 @@ export interface RequestRecord {
   readonly url: string
 }
 
-/** Requests that are not a GET to the page's own origin. */
-export function nonGetRequests(requests: readonly RequestRecord[], origin: string): string[] {
+/**
+ * The only two writes the terminal has (PRD U3): queue a backtest and stop a job. In OpenAPI paths, as the served
+ * document and the contract list them, sorted.
+ */
+export const JOB_WRITES: readonly string[] = ['DELETE /api/jobs/{job_id}', 'POST /api/jobs']
+
+const JOB_ID_SEGMENT = /^\/api\/jobs\/j_[0-9a-f]{12}$/
+
+/** True for exactly `POST /api/jobs` and `DELETE /api/jobs/<job id>`, on the page's own origin. */
+export function isJobWrite(method: string, url: string, origin: string): boolean {
+  const parsed = new URL(url)
+  if (parsed.origin !== origin || parsed.search !== '') return false
+  if (method === 'POST') return parsed.pathname === '/api/jobs'
+  return method === 'DELETE' && JOB_ID_SEGMENT.test(parsed.pathname)
+}
+
+/**
+ * Requests that are not a GET to the page's own origin. `allowJobWrites` lets exactly the queue's two writes through
+ * (isJobWrite): a PUT or PATCH there, a POST to any other path and a DELETE of a nested path are still reported.
+ */
+export function nonGetRequests(requests: readonly RequestRecord[], origin: string, allowJobWrites = false): string[] {
   return requests
     .filter((r) => r.method !== 'GET' || new URL(r.url).origin !== origin)
+    .filter((r) => !(allowJobWrites && isJobWrite(r.method, r.url, origin)))
+    .map((r) => `${r.method} ${r.url}`)
+}
+
+/** A write request with the headers it was sent with, for writesWithoutHeader. */
+export interface WriteRecord extends RequestRecord {
+  readonly headers: Readonly<Record<string, string>>
+}
+
+/** The queue's writes that lack `X-NQT: 1`, or a POST that lacks a JSON content type. */
+export function badJobWrites(requests: readonly WriteRecord[], origin: string): string[] {
+  return requests
+    .filter((r) => isJobWrite(r.method, r.url, origin))
+    .filter((r) => r.headers['x-nqt'] !== '1' || (r.method === 'POST' && !/^application\/json/.test(r.headers['content-type'] ?? '')))
     .map((r) => `${r.method} ${r.url}`)
 }
 

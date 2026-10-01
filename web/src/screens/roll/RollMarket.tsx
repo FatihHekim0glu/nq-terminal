@@ -1,12 +1,15 @@
 // One market's rolls (ANALYTICS MV10, gaps as MV2): a market picker, the summary with the universe QA report's count beside
 // ours, the gap chart and the table of rolls (dates, the vendor instrument ids before and after, the raw close
 // before the roll, the gap in points at the tick's precision and in percent). Rolls dated after 2021-12-31 are
-// never shown; if the API ever sent one, a note says how many were left out.
+// never shown; if the API ever sent one, a note says how many were left out. Under the table, MV6 (P2): the term structure
+// of the picked market from its calendar chains (front to next carry over the spread, and the latest curve).
 import { useMemo } from 'react'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
+import { useTermStructure } from '../../api/queries.screens'
 import { CONTRACT_NAMES } from '../../copy/market'
 import { ROLL } from '../../copy/roll'
 import { fillCopy } from '../../copy/workspace'
+import { TermStructureHost } from '../p2rct/hosts'
 import GapChart from './GapChart'
 import { formatPct, formatPts, gapChart, qaText, shownRolls, summaryText } from './model'
 import type { MarketRolls, RollCalendar } from './types'
@@ -62,6 +65,7 @@ export default function RollMarket({ calendar, symbol, onSymbol }: RollMarketPro
     [calendar.markets],
   )
   const chart = useMemo(() => (market ? gapChart(market) : null), [market])
+  const term = useTermStructure(market?.root ?? '')
   if (!market || !chart) return null
   return (
     <div className="roll-market">
@@ -76,6 +80,7 @@ export default function RollMarket({ calendar, symbol, onSymbol }: RollMarketPro
         <GapChart chart={chart} />
       </div>
       <RollsTable market={market} />
+      <TermStructureHost root={market.root} query={term} />
       <p className="roll-note muted">{ROLL.idsNote}</p>
     </div>
   )

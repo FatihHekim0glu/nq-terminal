@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nq_terminal.api import dq as dq_api
+from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import assert_get_only, create_app
 from nq_terminal.settings import load_settings
 
@@ -25,7 +26,7 @@ def client(tmp_path: Path) -> TestClient:
     write_dq_results(tmp_path)
     settings = replace(load_settings({"NQT_FIXTURE_DIR": str(tmp_path)}), web_dist=tmp_path / "no-dist")
     app = create_app(settings)  # create_app includes the DQ router before the web mount
-    assert_get_only(app)
+    assert_get_only(app, ALLOWED_WRITE_ROUTES)
     return TestClient(app, base_url=LOCAL, client=LOOPBACK)
 
 

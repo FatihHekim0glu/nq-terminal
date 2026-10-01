@@ -270,10 +270,12 @@ async def run_stream(session: StreamSession, limits: StreamLimits,
     ends = clock() + limits.lifetime_s
     for event in await anyio.to_thread.run_sync(session.opening):
         yield event
-    while clock() < ends:
+    while True:  # one tick at least, so a slow opening cannot leave a stream of hello and bye alone
         events, more = await anyio.to_thread.run_sync(session.tick)
         for event in events:
             yield event
+        if clock() >= ends:
+            break
         if not more:
             await anyio.sleep(limits.poll_s)
     yield session.bye()

@@ -5,8 +5,8 @@ line-length = 120
 
 [lint.isort]
 known-first-party = ["nq_lab", "nq_terminal"]
-known-local-folder = ["conftest", "fakes", "fixture_app", "research_guard", "safety_receivers", "test_research_support",
-                      "test_runs_support"]
+known-local-folder = ["conftest", "fakes", "fixture_app", "ib_fake_server", "research_guard", "safety_names",
+                      "safety_receivers", "test_research_support", "test_runs_support"]
 
 [lint.per-file-ignores]
 # One import and one include_router line per build phase, so concurrent edits each touch a single line (the one-line

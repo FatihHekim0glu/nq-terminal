@@ -17,9 +17,9 @@ describe('the built mnemonic codes (one set for suggestions and menus)', () => {
     expect(BUILT_CODES.size).toBe(Object.keys(BUILT_SCREENS).length)
   })
 
-  it('hold every P0 and P1 mnemonic and leave JOBS, the P2 slot, unbuilt', () => {
-    for (const m of MNEMONICS) expect(isBuilt(m.code), m.code).toBe(m.priority !== 'P2')
-    expect(isBuilt('JOBS')).toBe(false)
+  it('hold every mnemonic, JOBS (the P2 backtest queue) included', () => {
+    for (const m of MNEMONICS) expect(isBuilt(m.code), m.code).toBe(true)
+    expect(isBuilt('JOBS')).toBe(true)
     expect(isBuilt('VCONE')).toBe(true)
   })
 
@@ -32,6 +32,7 @@ describe('the built mnemonic codes (one set for suggestions and menus)', () => {
   it('born failing: a screen registry missing one code, or holding an extra one, is reported', () => {
     const { VCONE: _dropped, ...rest } = BUILT_SCREENS
     expect(drift(BUILT_CODES, builtScreens(rest))).toEqual({ listedOnly: ['VCONE'], screenOnly: [] })
-    expect(drift(BUILT_CODES, new Set([...BUILT_CODES, 'JOBS']))).toEqual({ listedOnly: [], screenOnly: ['JOBS'] })
+    expect(drift(BUILT_CODES, new Set([...BUILT_CODES, 'NOPE']))).toEqual({ listedOnly: [], screenOnly: ['NOPE'] })
+    expect(drift(BUILT_CODES, builtScreens({ ...BUILT_SCREENS, JOBS: undefined as never }))).toEqual({ listedOnly: [], screenOnly: [] })
   })
 })

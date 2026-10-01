@@ -201,6 +201,14 @@ SERIES_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
     "vrp_eq_v0": SeriesSource("vrp_eq_v0_monthly.csv", "label", _per_cost("r_VRP_t{k}"), "return on capital per month",
                               "monthly", _per_cost("r_C_t{k}"), "constant long book, ES and YM",
                               time_rule=MONTH_END_SESSION, void_column="void"),
+    # Round 15: monthly book on the last weekday of the month (a holding hour at the WM/R fix, recorded as one
+    # return on K per month). `void` holds the reason text of a void month (empty otherwise) and its returns are
+    # empty, so empty values drop those months; `D` is the weekday the book traded on, never before the NYSE
+    # session it is dated at.
+    "fxeomhedge_v0": SeriesSource("fxeomhedge_v0_monthly.csv", "month", _per_cost("r{k}"),
+                                  "return on capital per month", "monthly", _per_cost("lo{k}"),
+                                  "gross long-only FX basket, same hour", time_rule=MONTH_END_SESSION,
+                                  guard_column="D"),
 })
 
 

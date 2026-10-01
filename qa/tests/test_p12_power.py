@@ -135,6 +135,24 @@ def test_a_tampered_copy_returns_one_and_names_the_first_difference(tmp_path, ca
     assert "mde[3].value" in capsys.readouterr().out
 
 
+def _one_ulp_up(value):
+    """The same JSON value with every float moved one last bit up: what another platform's maths library can do."""
+    if isinstance(value, float):
+        return math.nextafter(value, math.inf)
+    if isinstance(value, list):
+        return [_one_ulp_up(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _one_ulp_up(item) for key, item in value.items()}
+    return value
+
+
+def test_a_copy_that_differs_in_the_last_bit_of_every_float_still_passes(tmp_path, capsys):
+    path = tmp_path / "other_platform.json"
+    path.write_text(json.dumps(_one_ulp_up(json.loads(GOLDEN.read_text())), indent=1, sort_keys=True, allow_nan=False) + "\n")
+    assert main(["--check", str(path)]) == 0
+    assert capsys.readouterr().out == ""
+
+
 def test_a_missing_or_shortened_copy_returns_one(tmp_path, capsys):
     assert main(["--check", str(tmp_path / "absent.json")]) == 1
     short = tmp_path / "short.json"

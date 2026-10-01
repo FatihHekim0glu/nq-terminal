@@ -5,7 +5,7 @@
 // CSP report, and no served price point past the fence.
 import { expect, test, type Locator, type Page, type Request, type Response } from '@playwright/test'
 import { OFFLINE, recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
-import { isPriceEndpoint, nonGetRequests, pointsPastFence } from './scan.ts'
+import { badJobWrites, isPriceEndpoint, nonGetRequests, pointsPastFence } from './scan.ts'
 
 export const CLIENT_HEADER = 'x-nqt-client'
 export const CLIENT_NAME = 'nq-lab-terminal'
@@ -146,11 +146,21 @@ export async function pressUntil(page: Page, key: string, done: () => Promise<bo
   throw new Error(`${key} pressed ${limit} times without reaching the target`)
 }
 
+export interface CleanFlowOptions {
+  /** The flow queues and stops a backtest: exactly `POST /api/jobs` and `DELETE /api/jobs/<id>` may be sent, each with `X-NQT: 1`. */
+  readonly jobWrites?: boolean
+}
+
 /** The flow's end state: GET only, same origin, client header, no errors, no CSP report, fence held. */
-export async function expectCleanFlow(page: Page, watch: FlowWatch): Promise<void> {
+export async function expectCleanFlow(page: Page, watch: FlowWatch, options: CleanFlowOptions = {}): Promise<void> {
   const origin = new URL(page.url()).origin
+  const allowJobWrites = options.jobWrites === true
   expect(watch.requests.length).toBeGreaterThan(0)
-  expect(nonGetRequests(watch.requests.map((r) => ({ method: r.method(), url: r.url() })), origin)).toEqual([])
+  expect(nonGetRequests(watch.requests.map((r) => ({ method: r.method(), url: r.url() })), origin, allowJobWrites)).toEqual([])
+  if (allowJobWrites) {
+    const writes = await Promise.all(watch.requests.filter((r) => r.method() !== 'GET').map(async (r) => ({ method: r.method(), url: r.url(), headers: await r.allHeaders() })))
+    expect(badJobWrites(writes, origin)).toEqual([])
+  }
   // The live stream (TASKS 9.2) is an EventSource, which cannot set a header: it is a same-origin GET that asks
   // for text/event-stream, and every other API request carries the client header.
   const isStream = (r: Request) => new URL(r.url()).pathname === '/api/live/stream'

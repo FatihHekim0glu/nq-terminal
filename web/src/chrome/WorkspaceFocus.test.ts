@@ -60,6 +60,27 @@ describe('syncRoving: one tab stop per panel', () => {
     expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
   })
 
+  // axe scrollable-region-focusable (WCAG 2.1.1): the overlay takes the Tab stop, so a body that scrolls
+  // on its own is left at tabindex -1 under the dim. Marking it inert takes it out of the page for
+  // keyboard, pointer and the accessibility tree while the overlay is open, so it is not a scroll region
+  // that no key reaches; the mark goes again when the overlay closes.
+  it('born failing: an open overlay makes the panel body inert, and closing it makes it live again', () => {
+    const el = panel(`
+      <button data-roving id="bar">b</button>
+      <div data-roving data-roving-default id="body" tabindex="0">x</div>
+      <div ${ROVING_OVERLAY_ATTR} data-roving id="menu"><button id="cancel">c</button></div>`)
+    const body = el.querySelector('#body') as HTMLElement
+    const bar = el.querySelector('#bar') as HTMLElement
+    syncRoving(el)
+    expect(body.hasAttribute('inert')).toBe(true)
+    expect(bar.hasAttribute('inert')).toBe(false)
+    expect(el.querySelector('#menu')?.hasAttribute('inert')).toBe(false)
+    el.querySelector('#menu')?.remove()
+    syncRoving(el)
+    expect(body.hasAttribute('inert')).toBe(false)
+    expect(panelTabStops(el).map((n) => n.id)).toEqual(['body'])
+  })
+
   it('born failing: without the overlay mark the open menu has no tab stop at all', () => {
     const el = panel(`
       <button data-roving id="bar">b</button>
@@ -296,5 +317,31 @@ describe('handleRovingKey on a tab: the ARIA tabs keyboard pattern', () => {
   it('leaves Home and End alone on an item that is not a tab (it scrolls)', () => {
     const el = panel(html)
     expect(handleRovingKey(el, key(el.querySelector('#after') as HTMLElement, 'Home'))).toBe(false)
+  })
+})
+
+describe('handleRovingKey in a text area', () => {
+  const html = `<button data-roving id="a">a</button><textarea data-roving id="t">one\ntwo</textarea><button data-roving id="b">b</button>`
+
+  it('born failing: Right at the end of the text, or Left at the start, moves on, so a text area is not a keyboard trap', () => {
+    const el = panel(html)
+    const area = el.querySelector('#t') as HTMLTextAreaElement
+    area.focus()
+    area.setSelectionRange(area.value.length, area.value.length)
+    expect(handleRovingKey(el, key(area, 'ArrowRight'))).toBe(true)
+    expect(document.activeElement?.id).toBe('b')
+    area.focus()
+    area.setSelectionRange(0, 0)
+    expect(handleRovingKey(el, key(area, 'ArrowLeft'))).toBe(true)
+    expect(document.activeElement?.id).toBe('a')
+  })
+
+  it('keeps the arrows inside the text while the caret has room to move', () => {
+    const el = panel(html)
+    const area = el.querySelector('#t') as HTMLTextAreaElement
+    area.focus()
+    area.setSelectionRange(2, 2)
+    expect(handleRovingKey(el, key(area, 'ArrowRight'))).toBe(false)
+    expect(handleRovingKey(el, key(area, 'ArrowLeft'))).toBe(false)
   })
 })

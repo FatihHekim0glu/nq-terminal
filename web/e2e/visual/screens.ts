@@ -86,8 +86,9 @@ export const SCREENS: readonly ScreenCase[] = [
   { name: 'EQ', line: `${HYP} EQ`, code: 'EQ', charts: 2 },
   { name: 'DD', line: `${HYP} DD`, code: 'DD', charts: 1 },
   { name: 'RET', line: `${HYP} RET`, code: 'RET', charts: 3 },
-  { name: 'RR', line: `${HYP} RR`, code: 'RR', charts: 1 },
-  { name: 'RR-run', line: 'nt_dtsmom_v0_fixture_ts1 RR', code: 'RR', charts: 4 },
+  // P2 (RG2): RR also draws the trend regime, the NQ close against its mean with the regime strip (one more LineStack).
+  { name: 'RR', line: `${HYP} RR`, code: 'RR', charts: 2 },
+  { name: 'RR-run', line: 'nt_dtsmom_v0_fixture_ts1 RR', code: 'RR', charts: 5 },
   { name: 'MRET', line: `${HYP} MRET`, code: 'MRET', charts: 2 },
   { name: 'HELP', line: 'HELP', code: 'HELP', charts: 0 },
 ]
@@ -132,6 +133,9 @@ const OFFLINE_CHART_COUNTS: Readonly<Record<string, number>> = {
   // The volmanaged run's RR draws its net P&L against slippage ladder, its exposure and turnover pane and its weekday ladder (3). The
   // fixture's dtsmom RR draws 4; the demo holds no excursions or trade paths for the volmanaged run (analytics.ts EXCURSION_VIEWS, TRADE_PATH_VIEWS).
   'RR-run': 3,
+  // RG2's trend regime is not in the demo dataset (routes.ts answers its two paths "not in the demo dataset"), so the hypothesis RR
+  // keeps the one chart it drew before P2 and the trend card says so.
+  RR: 1,
 }
 
 /**

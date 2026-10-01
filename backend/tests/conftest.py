@@ -90,6 +90,13 @@ def research_files_guard():
     assert not report.problems, "research files changed by the terminal tests:\n" + "\n".join(report.problems)
 
 
+@pytest.fixture(autouse=True)
+def no_ib_settings_from_the_shell(monkeypatch: pytest.MonkeyPatch):
+    """The owner's IB settings must not leak into a test: a test that wants one sets it itself (after this runs)."""
+    for name in ("NQT_IB_READONLY", "IB_HOST", "IB_PORT"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def pytest_terminal_summary(terminalreporter):
     for note in _NOTES:
         terminalreporter.write_line(f"research guard note: {note}")

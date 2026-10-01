@@ -209,6 +209,31 @@ describe('GET only (PRD G6, DL5)', () => {
     expect(findWriteRequests('/src/screens/x/Screen.tsx', snippet)).toEqual(expect.arrayContaining([expect.stringMatching(pattern)]))
   })
 
+  it('lets the jobs client send a POST and a DELETE with fetch, and nothing else', () => {
+    expect(findWriteRequests('/src/api/jobsClient.ts', "x = 'POST'; y = 'DELETE'; fetch(u)")).toEqual([])
+    expect(findWriteRequests('/src/api/jobsClient.ts', 'globalThis.fetch(u, init)')).toEqual([])
+  })
+
+  it.each([
+    ["const m = 'PUT'", /PUT/],
+    ["const m = 'patch'", /PATCH/],
+    ["const r = new Request('/api/jobs')", /Request/],
+    ['navigator.sendBeacon(u, body)', /sendBeacon/],
+    ['const x = new XMLHttpRequest()', /XMLHttpRequest/],
+    ['const s = new EventSource(u)', /EventSource/],
+    ["const w = new WebSocket('ws://x')", /WebSocket/],
+  ])('born failing: still flags %s in the jobs client', (snippet, pattern) => {
+    expect(findWriteRequests('/src/api/jobsClient.ts', snippet)).toEqual([expect.stringMatching(pattern)])
+  })
+
+  it('born failing: the jobs allowance covers that one file only, not a copy of it elsewhere', () => {
+    const body = "x = 'POST'; y = 'DELETE'; fetch(u)"
+    expect(findWriteRequests('/src/api/jobsClient2.ts', body)).toHaveLength(3)
+    expect(findWriteRequests('/src/screens/jobs/jobsClient.ts', body)).toHaveLength(3)
+    expect(findWriteRequests('/src/screens/jobs/JobsScreen.tsx', body)).toHaveLength(3)
+    expect(findWriteRequests('./other.ts', body)).toHaveLength(3)
+  })
+
   it('lets the client keep its own fetch, and still flags a write method there', () => {
     expect(findWriteRequests('/src/api/client.ts', 'globalThis.fetch(url, init)')).toEqual([])
     expect(findWriteRequests('/src/api/client.ts', "method: 'delete'")).toEqual([expect.stringMatching(/DELETE/)])

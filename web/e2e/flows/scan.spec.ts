@@ -4,9 +4,12 @@
 import { expect, test } from '@playwright/test'
 import {
   actionNames,
+  badJobWrites,
   chunkName,
   FENCE_SECONDS,
   isActionName,
+  isJobWrite,
+  JOB_WRITES,
   nonGetRequests,
   openApiNames,
   pointsPastFence,
@@ -84,6 +87,53 @@ test.describe('GET-only check', () => {
       'GET http://127.0.0.1:8765/api/runs',
     ])
     expect(nonGetRequests(requests.slice(0, 1), ORIGIN)).toEqual([])
+  })
+})
+
+test.describe("the queue's two writes (PRD U3)", () => {
+  const JOB = 'j_0123456789ab'
+
+  test('lets exactly POST /api/jobs and DELETE /api/jobs/<job id> through, and reports every other write', () => {
+    const requests = [
+      { method: 'POST', url: `${ORIGIN}/api/jobs` },
+      { method: 'DELETE', url: `${ORIGIN}/api/jobs/${JOB}` },
+      { method: 'PUT', url: `${ORIGIN}/api/jobs` },
+      { method: 'PATCH', url: `${ORIGIN}/api/jobs/${JOB}` },
+      { method: 'POST', url: `${ORIGIN}/api/jobs/${JOB}` },
+      { method: 'DELETE', url: `${ORIGIN}/api/jobs` },
+      { method: 'DELETE', url: `${ORIGIN}/api/jobs/${JOB}/extra` },
+      { method: 'DELETE', url: `${ORIGIN}/api/jobs/not-a-job-id` },
+      { method: 'POST', url: `${ORIGIN}/api/orders` },
+      { method: 'POST', url: `${ORIGIN}/api/jobs?x=1` },
+      { method: 'POST', url: 'http://127.0.0.1:8765/api/jobs' },
+    ]
+    expect(nonGetRequests(requests, ORIGIN, true)).toEqual(requests.slice(2).map((r) => `${r.method} ${r.url}`))
+    expect(nonGetRequests(requests, ORIGIN)).toHaveLength(requests.length)
+  })
+
+  test('says what a job write is by method, origin and path', () => {
+    expect(isJobWrite('POST', `${ORIGIN}/api/jobs`, ORIGIN)).toBe(true)
+    expect(isJobWrite('DELETE', `${ORIGIN}/api/jobs/${JOB}`, ORIGIN)).toBe(true)
+    expect(isJobWrite('GET', `${ORIGIN}/api/jobs`, ORIGIN)).toBe(false)
+    expect(isJobWrite('POST', 'http://evil.example/api/jobs', ORIGIN)).toBe(false)
+  })
+
+  test('reports a queue write that lacks X-NQT 1, and a POST that lacks a JSON content type', () => {
+    const post = { method: 'POST', url: `${ORIGIN}/api/jobs` }
+    const good = { ...post, headers: { 'x-nqt': '1', 'content-type': 'application/json' } }
+    expect(badJobWrites([good], ORIGIN)).toEqual([])
+    expect(badJobWrites([{ ...post, headers: { 'content-type': 'application/json' } }], ORIGIN)).toEqual([`POST ${ORIGIN}/api/jobs`])
+    expect(badJobWrites([{ ...post, headers: { 'x-nqt': '1' } }], ORIGIN)).toEqual([`POST ${ORIGIN}/api/jobs`])
+    const del = { method: 'DELETE', url: `${ORIGIN}/api/jobs/${JOB}` }
+    expect(badJobWrites([{ ...del, headers: { 'x-nqt': '1' } }], ORIGIN)).toEqual([])
+    expect(badJobWrites([{ ...del, headers: {} }], ORIGIN)).toEqual([`DELETE ${ORIGIN}/api/jobs/${JOB}`])
+  })
+
+  test('lists the two writes of an OpenAPI document, and finds a third', () => {
+    const doc: OpenApiDoc = { paths: { '/api/jobs': { get: {}, post: {} }, '/api/jobs/{job_id}': { get: {}, delete: {} } } }
+    expect(writeOperations(doc).sort()).toEqual(JOB_WRITES)
+    const third: OpenApiDoc = { paths: { ...doc.paths, '/api/ib/snapshot': { get: {}, post: {} } } }
+    expect(writeOperations(third).sort()).not.toEqual(JOB_WRITES)
   })
 })
 

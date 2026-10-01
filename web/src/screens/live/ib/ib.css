@@ -1,0 +1,6 @@
+/* LIVE's IB snapshot panel (read only). Tokens only; every state is a hard cut. The words carry the state (off, TWS not
+   reachable, STALE); the amber tone only repeats them, so colour is never the only cue. */
+.live-ib { flex: 0 0 auto; padding-top: 2px; }
+.live-ib-state { white-space: normal; }
+.live-ib-state b { color: var(--white); }
+.live-ib-warn b { color: var(--warn); }

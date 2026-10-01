@@ -113,10 +113,20 @@ def test_has_answers_from_the_listing(tmp_path):
     assert not catalog.has("ES.V.0", "1m", "vendor")
 
 
+_LAST_FOLDER_MTIME_NS: dict[str, int] = {}
+
+
 def later_mtime(folder) -> None:
-    """Move the folder's own mtime one second on, as the next add, remove or rename in it would."""
+    """Move the folder's own mtime one second on, as the next add, remove or rename in it would.
+
+    Strictly later than the last value set here: NTFS can hand a folder back its earlier mtime after a delete, and
+    "one second after what stat says" would then land on the value the catalog has already cached.
+    """
     stat = folder.stat()
-    os.utime(folder, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    key = str(folder)
+    moved = max(stat.st_mtime_ns, _LAST_FOLDER_MTIME_NS.get(key, 0)) + 1_000_000_000
+    _LAST_FOLDER_MTIME_NS[key] = moved
+    os.utime(folder, ns=(stat.st_atime_ns, moved))
 
 
 def counted_scans(monkeypatch) -> list:

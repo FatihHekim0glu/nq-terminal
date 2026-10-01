@@ -15,12 +15,21 @@ repository folder with Node 24, and `corepack pnpm --dir web` stands for pnpm in
 | Docs drift test | macOS, Linux, Windows | No | Part of Vitest: `web/scripts/docsSync.test.ts` |
 | qa reference tests | Any machine with uv | No, except one test (below) | `cd qa`, then `uv run --frozen --offline pytest` |
 | Backend pytest | The nq-lab virtual environment | Yes | See the README, Test commands |
+| P2 fakes | Any machine with the nq-lab virtual environment | Yes | Part of backend pytest: a fake IB server on a loopback socket and a fake `run_base.py`; no test connects to a real TWS or Gateway |
 | Playwright against the fixture backend | Windows | Yes | `corepack pnpm --dir web e2e`, `e2e:perf` |
 | Playwright against the demo layer | macOS, Linux (not tried on Windows) | No | `corepack pnpm --dir web e2e:offline`, `e2e:offline:perf`, `e2e:offline:baseline` |
 
 Two tests assume the nq-lab layout and fail outside it, on any machine: `web/src/grids/JournalTable.model.test.ts`
 reads nq-lab's `src/nq_lab/paper_plumbing.py`, and qa's `test_the_default_dump_folder_is_under_terminal_qa` expects the
 qa folder's parent to be named `terminal`.
+
+## P2 suites
+
+- **Backtest queue.** `test_p2_jobs_models.py` (JobSpec refusals, pinned to `run_base.FEEDS`, the strategy registry and the fence), `test_p2_jobs_service.py` (queue cap, one worker, exit codes, the state file, a fake `run_base` round trip through the real `Popen` under a path with a space), `test_p2_jobs_api.py` (header, content type, origin, loopback and status codes) and `test_p2_jobs_safety.py` (static bans over the three JOBS files). `test_app.py` and `test_openapi_contract.py` pin the write routes to exactly `POST /api/jobs` and `DELETE /api/jobs/{job_id}` and plant any other non-GET route born failing.
+- **IB snapshot.** `backend/tests/ib_fake_server.py` is a loopback fake IB server (protobuf wire format, server version 213) with modes normal, silent, no_executions_end and client_id_in_use. `test_ib_readonly_client.py`, `test_ib_snapshot.py` and `test_ib_api.py` run over it; `test_ib_readonly_ast.py` is the order-name and import scan. No test may connect to a real TWS or Gateway.
+- **Analytics.** `test_p2_spa*.py`, `test_p2_risk_extras*.py`, `test_p2_trend_regime.py`, `test_p2_capacity.py`, `test_p2_term_structure.py` and `test_p2_rct_api.py`, with their QA dump writers (`test_dump_for_qa_p2_*.py`) and references (`qa/crosscheck/p2_*.py`, registered in `dumps.py` and `compare.py`; `qa/tests/test_p2_dump_kinds.py` pins the input names).
+- **Browser.** `e2e/flows/p2.spec.ts` opens every P2 surface against the fixture backend (MT 88, the RET and RR cards, a run's capacity, ROLL term structure, the LIVE IB panel over a fake snapshot, the JOBS submit and stop flow against a fake runner, the amber classic theme), with axe at both viewport sizes and in both looks, keyboard flows and screenshots with a black mask colour. `e2e/flows/safety.spec.ts` allows exactly the two JOBS writes.
+- **Baselines.** The 26 baselines of `p2.spec.ts` were taken on one Windows machine on 2026-10-01, with the JOBS table and log (a shared queue with server times) masked. The older baselines of the screens that P2 changes on purpose (RR and RR-run with the trend regime card, RET, EQ-run and EXPO with their new cards, LIVE with the IB panel, ROLL 2) Market) were not rewritten: renew them with `--update-snapshots` on the machine that owns them. Screenshot baselines are tied to a machine's text rendering: on a machine whose rendering differs, the same specs fail at the commit before P2 as well, so compare a run with the commit before it, or point `snapshotPathTemplate` at an empty folder and run with `--update-snapshots=all` so that every other assertion of a spec runs to its end.
 
 ## The offline Playwright suite
 

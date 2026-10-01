@@ -22,6 +22,7 @@ import type { ConnectionState } from '../api/connection'
 import type { CommandIndexData } from '../commands/types'
 import { DEMO_DATA, STATUS_BAR, isDemoPage } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
+import { twsSegmentValue, useIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
 import { fillCopy } from '../copy/workspace'
 import { LINK_GROUP_IDS, type LinkContexts } from './ContextStrip'
 import { KeyText } from './MessageLine'
@@ -125,6 +126,7 @@ function DataSourceSegment() {
 
 export function StatusBar({ screen, edited, contexts, health, index = null, connection, watch }: StatusBarProps) {
   const clock = useEtClock()
+  const ibLive = useIbSnapshotLive()
   const data = health.status === 'ok' ? health.data : null
   const range = data ? dataWindowValue(data.fence) : STATUS_BAR.dataFallbackValue
   return (
@@ -142,7 +144,7 @@ export function StatusBar({ screen, edited, contexts, health, index = null, conn
       {watch ? <WatchSegment view={watch} /> : null}
       <Seg k={STATUS_BAR.data} kind="shrink">{range}</Seg>
       {data?.fixture_mode ? <DataSourceSegment /> : null}
-      <Seg k={STATUS_BAR.tws}>{STATUS_BAR.twsValue}</Seg>
+      <Seg k={STATUS_BAR.tws}>{twsSegmentValue(ibLive)}</Seg>
       <SafetySegments health={health} connection={connection} />
       <Seg k={STATUS_BAR.gateReads}>{data ? String(data.gate_reads_this_process) : STATUS_BAR.missing}</Seg>
       <span className="seg keep flag">{STATUS_BAR.readOnly}</span>

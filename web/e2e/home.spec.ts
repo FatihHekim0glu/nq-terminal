@@ -26,6 +26,7 @@ interface PanelBody {
   readonly basis: string
   readonly basis_label: string
   readonly unit: string
+  readonly equity_unit: string
   /** The tear sheet's alpha tiles (alpha_annual in % per year, alpha_t), as the panel serves them. */
   readonly alpha: ReadonlyArray<{ readonly key: string; readonly value: number | null }>
 }
@@ -103,7 +104,7 @@ async function expectTilesMatch(page: Page, title: string, name: string): Promis
   await expect(tiles).toBeVisible()
   await expect(tiles.locator('.kpi-value')).toHaveText(expectedFaces(body))
   await expect(tiles.locator('.kpi-tag').first()).toHaveText(body.tag)
-  await expect(panel(page, title).getByText(`Basis ${body.basis}, ${body.basis_label}. Unit: ${body.unit}.`)).toBeVisible()
+  await expect(panel(page, title).getByText(`Basis ${body.basis}, ${body.basis_label}. Returns in ${body.unit}; the equity pane plots ${body.equity_unit}.`)).toBeVisible()
 }
 
 async function expectAxeClean(page: Page): Promise<void> {
@@ -232,8 +233,10 @@ test.describe('HELP pages (7.4)', () => {
     await expect(panel(page, 'HELP').getByRole('region', { name: 'Help for GP' })).toBeVisible()
     await panelBody(page, 'HELP').focus()
     await run(page, '41')
-    await expect(status(page)).toContainText('Screen GP')
+    // A one-panel screen replaces the HELP panel in the HOME grid (planOpen), so the screen stays HOME.
     await expect(panel(page, 'NQ GP')).toBeVisible()
+    await expect(panel(page, 'HELP')).toHaveCount(0)
+    await expect(status(page)).toContainText('Screen HOME')
   })
 
   for (const size of SIZES) {

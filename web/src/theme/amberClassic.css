@@ -1,0 +1,52 @@
+/* amber-classic (TASKS Phase 12): the optional all-amber-on-black look of the older Terminal build.
+   Chosen in the frame strip's Options menu (src/theme/LookOptions.tsx) and set as data-theme on the
+   root element (src/theme/look.ts). This block overrides token VALUES only: it declares no new token,
+   no size and no font, and none of the tokens the colour-vision themes own, so it combines with
+   data-cvd="deut" or "prot" (checked by src/theme/amberClassic.test.ts, with every WCAG pair).
+   The ":root" in the selector keeps it above the default block whatever the import order.
+
+   What changes: numbers and grid text become a light amber (labels keep the standard amber), headers,
+   tabs, the message line and chart axes turn amber, borders and rules turn a dark amber, and the
+   function bar becomes a burnt amber (white text, so the screen title keeps 7.48:1).
+   What stays: the black surfaces, the sign colours, the blue command line, focus ring and selection,
+   the red READ ONLY and NO ORDER PATH flags, and the grey frame strip and panel title bars (their
+   black text also labels the key and link-chip fills). */
+
+:root[data-theme="amber-classic"] {
+  /* Text: light amber numbers, amber headers and labels, a tan for secondary text */
+  --text: #FFC266;
+  --muted: #C9A77A;
+  --muted-hover: #D4AE7C;
+  --th-fg: #FFA028;
+  --tab-fg: #FFA028;
+  --frame-tab-fg: #FFA028;
+  --minibar-fg: #FFA028;
+  --msg-fg: #FFA028;
+  --chart-axis: #FFA028;
+  --sb-arrow: #FFA028;
+
+  /* Borders and rules */
+  --border: #4A3210;
+  --border-int: #B8761C;
+  --list-border: #E0962A;
+  --menu-border: #E0962A;
+  --dialog-border: #FFA028;
+  --th-rule: #6B4A18;
+  --box-border: #6B4A18;
+  --chrome-div: #8A5E1E;
+  --frame-tab-edge: #5A3A10;
+  --chart-grid: #5A3A10;
+  --sb-thumb: #9A6A26;
+
+  /* Tabs: a dark amber strip, the selected tab amber with black text */
+  --tab-bg: #3A2A10;
+  --tab-on: #C77A12;
+  --tab-hover: #E0901E;
+
+  /* The function bar variant: burnt amber with white text */
+  --fn-bar: #7A4A00;
+  --fn-hover: #9A5E00;
+  --fn-press: #5E3900;
+  --fn-edge: #2A1800;
+  --fn-off: #B08A50;
+}

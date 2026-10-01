@@ -12,11 +12,17 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.staticfiles import StaticFiles
 
 from nq_terminal import app as app_module
+from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import GetOnlyError, assert_get_only, create_app, non_get_routes
 from nq_terminal.settings import ALLOWED_HOSTS, load_settings
 
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)  # TestClient's default client ("testclient") is not an address
+
+
+def extra_routes(app: FastAPI) -> list[str]:
+    """The non-GET routes beyond the two JOBS writes that the app is allowed."""
+    return [problem for problem in non_get_routes(app) if problem not in ALLOWED_WRITE_ROUTES]
 
 
 @pytest.fixture
@@ -69,13 +75,17 @@ def test_no_cors(no_dist):
 
 
 @pytest.mark.parametrize("settings_name", ["no_dist", "with_dist"])
-def test_every_registered_route_is_get(settings_name, request):
+def test_every_registered_route_is_get_bar_the_two_job_writes(settings_name, request):
     app = create_app(request.getfixturevalue(settings_name))
-    assert non_get_routes(app) == []
+    assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
-def test_module_level_app_is_get_only():
-    assert non_get_routes(app_module.app) == []
+def test_module_level_app_is_get_only_bar_the_two_job_writes():
+    assert sorted(non_get_routes(app_module.app)) == sorted(ALLOWED_WRITE_ROUTES)
+
+
+def test_the_two_job_writes_are_exactly_post_jobs_and_delete_one_job():
+    assert sorted(ALLOWED_WRITE_ROUTES) == ["DELETE /api/jobs/{job_id}", "POST /api/jobs"]
 
 
 @pytest.mark.parametrize("method", ["post", "put", "patch", "delete"])
@@ -87,9 +97,29 @@ def test_write_methods_are_refused(no_dist, method):
 def test_a_post_route_is_caught_born_failing(no_dist):
     app = create_app(no_dist)
     app.add_api_route("/api/sneaky", lambda: {"ok": True}, methods=["POST"])
-    assert non_get_routes(app) == ["POST /api/sneaky"]
+    assert extra_routes(app) == ["POST /api/sneaky"]
     with pytest.raises(GetOnlyError):
         assert_get_only(app)
+    with pytest.raises(GetOnlyError, match="POST /api/sneaky"):
+        assert_get_only(app, ALLOWED_WRITE_ROUTES)  # the allow list names two routes and nothing else
+
+
+@pytest.mark.parametrize("route", [
+    ("/api/jobs", "PUT"), ("/api/jobs", "DELETE"), ("/api/jobs/{job_id}", "POST"), ("/api/jobs/{job_id}", "PATCH"),
+    ("/api/jobs/other", "POST"), ("/api/orders", "POST"), ("/api/ib/snapshot", "POST"),
+])
+def test_any_other_non_get_route_is_caught_even_beside_the_job_writes_born_failing(no_dist, route):
+    path, method = route
+    app = create_app(no_dist)
+    app.add_api_route(path, lambda: {"ok": True}, methods=[method], name="planted")
+    with pytest.raises(GetOnlyError, match=f"{method} {path.replace('{', '.').replace('}', '.')}"):
+        assert_get_only(app, ALLOWED_WRITE_ROUTES)
+
+
+def test_the_job_write_allowance_does_not_cover_a_get_only_app_check(no_dist):
+    app = create_app(no_dist)
+    with pytest.raises(GetOnlyError):
+        assert_get_only(app)  # without the allow list the two job writes are refused too
 
 
 def test_a_post_inside_an_included_router_is_caught_born_failing(no_dist):
@@ -97,13 +127,13 @@ def test_a_post_inside_an_included_router_is_caught_born_failing(no_dist):
     router = APIRouter(prefix="/api/nested")
     router.add_api_route("/write", lambda: {"ok": True}, methods=["GET", "DELETE"])
     app.include_router(router)
-    assert non_get_routes(app) == ["DELETE /api/nested/write"]
+    assert extra_routes(app) == ["DELETE /api/nested/write"]
 
 
 def test_a_mounted_sub_app_is_caught_born_failing(no_dist):
     app = create_app(no_dist)
     app.mount("/api/sub", FastAPI())
-    assert non_get_routes(app) == ["MOUNT /api/sub"]
+    assert extra_routes(app) == ["MOUNT /api/sub"]
 
 
 def test_a_websocket_route_is_caught_born_failing(no_dist):
@@ -113,7 +143,7 @@ def test_a_websocket_route_is_caught_born_failing(no_dist):
         await websocket.close()
 
     app.add_api_websocket_route("/api/ws", ws)
-    assert non_get_routes(app) == ["WEBSOCKET /api/ws"]
+    assert extra_routes(app) == ["WEBSOCKET /api/ws"]
 
 
 def test_no_interactive_docs(no_dist):
@@ -142,6 +172,9 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/events/calendar", "/api/events/study",
     "/api/market/rolls", "/api/market/paper-rolls",
     "/api/dq/symbols", "/api/dq/calendar/{symbol}", "/api/dq/guards",
+    "/api/market/term-structure/{root}",  # P2 (MV6)
+    "/api/ib/snapshot",  # P2 (U3, read only)
+    "/api/jobs", "/api/jobs/{job_id}",  # P2 (U3, the only writes)
 }
 PHASE_3_PREFIX = "/api/analytics/"  # section 4 routes a concurrent Phase 3 build adds; checked by the contract
 
@@ -151,7 +184,8 @@ def test_openapi_is_served_under_api(no_dist):
     assert r.status_code == 200
     paths = r.json()["paths"]
     assert {p for p in paths if not p.startswith(PHASE_3_PREFIX)} == EXPECTED_PATHS
-    assert all(set(ops) == {"get"} for ops in paths.values()), {p: sorted(ops) for p, ops in paths.items()}
+    writes = {p: sorted(ops) for p, ops in paths.items() if set(ops) != {"get"}}
+    assert writes == {"/api/jobs": ["get", "post"], "/api/jobs/{job_id}": ["delete", "get"]}, writes
 
 
 def test_static_mount_absent_without_dist(no_dist):
@@ -181,7 +215,7 @@ def test_static_mount_refuses_path_traversal(with_dist, tmp_path: Path):
 def test_a_static_mount_of_another_folder_is_caught_born_failing(with_dist, tmp_path: Path):
     app = create_app(with_dist)
     app.mount("/raw", StaticFiles(directory=tmp_path))
-    problems = non_get_routes(app)
+    problems = extra_routes(app)
     assert len(problems) == 1 and problems[0].startswith("STATIC /raw")
     with pytest.raises(GetOnlyError):
         assert_get_only(app)
@@ -233,7 +267,7 @@ def test_the_launcher_binds_loopback_only(monkeypatch):
     # an open live stream must not hold a shutdown for its whole lifetime (TASKS 9.2)
     from nq_terminal.api.live_stream import StreamLimits
     assert 0 < first["timeout_graceful_shutdown"] == launcher.SHUTDOWN_GRACE_S < StreamLimits().lifetime_s
-    assert non_get_routes(app) == []
+    assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
 @pytest.mark.parametrize("headers", [

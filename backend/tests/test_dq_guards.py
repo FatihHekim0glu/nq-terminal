@@ -37,6 +37,11 @@ def test_every_guard_dict_of_the_module_is_a_group(results):
     assert names == expected and "CONSTANTS" in names and "VRP_GUARDS" in names
 
 
+def test_every_live_guard_group_is_pinned_or_the_constants():
+    live = set(dq_guards.live_groups())
+    assert live - {"CONSTANTS"} == set(dq_guards.PINS), "a guard group the lab added needs its PINS entry (else NO RECORD)"
+
+
 def test_the_real_records_all_match(results):
     rep = report(results)
     assert rep.mismatch == 0 and rep.no_record == 0 and rep.ok == len(rep.groups)

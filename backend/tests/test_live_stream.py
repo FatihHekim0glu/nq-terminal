@@ -7,6 +7,7 @@ app gets a short stream lifetime (`app.state.live_stream_limits`).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 from pathlib import Path
@@ -314,6 +315,19 @@ def test_a_reconnect_after_a_server_restart_resumes_from_last_event_id(root: Pat
     assert [e for e in after if e["event"] == "journal_reset"] == []
     assert [(e["data"]["row"]["file"], e["data"]["row"]["line_no"]) for e in after if e["event"] == "journal_row"] \
         == [(BOOK, 7)]
+
+
+def test_a_stream_whose_opening_outlasts_its_lifetime_still_ticks_once(root: Path):
+    """A slow machine must not turn a stream into hello and bye with no journal row in between."""
+    readings = iter([0.0])
+    slow_clock = lambda: next(readings, 1000.0)  # noqa: E731  (the first reading fixes the end; the rest are late)
+
+    async def collect() -> list:
+        return [event async for event in live_stream.run_stream(session(root), FAST, clock=slow_clock)]
+
+    events = asyncio.run(collect())
+    assert events[-1].event == "bye"
+    assert "journal_row" in [e.event for e in events]
 
 
 def test_an_unrecognised_last_event_id_starts_again_and_says_so(root: Path):

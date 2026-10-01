@@ -24,6 +24,9 @@ from crosscheck.p11_roll import P11_ROLL_REFERENCES
 from crosscheck.p11_seas import P11_SEAS_REFERENCES
 from crosscheck.p11_vcone import P11_VCONE_REFERENCES
 from crosscheck.p1_reference import P1_REFERENCES
+from crosscheck.p2_regimes_capacity_term import P2_RCT_REFERENCES
+from crosscheck.p2_risk_extras import P2_RISK_REFERENCES
+from crosscheck.p2_spa import P2_SPA_REFERENCES
 from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
 from crosscheck.trade_reference import costs_references, trades_references
 
@@ -31,7 +34,9 @@ BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "ma
                      **P1_REFERENCES,
                      # Phase 11: VCONE, SEAS, EVT, ROLL and DQ (RI4, RI5)
                      **P11_VCONE_REFERENCES, **P11_SEAS_REFERENCES, **P11_EVT_REFERENCES, **P11_ROLL_REFERENCES,
-                     **P11_DQ_REFERENCES}
+                     **P11_DQ_REFERENCES,
+                     # Phase 12 (P2): SV8, RK4 with PF11 and BR5, RG2, EX5 and MV6
+                     **P2_SPA_REFERENCES, **P2_RISK_REFERENCES, **P2_RCT_REFERENCES}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9
