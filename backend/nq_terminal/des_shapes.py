@@ -29,6 +29,7 @@ FALLBACK_KEYS = ("mean_r", "mean", "diff_pct", "sharpe", "sharpe_m", "sharpe_a")
 _PTS = "points per trade (NQ), net at 1 tick per side"
 _SIZING_BLOCK = "alpha, % per year, 1 tick per side"
 _MONTHLY = "% per month, return on capital"
+_BP_MONTH = "basis points per month, return on capital"
 _RHO = "rho_bar: mean over the test markets of 1 - ES21(VT) / ES21(CE); above 0 is a thinner left tail"
 _NO_T = "no t statistic: the gate's p is a joint block bootstrap p"
 
@@ -125,6 +126,9 @@ SHAPES: Mapping[str, Shape] = MappingProxyType({
                        block_key="alpha_annual_pct", blocks_unit="alpha, % per year, 1 tick",
                        ladder=MappingProxyType({1: "headline.alpha_annual_pct", 2: "P3_2tick.alpha_annual_pct"}),
                        ladder_unit="alpha, % per year"),
+    "fxeomhedge_v0": Shape("headline.mean_bp", "Net mean monthly return, 1 tick", _BP_MONTH, "headline.t_nw",
+                           "Newey-West t", blocks="blocks", block_key="mean_bp", blocks_unit=f"{_BP_MONTH}, 1 tick",
+                           ladder=_ladder("ladder_mean_bp.{k}"), ladder_unit=_BP_MONTH),
     "mim_v0": Shape("headline.mean", "Net mean per session, 1 tick plus fees", "return on capital per session",
                     "headline.t_nw", "Newey-West t", blocks="blocks", block_key="mean",
                     blocks_unit="return on capital per session, 1 tick",

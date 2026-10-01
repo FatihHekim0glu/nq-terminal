@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FRAME_STRIP } from '../copy/chrome'
+import { THEME_OPTIONS } from '../copy/amberClassic'
 import { LAYOUT } from '../copy/layout'
 import { FrameStrip, type FrameStripProps } from './FrameStrip'
 
@@ -285,5 +286,35 @@ describe('FrameStrip: workspace tabs (roadmap #14)', () => {
     expect(onOpen).toHaveBeenCalledWith('REG')
     fireEvent.click(within(nav).getByRole('button', { name: FRAME_STRIP.newTab }))
     expect(onNew).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('FrameStrip: the theme group in Options', () => {
+  const open = (props: Partial<FrameStripProps> = {}) => {
+    const onLook = vi.fn()
+    const handlers = setup({ look: 'standard', onLook, ...props })
+    fireEvent.click(screen.getByRole('button', { name: FRAME_STRIP.options }))
+    return { onLook, ...handlers }
+  }
+
+  it('sits beside the colour scheme group, with the current theme pressed', () => {
+    open({ look: 'amber-classic' })
+    const list = document.querySelector('.frame-options-list') as HTMLElement
+    expect(within(list).getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([FRAME_STRIP.schemesLabel, THEME_OPTIONS.label])
+    expect(screen.getByRole('button', { name: THEME_OPTIONS.themes['amber-classic'] }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: THEME_OPTIONS.themes.standard }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('reports the chosen theme and leaves the colour scheme alone', () => {
+    const { onLook, onScheme } = open()
+    fireEvent.click(screen.getByRole('button', { name: THEME_OPTIONS.themes['amber-classic'] }))
+    expect(onLook).toHaveBeenCalledWith('amber-classic')
+    expect(onScheme).not.toHaveBeenCalled()
+  })
+
+  it('shows no theme group when the shell passes no onLook', () => {
+    open({ onLook: undefined })
+    expect(screen.queryByRole('group', { name: THEME_OPTIONS.label })).toBeNull()
+    expect(screen.getByRole('group', { name: FRAME_STRIP.schemesLabel })).toBeTruthy()
   })
 })

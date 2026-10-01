@@ -26,6 +26,7 @@ import { DEFLATED } from '../../copy/deflated'
 import { EFFECTIVE_N } from '../../copy/effectiveN'
 import { MT } from '../../copy/reg'
 import { REPLICATION } from '../../copy/replication'
+import { SPA } from '../../copy/spa'
 import { fillCopy } from '../../copy/workspace'
 import { ReplicationBody } from './MtReplication'
 import MtScreen from './MtScreen'
@@ -245,25 +246,27 @@ async function openReplication(): Promise<void> {
 }
 
 describe('MT: 85) Family and 86) Replication tabs', () => {
-  it('shows the sub tab strip with 85) Family selected, 86) Replication and 87) Effective trials beside it', async () => {
+  it('shows the sub tab strip with 85) Family selected, 86) Replication, 87) Effective trials and 88) Family test beside it', async () => {
     stubApi()
     await ready()
     const strip = within(tabs())
-    expect(strip.getAllByRole('tab').map((t) => t.textContent)).toEqual(['85) Family', '86) Replication', '87) Effective trials'])
+    expect(strip.getAllByRole('tab').map((t) => t.textContent)).toEqual(['85) Family', '86) Replication', '87) Effective trials', '88) Family test'])
     expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-selected')).toBe('true')
     expect(strip.getByRole('tab', { name: '86) Replication' }).getAttribute('aria-selected')).toBe('false')
     expect(strip.getByRole('tab', { name: '87) Effective trials' }).getAttribute('aria-selected')).toBe('false')
+    expect(strip.getByRole('tab', { name: '88) Family test' }).getAttribute('aria-selected')).toBe('false')
     const panel = screen.getByRole('tabpanel', { name: '85) Family' })
     expect(strip.getByRole('tab', { name: '85) Family' }).getAttribute('aria-controls')).toBe(panel.id)
   })
 
-  it('registers 85, 86 and 87 for Number <GO> beside the red bar and the family rows', async () => {
+  it('registers 85, 86, 87 and 88 for Number <GO> beside the red bar and the family rows', async () => {
     stubApi()
     await ready()
     const numbers = numberedItems(PANEL_ID).map((i) => i.n)
-    expect(numbers).toEqual(expect.arrayContaining([1, 21, 85, 86, 87, 96, 97]))
+    expect(numbers).toEqual(expect.arrayContaining([1, 21, 85, 86, 87, 88, 96, 97]))
     expect(numberedItems(PANEL_ID).find((i) => i.n === 86)!.label).toBe('Replication')
     expect(numberedItems(PANEL_ID).find((i) => i.n === 87)!.label).toBe(EFFECTIVE_N.tab)
+    expect(numberedItems(PANEL_ID).find((i) => i.n === 88)!.label).toBe(SPA.tab)
   })
 
   it('keeps the family view whole under 85: the family line, the scatter, the table, the confirmations and SV3', async () => {
@@ -567,5 +570,40 @@ describe('MT: 87) Effective trials', () => {
     expect(within(view).getByText('[POST HOC]')).toBeTruthy()
     expect(within(view).getByText(EFFECTIVE_N.computed)).toBeTruthy()
     expect(view.textContent).toContain('the 15 daily trials in the matrix; the 6 monthly books counted as independent trials.')
+  })
+})
+
+// 88) Family test (SV8): White's Reality Check, the SPA and StepM over the registered family; one GET, only once open.
+describe('MT: 88) Family test', () => {
+  const SPA_URL = '/api/analytics/spa'
+
+  it('asks for nothing from the SPA route on 85, 86 or 87', async () => {
+    const seen = stubApi()
+    await ready()
+    await screen.findByRole('region', { name: DEFLATED.label })
+    fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
+    await screen.findByRole('region', { name: REPLICATION.label })
+    fireEvent.click(screen.getByRole('tab', { name: '87) Effective trials' }))
+    await screen.findByRole('region', { name: EFFECTIVE_N.label })
+    expect(seen.filter((s) => s.url === SPA_URL)).toEqual([])
+  })
+
+  it('opens 88) with one GET to the SPA route and draws the family test region', async () => {
+    const seen = stubApi()
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: '88) Family test' }))
+    expect(await screen.findByRole('region', { name: SPA.label })).toBeTruthy()
+    const asked = seen.filter((s) => s.url === SPA_URL)
+    expect(asked).toEqual([{ url: SPA_URL, method: 'GET' }])
+    expect(screen.getByRole('tabpanel', { name: '88) Family test' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '88) Family test' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('states a refused SPA read in an alert, with the tab strip still there', async () => {
+    stubApi({ [SPA_URL]: 503 })
+    await ready()
+    fireEvent.click(screen.getByRole('tab', { name: '88) Family test' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('stub 503')
+    expect(screen.getAllByRole('tab')).toHaveLength(4)
   })
 })

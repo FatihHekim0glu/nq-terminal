@@ -53,7 +53,7 @@ export function fuzzy(s: string, q: string): boolean {
   return false
 }
 
-/** A built screen shows its title; only an unbuilt one (JOBS) says so, with its priority. */
+/** A built screen shows its title; an unbuilt one (none now: every mnemonic opens a screen) says so, with its priority. */
 function functionCandidate(m: MnemonicDef): Candidate {
   const detail = isBuilt(m.code) ? m.screen : withValue(SUGGESTION_DETAILS.notBuilt, `${m.screen} (${m.priority})`)
   return { label: m.code, detail, group: 'function' }

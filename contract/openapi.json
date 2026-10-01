@@ -936,6 +936,199 @@
         "title": "CacheStats",
         "type": "object"
       },
+      "CapacityInstrument": {
+        "description": "One traded instrument and the continuous series whose volume measures it (null when outside the universe).",
+        "properties": {
+          "factor": {
+            "description": "full-size contracts of `symbol` per traded contract (MNQ: 0.1)",
+            "title": "Factor",
+            "type": "number"
+          },
+          "instrument": {
+            "title": "Instrument",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          }
+        },
+        "required": [
+          "instrument",
+          "symbol",
+          "factor",
+          "note"
+        ],
+        "title": "CapacityInstrument",
+        "type": "object"
+      },
+      "CapacityRow": {
+        "properties": {
+          "contracts_mean": {
+            "description": "full-size contracts per traded session",
+            "title": "Contracts Mean",
+            "type": "number"
+          },
+          "contracts_total": {
+            "title": "Contracts Total",
+            "type": "number"
+          },
+          "ratio_max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio Max"
+          },
+          "ratio_max_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio Max Date"
+          },
+          "ratio_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio Mean"
+          },
+          "ratio_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio Median"
+          },
+          "ratio_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ratio P95"
+          },
+          "sessions": {
+            "description": "sessions with at least one contract traded",
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "sessions_with_volume": {
+            "minimum": 0.0,
+            "title": "Sessions With Volume",
+            "type": "integer"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "void": {
+            "description": "traded sessions without a volume bar or with volume <= 0",
+            "minimum": 0.0,
+            "title": "Void",
+            "type": "integer"
+          },
+          "volume_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Median"
+          }
+        },
+        "required": [
+          "symbol",
+          "sessions",
+          "sessions_with_volume",
+          "void",
+          "contracts_total",
+          "contracts_mean",
+          "ratio_mean",
+          "ratio_median",
+          "ratio_p95",
+          "ratio_max",
+          "ratio_max_date",
+          "volume_median"
+        ],
+        "title": "CapacityRow",
+        "type": "object"
+      },
+      "CapacitySession": {
+        "properties": {
+          "contracts": {
+            "title": "Contracts",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "ratio": {
+            "title": "Ratio",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "symbol",
+          "contracts",
+          "volume",
+          "ratio"
+        ],
+        "title": "CapacitySession",
+        "type": "object"
+      },
       "CaptureView": {
         "description": "BR3: ratios of geometric annualised returns over benchmark-up and benchmark-down sessions.",
         "properties": {
@@ -1642,6 +1835,230 @@
           "source"
         ],
         "title": "ContractSpec",
+        "type": "object"
+      },
+      "CornishFisherEsLevel": {
+        "properties": {
+          "cf_quantile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "h, the Cornish-Fisher quantile of the tail (RK3's expansion)",
+            "title": "Cf Quantile"
+          },
+          "edgeworth_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "E_G, the Edgeworth expected value of z at or below h over the tail",
+            "title": "Edgeworth Mean"
+          },
+          "floored": {
+            "description": "the operational floor was taken: E_G lies above h, so the ES equals the modified VaR",
+            "title": "Floored",
+            "type": "boolean"
+          },
+          "gaussian": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Gaussian ES -mu + sigma phi(z) / tail, a positive loss; greyed when not used",
+            "title": "Gaussian"
+          },
+          "historical": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "RK1's historical CVaR at the same tail, the comparator beside it",
+            "title": "Historical"
+          },
+          "in_domain": {
+            "title": "In Domain",
+            "type": "boolean"
+          },
+          "level": {
+            "enum": [
+              "95",
+              "99"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "modified": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null outside the monotone domain or below zero (inverse risk)",
+            "title": "Modified"
+          },
+          "raw_expansion": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the modified ES even where it is not defined (for the record)",
+            "title": "Raw Expansion"
+          },
+          "tail": {
+            "title": "Tail",
+            "type": "number"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the tile: the modified ES where defined, else the historical CVaR",
+            "title": "Value"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "level",
+          "tail",
+          "z",
+          "cf_quantile",
+          "edgeworth_mean",
+          "gaussian",
+          "historical",
+          "raw_expansion",
+          "modified",
+          "value",
+          "in_domain",
+          "floored",
+          "method"
+        ],
+        "title": "CornishFisherEsLevel",
+        "type": "object"
+      },
+      "CornishFisherEsView": {
+        "description": "RK4: modified expected shortfall (Boudt, Peterson and Croux 2008) with PerformanceAnalytics' moments.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "domain": {
+            "description": "the monotone domain (RK3's) outside which the value is not defined, and the fallback",
+            "title": "Domain",
+            "type": "string"
+          },
+          "excess_kurtosis": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excess Kurtosis"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/CornishFisherEsLevel"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "sigma": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sigma"
+          },
+          "skew": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skew"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "basis",
+          "unit",
+          "horizon",
+          "mean",
+          "sigma",
+          "skew",
+          "excess_kurtosis",
+          "domain",
+          "levels"
+        ],
+        "title": "CornishFisherEsView",
         "type": "object"
       },
       "CornishFisherLevel": {
@@ -5926,6 +6343,484 @@
         "title": "HypothesisSeries",
         "type": "object"
       },
+      "IbExecution": {
+        "properties": {
+          "account_masked": {
+            "title": "Account Masked",
+            "type": "string"
+          },
+          "average_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Price"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "integer"
+          },
+          "cumulative_quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Quantity"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "exec_id": {
+            "title": "Exec Id",
+            "type": "string"
+          },
+          "local_symbol": {
+            "title": "Local Symbol",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "perm_id": {
+            "title": "Perm Id",
+            "type": "integer"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "sec_type": {
+            "title": "Sec Type",
+            "type": "string"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
+          },
+          "side": {
+            "title": "Side",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exec_id",
+          "time",
+          "account_masked",
+          "symbol",
+          "local_symbol",
+          "sec_type",
+          "exchange",
+          "side",
+          "shares",
+          "price",
+          "cumulative_quantity",
+          "average_price",
+          "order_id",
+          "perm_id",
+          "client_id"
+        ],
+        "title": "IbExecution",
+        "type": "object"
+      },
+      "IbPosition": {
+        "properties": {
+          "account_masked": {
+            "title": "Account Masked",
+            "type": "string"
+          },
+          "average_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Cost"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "expiry": {
+            "title": "Expiry",
+            "type": "string"
+          },
+          "local_symbol": {
+            "title": "Local Symbol",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          },
+          "sec_type": {
+            "title": "Sec Type",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_masked",
+          "symbol",
+          "local_symbol",
+          "sec_type",
+          "exchange",
+          "currency",
+          "expiry",
+          "quantity",
+          "average_cost"
+        ],
+        "title": "IbPosition",
+        "type": "object"
+      },
+      "IbSnapshot": {
+        "properties": {
+          "accounts_masked": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accounts Masked",
+            "type": "array"
+          },
+          "age_s": {
+            "minimum": 0.0,
+            "title": "Age S",
+            "type": "number"
+          },
+          "cache_seconds": {
+            "minimum": 0.0,
+            "title": "Cache Seconds",
+            "type": "number"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "boolean"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "integer"
+          },
+          "executions": {
+            "items": {
+              "$ref": "#/components/schemas/IbExecution"
+            },
+            "title": "Executions",
+            "type": "array"
+          },
+          "fetched_at_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At Utc"
+          },
+          "incomplete": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Incomplete",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "open_orders": {
+            "items": {
+              "$ref": "#/components/schemas/IbWorkingRow"
+            },
+            "title": "Open Orders",
+            "type": "array"
+          },
+          "order_path": {
+            "const": "none",
+            "title": "Order Path",
+            "type": "string"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/IbPosition"
+            },
+            "title": "Positions",
+            "type": "array"
+          },
+          "read_only": {
+            "const": true,
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "server_time_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server Time Utc"
+          },
+          "state": {
+            "enum": [
+              "ok",
+              "disabled",
+              "unavailable",
+              "refused"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "items": {
+              "$ref": "#/components/schemas/IbSummaryRow"
+            },
+            "title": "Summary",
+            "type": "array"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "state",
+          "message",
+          "read_only",
+          "order_path",
+          "client_id",
+          "accounts_masked",
+          "server_time_utc",
+          "fetched_at_utc",
+          "cached",
+          "age_s",
+          "cache_seconds",
+          "incomplete",
+          "truncated",
+          "notes",
+          "summary",
+          "positions",
+          "open_orders",
+          "executions"
+        ],
+        "title": "IbSnapshot",
+        "type": "object"
+      },
+      "IbSummaryRow": {
+        "properties": {
+          "account_masked": {
+            "title": "Account Masked",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_masked",
+          "tag",
+          "value",
+          "number",
+          "currency"
+        ],
+        "title": "IbSummaryRow",
+        "type": "object"
+      },
+      "IbWorkingRow": {
+        "description": "A working order as TWS lists it (every client's), for viewing only.",
+        "properties": {
+          "account_masked": {
+            "title": "Account Masked",
+            "type": "string"
+          },
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "integer"
+          },
+          "filled": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filled"
+          },
+          "limit_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Price"
+          },
+          "local_symbol": {
+            "title": "Local Symbol",
+            "type": "string"
+          },
+          "order_id": {
+            "title": "Order Id",
+            "type": "integer"
+          },
+          "order_type": {
+            "title": "Order Type",
+            "type": "string"
+          },
+          "perm_id": {
+            "title": "Perm Id",
+            "type": "integer"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "sec_type": {
+            "title": "Sec Type",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Price"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "tif": {
+            "title": "Tif",
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id",
+          "perm_id",
+          "client_id",
+          "account_masked",
+          "symbol",
+          "local_symbol",
+          "sec_type",
+          "action",
+          "order_type",
+          "quantity",
+          "limit_price",
+          "stop_price",
+          "tif",
+          "status",
+          "filled",
+          "remaining"
+        ],
+        "title": "IbWorkingRow",
+        "type": "object"
+      },
       "Instrument": {
         "properties": {
           "root": {
@@ -6130,6 +7025,191 @@
           "note"
         ],
         "title": "JarqueBeraView",
+        "type": "object"
+      },
+      "Job": {
+        "description": "A queued, running or finished backtest. `message` is a short fixed text; no path is ever served.",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "string"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "finished": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished"
+          },
+          "id": {
+            "pattern": "^j_[0-9a-f]{12}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "log_tail": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Log Tail",
+            "type": "array"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/JobSpec"
+          },
+          "started": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "ok",
+              "failed",
+              "error",
+              "stopped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "state",
+          "spec",
+          "created",
+          "started",
+          "finished",
+          "exit_code",
+          "message",
+          "log_tail"
+        ],
+        "title": "Job",
+        "type": "object"
+      },
+      "JobList": {
+        "description": "Newest first. `enabled` is false when no runner is configured (fixture mode).",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "queue_cap": {
+            "title": "Queue Cap",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jobs",
+          "queued",
+          "running",
+          "queue_cap",
+          "enabled"
+        ],
+        "title": "JobList",
+        "type": "object"
+      },
+      "JobSpec": {
+        "additionalProperties": false,
+        "description": "One backtest request; the same fields, in this order, go to `run_base.py --config` (see `run_config`).",
+        "properties": {
+          "end": {
+            "format": "date",
+            "title": "End",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "run_id": {
+            "pattern": "^t_[A-Za-z0-9_.-]{1,80}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "start": {
+            "format": "date",
+            "title": "Start",
+            "type": "string"
+          },
+          "strategy": {
+            "enum": [
+              "za_orb",
+              "overnight",
+              "volmanaged",
+              "volmanaged_bh",
+              "tsmom",
+              "dtsmom",
+              "eomtsy"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          },
+          "variant": {
+            "enum": [
+              "repaired",
+              "vendor"
+            ],
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy",
+          "params",
+          "variant",
+          "start",
+          "end",
+          "run_id"
+        ],
+        "title": "JobSpec",
         "type": "object"
       },
       "JournalInfo": {
@@ -10515,6 +11595,76 @@
         "title": "RelativeView",
         "type": "object"
       },
+      "RiskExtras": {
+        "description": "RK4, PF11 and BR5 of one tear sheet series, all \"[POST HOC]\" and descriptive.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "descriptive": {
+            "title": "Descriptive",
+            "type": "string"
+          },
+          "drawdown_tiles": {
+            "description": "PF11: ulcer index and recovery factor (the RET tab)",
+            "items": {
+              "$ref": "#/components/schemas/Kpi"
+            },
+            "title": "Drawdown Tiles",
+            "type": "array"
+          },
+          "modified_es": {
+            "$ref": "#/components/schemas/CornishFisherEsView",
+            "description": "RK4 at 95% and 99% (the RET tab)"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "periods_per_year": {
+            "title": "Periods Per Year",
+            "type": "integer"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "treynor": {
+            "$ref": "#/components/schemas/TreynorView",
+            "description": "BR5 (the RR tab)"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "context",
+          "basis",
+          "unit",
+          "periods_per_year",
+          "n",
+          "tag",
+          "descriptive",
+          "drawdown_tiles",
+          "modified_es",
+          "treynor"
+        ],
+        "title": "RiskExtras",
+        "type": "object"
+      },
       "RiskView": {
         "description": "RK1 (1 period, positive numbers are losses) and RK2 (daily series only; null for a monthly book).",
         "properties": {
@@ -11171,6 +12321,112 @@
           "bad_fills"
         ],
         "title": "RoutesSummary",
+        "type": "object"
+      },
+      "RunCapacity": {
+        "description": "EX5: contracts per session over the session's volume, per continuous series, with the largest sessions.",
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GateInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/CapacityInstrument"
+            },
+            "title": "Instruments",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Ratio"
+          },
+          "max_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Symbol"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/CapacityRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "fills",
+              "trades"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "worst": {
+            "items": {
+              "$ref": "#/components/schemas/CapacitySession"
+            },
+            "title": "Worst",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "tag",
+          "label",
+          "basis",
+          "unit",
+          "source",
+          "instruments",
+          "rows",
+          "worst",
+          "max_ratio",
+          "max_symbol",
+          "gate"
+        ],
+        "title": "RunCapacity",
         "type": "object"
       },
       "RunComparison": {
@@ -12933,6 +14189,412 @@
         "title": "SlippageView",
         "type": "object"
       },
+      "SpaCritical": {
+        "properties": {
+          "consistent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consistent"
+          },
+          "lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lower"
+          },
+          "upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upper"
+          }
+        },
+        "required": [
+          "lower",
+          "consistent",
+          "upper"
+        ],
+        "title": "SpaCritical",
+        "type": "object"
+      },
+      "SpaExcluded": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ],
+        "title": "SpaExcluded",
+        "type": "object"
+      },
+      "SpaMember": {
+        "properties": {
+          "block": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Politis-White stationary block length of d_i",
+            "title": "Block"
+          },
+          "in_consistent_set": {
+            "description": "within the ln ln t bound, so it counts for the consistent p-value",
+            "title": "In Consistent Set",
+            "type": "boolean"
+          },
+          "left_out": {
+            "description": "own sessions outside the family's common index",
+            "title": "Left Out",
+            "type": "integer"
+          },
+          "left_out_with_pnl": {
+            "description": "of those, sessions with non-zero P&L",
+            "title": "Left Out With Pnl",
+            "type": "integer"
+          },
+          "long_run_variance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the stationary-bootstrap kernel variance of d_i",
+            "title": "Long Run Variance"
+          },
+          "mean_differential": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "mean d_i = L_bh - L_i = r_i - r_bh, USD per session",
+            "title": "Mean Differential"
+          },
+          "mean_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "mean r_i on the common index, USD per session, one NQ contract",
+            "title": "Mean Return"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rejected": {
+            "description": "StepM rejects 'no better than the benchmark' at the family's size",
+            "title": "Rejected",
+            "type": "boolean"
+          },
+          "sessions": {
+            "description": "rows of the hypothesis's own series before alignment",
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the StepM step that rejected it (1 is the first), null if not rejected",
+            "title": "Step"
+          }
+        },
+        "required": [
+          "name",
+          "sessions",
+          "left_out",
+          "left_out_with_pnl",
+          "mean_return",
+          "mean_differential",
+          "long_run_variance",
+          "block",
+          "in_consistent_set",
+          "rejected",
+          "step"
+        ],
+        "title": "SpaMember",
+        "type": "object"
+      },
+      "SpaPValues": {
+        "properties": {
+          "consistent": {
+            "description": "recentred only within Hansen's ln ln t bound (the SPA p-value)",
+            "title": "Consistent",
+            "type": "number"
+          },
+          "lower": {
+            "description": "recentred only where a model is at or above the benchmark",
+            "title": "Lower",
+            "type": "number"
+          },
+          "upper": {
+            "description": "every model recentred: White's Reality Check",
+            "title": "Upper",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lower",
+          "consistent",
+          "upper"
+        ],
+        "title": "SpaPValues",
+        "type": "object"
+      },
+      "SpaView": {
+        "description": "SV8: White's Reality Check, Hansen's SPA and Romano-Wolf StepM over the registered NQ one-contract hypotheses.",
+        "properties": {
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "bench_missing": {
+            "description": "shared sessions left out because the benchmark has no close change",
+            "title": "Bench Missing",
+            "type": "integer"
+          },
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "benchmark_id": {
+            "description": "the null this view tests: cash (r_0 = 0, so d_i = r_i, 'some member has a positive mean') or NQ buy and hold on one contract ('some member beats holding NQ')",
+            "enum": [
+              "cash",
+              "nq_buy_and_hold"
+            ],
+            "title": "Benchmark Id",
+            "type": "string"
+          },
+          "block": {
+            "title": "Block",
+            "type": "number"
+          },
+          "block_rule": {
+            "title": "Block Rule",
+            "type": "string"
+          },
+          "buy_and_hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the same family against NQ buy and hold on one contract, a different and much harder null (a second, separately labelled row); null inside that row itself"
+          },
+          "construction": {
+            "title": "Construction",
+            "type": "string"
+          },
+          "correlation": {
+            "description": "Pearson correlation of the members' loss differentials d_i on the common index, k by k in the order of `members`; null where a member does not vary",
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Correlation",
+            "type": "array"
+          },
+          "correlation_note": {
+            "title": "Correlation Note",
+            "type": "string"
+          },
+          "cost": {
+            "title": "Cost",
+            "type": "integer"
+          },
+          "critical_values": {
+            "$ref": "#/components/schemas/SpaCritical",
+            "description": "percentile 100 (1 - size) of the maximum replicated mean"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/components/schemas/SpaExcluded"
+            },
+            "title": "Excluded",
+            "type": "array"
+          },
+          "family_note": {
+            "description": "the family is fixed by a rule on the registry, not picked on screen",
+            "title": "Family Note",
+            "type": "string"
+          },
+          "first": {
+            "title": "First",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last": {
+            "title": "Last",
+            "type": "string"
+          },
+          "loss": {
+            "title": "Loss",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/SpaMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "n_sessions": {
+            "title": "N Sessions",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "pvalues": {
+            "$ref": "#/components/schemas/SpaPValues"
+          },
+          "reality_check": {
+            "description": "White's Reality Check p-value (the upper SPA p-value)",
+            "title": "Reality Check",
+            "type": "number"
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "number"
+          },
+          "statistic": {
+            "title": "Statistic",
+            "type": "string"
+          },
+          "stepm_steps": {
+            "title": "Stepm Steps",
+            "type": "integer"
+          },
+          "superior": {
+            "description": "the members StepM rejects, in registry order",
+            "items": {
+              "type": "string"
+            },
+            "title": "Superior",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "label",
+          "family_note",
+          "construction",
+          "basis",
+          "cost",
+          "unit",
+          "benchmark_id",
+          "benchmark",
+          "loss",
+          "statistic",
+          "n_sessions",
+          "first",
+          "last",
+          "bench_missing",
+          "block",
+          "block_rule",
+          "reps",
+          "seed",
+          "size",
+          "pvalues",
+          "reality_check",
+          "critical_values",
+          "stepm_steps",
+          "superior",
+          "members",
+          "correlation",
+          "correlation_note",
+          "excluded",
+          "note",
+          "buy_and_hold"
+        ],
+        "title": "SpaView",
+        "type": "object"
+      },
       "SpecHash": {
         "description": "One spec re-hashed now (`actual_sha256`) against the hash its result recorded (`recorded_sha256`).",
         "properties": {
@@ -14023,6 +15685,403 @@
         "title": "Tails",
         "type": "object"
       },
+      "TermCurve": {
+        "properties": {
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "missing_ranks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Missing Ranks",
+            "type": "array"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TermPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "date",
+          "points",
+          "missing_ranks"
+        ],
+        "title": "TermCurve",
+        "type": "object"
+      },
+      "TermPoint": {
+        "properties": {
+          "close": {
+            "title": "Close",
+            "type": "number"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "days_to_expiry": {
+            "title": "Days To Expiry",
+            "type": "integer"
+          },
+          "expiry": {
+            "title": "Expiry",
+            "type": "string"
+          },
+          "rank": {
+            "minimum": 0.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "thin": {
+            "description": "volume under 10 or high not above low (carry_v0's liquidity rule)",
+            "title": "Thin",
+            "type": "boolean"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rank",
+          "contract",
+          "expiry",
+          "days_to_expiry",
+          "close",
+          "volume",
+          "thin"
+        ],
+        "title": "TermPoint",
+        "type": "object"
+      },
+      "TermStructure": {
+        "description": "MV6: the front (C.0) to next (C.1) spread per session, annualised by the days between the pinned CME expiries,\nand the latest curve over every chain rank.",
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "carry": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Carry",
+            "type": "array"
+          },
+          "curve": {
+            "$ref": "#/components/schemas/TermCurve"
+          },
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "expiry_front": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expiry Front",
+            "type": "array"
+          },
+          "expiry_next": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Expiry Next",
+            "type": "array"
+          },
+          "expiry_source": {
+            "title": "Expiry Source",
+            "type": "string"
+          },
+          "f1": {
+            "items": {
+              "type": "number"
+            },
+            "title": "F1",
+            "type": "array"
+          },
+          "f2": {
+            "items": {
+              "type": "number"
+            },
+            "title": "F2",
+            "type": "array"
+          },
+          "fenced": {
+            "minimum": 0.0,
+            "title": "Fenced",
+            "type": "integer"
+          },
+          "front": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Front",
+            "type": "array"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/GateInfo"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "next": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Next",
+            "type": "array"
+          },
+          "ranks": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Ranks",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "sector": {
+            "title": "Sector",
+            "type": "string"
+          },
+          "sessions": {
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "spread": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Spread",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TermSummary"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "units": {
+            "title": "Units",
+            "type": "string"
+          },
+          "void": {
+            "$ref": "#/components/schemas/TermVoid"
+          }
+        },
+        "required": [
+          "root",
+          "symbol",
+          "sector",
+          "units",
+          "tag",
+          "label",
+          "basis",
+          "unit",
+          "expiry_source",
+          "ranks",
+          "sessions",
+          "fenced",
+          "void",
+          "summary",
+          "t",
+          "date",
+          "front",
+          "next",
+          "f1",
+          "f2",
+          "expiry_front",
+          "expiry_next",
+          "spread",
+          "carry",
+          "curve",
+          "gate"
+        ],
+        "title": "TermStructure",
+        "type": "object"
+      },
+      "TermSummary": {
+        "properties": {
+          "last": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last"
+          },
+          "last_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Date"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "n": {
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "share_backwardation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Backwardation"
+          }
+        },
+        "required": [
+          "n",
+          "mean",
+          "median",
+          "min",
+          "max",
+          "share_backwardation",
+          "last",
+          "last_date"
+        ],
+        "title": "TermSummary",
+        "type": "object"
+      },
+      "TermVoid": {
+        "properties": {
+          "missing_front": {
+            "minimum": 0.0,
+            "title": "Missing Front",
+            "type": "integer"
+          },
+          "missing_next": {
+            "minimum": 0.0,
+            "title": "Missing Next",
+            "type": "integer"
+          },
+          "order": {
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "price": {
+            "minimum": 0.0,
+            "title": "Price",
+            "type": "integer"
+          },
+          "thin": {
+            "minimum": 0.0,
+            "title": "Thin",
+            "type": "integer"
+          },
+          "unresolved": {
+            "minimum": 0.0,
+            "title": "Unresolved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "missing_front",
+          "missing_next",
+          "unresolved",
+          "order",
+          "thin",
+          "price"
+        ],
+        "title": "TermVoid",
+        "type": "object"
+      },
       "TrackRecord": {
         "description": "SV2: null sessions and years when the threshold is not reachable (Sharpe at or below it) or the moments\nleave it undefined; `reason` says which.",
         "properties": {
@@ -14410,6 +16469,315 @@
           "payoff"
         ],
         "title": "TradeStats",
+        "type": "object"
+      },
+      "TrendRegimeRow": {
+        "properties": {
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "share of the non-zero sessions above zero",
+            "title": "Hit Rate"
+          },
+          "mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean"
+          },
+          "n": {
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          },
+          "regime": {
+            "enum": [
+              "above",
+              "below"
+            ],
+            "title": "Regime",
+            "type": "string"
+          },
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe"
+          }
+        },
+        "required": [
+          "regime",
+          "n",
+          "mean",
+          "sharpe",
+          "hit_rate"
+        ],
+        "title": "TrendRegimeRow",
+        "type": "object"
+      },
+      "TrendRegimeView": {
+        "description": "RG2: NQ's back-adjusted close at the session before, above or below its 200-session mean; Welch's t, no\np-value. `available` is false (with `note`) for a monthly book, which has no daily sessions to split.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "close": {
+            "description": "NQ's back-adjusted close at the session before each date",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Close",
+            "type": "array"
+          },
+          "context": {
+            "$ref": "#/components/schemas/Context"
+          },
+          "date": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Date",
+            "type": "array"
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GateInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mean_close": {
+            "description": "its 200-session mean at the same session",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Mean Close",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "regime": {
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "above",
+                    "below"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Regime",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/TrendRegimeRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "t": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "T",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "unlabelled": {
+            "minimum": 0.0,
+            "title": "Unlabelled",
+            "type": "integer"
+          },
+          "welch_df": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welch Df"
+          },
+          "welch_t": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Welch T"
+          },
+          "window": {
+            "title": "Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "context",
+          "tag",
+          "label",
+          "basis",
+          "source",
+          "unit",
+          "window",
+          "available",
+          "note",
+          "rows",
+          "welch_t",
+          "welch_df",
+          "unlabelled",
+          "t",
+          "date",
+          "regime",
+          "close",
+          "mean_close",
+          "gate"
+        ],
+        "title": "TrendRegimeView",
+        "type": "object"
+      },
+      "TreynorView": {
+        "description": "BR5: CAGR over BR1's beta; null without a benchmark, without a capital K or with a beta of 0.",
+        "properties": {
+          "bench_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bench Label"
+          },
+          "beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "BR1's OLS slope on the rows where both sides have a value",
+            "title": "Beta"
+          },
+          "cagr": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "PF2 over the whole series on its basis (fraction per year)",
+            "title": "Cagr"
+          },
+          "n_pairs": {
+            "title": "N Pairs",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "how to read the ratio (a negative beta), or why it is null",
+            "title": "Note"
+          },
+          "tile": {
+            "$ref": "#/components/schemas/Kpi"
+          }
+        },
+        "required": [
+          "tile",
+          "cagr",
+          "beta",
+          "n_pairs",
+          "bench_label",
+          "note"
+        ],
+        "title": "TreynorView",
         "type": "object"
       },
       "TurnoverView": {
@@ -15783,6 +18151,184 @@
         ]
       }
     },
+    "/api/analytics/hypothesis/{name}/risk-extras": {
+      "get": {
+        "description": "RK4 modified ES, PF11 ulcer index and recovery factor, and BR5 Treynor of a hypothesis's screen series.",
+        "operationId": "hypothesis_risk_extras_api_analytics_hypothesis__name__risk_extras_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+            "in": "query",
+            "name": "cost",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Cost",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskExtras"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Hypothesis Risk Extras",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/hypothesis/{name}/trend-regime": {
+      "get": {
+        "description": "RG2 on a hypothesis's screen series: NQ above or below its 200-session mean at the session before; per-regime\nSharpe, mean, hit rate and n; Welch's t above against below, no p-value.",
+        "operationId": "hypothesis_trend_regime_api_analytics_hypothesis__name__trend_regime_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 80,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+            "in": "query",
+            "name": "cost",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "description": "ticks per side: 0, 1 or 2 (as the screen recorded them)",
+              "maximum": 2,
+              "minimum": 0,
+              "title": "Cost",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendRegimeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Hypothesis Trend Regime",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/paper-tracking": {
       "get": {
         "description": "LV5: daily paper P&L against the rule's target on the same closes; plumbing rows never reach it.",
@@ -16033,6 +18579,80 @@
           }
         },
         "summary": "Run Bootstrap",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/run/{run_id}/capacity": {
+      "get": {
+        "description": "EX5: contracts per session over the session's volume (vendor 1d bar of the continuous series), per traded\nroot, with the sessions of largest participation.",
+        "operationId": "run_capacity_api_analytics_run__run_id__capacity_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunCapacity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Capacity",
         "tags": [
           "analytics"
         ]
@@ -16440,6 +19060,96 @@
         ]
       }
     },
+    "/api/analytics/run/{run_id}/risk-extras": {
+      "get": {
+        "description": "RK4 modified ES, PF11 ulcer index and recovery factor, and BR5 Treynor of a Nautilus run's account series.",
+        "operationId": "run_risk_extras_api_analytics_run__run_id__risk_extras_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+            "in": "query",
+            "name": "freq",
+            "required": false,
+            "schema": {
+              "default": "D",
+              "description": "D: one row per session; M: sessions compounded into months (P = 12)",
+              "enum": [
+                "D",
+                "M"
+              ],
+              "title": "Freq",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskExtras"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Risk Extras",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/analytics/run/{run_id}/trade-paths": {
       "get": {
         "description": "TA4 holding times (log histogram) and TA5 streaks with the runs test over the whole trade list.",
@@ -16583,6 +19293,122 @@
           }
         },
         "summary": "Run Trades",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/run/{run_id}/trend-regime": {
+      "get": {
+        "description": "RG2 on a Nautilus run's daily account series (Basis B, one row per gated session).",
+        "operationId": "run_trend_regime_api_analytics_run__run_id__trend_regime_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendRegimeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Run Trend Regime",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/spa": {
+      "get": {
+        "description": "SV8 family test over the pre-registered NQ one-contract hypotheses; [POST HOC], an extra view only.",
+        "operationId": "family_spa_api_analytics_spa_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpaView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Family Spa",
         "tags": [
           "analytics"
         ]
@@ -17754,6 +20580,28 @@
         ]
       }
     },
+    "/api/ib/snapshot": {
+      "get": {
+        "description": "Account summary, positions, working orders (view only) and today's executions; see the module docstring.",
+        "operationId": "ib_snapshot_api_ib_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ib Snapshot",
+        "tags": [
+          "ib"
+        ]
+      }
+    },
     "/api/instruments/{root}": {
       "get": {
         "description": "Contract, month codes, related dates, data coverage and notes for one root; no price is read.",
@@ -17816,6 +20664,333 @@
         "summary": "Instrument",
         "tags": [
           "instruments"
+        ]
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "description": "Every job, newest first, with the queue counts.",
+        "operationId": "list_jobs_api_jobs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the request is cross-site"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown job"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the spec was refused (the detail lists each reason)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off (fixture mode)"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "post": {
+        "description": "Queue one in-sample backtest; the worker runs `run_base.py` with exactly this config.",
+        "operationId": "queue_job_api_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the request is cross-site"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown job"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the run id is already used by a job or an output folder"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the body is larger than 8 KB"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the content type is not application/json"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the spec was refused (the detail lists each reason)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the queue is full (10 jobs waiting)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off (fixture mode)"
+          }
+        },
+        "summary": "Queue Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "delete": {
+        "description": "Stop a queued or running job, or drop a finished job's record; run output is never touched.",
+        "operationId": "remove_job_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "pattern": "^j_[0-9a-f]{12}$",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the request is cross-site"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown job"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the content type is not application/json"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the spec was refused (the detail lists each reason)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off (fixture mode)"
+          }
+        },
+        "summary": "Remove Job",
+        "tags": [
+          "jobs"
+        ]
+      },
+      "get": {
+        "operationId": "read_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "pattern": "^j_[0-9a-f]{12}$",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the request is cross-site"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown job"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the spec was refused (the detail lists each reason)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off (fixture mode)"
+          }
+        },
+        "summary": "Read Job",
+        "tags": [
+          "jobs"
         ]
       }
     },
@@ -18700,6 +21875,81 @@
           }
         },
         "summary": "Market Rv",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/api/market/term-structure/{root}": {
+      "get": {
+        "description": "MV6: the front to next calendar-chain spread per session, annualised by the days between the pinned CME\nexpiries, and the latest curve over every chain rank, to 2021-12-31.",
+        "operationId": "market_term_structure_api_market_term_structure__root__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "root",
+            "required": true,
+            "schema": {
+              "maxLength": 2,
+              "pattern": "^[A-Z0-9]{2}$",
+              "title": "Root",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TermStructure"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Market Term Structure",
         "tags": [
           "data"
         ]

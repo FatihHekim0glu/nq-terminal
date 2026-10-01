@@ -4,6 +4,7 @@
 // encoded and refused the same way, and makes no request.
 import { buildApiUrl } from '../../api/client'
 import type { ApiPath } from '../../api/types'
+import { riskExtrasPath } from '../riskextras/riskExtrasSource'
 import type { TearCode } from './TearSheet'
 import type { TearTarget } from './tearQueries'
 
@@ -13,6 +14,8 @@ const RUN_BOOTSTRAP_PATH = '/api/analytics/run/{run_id}/bootstrap' satisfies Api
 const HYPOTHESIS_BOOTSTRAP_PATH = '/api/analytics/hypothesis/{name}/bootstrap' satisfies ApiPath
 const RUN_EXTENDED_PATH = '/api/analytics/run/{run_id}/extended' satisfies ApiPath
 const HYPOTHESIS_EXTENDED_PATH = '/api/analytics/hypothesis/{name}/extended' satisfies ApiPath
+const RUN_TREND_PATH = '/api/analytics/run/{run_id}/trend-regime' satisfies ApiPath
+const HYPOTHESIS_TREND_PATH = '/api/analytics/hypothesis/{name}/trend-regime' satisfies ApiPath
 /** A run's books, in the order the run panel lists them (RunBooks, then RunTradePaths). */
 const RUN_BOOK_PATHS = [
   '/api/analytics/run/{run_id}/trades',
@@ -20,6 +23,7 @@ const RUN_BOOK_PATHS = [
   '/api/analytics/run/{run_id}/exposure',
   '/api/analytics/run/{run_id}/excursions',
   '/api/analytics/run/{run_id}/trade-paths',
+  '/api/analytics/run/{run_id}/capacity',
 ] as const satisfies readonly ApiPath[]
 
 /** The setting each kind is asked at: a run its frequency, a hypothesis its cost in ticks per side. */
@@ -60,7 +64,9 @@ export interface TearDrawn {
 /**
  * Every GET whose numbers the image of `tab` can hold, analytics first: the bootstrap cone on EQ, the /extended
  * body on EQ and DD (market context, when it arrived) and on RET and RR (their P1 cards, always asked), and, for a
- * run, its books on every tab (trades, costs, exposure, excursions, trade-paths). The sub-routes carry exactly the
+ * run, its books on every tab (trades, costs, exposure, excursions, trade-paths). RET and RR also ask for the P2
+ * risk-extras body (RK4, PF11, BR5), and RR the trend regime (RG2; a run only at the daily frequency, the route has
+ * no monthly view). A run's books end with its capacity (EX5). The sub-routes carry exactly the
  * query their hooks send: a hypothesis its cost when it has one, a run its freq. A tab that draws neither
  * ignores the flags.
  */
@@ -70,6 +76,12 @@ export function tearSources(target: TearTarget, tab: TearCode, context: TearSour
   const asksExtended = tab === 'RET' || tab === 'RR'
   const showsExtended = tab === 'EQ' || tab === 'DD'
   if (asksExtended || (showsExtended && drawn.extended)) paths.push(seriesPath(target, context, RUN_EXTENDED_PATH, HYPOTHESIS_EXTENDED_PATH))
+  if (asksExtended) paths.push(riskExtrasPath(target, context))
+  if (tab === 'RR' && !(target.kind === 'run' && context.freq === 'M')) {
+    paths.push(target.kind === 'run'
+      ? buildApiUrl(RUN_TREND_PATH, { path: { run_id: target.name } })
+      : buildApiUrl(HYPOTHESIS_TREND_PATH, { path: { name: target.name }, query: context.cost === null ? {} : { cost: context.cost } }))
+  }
   if (target.kind === 'run') for (const book of RUN_BOOK_PATHS) paths.push(buildApiUrl(book, { path: { run_id: target.name } }))
   return paths
 }

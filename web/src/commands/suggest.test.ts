@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { MNEMONIC_SCREENS, SUGGESTION_DETAILS } from '../copy/commands'
+import { MNEMONIC_SCREENS } from '../copy/commands'
 import { BUILT_CODES } from './built'
-import { withValue } from './messages'
 import { MNEMONICS } from './registry'
 import { fuzzy, sheetGroups, suggest } from './suggest'
 import type { CommandIndexData } from './types'
@@ -99,10 +98,10 @@ describe('suggestions', () => {
     expect(suggest('NQ ', INDEX).find((s) => s.label === 'DQ')?.detail).toBe(MNEMONIC_SCREENS.DQ)
   })
 
-  it('keeps "not built yet", with the priority, only for the unbuilt JOBS slot', () => {
+  it('titles JOBS, the P2 backtest queue, with its screen name now that it is built', () => {
     const [jobs] = suggest('JOBS', INDEX)
-    expect(jobs).toMatchObject({ value: 'JOBS ', group: 'function', detail: withValue(SUGGESTION_DETAILS.notBuilt, `${MNEMONIC_SCREENS.JOBS} (P2)`) })
-    expect(jobs?.detail).toMatch(/, not built yet$/)
+    expect(jobs).toMatchObject({ value: 'JOBS ', group: 'function', detail: MNEMONIC_SCREENS.JOBS })
+    expect(jobs?.detail).not.toContain('not built yet')
   })
 
   it('titles every built function and flags only the others, the index loaded or not', () => {

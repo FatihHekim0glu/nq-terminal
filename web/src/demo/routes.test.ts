@@ -47,8 +47,8 @@ function gapped(answer: { status: number; body: unknown }) {
 const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 64 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(64)
+  it('has exactly the 74 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(74)
     expect(Object.keys(DEMO_ROUTES).sort()).toEqual(CONTRACT_PATHS)
   })
 
@@ -56,7 +56,7 @@ describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(63)
+    expect(Object.keys(incomplete)).toHaveLength(73)
   })
 })
 
@@ -512,6 +512,29 @@ describe('DES cards carry a screen file only under the hypothesis it was recorde
       const { spec_sha256: _sha, ...unsealed } = VOLMANAGED_SCREEN
       expect(withScreen(VOLMANAGED, unsealed)).toBe(VOLMANAGED)
     })
+  })
+})
+
+describe('the P2 paths in the demo: the queue and the IB snapshot are off, the rest has no body', () => {
+  it('answers the queue list as a server with no runner: empty and not enabled', () => {
+    expect(ok('/api/jobs')).toEqual({ jobs: [], queued: 0, running: 0, queue_cap: 10, enabled: false })
+  })
+
+  it('answers the IB snapshot as disabled, with no accounts, no rows and nothing contacted', () => {
+    const body = ok('/api/ib/snapshot')
+    expect(body).toMatchObject({ state: 'disabled', read_only: true, order_path: 'none', accounts_masked: [], fetched_at_utc: null })
+    expect([body.summary, body.positions, body.open_orders, body.executions]).toEqual([[], [], [], []])
+  })
+
+  it('refuses every other P2 path as not in the demo dataset, never another body relabelled', () => {
+    refused(get('/api/analytics/spa'), 404)
+    refused(get('/api/analytics/hypothesis/{name}/risk-extras', { path: { name: 'volmanaged_v0' } }), 404)
+    refused(get('/api/analytics/run/{run_id}/risk-extras', { path: { run_id: 'nt_dtsmom_v0_ts1' } }), 404)
+    refused(get('/api/analytics/hypothesis/{name}/trend-regime', { path: { name: 'volmanaged_v0' } }), 404)
+    refused(get('/api/analytics/run/{run_id}/trend-regime', { path: { run_id: 'nt_dtsmom_v0_ts1' } }), 404)
+    refused(get('/api/analytics/run/{run_id}/capacity', { path: { run_id: 'nt_dtsmom_v0_ts1' } }), 404)
+    refused(get('/api/market/term-structure/{root}', { path: { root: 'NQ' } }), 404)
+    refused(get('/api/jobs/{job_id}', { path: { job_id: 'j_000000000000' } }), 404)
   })
 })
 

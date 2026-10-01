@@ -1,0 +1,10 @@
+/* SV8 on MT (look spec 7.2, 4.4): the family test under SV3. Tokens only, square corners. The member table
+   keeps the panel's width and wraps its cells instead of scrolling sideways, and the notes wrap rather than
+   clip (1.4.10). */
+.mt-spa { flex: 0 0 auto; }
+.mt-spa .reg-msg { white-space: normal; }
+.mt-spa-result { color: var(--white); font-weight: var(--fw-bold); }
+.mt-spa-table th, .mt-spa-table td { white-space: normal; overflow-wrap: anywhere; line-height: var(--row-h); }
+.mt-spa-rejected { color: var(--white); font-weight: var(--fw-bold); }
+.mt-spa-excluded { margin: 0; padding: 0 5px 0 21px; }
+.mt-spa-excluded li { white-space: normal; }

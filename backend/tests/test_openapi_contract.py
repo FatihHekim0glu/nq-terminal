@@ -70,10 +70,27 @@ def test_contract_file_is_canonical():
     assert text == render(json.loads(text))
 
 
-def test_contract_is_get_only():
+JOB_WRITES = {"/api/jobs": {"post"}, "/api/jobs/{job_id}": {"delete"}}  # PRD U3: the only writes in the contract
+
+
+def non_get_operations(schema: dict) -> dict[str, set[str]]:
+    """Every path with a method other than get, minus the two job writes (which must be exactly those methods)."""
+    found = {path: {m for m in ops if m in METHODS and m != "get"} for path, ops in schema["paths"].items()}
+    return {path: methods for path, methods in found.items() if methods and methods != JOB_WRITES.get(path)}
+
+
+def test_contract_is_get_only_bar_the_two_job_writes():
     saved = json.loads(CONTRACT.read_text(encoding="utf-8")) if CONTRACT.exists() else current_schema()
-    methods = {m for ops in saved["paths"].values() for m in ops if m in METHODS}
-    assert methods == {"get"}
+    assert non_get_operations(saved) == {}
+    for path, methods in JOB_WRITES.items():
+        assert methods <= {m for m in saved["paths"][path] if m in METHODS}, path
+
+
+def test_the_non_get_scan_is_born_failing():
+    planted = {"paths": {"/api/jobs": {"get": {}, "post": {}, "put": {}}, "/api/jobs/{job_id}": {"delete": {}},
+                         "/api/orders": {"post": {}}, "/api/jobs/other": {"delete": {}}}}
+    assert non_get_operations(planted) == {"/api/jobs": {"post", "put"}, "/api/orders": {"post"},
+                                           "/api/jobs/other": {"delete"}}
 
 
 def _mutations(schema: dict) -> list[tuple[str, dict[str, Any]]]:

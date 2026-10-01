@@ -36,6 +36,8 @@ class FakeUplot {
   readonly width = 700
   readonly cursorCalls: [{ left: number; top: number }, boolean | undefined, boolean | undefined][] = []
   readonly scaleCalls: [string, { min: number; max: number }][] = []
+  /** Each `setData(data, resetScales)` made on the plot. */
+  readonly dataCalls: boolean[] = []
   destroyed = false
 
   readonly opts: uPlot.Options
@@ -50,12 +52,24 @@ class FakeUplot {
     const range = opts.scales!.x!.range as (u: unknown, lo: number, hi: number) => [number, number]
     const [min, max] = range(this, t[0]!, t.at(-1)!)
     this.scales = { x: { min, max }, y: { min: 0, max: 2 } }
+    this.rangeY()
     FakeUplot.instances.push(this)
     const root = document.createElement('div')
     root.className = 'uplot'
     el.append(root)
     this.plugins('init')
     queueMicrotask(() => this.fire('draw'))
+  }
+
+  /** uPlot asks the y scale's range function when it is built and whenever the data are set again. */
+  private rangeY() {
+    const range = this.opts.scales!.y!.range
+    if (typeof range === 'function') range(this as unknown as uPlot, 0, 2, 'y')
+  }
+
+  setData(_data: unknown, resetScales?: boolean) {
+    this.dataCalls.push(resetScales === true)
+    this.rangeY()
   }
 
   private plugins(name: 'init' | 'destroy') {
@@ -195,6 +209,35 @@ describe('LineStack (TASKS 5.1)', () => {
     expect(dd!.opts.axes![0]!.show).toBe(true)
     expect(eq!.scales.x).toEqual({ min: T[0], max: FENCE_TIME + (FENCE_TIME - T[0]!) * 0.025 })
     expect(eq!.el.closest('[data-pane]')!.getAttribute('data-fence-x')).not.toBe('')
+  })
+
+  // The legend is built empty and gets its values on the first draw, so it grows after the y range was fitted to it.
+  describe('the y range follows the legend as it grows', () => {
+    const sizeOf = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    afterEach(() => {
+      if (sizeOf) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', sizeOf)
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).offsetWidth
+    })
+
+    it('born failing: takes the range again once, after the first draw filled the legend', async () => {
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.classList.contains('chart-legend') ? this.textContent!.length : 0
+        },
+      })
+      renderStack()
+      await ready()
+      await ready()
+      expect(FakeUplot.instances.map((u) => u.dataCalls)).toEqual([[true], [true]])
+    })
+
+    it('does not take it again when the legend is the size it was fitted to', async () => {
+      renderStack()
+      await ready()
+      await ready()
+      expect(FakeUplot.instances.map((u) => u.dataCalls)).toEqual([[], []])
+    })
   })
 
   it('gives each pane an HTML legend with the series names', async () => {

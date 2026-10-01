@@ -138,7 +138,11 @@ describe('tearSources: the GETs behind the figures a tab draws', () => {
   const RA = `/api/analytics/run/${RUN_ID}?freq=D`
   const RB = `/api/analytics/run/${RUN_ID}/bootstrap?freq=D`
   const RX = `/api/analytics/run/${RUN_ID}/extended?freq=D`
-  const BOOKS = ['trades', 'costs', 'exposure', 'excursions', 'trade-paths'].map((leaf) => `/api/analytics/run/${RUN_ID}/${leaf}`)
+  const BOOKS = ['trades', 'costs', 'exposure', 'excursions', 'trade-paths', 'capacity'].map((leaf) => `/api/analytics/run/${RUN_ID}/${leaf}`)
+  const XR = '/api/analytics/hypothesis/volmanaged_v0/risk-extras?cost=1'
+  const TR = '/api/analytics/hypothesis/volmanaged_v0/trend-regime?cost=1'
+  const RXR = `/api/analytics/run/${RUN_ID}/risk-extras?freq=D`
+  const RTR = `/api/analytics/run/${RUN_ID}/trend-regime`
 
   it('EQ of a hypothesis with a bootstrap: the analytics GET, then the bootstrap GET (the cone)', () => {
     expect(tearSources(HYPOTHESIS, 'EQ', HYP_CTX, { bootstrap: true, extended: false })).toEqual([A, B])
@@ -153,9 +157,9 @@ describe('tearSources: the GETs behind the figures a tab draws', () => {
     expect(tearSources(HYPOTHESIS, 'EQ', HYP_CTX, { bootstrap: false, extended: true })).toEqual([A, X])
   })
 
-  it('RR and RET add the extended GET with the same query', () => {
-    expect(tearSources(HYPOTHESIS, 'RR', HYP_CTX, { bootstrap: false, extended: true })).toEqual([A, X])
-    expect(tearSources(HYPOTHESIS, 'RET', HYP_CTX, { bootstrap: false, extended: true })).toEqual([A, X])
+  it('RR and RET add the extended GET with the same query, then the risk extras GET; RR adds the trend regime GET last', () => {
+    expect(tearSources(HYPOTHESIS, 'RR', HYP_CTX, { bootstrap: false, extended: true })).toEqual([A, X, XR, TR])
+    expect(tearSources(HYPOTHESIS, 'RET', HYP_CTX, { bootstrap: false, extended: true })).toEqual([A, X, XR])
   })
 
   it('DD adds the extended GET only when the market context is drawn', () => {
@@ -166,7 +170,7 @@ describe('tearSources: the GETs behind the figures a tab draws', () => {
   it('a tab that draws neither adds neither, whatever the flags say', () => {
     expect(tearSources(HYPOTHESIS, 'MRET', HYP_CTX, { bootstrap: true, extended: true })).toEqual([A])
     expect(tearSources(HYPOTHESIS, 'DD', HYP_CTX, { bootstrap: true, extended: false })).toEqual([A])
-    expect(tearSources(HYPOTHESIS, 'RR', HYP_CTX, { bootstrap: true, extended: true })).toEqual([A, X])
+    expect(tearSources(HYPOTHESIS, 'RR', HYP_CTX, { bootstrap: true, extended: true })).toEqual([A, X, XR, TR])
   })
 
   it('a hypothesis never lists the run books', () => {
@@ -181,19 +185,31 @@ describe('tearSources: the GETs behind the figures a tab draws', () => {
       '/api/analytics/hypothesis/volmanaged_v0/bootstrap',
       '/api/analytics/hypothesis/volmanaged_v0/extended',
     ])
+    expect(tearSources(HYPOTHESIS, 'RET', { cost: null, freq: 'D' }, none)).toEqual([
+      '/api/analytics/hypothesis/volmanaged_v0',
+      '/api/analytics/hypothesis/volmanaged_v0/extended',
+      '/api/analytics/hypothesis/volmanaged_v0/risk-extras',
+    ])
     expect(tearSources(HYPOTHESIS, 'EQ', { cost: 0, freq: 'D' }, { bootstrap: true, extended: false })[1]).toBe('/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=0')
   })
 
   it('a run asks at its frequency: the bootstrap and extended GETs carry ?freq=D, then the run books in order', () => {
     expect(tearSources(RUN, 'EQ', RUN_CTX, { bootstrap: true, extended: true })).toEqual([RA, RB, RX, ...BOOKS])
-    expect(tearSources(RUN, 'RR', RUN_CTX, { bootstrap: false, extended: true })).toEqual([RA, RX, ...BOOKS])
-    expect(tearSources(RUN, 'RET', RUN_CTX, { bootstrap: false, extended: true })).toEqual([RA, RX, ...BOOKS])
+    expect(tearSources(RUN, 'RR', RUN_CTX, { bootstrap: false, extended: true })).toEqual([RA, RX, RXR, RTR, ...BOOKS])
+    expect(tearSources(RUN, 'RET', RUN_CTX, { bootstrap: false, extended: true })).toEqual([RA, RX, RXR, ...BOOKS])
   })
 
-  it('a run lists /trades, /costs, /exposure, /excursions and /trade-paths last on every tab', () => {
+  it('a run at the monthly frequency has no trend regime GET (the route has no monthly view); a monthly book keeps its own', () => {
+    const monthly = { cost: null, freq: 'M' }
+    expect(tearSources(RUN, 'RR', monthly, none).some((path) => path.includes('trend-regime'))).toBe(false)
+    expect(tearSources(RUN, 'RR', monthly, none)).toContain(`/api/analytics/run/${RUN_ID}/risk-extras?freq=M`)
+    expect(tearSources(HYPOTHESIS, 'RR', { cost: 1, freq: 'M' }, none)).toContain(TR)
+  })
+
+  it('a run lists /trades, /costs, /exposure, /excursions, /trade-paths and /capacity last on every tab', () => {
     for (const tab of ['EQ', 'DD', 'RET', 'RR', 'MRET'] as const satisfies readonly TearCode[]) {
       const paths = tearSources(RUN, tab, RUN_CTX, none)
-      expect(paths.slice(-5)).toEqual(BOOKS)
+      expect(paths.slice(-6)).toEqual(BOOKS)
       expect(paths[0]).toBe(RA)
     }
     expect(tearSources(RUN, 'DD', RUN_CTX, none)).toEqual([RA, ...BOOKS])
@@ -336,7 +352,12 @@ describe('TearBody registers its provenance for GRAB', () => {
     show(HYPOTHESIS, 'p8', 'RR')
     await screen.findByRole('list', { name: 'Tear sheet key figures' })
     await vi.waitFor(() => expect(panelSource('p8')?.provenance).not.toBeNull())
-    expect(panelSource('p8')?.provenance?.source).toBe('/api/analytics/hypothesis/volmanaged_v0?cost=1, /api/analytics/hypothesis/volmanaged_v0/extended?cost=1')
+    expect(panelSource('p8')?.provenance?.source).toBe([
+      '/api/analytics/hypothesis/volmanaged_v0?cost=1',
+      '/api/analytics/hypothesis/volmanaged_v0/extended?cost=1',
+      '/api/analytics/hypothesis/volmanaged_v0/risk-extras?cost=1',
+      '/api/analytics/hypothesis/volmanaged_v0/trend-regime?cost=1',
+    ].join(GRAB.caption.pair))
     cleanup()
     extendedServed = false
     show(HYPOTHESIS, 'p9', 'DD')
@@ -361,7 +382,7 @@ describe('TearBody registers its provenance for GRAB', () => {
     await vi.waitFor(() => expect(panelSource('p7')?.provenance).not.toBeNull())
     const source = panelSource('p7')?.provenance?.source ?? ''
     const named = source.split(GRAB.caption.pair)
-    expect(named.slice(-5)).toEqual(['trades', 'costs', 'exposure', 'excursions', 'trade-paths'].map((leaf) => `/api/analytics/run/${RUN_ID}/${leaf}`))
+    expect(named.slice(-6)).toEqual(['trades', 'costs', 'exposure', 'excursions', 'trade-paths', 'capacity'].map((leaf) => `/api/analytics/run/${RUN_ID}/${leaf}`))
     expect(named[0]).toBe(`/api/analytics/run/${RUN_ID}?freq=D`)
     await vi.waitFor(() => expect(requested).toContain(`/api/analytics/run/${RUN_ID}/trades`))
     expect(requested).toContain(`/api/analytics/run/${RUN_ID}/costs`)

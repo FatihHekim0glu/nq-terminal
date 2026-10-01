@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApiQueryClient } from '../../api/queries'
 import type { MnemonicCode } from '../../commands/registry'
 import type { ResolvedContext } from '../../commands/types'
+import { RCT } from '../../copy/regimesCapacityTerm'
+import { fillCopy } from '../../copy/workspace'
 import { createDemoFetch } from '../../demo/fetch'
 import TearSheet from './TearSheet'
 
@@ -94,7 +96,9 @@ describe('nt_volmanaged_v0_fixture_m1 EQ in the demo', () => {
     expect(figures.textContent).toContain('[POST HOC]')
     expect(await screen.findByText('nt_volmanaged_v0_fixture_m1 equity', {}, LATER)).toBeTruthy()
     expect(screen.queryByText(/The server refused this tear sheet/)).toBeNull()
-    expect(screen.queryByRole('alert')).toBeNull()
+    // EX5 (P2) has no body in the demo (it needs vendor volume): its card says so, and nothing else raises an alert.
+    const gap = fillCopy(RCT.failed, { detail: 'not in the demo dataset' })
+    await vi.waitFor(() => expect(screen.queryAllByRole('alert').map((a) => a.textContent)).toEqual([gap]))
     const record = reads.find((r) => r.path === '/api/runs/nt_volmanaged_v0_fixture_m1')
     expect(record?.status).toBe(200)
     expect(reads.find((r) => r.path === '/api/analytics/run/nt_volmanaged_v0_fixture_m1')?.status).toBe(200)

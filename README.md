@@ -33,10 +33,11 @@ terminal: amber on black, function keys, a command line.
 
 ## Highlights
 
-- **Read only by construction.** All 64 API paths are GET, and tests fail on any other method or on a write call in
-  the backend. See the [safety model](#safety-model).
-- **No order path.** No IB client exists in the terminal, and tests fail on an IB order call or on any route or
-  component named like an order action.
+- **Read only by construction.** All 74 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
+  `DELETE /api/jobs/{job_id}`), and tests fail on any other method or on a write call in the backend. See the
+  [safety model](#safety-model).
+- **No order path.** The one IB client is read only (an optional paper snapshot on client id 95), and tests fail on an
+  IB order call or on any route or component named like an order action.
 - **One gated door to prices.** Every price read goes through nq-lab's out-of-sample gate, which decides and logs it.
   Nothing after 2021-12-31 is served.
 - **Honest labels.** `[PRE-REG]` marks a value read from a registered result and `[POST HOC]` one the terminal
@@ -97,8 +98,8 @@ other origin, including a real backend on 127.0.0.1:8765. Nothing is sent to a b
   [`web/src/demo/routes.ts`](web/src/demo/routes.ts): one handler per contract path, typed so that a missing path
   fails the compile.
 - **Gaps say so.** A path, run or request the demo holds no honest body for answers "not in the demo dataset", and
-  the screen shows that text. It is a gap in the demo, not a fault and not a finding. (`JOBS`, the P2 backtest queue,
-  is a labelled placeholder.)
+  the screen shows that text. It is a gap in the demo, not a fault and not a finding. (`JOBS` and the IB snapshot
+  answer as a server with both off.)
 - **GET only.** The demo refuses any other method in the page, before anything else looks at the request.
 - **No demo code in a production build.** [`bundleCheck.ts`](web/scripts/bundleCheck.ts) fails a production build that
   contains demo code, and fails a demo build that lacks it.
@@ -254,8 +255,8 @@ refused whole. A page opened with no link at all restores the workspace you save
 <details>
 <summary>All 30 mnemonics</summary>
 
-From [`web/src/commands/registry.ts`](web/src/commands/registry.ts), in HELP's order. P0 shipped first, P1 after it;
-P2 is built only on request.
+From [`web/src/commands/registry.ts`](web/src/commands/registry.ts), in HELP's order. P0 shipped first, P1 after it,
+and P2 (`JOBS`) with the owner's approval of 2026-10-01.
 
 | No. | Mnemonic | Screen | Context | Pri |
 |---:|---|---|---|---|
@@ -288,7 +289,7 @@ P2 is built only on request.
 | 27 | `EVT` | Event study | instrument | P1 |
 | 28 | `ROLL` | Roll calendar | instrument | P1 |
 | 29 | `DQ` | Data quality | instrument | P1 |
-| 30 | `JOBS` | Backtest queue | none | P2, placeholder |
+| 30 | `JOBS` | Backtest queue | none | P2 |
 
 </details>
 
@@ -438,9 +439,9 @@ flowchart TB
 
 - **Backend.** FastAPI 0.141.1 on uvicorn 0.54.0 in the nq-lab venv, package `nq_terminal`, JSON through orjson. It
   binds 127.0.0.1, answers GET only, and serves the built front end and `/api` from one origin.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 64 paths. pytest compares `app.openapi()` with
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 74 paths. pytest compares `app.openapi()` with
   it; `pnpm gen:api` generates the front end's types with openapi-typescript, and `pnpm test` fails first when they
-  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 64 paths with the screens that
+  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 74 paths with the screens that
   read them, and a test keeps that index equal to the contract.
 - **Front end.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1: dockview panels under a command line built on cmdk,
   with the terminal's own key handler, zustand and TanStack Query. Every screen loads lazily, and one GET client
@@ -477,8 +478,20 @@ over budget or loads a chart or grid library with the shell.
 
 `scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 115.8 kB and measured 114.4 kB); raise it only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build, and cmdk's unused command-score is swapped for `src/vendor/commandScoreStub.ts` by the `cmdkScoreStub` plugin there.
 
-**Status.** P0 and P1 are built: 29 of the 30 mnemonics open a screen. P2, the `JOBS` backtest queue and a read-only
-IB snapshot, is not built and waits for the owner's decision.
+**Status.** P0, P1 and P2 are built: 30 of the 30 mnemonics open a screen. `JOBS` is the one screen that writes. It
+queues an in-sample backtest (`backtests/run_base.py`, one worker, at most ten jobs waiting), shows each job's status in
+words, the tail of its log and a link to the produced run in `RUN`, and stops a queued or running job after one
+confirmation. The browser sends exactly two kinds of write, a POST to queue and a DELETE to stop, both with the
+`X-NQT: 1` header, and only from `web/src/api/jobsClient.ts`. A run writes `backtests/output/<run id>` and its gate log
+lines, never the ledger, and the screen connects to no broker. P2 also adds the read-only IB snapshot on `LIVE`
+(off unless `NQT_IB_READONLY=1`), the family test on `MT` (88), the risk extras and the trend regime on the tear sheet,
+a run's capacity, the term structure on `ROLL`, and the optional amber classic theme in the Options menu.
+
+| Variable | Meaning |
+|---|---|
+| `NQT_IB_READONLY` | Set to exactly `1` to turn on the read-only IB snapshot (off by default). With it on, the terminal connects to a paper TWS or Gateway on this machine as API client 95 and shows the account summary, positions, working orders (view only) and today's executions. It never places, changes or cancels an order |
+| `IB_HOST` | IB host for the snapshot, default 127.0.0.1; a host that is not this machine is refused |
+| `IB_PORT` | IB port for the snapshot, default 7497 (TWS paper; Gateway paper is 4002). The live ports 7496 and 4001 are refused |
 
 <details>
 <summary>Decisions</summary>
@@ -497,7 +510,7 @@ The full log is [`docs/PRD.md`](docs/PRD.md) section 7, with later decisions in
   so. The list is in the look spec section 7.
 - **Grids and live data.** P0 grids are TanStack Table with virtual rows. The Perspective pivot grid (LEDG, the RUN
   trades and fills, the OOS log) and the server-sent live stream for LIVE and JRNL are built (P1), with 2 s polling as
-  the fallback. A backtest queue and a read-only IB snapshot remain P2 and wait for the owner's decision.
+  the fallback. The backtest queue and the read-only IB snapshot (P2) are built, and the owner approved them on 2026-10-01.
 - **Demo on fixture data.** The demo answers `/api` inside the page from captured fixtures and seeded prices, marks
   every screen DEMO DATA, and reaches no backend. It exists to try the terminal, not to publish results, and a
   production build contains none of its code.
@@ -519,7 +532,8 @@ break them.
 <p align="center"><img src="docs/media/status-line.webp" width="725" alt="Part of the status line: the served data window 2010-01-01..2021-12-31, FIXTURE DATA, TWS not monitored, KILL off, gate reads 0, READ ONLY and NO ORDER PATH"></p>
 <p align="center"><em>The status line on every screen: the served window, the data source, gate reads, READ ONLY and NO ORDER PATH.</em></p>
 
-- **Read only.** Every route is GET; a test pins the route set and fails on any other method. A syntax-tree scan
+- **Read only.** Every route is GET except the two `JOBS` writes; a test pins the route set and fails on any other
+  method, and on any other write beside those two. A syntax-tree scan
   bans write calls anywhere in the backend. The ledger is never written: for an eligible run, RUN shows the
   `scripts\ledger_append.py` command for you to copy and run yourself. Tests:
   [`test_app.py`](backend/tests/test_app.py), [`test_safety_ast.py`](backend/tests/test_safety_ast.py).
@@ -528,8 +542,10 @@ break them.
   scan bans direct parquet reads. Prices are cached in memory by calendar year, never on disk, so a normal
   session adds a handful of lines to `results\oos_access_log.jsonl`, each with caller `terminal`. Tests:
   [`test_safety_ast.py`](backend/tests/test_safety_ast.py).
-- **No order path.** No IB client exists in the terminal. A scan bans IB order calls across `terminal\`, and the
-  browser tests assert that every request is a GET and that no route or component is named like an order action.
+- **No order path.** The one IB client (`services/ib_readonly_client.py`, client id 95, paper accounts only, opt-in) can
+  send eight read-only message kinds and nothing else, and its order-style calls raise. A scan bans IB order calls
+  across `terminal\`, and the browser tests assert that every request is a GET (bar the queue's POST and DELETE) and
+  that no route or component is named like an order action.
   Tests: [`test_safety_ast.py`](backend/tests/test_safety_ast.py), [`safety.spec.ts`](web/e2e/flows/safety.spec.ts).
 - **Local only.** The server binds 127.0.0.1 in code and refuses a peer that is not loopback. It accepts only the
   hosts 127.0.0.1 and localhost and has no CORS. A same-origin guard stops another page from triggering gate reads.
@@ -574,18 +590,19 @@ for daily series and 12 for monthly ones, sessions only, and the risk-free rate 
 read that bypasses the gate and a wrong annualisation factor (√365) must each make a test fail.
 
 **The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 78 metrics (41 P0, 30 P1, 7 P2),
-from performance and drawdowns to research integrity and live paper monitoring. The strict cross-check runs recorded
-in it on 2026-09-27: P1 bundles PASS 1,453, FAIL 0, INFO 84; Phase 11 bundles PASS 467, FAIL 0.
+from performance and drawdowns to research integrity and live paper monitoring. All seven P2 metrics are built. The
+strict cross-check runs recorded in it: on 2026-09-27 P1 bundles PASS 1,453, FAIL 0, INFO 84 and Phase 11 bundles
+PASS 467, FAIL 0; on 2026-10-01 the whole dump folder, P2 bundles included, PASS 2,287, FAIL 0, INFO 98.
 
 <br clear="right">
 
-| Layer | What it proves | Size (2026-09-29, working tree on `b746b02`) | Command |
+| Layer | What it proves | Size (2026-10-01, working tree on `f1be892`) | Command |
 |---|---|---|---|
-| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 1,239 test functions in 91 files | nq-lab venv's pytest, see Test commands |
-| qa cross-check | Every dumped value, recomputed by the reference libraries | 188 tests in 11 files, plus `crosscheck --strict` | `uv run --project terminal\qa ...` |
-| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 6,585 tests in 430 files | `pnpm --dir terminal\web test` |
+| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 1,550 test functions in 111 files (2,537 cases) | nq-lab venv's pytest, see Test commands |
+| qa cross-check | Every dumped value, recomputed by the reference libraries | 262 tests in 16 files, plus `crosscheck --strict` (2026-10-01: PASS 2,287, FAIL 0, INFO 98) | `uv run --project terminal\qa ...` |
+| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 6,933 tests in 455 files (45 skipped) | `pnpm --dir terminal\web test` |
 | Types and build | `tsc -b` over the app; a production build under the bundle budgets | n/a | `test:types`, `build` |
-| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 357 tests in 32 specs (354 run by `pnpm e2e`, 3 perf), 170 screenshot baselines | `pnpm --dir terminal\web e2e` |
+| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 386 tests in 33 specs (383 run by `pnpm e2e`, 3 perf), 196 screenshot baselines | `pnpm --dir terminal\web e2e` |
 | Playwright offline (macOS, Linux) | The same specs against the demo layer, served as `GET /api/*` from Node: no Python and no backend | 185 tests in 14 files, plus 3 performance tests; each command skips 1 | `pnpm --dir web e2e:offline`, `e2e:offline:perf` |
 
 The table gives suite sizes, not pass rates. The backend suite needs the private nq-lab venv. Two tests assume the

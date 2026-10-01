@@ -14,9 +14,12 @@ import './assets/fonts/bergoom/LICENSE.md?url'
 import './theme/index.css'
 
 import App from './App'
+import { applyStoredLook } from './theme/look'
 
 const root = document.getElementById('root')
 if (!root) throw new Error('index.html is missing the #root element')
+// The stored theme goes on before the first render, so a viewer who chose amber-classic never sees the standard colours.
+applyStoredLook()
 
 function renderApp(el: HTMLElement): void {
   createRoot(el).render(

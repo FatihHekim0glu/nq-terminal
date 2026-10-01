@@ -31,10 +31,10 @@ const RUN: ResolvedContext = { kind: 'run', value: 'nt_dtsmom_v0_ts1' }
 const labels = (context: ResolvedContext | null) => relatedMenu(context, INDEX).items.map((i) => i.label)
 
 describe('relatedMenu: the MENU word on the command line (spec 4.7)', () => {
-  it('with no context, lists the built screens that take none, in registry order, and never JOBS', () => {
+  it('with no context, lists the built screens that take none, in registry order, JOBS (the P2 queue) included', () => {
     const menu = relatedMenu(null, INDEX)
     expect(menu.title).toBe(COMMAND_LINE.menuTitle)
-    expect(menu.items.map((i) => i.label)).toEqual(['HOME', 'REG', 'MT', 'RUNS', 'LEDG', 'OOS', 'LIVE', 'JRNL', 'HELP'])
+    expect(menu.items.map((i) => i.label)).toEqual(['HOME', 'REG', 'MT', 'RUNS', 'LEDG', 'OOS', 'LIVE', 'JRNL', 'HELP', 'JOBS'])
     expect(menu.items.every((i) => BUILT_CODES.has(i.label as never))).toBe(true)
     expect(menu.items.map((i) => i.n)).toEqual(menu.items.map((_, i) => i + 1))
     expect(menu.items[0]?.act).toEqual({ kind: 'run', line: 'HOME' })

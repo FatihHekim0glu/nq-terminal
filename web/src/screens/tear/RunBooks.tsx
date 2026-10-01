@@ -1,7 +1,7 @@
 // A run's trades, costs and exposure panels (UI_SPEC section 7, the tear sheet's last row; ANALYTICS
 // TA1, TA3, TA6, EX1 to EX4, and in P1 TA2, TA4, TA5 as the trade paths card). DES-style cards under the tab view. The trade card appears only
 // when the run has closed trades; the exposure card says why when a run has no snapshots. Each card
-// is [POST HOC] and names its unit; the slippage table holds real fills only, as the API sends them.
+// is [POST HOC] and names its unit; EX5's capacity card (P2) closes the grid; the slippage table holds real fills only, as the API sends them.
 import { useId, useMemo, useState, type CSSProperties } from 'react'
 import { useCommands, useRun } from '../../api/queries'
 import { BarLadder } from '../../charts/echarts/BarLadder'
@@ -22,7 +22,8 @@ import {
 import RunTradePaths from './RunTradePaths'
 import { Card, Pending as CardPending, Rows, chartId } from './TearCard'
 import { formatNumber } from './tearFormat'
-import { useRunBooks } from './tearQueries'
+import { CapacityHost } from '../p2rct/hosts'
+import { useRunBooks, useRunCapacity } from './tearQueries'
 import '../../grids/grid.css'
 import '../../tiles/tiles.css'
 import './tearComposition.css'
@@ -198,6 +199,7 @@ export function ExposureCard(props: ExposureCardProps) {
 
 export default function RunBooks({ runId, link = '-' }: { readonly runId: string; readonly link?: PanelLink }) {
   const books = useRunBooks(runId, true)
+  const capacity = useRunCapacity(runId, true)
   const trades = books.trades.data
   return (
     <section className="tear-books" aria-label={fillCopy(B.headingLabel, { run: runId })}>
@@ -209,6 +211,7 @@ export default function RunBooks({ runId, link = '-' }: { readonly runId: string
         {trades && hasTrades(trades) ? <RunTradePaths runId={runId} /> : null}
         {books.costs.data ? <CostsCard costs={books.costs.data} runId={runId} /> : <Card title={B.costsTitle}><Pending error={books.costs.error} /></Card>}
         {books.exposure.data ? <ExposureCard exposure={books.exposure.data} runId={runId} link={link} /> : <Card title={B.exposureTitle}><Pending error={books.exposure.error} /></Card>}
+        <CapacityHost query={capacity} />
       </div>
     </section>
   )

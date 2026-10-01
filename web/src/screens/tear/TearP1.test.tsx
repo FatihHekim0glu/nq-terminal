@@ -9,10 +9,14 @@ import { createApiQueryClient } from '../../api/queries'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import type { MnemonicCode } from '../../commands/registry'
 import type { ResolvedContext } from '../../commands/types'
+import { RCT } from '../../copy/regimesCapacityTerm'
+import { RISK_EXTRAS } from '../../copy/riskExtras'
 import { TEAR_P1 } from '../../copy/tearP1'
 import { TRADE_PATHS as T } from '../../copy/tradePaths'
 import { BOOK_TRADES, RUN_ANALYTICS, RUN_COSTS, RUN_EXPOSURE, RUN_TRADES, SMOKE_ANALYTICS } from './tear.fixtures'
 import { EXCURSIONS, EXCURSIONS_DAILY, EXCURSIONS_ON_BASIS, HYP_ANALYTICS, HYP_BOOTSTRAP, HYP_EXTENDED, TRADE_PATHS } from './tearP1.fixtures'
+import { RUN_CAPACITY, TREND_VIEW } from '../p2rct/p2rct.fixtures'
+import { HYP_RISK_EXTRAS, RUN_RISK_EXTRAS } from '../riskextras/riskExtras.fixtures'
 import { formatNumber } from './tearFormat'
 import TearSheet from './TearSheet'
 
@@ -46,6 +50,11 @@ let excursions: typeof EXCURSIONS = EXCURSIONS_ON_BASIS
 const ROUTES: ReadonlyArray<readonly [RegExp, () => Response]> = [
   [/^\/api\/hypotheses\/volmanaged_v0$/, () => json({ card: { name: 'volmanaged_v0', series_costs: [0, 1, 2] } })],
   [/^\/api\/analytics\/hypothesis\/volmanaged_v0\/extended\?cost=1$/, () => json(HYP_EXTENDED)],
+  [/^\/api\/analytics\/hypothesis\/volmanaged_v0\/risk-extras\?cost=1$/, () => json(HYP_RISK_EXTRAS)],
+  [/^\/api\/analytics\/hypothesis\/volmanaged_v0\/trend-regime\?cost=1$/, () => json(TREND_VIEW)],
+  [/^\/api\/analytics\/run\/nt_za_v0_fixture_a\/risk-extras\?freq=D$/, () => json(RUN_RISK_EXTRAS)],
+  [/^\/api\/analytics\/run\/nt_za_v0_fixture_a\/trend-regime$/, () => json(TREND_VIEW)],
+  [/^\/api\/analytics\/run\/nt_za_v0_fixture_a\/capacity$/, () => json(RUN_CAPACITY)],
   [/^\/api\/analytics\/hypothesis\/volmanaged_v0\/bootstrap\?cost=1$/, () => (bootstrapStatus === 200 ? json(HYP_BOOTSTRAP) : json({ detail: 'no bootstrap for this series: a block length needs at least 30 observations, got 10' }, bootstrapStatus))],
   [/^\/api\/analytics\/hypothesis\/volmanaged_v0\?cost=1$/, () => json(HYP_ANALYTICS)],
   [/^\/api\/runs\/nt_za_v0_fixture_a$/, () => json({ summary: { strategy: 'za_orb', balance_ok: true } })],
@@ -100,6 +109,8 @@ function mount(code: MnemonicCode, context: ResolvedContext) {
 
 const hyp: ResolvedContext = { kind: 'hypothesis', value: 'volmanaged_v0' }
 const section = () => screen.findByRole('region', { name: `Extended analytics for ${hyp.value}` })
+/** A heading whose accessible name starts with `title` (the card's tag follows it in the same heading). */
+const titled = (title: string) => (name: string) => name.startsWith(title)
 const chartsOf = (kind: string) => seen.charts.filter((c) => c.kind === kind)
 
 describe('EQ: SV5 intervals and the SV6 cone', () => {
@@ -160,6 +171,66 @@ describe('RET: ratios, Cornish-Fisher VaR, normality and the stress panel', () =
     expect(p1.textContent).toContain(HYP_EXTENDED.stress.spent_note!)
     expect(stress.textContent).not.toMatch(/\bp\b/)
     expect(within(p1).getByRole('region', { name: TEAR_P1.stress.caption })).toBeTruthy()
+  })
+})
+
+describe('RET and RR: the P2 cards (RK4, PF11, BR5, RG2)', () => {
+  it('RET adds the ulcer index and recovery factor card and the modified expected shortfall card, from the risk-extras read', async () => {
+    mount('RET', hyp)
+    const p1 = await section()
+    expect(await within(p1).findByRole('heading', { name: titled(RISK_EXTRAS.es.title) })).toBeTruthy()
+    expect(within(p1).getByRole('heading', { name: titled(RISK_EXTRAS.drawdown.title) })).toBeTruthy()
+    expect(within(p1).queryByRole('heading', { name: titled(RISK_EXTRAS.treynor.title) })).toBeNull()
+    expect(calls).toContain('/api/analytics/hypothesis/volmanaged_v0/risk-extras?cost=1')
+  })
+
+  it('RR adds the Treynor ratio card and the trend regime card, each from its own read; RET never asks for the trend regime', async () => {
+    mount('RR', hyp)
+    const p1 = await section()
+    expect(await within(p1).findByRole('heading', { name: titled(RISK_EXTRAS.treynor.title) })).toBeTruthy()
+    expect(await within(p1).findByRole('heading', { name: titled(RCT.trend.title) })).toBeTruthy()
+    expect(calls).toContain('/api/analytics/hypothesis/volmanaged_v0/trend-regime?cost=1')
+    cleanup()
+    calls = []
+    mount('RET', hyp)
+    await section()
+    await waitFor(() => expect(calls.some((u) => u.includes('/risk-extras'))).toBe(true))
+    expect(calls.some((u) => u.includes('trend-regime'))).toBe(false)
+  })
+
+  it('a run asks for its own risk extras at its freq and for the trend regime at the daily frequency only', async () => {
+    mount('RR', { kind: 'run', value: 'nt_za_v0_fixture_a' })
+    await waitFor(() => expect(calls).toContain('/api/analytics/run/nt_za_v0_fixture_a/trend-regime'))
+    expect(calls).toContain('/api/analytics/run/nt_za_v0_fixture_a/risk-extras?freq=D')
+  })
+
+  it('a refused risk-extras read is an alert inside the card, and the P1 cards beside it still draw', async () => {
+    const real = ROUTES.findIndex(([re]) => re.test('/api/analytics/hypothesis/volmanaged_v0/risk-extras?cost=1'))
+    const original = ROUTES[real]!
+    ;(ROUTES as Array<readonly [RegExp, () => Response]>)[real] = [original[0], () => json({ detail: 'refused here' }, 422)]
+    try {
+      mount('RET', hyp)
+      const p1 = await section()
+      await waitFor(() => expect(within(p1).getAllByRole('alert').some((a) => (a.textContent ?? '').includes('refused here'))).toBe(true))
+      expect(p1.textContent).toContain('Omega (0)')
+    } finally {
+      ;(ROUTES as Array<readonly [RegExp, () => Response]>)[real] = original
+    }
+  })
+})
+
+describe("EX5: the capacity card closes a run's books", () => {
+  it('asks for the capacity of a run once its sheet answered, and names the card in the books grid', async () => {
+    mount('EQ', { kind: 'run', value: 'nt_za_v0_fixture_a' })
+    const heading = await screen.findByRole('heading', { name: titled(RCT.capacity.title) })
+    expect(heading.closest('.tear-books-grid')).not.toBeNull()
+    expect(calls).toContain('/api/analytics/run/nt_za_v0_fixture_a/capacity')
+  })
+
+  it('a hypothesis has no run books, so it never asks for a capacity', async () => {
+    mount('EQ', hyp)
+    await section()
+    expect(calls.some((u) => u.includes('/capacity'))).toBe(false)
   })
 })
 

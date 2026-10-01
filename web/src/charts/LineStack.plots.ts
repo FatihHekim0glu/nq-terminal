@@ -169,6 +169,18 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
   const legend = pane.lanes === undefined ? paneLegend(el, pane, values, a.t, tokens) : noLegend()
   const hover = pane.lanes === undefined ? null : laneHover(pane.lanes, live)
   const isBottom = i === a.panes.length - 1
+  // The y range keeps the curve clear of the legend as it was measured when the range was last computed. The legend
+  // is built empty and gets its values on the first draw, so it grows after that first range: the range is taken
+  // again once, when the legend's size no longer matches the one it was fitted to (look spec 6.1).
+  let fitted: { width: number; height: number } | null = null
+  let gone = false
+  const refitForLegend = (u: uPlot) => {
+    const box = legend.handle.element
+    if (fitted === null || (fitted.width === box.offsetWidth && fitted.height === box.offsetHeight)) return
+    queueMicrotask(() => {
+      if (!gone) u.setData(u.data, true)
+    })
+  }
   const opts = paneOptions({
     pane,
     data: values,
@@ -186,11 +198,13 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
     gutter: { shared: gutter, index: i },
     legendBox: () => {
       const box = legend.handle.element
+      fitted = { width: box.offsetWidth, height: box.offsetHeight }
       return { left: box.offsetLeft, top: box.offsetTop, width: box.offsetWidth, height: box.offsetHeight }
     },
     onDraw: (u, info) => {
       writeAttrs(el, u, info)
       legend.onScale(u)
+      refitForLegend(u)
       c.onFirstDraw()
     },
     onCursor: (u) => {
@@ -203,7 +217,14 @@ function buildPane(Ctor: UplotConstructor, c: PaneContext): { plot: uPlot; legen
     lanesHighlight: () => live.current.highlightLane ?? null,
   })
   const plot = new Ctor(opts, paneUplotData<readonly (number | null)[]>(a.t, pane, values) as unknown as uPlot.AlignedData, el)
-  return { plot, legend: legend.handle, reset: () => hover?.reset() }
+  return {
+    plot,
+    legend: legend.handle,
+    reset: () => {
+      gone = true
+      hover?.reset()
+    },
+  }
 }
 
 export function useLineStackPlots(a: PlotsArgs): PlotsState {

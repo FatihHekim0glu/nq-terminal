@@ -10,12 +10,14 @@
 // the whole body, so the row budget of look spec 7 holds; the notes sit under the grid, reached by
 // scrolling the body. Enter on a row opens that symbol's functions (GP, GIP, DES, CORR).
 import { useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { flushSync } from 'react-dom'
 import { useUniverse } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
 import { DropdownField, ParamRow, ReadOnlyValue } from '../../chrome/Field'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { isPlainObject, readJson, safeLocalStorage, writeJson } from '../../state/safeStorage'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
+import { focusAfterOverlay } from '../../chrome/WorkspaceFocus'
 import { usePanelActions, type PanelActions } from '../../chrome/PanelChrome.actions'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
@@ -175,8 +177,8 @@ export default function MonScreen(_props: ScreenProps) {
   const horizons = universe?.horizons
   const columns = useMemo(() => monColumns(horizons ?? [], s.view, s.heat, wide), [horizons, s.view, s.heat, wide])
   const closeDrill = () => {
-    setDrill(null)
-    root.current?.querySelector<HTMLElement>('[role="grid"]')?.focus()
+    flushSync(() => setDrill(null))
+    focusAfterOverlay(root.current?.querySelector<HTMLElement>('[role="grid"]') ?? null)
   }
   const run = (line: string) => {
     setDrill(null)

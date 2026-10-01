@@ -6,6 +6,12 @@
 // Runs against the fixture-mode backend (playwright.config.ts).
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { dismissOrientation } from './orientation.ts'
+
+// The bare HOME frame is measured here: start as a viewer who has dismissed the first-run orientation line (e2e/orientation.ts).
+test.beforeEach(async ({ page }) => {
+  await dismissOrientation(page)
+})
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
@@ -225,7 +231,9 @@ test.describe('panels and tables', () => {
       const info = await page.evaluate(() => {
         const el = document.activeElement as HTMLElement | null
         const section = el?.closest('[data-nqt-panel]') as HTMLElement | null
-        const s = el ? getComputedStyle(el) : null
+        // A grid keeps DOM focus on the table and draws the ring on its active cell (grid.css), so that is measured.
+        const ringed = el?.matches('[role="grid"]') ? (el.querySelector('.is-active') as HTMLElement | null) ?? el : el
+        const s = ringed ? getComputedStyle(ringed) : null
         return {
           title: section?.getAttribute('data-nqt-title') ?? null,
           ring: s ? `${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor}` : '',
@@ -260,7 +268,7 @@ test.describe('panels and tables', () => {
     const bar = help.locator('.fn-bar')
     await expect(bar).toHaveCount(1)
     expect(await bar.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgb(135, 15, 30)')
-    await expect(bar.getByRole('textbox', { name: 'Search help' })).toHaveAttribute('placeholder', '<Search help>')
+    await expect(bar.getByRole('combobox', { name: 'Search help' })).toHaveAttribute('placeholder', '<Search help>')
     await expect(bar.getByRole('button', { name: /96\) Actions/ })).toBeVisible()
     await expect(bar.locator('.fn-title')).toHaveText('Help')
     const fieldEdge = await bar.locator('.fn-field').evaluate((el) => {
@@ -271,8 +279,8 @@ test.describe('panels and tables', () => {
     const barBox = await bar.boundingBox()
     const titleBox = await help.locator('.ptitle').boundingBox()
     expect(Math.round((barBox?.y ?? 0) - ((titleBox?.y ?? 0) + (titleBox?.height ?? 0)))).toBe(0)
-    await bar.getByRole('textbox', { name: 'Search help' }).fill('drawdown')
-    await bar.getByRole('textbox', { name: 'Search help' }).press('Enter')
+    await bar.getByRole('combobox', { name: 'Search help' }).fill('drawdown')
+    await bar.getByRole('combobox', { name: 'Search help' }).press('Enter')
     await expect(page.getByRole('listbox')).toBeVisible()
     await expect(page.getByRole('listbox')).toContainText('DD')
   })

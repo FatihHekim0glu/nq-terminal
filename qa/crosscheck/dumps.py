@@ -32,6 +32,16 @@ import pandas as pd
 SCHEMA = "nqt-qa-dump/1"
 SIDES = ("ours", "nq_lab", "nautilus", "stored")
 BASES = ("A", "B")
+# Phase 12 (P2). The reference modules (`p2_spa.py`, `p2_risk_extras.py`, `p2_regimes_capacity_term.py`) import
+# `crosscheck.reference`, which imports this file, so the input names are written here as literals; the QA test
+# `tests/test_p2_dump_kinds.py` pins each tuple to the reference module's own constant.
+P2_SPA_INPUTS = {"spa": ("names", "dates", "bench", "models", "reps", "seed", "size")}
+P2_RISK_INPUTS = {"p2risk": ("dates", "r", "bench", "basis", "periods", "on_capital")}
+P2_RCT_INPUTS = {"p2trend": ("dates", "r", "close_dates", "close", "window", "periods"),
+                 "p2capacity": ("legs", "volume"),
+                 "p2term": ("root", "front", "next", "business_days"),
+                 "p2expiry": ("contracts", "business_days")}
+
 BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "costs": ("instruments", "ticks", "trade_pnl", "trade_commission", "fills", "snapshots"),
                  "market": ("dates", "r", "window"),
@@ -48,7 +58,8 @@ BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "evt": ("mode", "events", "pre", "post"),
                  "roll": ("dates", "t", "instrument_id", "offset", "c_none", "qa_rolls_total"),
                  "dq_sidecar": ("status", "fence", "sessions"), "dq_nq": ("fence", "sessions", "rejected", "still"),
-                 "guards": ("groups", "records")}
+                 "guards": ("groups", "records"),
+                 **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS}
 
 
 class DumpError(ValueError):

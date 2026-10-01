@@ -213,7 +213,7 @@ Backgrounds used for ratios: `bg #000000`, `raised #1E1E1E`, `chrome #191919`, `
   - Up `#3399FF`.
   - Down `#FF7329` (7.74 bg, 5.30 sel).
   - **Amber swaps too**: `--data` and `--field-bg` become `#FEBA11` (official swatch; the GIF shows `#FCBC50`; 12.25 bg). From the clones_legal verifier, CVD-8 frames 42 to 54.
-- **Removed**: `amber-classic` (P2). The navy 2011 look is not a target.
+- **`amber-classic`** (Phase 12, optional, `src/theme/amberClassic.css`): an all-amber-on-black variant that sets colour token values only. Every pair of the default list (8.2) and of `AMBER_CLASSIC_PAIRS` passes in it, alone and with each colour scheme, and so does every pair the stylesheets write (`src/theme/cssPairs.ts` reads each rule that sets a token text colour and a token fill; `src/theme/amberClassic.looks.test.ts` measures them in both looks). Disabled controls are exempt from the text minimum (WCAG 1.4.3) and listed by the test. The navy 2011 look is not a target.
 
 The existing rule stays: never put a `var()` colour in a CSS transition. State changes (hover, press, menu open, dim) are hard cuts with no transition (IS-04, IS-05, IS-07, IS-10 `[px]`: every observed state change lands within one frame).
 

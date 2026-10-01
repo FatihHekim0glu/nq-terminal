@@ -1,0 +1,96 @@
+/* JOBS, the backtest queue (look spec: amber input fields, grey buttons, hard cuts). Tokens only, square corners, no
+   transitions. Every state is in words as well as colour; every control is at least 24px (WCAG 2.5.8). */
+.jobs-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.jobs-screen > * { flex: 0 0 auto; }
+
+.jobs-note,
+.jobs-counts,
+.jobs-summary { margin: 0; padding: 0 6px; line-height: var(--row-h); }
+.jobs-basis { color: var(--text); }
+.jobs-counts { color: var(--data); font-weight: 700; }
+.jobs-summary { color: var(--c-down); font-weight: 700; }
+.jobs-heading { margin: 0; padding: 4px 6px 0; color: var(--data); font-size: var(--fs-data); font-weight: 700; }
+.jobs-mono { font-family: var(--font-mono); }
+
+.jobs-form { padding: 4px 6px; }
+.jobs-fieldset { margin: 0; padding: 4px 6px 6px; border: 1px solid var(--border-int); min-width: 0; }
+.jobs-legend { padding: 0 4px; color: var(--data); font-weight: 700; }
+.jobs-fields { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.jobs-field { display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: 280px; margin-bottom: 4px; }
+.jobs-label { color: var(--data); }
+.jobs-hint { color: var(--muted); }
+.jobs-error { color: var(--c-down); }
+.jobs-error b { color: var(--c-down); }
+
+.jobs-input {
+  min-height: 24px;
+  padding: 0 4px;
+  background: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.jobs-input.jobs-mono { font-family: var(--font-mono); }
+.jobs-input[aria-invalid="true"] { outline: 2px solid var(--c-down); outline-offset: 0; }
+.jobs-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.jobs-params { width: 100%; max-width: 640px; padding: 2px 4px; resize: vertical; }
+
+.jobs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+
+.jobs-button {
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 10px;
+  background: var(--btn-grey);
+  color: var(--text);
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.jobs-button:hover { background: var(--hover-menu); }
+.jobs-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.jobs-button:disabled { color: var(--muted); cursor: default; }
+.jobs-button[aria-pressed="true"] { background: var(--sel-toggle); color: var(--white); }
+
+.jobs-row-actions,
+.jobs-confirm { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.jobs-confirm > span { color: var(--white); font-weight: 700; }
+
+.jobs-status { color: var(--white); font-weight: 700; }
+.jobs-status.jobs-up { color: var(--c-up); }
+.jobs-status.jobs-down { color: var(--c-down); }
+.jobs-status.jobs-warn,
+.jobs-counts .jobs-warn { color: var(--warn); }
+
+/* The plain down red is 3.91:1 on the selection fill, so the selected row lifts it, as the grid does. */
+.live-table tbody tr.jobs-selected { --c-down: var(--c-down-raised); }
+.live-table tbody tr.jobs-selected td { background: var(--sel-bg); }
+
+.jobs-log { padding-bottom: 6px; }
+.jobs-pre {
+  box-sizing: border-box;
+  margin: 2px 6px 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--border-int);
+  background: var(--raised);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-data);
+  line-height: 1.35;
+  white-space: pre;
+}
+.jobs-pre:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

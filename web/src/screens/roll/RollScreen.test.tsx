@@ -14,6 +14,9 @@ import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import type { ResolvedContext } from '../../commands/types'
 import RollScreen from './RollScreen'
+import { RCT } from '../../copy/regimesCapacityTerm'
+import { fillCopy } from '../../copy/workspace'
+import { TERM_CL } from '../p2rct/p2rct.fixtures'
 import { BASIS, LABEL, PAPER, UNIT_NOTE, makeCalendar } from './rollTestData'
 
 const PANEL_ID = 'p-roll'
@@ -25,6 +28,9 @@ const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
   const url = new URL(String(input), 'http://x')
   if (status !== 200) {
     return new Response(JSON.stringify({ detail: 'window 2022-01-03 is past the fence' }), { status, headers: { 'content-type': 'application/json' } })
+  }
+  if (url.pathname.startsWith('/api/market/term-structure/')) {
+    return new Response(JSON.stringify({ ...TERM_CL, root: url.pathname.split('/').pop() }), { status: 200, headers: { 'content-type': 'application/json' } })
   }
   const body = url.pathname === '/api/market/rolls' ? makeCalendar() : PAPER
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -97,6 +103,17 @@ describe('ROLL screen', () => {
     const rolls = screen.getByRole('table', { name: /NQ rolls, oldest first/ })
     expect(within(rolls).getAllByRole('row')).toHaveLength(4)
     expect(within(rolls).getByText('+3.75')).toBeTruthy()
+  })
+
+  it('asks for the term structure (MV6) of the picked market only once its market view is open, and draws its card', async () => {
+    renderRoll()
+    await strip()
+    expect(urls().some((u) => u.includes('term-structure'))).toBe(false)
+    expect(activateNumbered(PANEL_ID, 12)).toBe(true)
+    await screen.findByRole('img', { name: /^NQ roll gap in percent/ })
+    const heading = await screen.findByRole('heading', { name: (name) => name.startsWith(fillCopy(RCT.term.title, { root: 'NQ' })) })
+    expect(heading).toBeTruthy()
+    expect(urls()).toContain('/api/market/term-structure/NQ')
   })
 
   it('keeps keyboard focus in the panel when a ticker opens the market view (WCAG 2.4.3)', async () => {

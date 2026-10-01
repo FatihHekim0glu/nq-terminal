@@ -5,6 +5,12 @@
 // the key map open. Runs against the fixture-mode backend (playwright.config.ts).
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { dismissOrientation } from './orientation.ts'
+
+// The bare HOME frame is measured here: start as a viewer who has dismissed the first-run orientation line (e2e/orientation.ts).
+test.beforeEach(async ({ page }) => {
+  await dismissOrientation(page)
+})
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
@@ -128,7 +134,9 @@ test.describe('keys (spec 5.2 and 8.4)', () => {
     await page.keyboard.press('Escape')
     await page.keyboard.press('F1')
     await page.keyboard.press('F1')
-    await expect(page.getByRole('contentinfo')).toContainText('Screen HELP')
+    // The HELP index opens as its own panel beside the HOME ones (U20), so the screen label stays HOME.
+    await expect(page.locator('[data-nqt-title="HELP"]')).toHaveCount(1)
+    await expect(page.getByRole('contentinfo')).toContainText('Screen HOME')
     expect(page.context().pages()).toHaveLength(1)
   })
 

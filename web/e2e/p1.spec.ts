@@ -246,9 +246,8 @@ test.describe('SV3 on REG, MT and DES', () => {
     const main = await openGallery(page, 'DesHypothesis')
     const row = view.rows.find((r) => r.name === 'overnight_v0')!
     const line = main.locator('.nqt-card-pair', { has: page.locator('dt', { hasText: 'Deflated Sharpe [POST HOC]' }) })
-    await expect(line).toContainText(`DSR ${dsrText(row.dsr)} under V (SR0 `)
-    await expect(line).toContainText(`), ${dsrText(row.dsr_null)} under V0 (SR0 `)
-    await expect(line).toContainText(`, N ${view.n_trials}`)
+    // DEFLATED.desLine (G06): the own-period SR0 and its annualised twin come first, then both DSRs, then N.
+    await expect(line).toContainText(`DSR ${dsrText(row.dsr)} under V, ${dsrText(row.dsr_null)} under V0; N ${view.n_trials}`)
     await expectGalleryClean(page, watch)
   })
 })

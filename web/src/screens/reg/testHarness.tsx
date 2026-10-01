@@ -14,6 +14,7 @@ import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../des/desTestData'
 import { DEFLATED_REAL } from './deflatedFixtures'
+import { SPA_REJECTS } from './spaFixtures'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 
 export const PANEL_ID = 'reg-test'
@@ -37,6 +38,7 @@ export const ANSWERS: Readonly<Record<string, unknown>> = {
   '/api/multiple-testing': MULTIPLE_TESTING,
   '/api/confirmations': CONFIRMATIONS,
   '/api/analytics/deflated': DEFLATED_REAL,
+  '/api/analytics/spa': SPA_REJECTS,
   '/api/hypotheses/overnight_v0': OVERNIGHT,
   '/api/hypotheses/volmanaged_v0': VOLMANAGED,
   '/api/hypotheses/rebal_v0': REBAL,

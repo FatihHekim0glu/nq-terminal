@@ -66,7 +66,7 @@ describe('checkNode', () => {
 describe('nodeCandidates', () => {
   const home = '/h'
   const dirs: Record<string, string[]> = {
-    '/h/.local/share': ['claude', 'node-v22.1.0-linux-x64', 'node-v24.3.0-darwin-arm64', 'node-24', 'node-v24.21.0-darwin-arm64'],
+    '/h/.local/share': ['editor', 'node-v22.1.0-linux-x64', 'node-v24.3.0-darwin-arm64', 'node-24', 'node-v24.21.0-darwin-arm64'],
     '/h/.nvm/versions/node': ['v20.1.0', 'v24.10.0', 'v24.9.1'],
   }
   const list = (dir: string): string[] => {

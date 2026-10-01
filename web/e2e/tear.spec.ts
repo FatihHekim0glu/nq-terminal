@@ -13,6 +13,12 @@
 // to its parent's tear sheet on every tab, never an endless load.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
+import { dismissOrientation } from './orientation.ts'
+
+// The bare HOME frame is measured here: start as a viewer who has dismissed the first-run orientation line (e2e/orientation.ts).
+test.beforeEach(async ({ page }) => {
+  await dismissOrientation(page)
+})
 
 const RUN = 'nt_za_v0_fixture_a'
 const HYP = 'volmanaged_v0'
@@ -194,8 +200,9 @@ test.describe('tear sheet of a run', () => {
             let found = false
             for (let r = 0; r < rows; r += 1) {
               const i = (r * cols + c) * 4
-              // Mostly white: a 1.5px line always covers one pixel row by at least 75%.
-              if (Math.min(img.data[i]!, img.data[i + 1]!, img.data[i + 2]!) >= 160) {
+              // Mostly white and mostly opaque: a 1.5px line always covers one pixel row by at least 75%. The canvas is
+              // transparent, so a window shading painted in white at a low alpha (the stress spans) is not the line.
+              if (Math.min(img.data[i]!, img.data[i + 1]!, img.data[i + 2]!) >= 160 && img.data[i + 3]! >= 191) {
                 found = true
                 const x = (x0 + c) / ratio
                 const y = (y0 + r) / ratio
@@ -279,8 +286,10 @@ test.describe('in the workspace', () => {
         expect(body.sw, `${code} width`).toBeLessThanOrEqual(body.cw)
         // The tab view is exactly one screen of the body. A hypothesis has no run books; EQ, RET and RR have their
         // P1 cards below the view in the body's scroll (UI_SPEC, P1 views on screen), DD and MRET have none.
-        expect(body.view, `${code} view height`).toBeLessThanOrEqual(body.ch)
-        if (code === 'DD' || code === 'MRET') expect(body.sh, `${code} height`).toBeLessThanOrEqual(body.ch)
+        // DD draws one lane row per drawn episode with a floor of its own (tear.css, G10), so in a short panel its view
+        // may be taller than the body; it then scrolls as one piece and never overflows onto anything below it.
+        if (code !== 'DD') expect(body.view, `${code} view height`).toBeLessThanOrEqual(body.ch)
+        if (code === 'DD' || code === 'MRET') expect(body.sh, `${code} height`).toBeLessThanOrEqual(Math.max(body.ch, body.view))
         else await expect(panel.getByRole('region', { name: `Extended analytics for ${HYP}` })).toBeAttached()
       }
     })
@@ -340,7 +349,11 @@ test.describe('tear sheet of a check row', () => {
       await expect(panel.getByRole('alert'), code).toHaveCount(0)
       await expect(panel.getByRole('button', { name: `${PARENT} ${code} <GO>` })).toBeVisible()
     }
-    expect(watch.requests.filter((r) => r.url().includes('/api/analytics/')).map((r) => r.url())).toEqual([])
+    // HOME's own first-load read of its default hypothesis panel can land after the first command is typed, so it is
+    // not a request of the check row; any other read under /api/analytics/ would be.
+    const homeOwnRead = `/api/analytics/hypothesis/${HYP}/panel`
+    const analytics = watch.requests.map((r) => new URL(r.url())).filter((u) => u.pathname.startsWith('/api/analytics/') && u.pathname !== homeOwnRead)
+    expect(analytics.map((u) => u.pathname)).toEqual([])
     await expectGalleryClean(page, watch)
     const last = page.locator(`[data-nqt-title="${CHECK} MRET"]`).filter({ visible: true })
     await last.getByRole('button', { name: `${PARENT} MRET <GO>` }).click()

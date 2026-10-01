@@ -73,12 +73,19 @@ def build_golden() -> dict:
     }
 
 
+# Another platform's libm and BLAS move a value by a few last bits (seen: 1e-14 relative on Windows against the
+# macOS golden file). 1e-13 sits ten times above that and ten times below the smallest tamper the tests make.
+FLOAT_REL_TOL = 1e-13
+FLOAT_ABS_TOL = 1e-15
+
+
 def render(golden: dict) -> str:
     return json.dumps(golden, indent=1, sort_keys=True, allow_nan=False) + "\n"
 
 
 def first_difference(built: object, stored: object, path: str = "") -> str | None:
-    """Path of the first key or index where the two JSON values differ (exact equality, type included)."""
+    """Path of the first key or index where the two JSON values differ (type included; numbers must agree to
+    `FLOAT_REL_TOL`, which the last-bit differences of another platform's maths library stay far inside)."""
     if isinstance(built, dict) and isinstance(stored, dict):
         for key in sorted(set(built) | set(stored)):
             where = f"{path}.{key}" if path else str(key)
@@ -97,7 +104,10 @@ def first_difference(built: object, stored: object, path: str = "") -> str | Non
             if found is not None:
                 return found
         return None
-    same = type(built) is type(stored) and built == stored
+    if type(built) is float and type(stored) is float:
+        same = math.isclose(built, stored, rel_tol=FLOAT_REL_TOL, abs_tol=FLOAT_ABS_TOL)
+    else:
+        same = type(built) is type(stored) and built == stored
     return None if same else (path or "<root>")
 
 

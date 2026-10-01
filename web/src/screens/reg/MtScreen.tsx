@@ -7,9 +7,11 @@
 // A sub tab strip from 85 (roadmap R8) picks the view: 85) Family is all of the above; 86) Replication
 // (MtReplication) draws each sealed confirmation against its parent's registered in-sample p and reads
 // /api/registry only once it is open; 87) Effective trials (EffectiveNPanel, SV3b) reads the SV3 view and the daily
-// trials' series (/api/analytics/hypothesis/{name}?cost=1) only once it is open.
+// trials' series (/api/analytics/hypothesis/{name}?cost=1) only once it is open; 88) Family test (SpaPanel, SV8) reads
+// /api/analytics/spa only once it is open.
 import { useCallback, useId, useMemo, useState } from 'react'
 import { useMultipleTesting } from '../../api/queries'
+import { useSpa } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
 import { PScatter } from '../../charts/echarts/PScatter'
 import FunctionBar, { type FunctionBarItem } from '../../chrome/FunctionBar'
@@ -20,6 +22,7 @@ import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { EFFECTIVE_N } from '../../copy/effectiveN'
 import { CONFIRM, MT } from '../../copy/reg'
 import { REPLICATION } from '../../copy/replication'
+import { SPA } from '../../copy/spa'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import MonitorGrid, { type OpenOptions } from '../../grids/MonitorGrid'
 import { MT_COLUMNS, mtRowId } from './regColumns'
@@ -28,6 +31,7 @@ import { boundaryCheck, buildMtRows, familyLine, linesLine, mtScatterInput, type
 import DeflatedPanel from './DeflatedPanel'
 import EffectiveNPanel from './EffectiveNPanel'
 import MtReplication from './MtReplication'
+import SpaPanel from './SpaPanel'
 import { MT_VIEWS, MT_VIEW_START, type MtView } from './mtViews'
 import { openDes } from './open'
 import './reg.css'
@@ -37,6 +41,7 @@ const MT_TAB_LABEL: Readonly<Record<MtView, string>> = {
   family: MT.views.family,
   replication: REPLICATION.tab,
   trials: EFFECTIVE_N.tab,
+  spa: SPA.tab,
 }
 const MT_TABS = MT_VIEWS.map((id) => ({ id, label: MT_TAB_LABEL[id] }))
 
@@ -64,7 +69,7 @@ function MtBar({ actions, view, scale, onScale }: MtBarProps) {
       label: FUNCTION_BAR.settings,
       menu: [{ label: scale === 'log' ? MT.settings.linear : MT.settings.log, onSelect: () => onScale(scale === 'log' ? 'linear' : 'log') }],
       // The p axis choice belongs to 85) Family; the replication chart has its own axes and the effective-trials
-      // heatmap has none, so both ignore it.
+      // heatmap and the family test have none, so all three ignore it.
       disabled: view !== 'family',
     },
   ]
@@ -140,6 +145,7 @@ export default function MtScreen(_props: ScreenProps) {
   const mt = useMultipleTesting()
   const [scale, setScale] = useState<PScale>('log')
   const [view, setView] = useState<MtView>('family')
+  const spa = useSpa(view === 'spa')
   const viewId = useId()
   const loaded = !mt.isError && mt.data !== undefined
   return (
@@ -166,6 +172,8 @@ export default function MtScreen(_props: ScreenProps) {
             </>
           ) : view === 'replication' ? (
             <MtReplication mt={mt.data} />
+          ) : view === 'spa' ? (
+            <SpaPanel query={spa} />
           ) : (
             <EffectiveNPanel />
           )}

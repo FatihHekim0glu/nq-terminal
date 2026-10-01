@@ -130,7 +130,7 @@ async function p11Anchors(page: Page): Promise<{ readonly failures: string[]; re
   expectEq('NQ unrepairable', nq.symbol.counts.unrepairable ?? -1, 11)
   expectEq('HO rebuilt', ho.symbol.counts.rebuilt ?? -1, 740)
   expectEq('HO unrepairable', ho.symbol.counts.unrepairable ?? -1, 222)
-  expectEq('guards OK', guards.ok, 12)
+  expectEq('guards OK', guards.ok, 13)
   expectEq('guards mismatch', guards.mismatch, 0)
   const later = nq.days.filter((d) => d.date >= P11_FROM)
   const eligible = later.length

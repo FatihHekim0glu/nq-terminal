@@ -39,7 +39,7 @@ Perspective pivot grids (`LEDG` pivot, trades, fills, OOS log); `COST`, `BLK`, `
 
 ### P2 (only on request)
 
-Backtest job runner through `backtests/run_base.py` (needs the user's go); read-only IB account snapshot (opt-in, client id 95); White's Reality Check, Hansen SPA and StepM; modified ES; ulcer index; Treynor; trend regimes; term structure; capacity; Arrow IPC wire format if a performance budget fails; `amber-classic` theme.
+Backtest job runner through `backtests/run_base.py` (needs the user's go); read-only IB account snapshot (opt-in, client id 95); White's Reality Check, a non-studentised SPA (the arch form) and StepM; modified ES; ulcer index; Treynor; trend regimes; term structure; capacity; Arrow IPC wire format if a performance budget fails; `amber-classic` theme.
 
 ## 5. Non-goals
 
@@ -58,7 +58,7 @@ Backtest job runner through `backtests/run_base.py` (needs the user's go); read-
 |---|---|---|
 | U1 | Add `fastapi==0.141.1` and `uvicorn==0.54.0` to nq-lab's `pyproject.toml` (new `terminal` dependency group; the dry run adds 4 packages and changes none) | Phase 1 |
 | U2 | Create a separate QA environment `terminal/qa` (own `pyproject.toml` and lock: quantstats, empyrical-reloaded, arch, statsmodels, scipy) that never touches nq-lab's `.venv` | Phase 3 QA gate |
-| U3 | Any P2 item: the job runner, the IB snapshot | Phase 10 |
+| U3 | Any P2 item: the job runner, the IB snapshot | Phase 10. **Approved by the owner on 2026-10-01 for all of P2** (the JOBS backtest queue, the read-only IB snapshot, SV8, RK4, PF11, BR5, RG2, EX5, MV6 and the amber-classic theme); Arrow IPC stays out unless a budget fails |
 | U4 | Opening 2022+ prices for display | Not planned |
 | U5 | Any git action | Not planned |
 
@@ -72,7 +72,7 @@ Three independent research reviews (analytics, UX and stack, architecture) disag
 | DL2 | Architecture proposed porting the SIGNAL TopBar and Rail; UX proposed dockview with a command line | **UX layout** (command line, dockview panels, status bar). From SIGNAL reuse tokens, class grammar, `StatusLine` segments and the `fuzzy()` matcher, not the Rail page layout | A terminal is panel based; the Rail is a website pattern |
 | DL3 | Perspective in P0 for all big grids | **P0 grids use TanStack Table with react-virtual; Perspective moves to P1** | 8,411 fills and 3,603 trades virtualise easily; Perspective's WASM and worker set-up is the riskiest front-end dependency and is not needed for P0 |
 | DL4 | Arrow IPC (UX) against JSON with epoch seconds (architecture) | **Columnar JSON via orjson** (`t` as integer epoch seconds, one array per field). Arrow only in P2 if a budget fails | Bars are downsampled to about 4,000 points per request, so JSON is small; one fewer dependency on each side |
-| DL5 | Job runner in the architecture plan; UX said v1 is display only | **Job runner is P2 and needs the user's go.** P0 and P1 are GET only | Keeps the safety E2E simple (every request is GET) and the ledger untouched |
+| DL5 | Job runner in the architecture plan; UX said v1 is display only | **Job runner is P2 and needed the user's go, given 2026-10-01 (U3).** P0 and P1 are GET only; v2 is GET only except `POST /api/jobs` and `DELETE /api/jobs/{job_id}` | Keeps the safety E2E simple (every request is GET but those two) and the ledger untouched: the queue writes only what `run_base.py` writes for an in-sample run |
 | DL6 | IB snapshot client id: "model on ib_lag_check" (93) against a new id 95 | **Client id 95, P2, opt-in** (`NQT_IB_READONLY=1`) | 93 belongs to `ib_lag_check`; two clients on one id clash |
 | DL7 | Nautilus pyo3 statistics as the terminal's engine (analytics) against the terminal's own `analytics.py` (architecture) | **Own numpy and pandas functions are primary.** Nautilus pyo3 statistics are the second implementation in tests, fed a session-indexed series. Independent libraries are the third, in the QA environment | The formulas and the two return bases (A and B) must be explicit and owned; pyo3 still gives an independent check |
 | DL8 | Rolling windows 21 and 63 (architecture) against 63 and 252 (analytics) | **63 and 252 sessions** for Sharpe and volatility; 126 for beta and correlation | A 21-session Sharpe is noise; 63 and 252 are the quarterly and annual views the screens use |
@@ -82,7 +82,7 @@ Three independent research reviews (analytics, UX and stack, architecture) disag
 | DL12 | UX wireframe said "PASS 0 FAIL 15" | **Counts come from `registry.csv` at runtime.** Today `overnight_v0` is PASS (14 FAIL, 1 PASS, plus 1 check row) | Hard-coded counts drift |
 | DL13 | Two servers (Vite on 5173 plus API) in normal use | **One origin: uvicorn on `127.0.0.1:8765` serves the built SPA and `/api`.** Vite dev server only in `-Dev` mode | No CORS needed at all |
 | DL14 | Sealed CSV price columns: drop by denylist | **Allowlist per file** of return, exposure and label columns | A new price column in a later file cannot leak by default |
-| DL15 | Status bar showed `TWS 7497 RO` | **Shows `TWS: not monitored`** until the P2 snapshot is enabled | The terminal has no TWS connection in P0 or P1 |
+| DL15 | Status bar showed `TWS 7497 RO` | **Shows `TWS: not monitored`** until the P2 snapshot is enabled, then `TWS: read-only snapshot` while LIVE holds a fresh snapshot | The terminal has no TWS connection unless `NQT_IB_READONLY=1` is set, and then only the read-only client on id 95 |
 | DL16 | F-keys in P0 | **P1 behind a Playwright test.** Esc and Ctrl+K are P0 | Browser interception of F2, F4, F8 and F9 is unverified |
 | DL17 | CVD theme in P0 | **P1.** P0 always shows sign and ▲ ▼ glyphs, so colour is never the only cue | Tokens make the theme cheap later |
 | DL18 | `GIP` as its own screen | **`GIP` is `GP` with a date and an intraday timeframe**, one component | Less code, same behaviour |

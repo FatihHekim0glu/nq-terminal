@@ -22,12 +22,13 @@ type CategoryKey = keyof typeof RELATED.categories
 /**
  * House grouping of the built functions (the reference menus group per function; there is no rule).
  * The P0 functions come first in each category and the P1 screens follow in registry order; COST
- * takes a run or a hypothesis, so it sits under both research and runs.
+ * takes a run or a hypothesis, so it sits under both research and runs. JOBS (the P2 backtest queue) takes no
+ * context and sits with the runs it produces.
  */
 const CATEGORY_CODES: ReadonlyArray<readonly [CategoryKey, readonly MnemonicCode[]]> = [
   ['prices', ['GP', 'GIP', 'MON', 'CORR', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ']],
   ['research', ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL']],
-  ['runs', ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO']],
+  ['runs', ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO', 'JOBS']],
   ['live', ['LIVE', 'JRNL', 'OOS']],
   ['terminal', ['HOME', 'HELP']],
 ]

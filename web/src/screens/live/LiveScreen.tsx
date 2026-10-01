@@ -12,6 +12,8 @@
 //   tiles        mean exposure, sessions, plumbing rows dropped (Basis B, [POST HOC])
 //   chart | recon  target against actual (performance rows only) | reconciliation table
 //   routes       READ ONLY Routes (one per close row) and Fills, footer strip of totals (/api/live/routes)
+//   ib snapshot  READ ONLY IB account, positions, open orders (view only) and today's executions (/api/ib/snapshot,
+//                opt-in: NQT_IB_READONLY=1); the status line's TWS segment follows it while this panel is open
 //   tracking     LV5 paper against model, cumulative and per session ([POST HOC], /api/analytics/paper-tracking)
 //   expectation  LV6 the paper and model paths as a fraction of K on the SV6 cone of the hypothesis ([POST HOC])
 //   journals     the journals under live/logs, expected files that are not written yet named
@@ -29,6 +31,7 @@ import ExpectationPanel from './ExpectationPanel'
 import JournalsGrid from './JournalsGrid'
 import { bookItems, exposureKpis, guardItems, type LiveStatus } from './liveModel'
 import PerformancePanel from './PerformancePanel'
+import IbSnapshotPanel from './ib/IbSnapshotPanel'
 import RoutesPanel from './RoutesPanel'
 import StateStrip from './StateStrip'
 import StreamState from './StreamState'
@@ -71,6 +74,7 @@ function Book({ status }: { readonly status: LiveStatus }) {
         <PerformancePanel />
       </div>
       <RoutesPanel />
+      <IbSnapshotPanel />
       <TrackingPanel />
       <ExpectationPanel />
       <div className="live-journals">

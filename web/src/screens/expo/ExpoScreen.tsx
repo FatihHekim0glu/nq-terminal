@@ -17,7 +17,9 @@ import { BookBar, EmptyGuide, Failed, Loading } from '../cost/BookFrame'
 import { DES } from '../../copy/des'
 import { DesCard, Tag } from '../des/DesParts'
 import { runTags } from '../runs/model'
+import { CapacityHost } from '../p2rct/hosts'
 import { ExposureCard } from '../tear/RunBooks'
+import { useRunCapacity } from '../tear/tearQueries'
 import { formatNumber } from '../tear/tearFormat'
 import { exposureCsv, sessionRows, summaryRows, type RunExposure, type SessionRow } from './expoModel'
 import '../tear/tear.css'
@@ -87,6 +89,8 @@ function Sessions({ view, panelId }: { readonly view: RunExposure; readonly pane
 function Exposure({ run, page, link }: { readonly run: string; readonly page: PanelPage | null; readonly link: PanelLink }) {
   const query = useApiQuery('/api/analytics/run/{run_id}/exposure', { path: { run_id: run } }, { enabled: run !== '' })
   const view = query.data
+  // EX5 (P2): asked once the exposure answered, so an unbalanced run (a 422 there) never reaches the capacity route.
+  const capacity = useRunCapacity(run, view !== undefined)
   // Honesty tags (UI_SPEC section 6) travel with the run wherever it is shown, so a probe or anchor run
   // is labelled here exactly as it is on RUN and RUNS (D20).
   const runDetail = useRun(run)
@@ -116,6 +120,9 @@ function Exposure({ run, page, link }: { readonly run: string; readonly page: Pa
               </DesCard>
             </div>
             <div className="books-col"><ExposureCard exposure={view} runId={run} link={link} /></div>
+          </div>
+          <div className="books-cols">
+            <div className="books-col"><CapacityHost query={capacity} /></div>
           </div>
           {view.available ? (
             <DesCard title={EXPO.seriesTitle}>

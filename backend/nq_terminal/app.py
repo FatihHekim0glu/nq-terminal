@@ -1,4 +1,4 @@
-"""FastAPI app for the nq-lab terminal: read-only, GET only, loopback only, one origin.
+"""FastAPI app for the nq-lab terminal: read-only, GET only (bar the two JOBS writes), loopback only, one origin.
 
 Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see `__main__.py`).
 
@@ -6,7 +6,9 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   client or local address that is not loopback); `TrustedHostMiddleware` for 127.0.0.1 and localhost (DNS
   rebinding control); `SameOriginApiMiddleware` (403 for a cross-site GET under /api). There is no CORS
   middleware, because the built SPA is served from the same origin (PRD DL13). See `security.py`.
-- Every registered route must be GET; `create_app` refuses to build an app that registers anything else.
+- Every registered route must be GET; `create_app` refuses to build an app that registers anything else, except
+  exactly the two JOBS writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3),
+  which carry their own header, origin and content-type checks (`api/jobs.py`). Any other non-GET route is refused.
   The one mount allowed is a plain `StaticFiles` at `/` serving exactly `settings.web_dist`; any other
   mount (a sub-app, a StaticFiles subclass, another path or folder) is refused, so data/ or results/ can
   never be served around the gate and FileCache.
@@ -15,6 +17,8 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -29,6 +33,10 @@ from nq_terminal.api import audit, commands, live  # 2.4
 from nq_terminal.api import research  # 2.2
 from nq_terminal.api import runs  # 2.1
 from nq_terminal.api import data  # 2.3
+from nq_terminal.api import ib as ib_api  # 12 (U3: read-only IB snapshot)
+from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, the only writes)
+from nq_terminal.api import regimes_capacity_term, risk_extras  # 12 (RK4, PF11, BR5, RG2, EX5, MV6)
+from nq_terminal.api import spa as spa_api  # 12 (SV8)
 from nq_terminal.security import (
     LoopbackOnlyMiddleware,
     SameOriginApiMiddleware,
@@ -89,8 +97,9 @@ def non_get_routes(app: FastAPI) -> list[str]:
     return problems
 
 
-def assert_get_only(app: FastAPI) -> None:
-    problems = non_get_routes(app)
+def assert_get_only(app: FastAPI, allowed: Sequence[str] = ()) -> None:
+    """Refuse every non-GET route except the exact `METHOD /path` strings in `allowed` (the two JOBS writes)."""
+    problems = [problem for problem in non_get_routes(app) if problem not in allowed]
     if problems:
         raise GetOnlyError("the terminal API is GET only; refused: " + ", ".join(problems))
 
@@ -100,9 +109,19 @@ def _mount_web(app: FastAPI, web_dist: Path) -> None:
         app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """On shutdown, stop a running backtest child (on Windows it would otherwise outlive the terminal)."""
+    yield
+    jobs = getattr(app.state, jobs_api.STATE_KEY, None)
+    if jobs is not None:
+        jobs.close()
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings if settings is not None else load_settings()
     app = FastAPI(
+        lifespan=_lifespan,
         title="nq-lab terminal",
         version=__version__,
         docs_url=None,
@@ -125,8 +144,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from nq_terminal.api import live_stream; app.include_router(live_stream.router)  # noqa: E702  9.2 (SSE)
     from nq_terminal.api import dq, events, roll, seasonality, vcone  # 11: DQ, EVT, ROLL, SEAS, VCONE
     for p11 in (vcone, seasonality, events, roll, dq): app.include_router(p11.router)  # noqa: E701  before the mount
+    for p12 in (spa_api, risk_extras, regimes_capacity_term, ib_api, jobs_api):  # 12: P2, before the mount
+        app.include_router(p12.router)
     _mount_web(app, settings.web_dist)
-    assert_get_only(app)
+    assert_get_only(app, jobs_api.ALLOWED_WRITE_ROUTES)
     return app
 
 

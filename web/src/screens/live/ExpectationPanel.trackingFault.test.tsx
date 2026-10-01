@@ -18,6 +18,7 @@ import { RUNS } from '../runs/runs.fixtures'
 import { RUN_ANALYTICS } from '../tear/tear.fixtures'
 import { HYP_BOOTSTRAP } from '../tear/tearP1.fixtures'
 import ExpectationPanel from './ExpectationPanel'
+import { DISABLED_SNAPSHOT } from './ib/ibSnapshot.fixtures'
 import { BOOK_CLOSE_ROWS, ROUTES_BODY, page, performance, status } from './liveFixtures'
 import LiveScreen from './LiveScreen'
 import { TRACKING_POPULATED } from './trackingFixtures'
@@ -46,6 +47,7 @@ function serveWithTrackingFault(trackingStatus = 500): void {
     if (url.startsWith('/api/live/performance')) return json(performance())
     if (url.startsWith('/api/live/journal')) return json(page(BOOK_CLOSE_ROWS))
     if (url.startsWith('/api/live/routes')) return json(ROUTES_BODY)
+    if (url === '/api/ib/snapshot') return json(DISABLED_SNAPSHOT)
     if (url === '/api/hypotheses/volmanaged_v0') return json(VOLMANAGED)
     if (url === '/api/runs') return json(RUNS)
     if (url === '/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=1') return json(HYP_BOOTSTRAP)

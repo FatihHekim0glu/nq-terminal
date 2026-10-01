@@ -11,6 +11,12 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { AXE_TAGS, expectGalleryClean, openGallery, screenshotGallery, watchGallery, type GalleryWatch } from './gallery.ts'
+import { dismissOrientation } from './orientation.ts'
+
+// The bare HOME frame is measured here: start as a viewer who has dismissed the first-run orientation line (e2e/orientation.ts).
+test.beforeEach(async ({ page }) => {
+  await dismissOrientation(page)
+})
 
 interface UniverseRow {
   readonly symbol: string
