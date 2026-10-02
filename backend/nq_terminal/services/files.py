@@ -11,6 +11,9 @@ FileCache
   pins a stale value under the new key.
 - LRU bounded by entry count and by the source files' byte sizes; a file bigger than the cap is served
   but not cached. Thread safe (FastAPI runs sync endpoints in a thread pool).
+- Read hook (result cache, services/result_cache.py): every read, a hit included, reports the file and the
+  (mtime_ns, size) it was read at to the result cache's recorder; a missing file is reported as missing, and a file
+  that changed while it was read is reported as unpinned, so a result built on it is never cached.
 - Retry once: when parsing raises a decode error (`ValueError`, which covers `json.JSONDecodeError`,
   `UnicodeDecodeError` and pandas' CSV errors) the file is re-read once after `retry_delay_s` (200 ms,
   ARCHITECTURE section 9); a second failure raises `FileDecodeError`.
@@ -50,6 +53,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeVar
 
 import pandas as pd
+
+from nq_terminal.services import result_cache
 
 T = TypeVar("T")
 
@@ -311,13 +316,23 @@ class FileCache:
             stat = target.stat()
         except FileNotFoundError:
             self._drop(key)
+            result_cache.record_missing(target)
             raise
         cached = self._lookup(key, stat.st_mtime_ns, stat.st_size)
         if cached is not None:
+            result_cache.record_file(target, cached.mtime_ns, cached.size)
             return cached.value
-        value, stable = self._load(target, parser)
+        try:
+            value, stable = self._load(target, parser)
+        except Exception:
+            # a caller may swallow this and finish with a body built without the file: never cache that body
+            result_cache.record_unstable(target)
+            raise
         if stable is not None:
             self._store(key, _Entry(stable[0], stable[1], value))
+            result_cache.record_file(target, *stable)
+        else:
+            result_cache.record_unstable(target)
         return value
 
     def stats(self) -> CacheStats:

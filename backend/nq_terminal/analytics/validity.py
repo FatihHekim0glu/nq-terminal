@@ -22,14 +22,21 @@ from __future__ import annotations
 
 import copy
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
-from nq_lab.sizing_stats import sharpe
 from nq_terminal.analytics._inputs import check_periods
 from nq_terminal.analytics.relative import align_pair
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 PERIODS_PER_YEAR = 252
 ALPHA = 0.05
@@ -58,8 +65,8 @@ def moments(r) -> dict:
     n = int(len(x))
     sd = float(x.std(ddof=1)) if n > 1 else math.nan
     sr = float(x.mean() / sd) if sd > 0 else math.nan
-    skew = float(sps.skew(x, bias=True)) if n > 2 else math.nan
-    kurt = float(sps.kurtosis(x, fisher=False, bias=True)) if n > 3 else math.nan
+    skew = float(_sps().skew(x, bias=True)) if n > 2 else math.nan
+    kurt = float(_sps().kurtosis(x, fisher=False, bias=True)) if n > 3 else math.nan
     return {"n": n, "sr": sr, "skew": skew, "kurt": kurt}
 
 
@@ -81,7 +88,7 @@ def psr(sr: float, sr_star: float, n: float, skew: float, kurt: float) -> float:
     se = mertens_se(sr, n, skew, kurt)
     if math.isnan(se) or math.isnan(sr) or math.isnan(sr_star):
         return math.nan
-    return float(sps.norm.cdf((sr - sr_star) / se))
+    return float(_sps().norm.cdf((sr - sr_star) / se))
 
 
 def psr_from_returns(r, sr_star: float = 0.0) -> float:
@@ -98,7 +105,7 @@ def min_trl(sr: float, sr_star: float, skew: float, kurt: float, alpha: float = 
     term = sr_variance_term(sr, skew, kurt)
     if not term > 0:
         return math.nan
-    return float(1.0 + term * (sps.norm.ppf(1.0 - alpha) / (sr - sr_star)) ** 2)
+    return float(1.0 + term * (_sps().norm.ppf(1.0 - alpha) / (sr - sr_star)) ** 2)
 
 
 def min_trl_from_returns(r, sr_star: float = 0.0, alpha: float = ALPHA, periods: int = PERIODS_PER_YEAR) -> dict:
@@ -128,6 +135,8 @@ def sharpe_ci(r, periods: int = PERIODS_PER_YEAR, z: float = Z95) -> dict:
     """PF4: annualised Sharpe (`sizing_stats.sharpe`) with the Mertens 95% interval, plus its moments.
 
     The one implementation of the interval: `perf.sharpe_ci` calls this after refusing NaN."""
+    from nq_lab.sizing_stats import sharpe  # lazy: nq_lab.sizing_stats imports scipy at module level (D1.1)
+
     check_periods(periods)
     x = _clean(r)
     m = moments(x)

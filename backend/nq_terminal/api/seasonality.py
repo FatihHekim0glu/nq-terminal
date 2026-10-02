@@ -11,25 +11,38 @@
 `app.state.seasonality_exclusions` when a harness injected one, else from `services.seasonality.default_exclusions`.
 Errors: an unknown root, hypothesis or series is 404; bad input (a year outside 2010 to 2021, start after end) is
 422 before any serve; a gate refusal is 403; a missing or inconsistent source is 503. No detail carries a path.
+
+Result cache (D1.3): `/api/seasonality/instrument/{root}` answers from `services/result_cache.py` through
+`cached_instrument_seasonality`, which the HOME prewarm calls too (the hypothesis route is not cached).
 """
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Literal
+from typing import Any, Literal, Mapping
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi import Path as PathParam
+from fastapi.responses import Response
 
 from nq_lab.config import IS_END, IS_START
 from nq_lab.dtsmom_universe import TABLE
 from nq_terminal.analytics import series
 from nq_terminal.analytics.seasonality import MONTHS
 from nq_terminal.analytics.series import SeriesError
-from nq_terminal.api.data import DAILY_TF, DAILY_VARIANT, DataServices, gate_info, get_services
+from nq_terminal.api.data import (
+    DAILY_TF,
+    DAILY_VARIANT,
+    DataServices,
+    gate_info,
+    get_with_current_gate,
+    json_response,
+    services_for,
+)
 from nq_terminal.api.research import MAX_COST, MAX_NAME, NAME_PATTERN
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.seasonality import SeasonBucket, SeasonHeatmap, SeasonPanel, Seasonality
+from nq_terminal.services import result_cache
 from nq_terminal.services import seasonality as seas
 from nq_terminal.services.bars import BarService, GateRefusal, UnknownSeries
 from nq_terminal.services.research import ResearchDataError, UnknownNameError, service_for_root
@@ -73,13 +86,18 @@ def _end_year() -> int:
     return Query(seas.LAST_YEAR, ge=IS_START.year, le=seas.LAST_YEAR, description="last calendar year (to 2021)")
 
 
-def session_exclusions(request: Request, services: DataServices) -> seas.ExclusionFn:
-    """The injected exclusion function (a harness), else the default one; EVT's intraday mode uses it too."""
-    injected = getattr(request.app.state, EXCLUSIONS_STATE, None)
+def exclusions_for(state: Any, services: DataServices) -> seas.ExclusionFn:
+    """The injected exclusion function (a harness), else the default one."""
+    injected = getattr(state, EXCLUSIONS_STATE, None)
     if injected is not None:
         return injected
     settings = services.settings
     return seas.default_exclusions(services.files, settings.results_dir, fixture_mode=settings.fixture_mode)
+
+
+def session_exclusions(request: Request, services: DataServices) -> seas.ExclusionFn:
+    """The injected exclusion function (a harness), else the default one; EVT's intraday mode uses it too."""
+    return exclusions_for(request.app.state, services)
 
 
 def _bar_service(services: DataServices) -> BarService:
@@ -110,6 +128,48 @@ def to_model(result: seas.Result, gate) -> Seasonality:
                        cost=result.cost, panels=panels, heatmap=heat, gate=gate)
 
 
+def _instrument(state: Any, services: DataServices, service: BarService, symbol: str, chosen: str,
+                start_year: int, end_year: int) -> Seasonality:
+    with _http_errors():
+        daily = service.frame(symbol, DAILY_TF, DAILY_VARIANT, IS_START, IS_END,
+                              version=services.catalog.version(symbol, DAILY_TF, DAILY_VARIANT))
+        minutes = (seas.MinuteSource(service, symbol, chosen, services.catalog.version(symbol, MINUTE_TF, chosen))
+                   if services.catalog.has(symbol, MINUTE_TF, chosen) else None)
+        exclusions = exclusions_for(state, services)(symbol, chosen)
+        result = seas.instrument_seasonality(daily.frame, symbol, minutes=minutes, exclusions=exclusions,
+                                             start_year=start_year, end_year=end_year)
+    years = tuple(daily.years) + result.served_years
+    return to_model(result, gate_info(service, years, daily.cached and result.cached))
+
+
+def cached_instrument_seasonality(state: Any, query: Mapping[str, Any]) -> bytes:
+    """The serialised SEAS body of one instrument through the result cache (`root`, `variant` or None,
+    `start_year`, `end_year`); the route and the prewarm both call it. In memory only (it reads prices).
+
+    The input checks and the lookup of the series come first, outside the cache, so a refused request is never
+    stored; the key holds the variant that was resolved (the default is the repaired series when it exists), so a
+    repaired file that appears later is not answered from an entry made without it. An exclusion function injected
+    by a harness is not part of the key, so with one the cache is bypassed."""
+    root, asked = query["root"], query.get("variant")
+    start_year, end_year = int(query.get("start_year", IS_START.year)), int(query.get("end_year", seas.LAST_YEAR))
+    _years(start_year, end_year)
+    if root not in UNIVERSE_ROOTS:
+        raise HTTPException(status_code=404, detail=f"not in the futures universe: {root}")
+    symbol = f"{root}.V.0"
+    services = services_for(state)
+    if not services.catalog.has(symbol, DAILY_TF, DAILY_VARIANT):
+        raise HTTPException(status_code=404, detail=f"no processed daily series for {symbol}")
+    chosen = _variant(services, symbol, asked)
+    service = _bar_service(services)
+    key = {"root": root, "variant": chosen, "start_year": start_year, "end_year": end_year}
+
+    def compute() -> bytes:
+        return result_cache.json_body(_instrument(state, services, service, symbol, chosen, start_year, end_year))
+
+    return get_with_current_gate(state, result_cache.ROUTE_SEASONALITY, key, compute, service,
+                                 clock_dependent=getattr(state, EXCLUSIONS_STATE, None) is not None)
+
+
 @router.get("/instrument/{root}", response_model=Seasonality)
 def instrument_seasonality(
     request: Request,
@@ -117,27 +177,10 @@ def instrument_seasonality(
     variant: Variant | None = Query(None, description="1m series for the buckets; default repaired when it exists"),
     start_year: int = _start_year(),
     end_year: int = _end_year(),
-    services: DataServices = Depends(get_services),
-) -> Seasonality:
+) -> Response:
     """SEAS for one instrument: calendar panels from the 1d file and 30-minute buckets from the 1m bars."""
-    _years(start_year, end_year)
-    if root not in UNIVERSE_ROOTS:
-        raise HTTPException(status_code=404, detail=f"not in the futures universe: {root}")
-    symbol = f"{root}.V.0"
-    if not services.catalog.has(symbol, DAILY_TF, DAILY_VARIANT):
-        raise HTTPException(status_code=404, detail=f"no processed daily series for {symbol}")
-    chosen = _variant(services, symbol, variant)
-    service = _bar_service(services)
-    with _http_errors():
-        daily = service.frame(symbol, DAILY_TF, DAILY_VARIANT, IS_START, IS_END,
-                              version=services.catalog.version(symbol, DAILY_TF, DAILY_VARIANT))
-        minutes = (seas.MinuteSource(service, symbol, chosen, services.catalog.version(symbol, MINUTE_TF, chosen))
-                   if services.catalog.has(symbol, MINUTE_TF, chosen) else None)
-        exclusions = session_exclusions(request, services)(symbol, chosen)
-        result = seas.instrument_seasonality(daily.frame, symbol, minutes=minutes, exclusions=exclusions,
-                                             start_year=start_year, end_year=end_year)
-    years = tuple(daily.years) + result.served_years
-    return to_model(result, gate_info(service, years, daily.cached and result.cached))
+    query = {"root": root, "variant": variant, "start_year": start_year, "end_year": end_year}
+    return json_response(cached_instrument_seasonality(request.app.state, query))
 
 
 @router.get("/hypothesis/{name}", response_model=Seasonality)

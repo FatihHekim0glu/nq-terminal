@@ -134,3 +134,69 @@ def test_the_checked_in_fixtures_folder_is_accepted():
     fixtures = ROOT / "terminal" / "backend" / "tests" / "fixtures"
     s = load_settings({"NQT_FIXTURE_DIR": str(fixtures)})
     assert s.fixture_mode and s.data_root == fixtures.resolve()
+
+
+# ---------------------------------------------------------------- NQT_STATE_DIR (the backend's own state folder)
+
+
+def test_state_dir_defaults_to_the_terminal_state_folder():
+    from nq_terminal import settings as settings_module
+
+    assert settings_module.TERMINAL_STATE_DIR == ROOT / "terminal" / "state"
+    # Under pytest the default is redirected to a per-test folder (conftest); outside it is TERMINAL_STATE_DIR.
+    assert load_settings({}).state_dir == settings_module.DEFAULT_STATE_DIR.resolve()
+
+
+def test_state_dir_comes_from_the_environment_resolved_strictly(tmp_path, monkeypatch):
+    (tmp_path / "st").mkdir()
+    monkeypatch.chdir(tmp_path)
+    s = load_settings({"NQT_STATE_DIR": "st"})
+    assert s.state_dir == (tmp_path / "st").resolve() and s.state_dir.is_absolute()
+
+
+@pytest.mark.parametrize("raw", [SEP * 2 + "localhost" + SEP + "c$" + SEP + "nqt", "//localhost/c$/nqt",
+                                 SEP * 2 + "server" + SEP + "share"])
+def test_state_dir_unc_paths_are_refused_before_any_network_access(raw, monkeypatch):
+    def no_network(self):
+        raise AssertionError("a UNC state folder must be refused before it is touched")
+
+    monkeypatch.setattr(Path, "is_dir", no_network)
+    monkeypatch.setattr(Path, "resolve", no_network)
+    with pytest.raises(SettingsError, match="NQT_STATE_DIR"):
+        load_settings({"NQT_STATE_DIR": raw})
+
+
+@pytest.mark.parametrize("prefix", [DEVICE, SEP * 2 + "." + SEP])
+def test_state_dir_device_paths_are_refused(tmp_path, prefix):
+    with pytest.raises(SettingsError, match="NQT_STATE_DIR"):
+        load_settings({"NQT_STATE_DIR": prefix + str(tmp_path)})
+
+
+def test_state_dir_must_exist_and_be_a_folder(tmp_path):
+    with pytest.raises(SettingsError, match="NQT_STATE_DIR"):
+        load_settings({"NQT_STATE_DIR": str(tmp_path / "missing")})
+    (tmp_path / "file.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(SettingsError, match="NQT_STATE_DIR"):
+        load_settings({"NQT_STATE_DIR": str(tmp_path / "file.txt")})
+
+
+@pytest.mark.parametrize("raw", [
+    "C:/",
+    str(ROOT),
+    str(ROOT.parent),
+    str(ROOT / "results"),
+    str(ROOT / "data"),
+    str(ROOT / "live"),
+    str(ROOT / "backtests" / "output"),
+])
+def test_state_dir_may_not_be_the_project_a_parent_or_a_research_folder(raw):
+    with pytest.raises(SettingsError, match="NQT_STATE_DIR"):
+        load_settings({"NQT_STATE_DIR": raw})
+
+
+def test_under_pytest_the_state_dir_is_a_per_test_folder_not_the_real_one(tmp_path):
+    """The autouse fixture in conftest.py redirects NQT_STATE_DIR and the default; born failing without it."""
+    real = (ROOT / "terminal" / "state").resolve()
+    for s in (load_settings(), load_settings({})):
+        assert not s.state_dir.is_relative_to(real), s.state_dir
+        assert s.state_dir.is_relative_to(tmp_path.parent), s.state_dir

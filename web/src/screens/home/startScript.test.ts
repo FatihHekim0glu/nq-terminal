@@ -83,6 +83,7 @@ describe.runIf(onWindows)('start.ps1 -DryRun: the plan, with nothing started', (
     expect(r.out).toContain(r.python)
     expect(r.out).toContain('-m nq_terminal')
     expect(r.out).toContain('NQT_PORT=8799')
+    expect(r.out).toContain('NQT_PREWARM=1') // the plain launcher asks the backend to warm HOME once its port is bound
     expect(r.out).toContain('http://127.0.0.1:8799/')
     expect(r.out).toMatch(/build: (needed|up to date)/)
     expect(r.out).toContain('browser: not opened')
@@ -93,6 +94,7 @@ describe.runIf(onWindows)('start.ps1 -DryRun: the plan, with nothing started', (
     expect(r.status, r.out).toBe(0)
     expect(r.out).toContain('-m uvicorn nq_terminal.app:create_app --factory --reload --host 127.0.0.1 --port 8765')
     expect(r.out).toContain('http://127.0.0.1:5173/')
+    expect(r.out).not.toContain('NQT_PREWARM') // uvicorn --reload restarts the process on each edit: no prewarm
   })
 
   it('-Dev refuses another backend port, because the Vite proxy points at 8765', async () => {

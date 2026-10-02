@@ -34,9 +34,10 @@ Rules
   logging, `numpy.save`, `pickle.dump`, `io.FileIO` in a writing mode, `extractall`, `urlretrieve`,
   `nq_lab.registry.write`/`main` (everywhere), and in PROD any `scripts.*` import. A method called on a name
   bound to a module file under `nq_terminal/` (`stored_alpha.extract(...)`) is not a write by its name alone: that
-  module is scanned itself. `WRITE_ALLOWED` lists
-  modules that may write under
-  `terminal/state`: the P2 job runner (`services/jobs.py`, U3) only.
+  module is scanned itself. `WRITE_ALLOWED` lists the modules that may write under `terminal/state`: the P2 job
+  runner (`services/jobs.py`, U3) and the result cache (`services/result_cache.py`, 02 section 7.2). The result
+  cache may write only through names bound by `_cache_file(...)` or `_cache_folder()`, which confine every path to
+  `<state>/cache` at run time; any other write target in that module is flagged (`CONFINED_WRITERS`).
 - order_call: `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions`, `reqAutoOpenOrders`,
   `reqOpenOrders`, their six `...ProtoBuf` twins, and the Nautilus `submit_order`, `cancel_order`, `modify_order` family, as a call, a
   reference, an import or a `getattr` string. A `def` of those names is allowed (the P2 read-only client
@@ -99,7 +100,13 @@ class Violation:
         return f"{self.where}:{self.line} [{self.rule}] {self.detail}"
 
 
-WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py"})
+RESULT_CACHE = "backend/nq_terminal/services/result_cache.py"
+WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py", RESULT_CACHE})
+# Modules on WRITE_ALLOWED whose writes must target a local name bound only by one of these confining calls.
+CONFINED_WRITERS: dict[str, frozenset[str]] = {RESULT_CACHE: frozenset({"_cache_file", "_cache_folder"})}
+CONFINED_CALLS = frozenset({"os.replace", "os.remove", "os.unlink", "os.utime", "open", "builtins.open", "io.open"})
+CONFINED_METHODS = frozenset({"write_bytes", "write_text", "unlink", "mkdir", "replace", "open"})
+SAFE_WRITE_KEYWORDS = frozenset({"parents", "exist_ok", "missing_ok", "encoding", "ns"})
 # The qa golden-file tools (`--write PATH` regenerates a golden vector file under terminal/qa) and their tests, which
 # write temporary files and run the tools in a subprocess. They sit outside the terminal's own code, in OTHER scope.
 QA_WRITE_ALLOWED: frozenset[str] = frozenset({
@@ -288,6 +295,24 @@ def _write_problem(call: ast.Call, full: str | None, on_pandas: bool = False, on
     return None
 
 
+def _confined_names(function: ast.AST, confiners: frozenset[str]) -> set[str]:
+    """Local names whose every binding in `function` is `name = <...>.<confiner>(...)` (never a parameter)."""
+    good: set[str] = set()
+    bad = {a.arg for a in ast.walk(function.args) if isinstance(a, ast.arg)}
+    for node in ast.walk(function):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            func = node.value.func if isinstance(node.value, ast.Call) else None
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            (good if name in confiners else bad).add(node.targets[0].id)
+            continue
+        targets = (node.targets if isinstance(node, ast.Assign) else
+                   [node.target] if isinstance(node, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr, ast.For,
+                                                      ast.comprehension)) else
+                   [node.optional_vars] if isinstance(node, ast.withitem) and node.optional_vars else [])
+        bad.update(n.id for target in targets for n in ast.walk(target) if isinstance(n, ast.Name))
+    return good - bad
+
+
 class Scanner(ast.NodeVisitor):
     """Walks one module and records every banned use for its scope."""
 
@@ -299,6 +324,8 @@ class Scanner(ast.NodeVisitor):
         self.docstrings = _docstring_ids(tree)
         self.sanctioned: set[int] = set()
         self.found: dict[tuple[str, int], Violation] = {}
+        self.functions: list[ast.AST] = []
+        self.confiners = CONFINED_WRITERS.get(where, frozenset())
 
     def flag(self, rule: str, node: ast.AST, detail: str) -> None:
         line = getattr(node, "lineno", 0)
@@ -377,7 +404,9 @@ class Scanner(ast.NodeVisitor):
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         if node.name == "serve_sealed":
             self.flag("serve_sealed", node, "defines serve_sealed")
+        self.functions.append(node)
         self.generic_visit(node)
+        self.functions.pop()
 
     visit_AsyncFunctionDef = visit_FunctionDef
 
@@ -414,12 +443,30 @@ class Scanner(ast.NodeVisitor):
             self.flag("data_path", node, "builds a path into data/processed, data/raw or data/sealed_cache")
         self.check_dynamic(node, full)
         self.check_serve(node, full)
-        if self.scope in (PROD, OTHER) and self.where not in WRITE_ALLOWED | QA_WRITE_ALLOWED:
+        allowed = self.where in WRITE_ALLOWED | QA_WRITE_ALLOWED
+        confined = allowed and self.scope == PROD and bool(self.confiners)  # allowed, but only inside the cache
+        if self.scope in (PROD, OTHER) and (confined or not allowed):
             receiver = self.dotted(node.func.value) if isinstance(node.func, ast.Attribute) else None
             problem = _write_problem(node, full, id(node) in self.pandas_calls, _terminal_module(receiver))
-            if problem:
-                self.flag("write", node, problem)
+            if problem and not (confined and self.writes_inside_the_cache(node, full)):
+                self.flag("write", node, problem + (" outside the cache folder" if confined else ""))
         self.generic_visit(node)
+
+    def writes_inside_the_cache(self, node: ast.Call, full: str | None) -> bool:
+        """A sanctioned write whose every path is a local name bound only by a confining call in this function."""
+        if not self.functions or any(k.arg not in SAFE_WRITE_KEYWORDS for k in node.keywords):
+            return False
+        if full in CONFINED_CALLS:  # os.replace(a, b), os.remove(a), os.utime(a), open(a, 'xb')
+            count = 2 if full == "os.replace" else 1
+            paths, rest = node.args[:count], node.args[count:]
+            if not all(isinstance(a, ast.Constant) for a in rest):
+                return False
+        elif isinstance(node.func, ast.Attribute) and node.func.attr in CONFINED_METHODS and not _qualified_write(full):
+            paths = [node.func.value, *node.args[:1]] if node.func.attr in PATH_MOVES else [node.func.value]
+        else:
+            return False
+        safe = _confined_names(self.functions[-1], self.confiners)
+        return bool(paths) and all(isinstance(p, ast.Name) and p.id in safe for p in paths)
 
     def check_dynamic(self, node: ast.Call, full: str | None) -> None:
         if full in DYNAMIC_IMPORTERS:
@@ -663,6 +710,21 @@ BANNED_CASES = [
     banned("write", "from nq_lab import registry\nregistry.extract(member)"),
     banned("write", "from nq_terminal.services import stored_alpha\nstored_alpha.handle.extract(member)"),
     banned("write", "from nq_terminal import services\nimport zipfile as services\nservices.ZipFile(p).extract(m)"),
+    # W1A: the result cache may write only inside <state>/cache; each planted out-of-folder write is flagged.
+    banned("write", "from pathlib import Path\nPath('C:/elsewhere/x.bin').write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "def f(state):\n    target = state / 'x.bin'\n    target.write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "def f(self, target):\n    target.write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "import os\ndef f(self, a, other):\n    tmp = self._cache_file(a)\n    os.replace(tmp, other)",
+           where=RESULT_CACHE),
+    banned("write", "def f(self, a, b):\n    t = self._cache_file(a)\n    t = b\n    t.write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "def f(self, a, b):\n    t = self._cache_file(a)\n    t.replace(b)", where=RESULT_CACHE),
+    banned("write", "def f(self, a):\n    t = self._cache_file(a)\n    (t.parent / 'x').write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "def f(self, a):\n    t = self._cache_file(a)\n    open(path, 'wb')", where=RESULT_CACHE),
+    banned("write", "t = cache._cache_file(a)\nt.write_bytes(b'')", where=RESULT_CACHE),
+    banned("write", "import shutil\ndef f(self, a):\n    t = self._cache_file(a)\n    shutil.rmtree(t)", where=RESULT_CACHE),
+    banned("write", "def f(self, a):\n    for t in self._cache_file(a).parent.iterdir():\n        t.unlink()",
+           where=RESULT_CACHE),
+    banned("write", "def f(self, a, mode):\n    t = self._cache_file(a)\n    open(t, mode)", where=RESULT_CACHE),
 ]
 
 
@@ -734,6 +796,12 @@ ALLOWED_CASES = [
     # A function of a terminal module is scanned where it is defined, so its name alone is not a write.
     allowed("from nq_terminal.services import market\nvalue = market.extract(name, cost, screen)"),
     allowed("import nq_terminal.services.market as m\nvalue = m.extract(name, cost, screen)"),
+    allowed("import os\ndef f(self, a, b, body):\n    tmp = self._cache_file(a)\n    final = self._cache_file(b)\n"
+            "    with open(tmp, 'xb') as fh:\n        fh.write(body)\n    os.replace(tmp, final)", where=RESULT_CACHE),
+    allowed("def f(self):\n    folder = self._cache_folder()\n    folder.mkdir(parents=True, exist_ok=True)",
+            where=RESULT_CACHE),
+    allowed("import os\ndef f(self, a):\n    t = self._cache_file(a)\n    t.unlink(missing_ok=True)\n    os.utime(t, ns=(1, 1))",
+            where=RESULT_CACHE),
 ]
 
 
@@ -746,6 +814,12 @@ def test_ban_is_born_failing(rule: str, scope: str, where: str, snippet: str) ->
 @pytest.mark.parametrize(("scope", "where", "snippet"), ALLOWED_CASES)
 def test_allowed_code_passes(scope: str, where: str, snippet: str) -> None:
     assert scan_source(textwrap.dedent(snippet), where, scope) == []
+
+
+def test_write_allowed_gained_exactly_the_result_cache() -> None:
+    assert WRITE_ALLOWED == {"backend/nq_terminal/services/jobs.py", RESULT_CACHE}
+    assert set(CONFINED_WRITERS) == {RESULT_CACHE}
+    assert (PACKAGE / "services" / "result_cache.py").is_file()
 
 
 def test_every_rule_has_born_failing_cases() -> None:

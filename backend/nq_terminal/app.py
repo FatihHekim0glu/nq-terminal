@@ -29,6 +29,7 @@ from starlette.staticfiles import StaticFiles
 
 from nq_terminal import __version__
 from nq_terminal.api import system
+from nq_terminal.api.home_prewarm import start_home_prewarm
 from nq_terminal.api import audit, commands, live  # 2.4
 from nq_terminal.api import research  # 2.2
 from nq_terminal.api import runs  # 2.1
@@ -112,7 +113,10 @@ def _mount_web(app: FastAPI, web_dist: Path) -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """On shutdown, stop a running backtest child (on Windows it would otherwise outlive the terminal)."""
+    """On startup, begin the HOME prewarm in a desktop or launcher process (a daemon thread that waits for the bound
+    port; off in tests, fixture mode and the smoke). On shutdown, stop a running backtest child (on Windows it would
+    otherwise outlive the terminal)."""
+    start_home_prewarm(app)
     yield
     jobs = getattr(app.state, jobs_api.STATE_KEY, None)
     if jobs is not None:

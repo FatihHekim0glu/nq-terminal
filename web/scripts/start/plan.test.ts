@@ -21,6 +21,7 @@ const NODE = '/n/bin/node'
 const PYTHON = '/lab/.venv/bin/python'
 const PROMPT_OFF = { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
 const BACKEND_ENV = { NQT_PORT: '8765', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
+const PREWARM_ENV = { ...BACKEND_ENV, NQT_PREWARM: '1' } // the plain launcher asks for the HOME prewarm; --dev and fixtures do not
 
 const READY = { path: PYTHON, exists: true, fastapi: true, nqLab: true }
 const NO_PYTHON = { path: PYTHON, exists: false, fastapi: false, nqLab: false }
@@ -302,7 +303,7 @@ describe('planStart: the full terminal', () => {
     what: 'start the backend',
     argv: [PYTHON, '-m', 'nq_terminal'],
     cwd: join(DIR, 'backend'),
-    env: BACKEND_ENV,
+    env: PREWARM_ENV,
     wait: { url: 'http://127.0.0.1:8765/api/health', contains: '"fence"' },
   }
 

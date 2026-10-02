@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 
 from nq_terminal import constants
-from nq_terminal.analytics import bootstrap, deflated, distribution, perf, regimes, relative, risk, rolling, stress
+from nq_terminal.analytics import bootstrap, deflated, distribution, regimes, relative, risk, rolling, stress
 from nq_terminal.analytics._inputs import PERIODS_DAILY
 from nq_terminal.analytics.series import SessionSeries
 from nq_terminal.models.analytics import Context, Kpi
@@ -88,6 +88,8 @@ def _kpi(s: SessionSeries, key: str, label: str, value: float, unit: str, note: 
 
 def ratio_tiles(s: SessionSeries) -> list[Kpi]:
     """PF7 Omega(0), PF8 tail ratio, PF9 gain to pain on months."""
+    from nq_terminal.analytics import perf  # lazy: the start path does not load perf (D1.1)
+
     return [_kpi(s, "omega", "Omega (0)", perf.omega(s.r), "ratio of summed gains to summed losses",
                  "not defined: no losing period"),
             _kpi(s, "tail_ratio", "Tail ratio", perf.tail_ratio(s.r), "ratio, abs(Q95 / Q5)",

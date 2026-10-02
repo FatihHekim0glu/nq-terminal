@@ -16,12 +16,26 @@
 
 `api/paper_expectation.py` and `services/paper_expectation.py` (the modules that were uncommitted when 03 was written) are already in 03 as rows 41 and 95 of Appendix A.1 with the fate `keep`, and the route `GET /api/analytics/paper-expectation` is in the generated route table; they need no addendum row.
 
+## Preflight of 2 October 2026 (wave W1A, stage A of D1)
+
+`gen_03_tables.py` was run on the tree at commit `af2f164` with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and contract rows | 111, 25, 24 and 35 |
+| Unmapped rows | 0 |
+| New module in this wave | `services/result_cache.py` (522 lines), already row 98 of 03, fate `keep` |
+| New test files in this wave | `test_startup_imports.py`, `test_result_cache.py`, `test_result_cache_persist.py` (tests carry no addendum row) |
+| Rows added to this addendum | `services/prewarm.py` (written in W1B) and `api/home_prewarm.py` (added in W1B), below |
+| Other build workflows on the repository | none (only the owner's 8765 backend, without `--reload`) |
+
 ## Rows added by later phases
 
 Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove`), desktop form, stage, tests.
 
 | Phase | Module | Lines | Fate | Desktop form | Stage | Tests |
 |---|---|---:|---|---|---|---|
-| (none yet) | | | | | | |
+| D1 (W1B) | `backend/nq_terminal/services/prewarm.py` | 117 | new | once-per-process warm-up thread that runs zero-argument tasks in order after the port is bound; on only when `NQT_DESKTOP=1` or `NQT_PREWARM=1`; errors logged, never raised | D1 | `test_prewarm.py` |
+| D1 (W1B) | `backend/nq_terminal/api/home_prewarm.py` | 108 | new | the HOME task list (deflated, ledger, two-day, universe, GP bars, EQ bootstrap) built from the cached route callables and started from the app's lifespan; skipped in fixture mode and for `NQT_PREWARM=0` | D1 | `test_home_prewarm.py` |
 
 The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock.py`, `desktop/sessions.py`, `desktop/envlist.py`, the workspace models and service, and the others in its stage 1 list) are rows of 03 itself and are not repeated here. Only a module that 03 does not name belongs in this table, for example `services/prewarm.py` and `desktop/fixture_main.py`, which the wave plan adds; the phase that creates them adds their rows.

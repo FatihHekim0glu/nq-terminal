@@ -22,7 +22,6 @@ import math
 import numpy as np
 import pandas as pd
 
-from nq_lab.sizing_stats import block_alphas, spanning_alpha
 from nq_terminal.analytics._inputs import check_periods
 
 PERIODS_PER_YEAR = 252
@@ -74,6 +73,8 @@ def information_ratio(r, b, periods: int = PERIODS_PER_YEAR) -> float:
 
 def alpha_beta(r, b, lags: tuple = NW_LAGS, periods: int = PERIODS_PER_YEAR) -> dict:
     """BR1: `sizing_stats.spanning_alpha` on the aligned rows (keys n, a, b, alpha_annual_pct, t, t_b, t_min)."""
+    from nq_lab.sizing_stats import spanning_alpha  # lazy: nq_lab.sizing_stats imports scipy at module level (D1.1)
+
     check_periods(periods)
     x, y, _ = align_pair(r, b)
     return spanning_alpha(x, y, lags, periods)
@@ -87,6 +88,8 @@ def alpha_by_block(r: pd.Series, b: pd.Series, lags: tuple = NW_LAGS, periods: i
     if not (isinstance(r, pd.Series) and isinstance(b, pd.Series)
             and isinstance(r.index, pd.DatetimeIndex) and isinstance(b.index, pd.DatetimeIndex)):
         raise TypeError("alpha_by_block needs two pandas Series on a DatetimeIndex")
+    from nq_lab.sizing_stats import block_alphas  # lazy: nq_lab.sizing_stats imports scipy at module level (D1.1)
+
     check_periods(periods)
     x, y, index = align_pair(r, b)
     return block_alphas(list(index), x, y, lags, periods)
@@ -132,6 +135,8 @@ def down_capture(r, b, periods: int = PERIODS_PER_YEAR) -> float:
 
 def scatter(r, b, periods: int = PERIODS_PER_YEAR) -> dict:
     """BR4: the aligned points (x the benchmark, y the strategy) and BR1's line y = intercept + slope x."""
+    from nq_lab.sizing_stats import spanning_alpha  # lazy: nq_lab.sizing_stats imports scipy at module level (D1.1)
+
     mine, theirs, index = align_pair(r, b)
     fit = spanning_alpha(mine, theirs, NW_LAGS, check_periods(periods))
     return {"x": theirs, "y": mine, "index": index, "slope": fit["b"], "intercept": fit["a"], "n": int(len(mine))}

@@ -13,10 +13,11 @@ Files come from `settings.data_root` (the fixture folder in fixture mode); nothi
 from __future__ import annotations
 
 import threading
+from types import ModuleType
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from nq_lab import guards, oos_gate
+from nq_lab import guards
 from nq_lab.config import IS_END
 from nq_terminal.api.system import sealed_status
 from nq_terminal.models.audit import (
@@ -42,6 +43,13 @@ _STATE_KEY = "audit_files"
 _LOCK = threading.Lock()
 _EMPTY = audit.ParsedLog(entries=(), errors=(), partial_tail=False)
 MAX_FILTER_CHARS = 128
+
+
+def _oos_gate() -> ModuleType:
+    """`nq_lab.oos_gate`, imported on first use so the start path does not load it (D1.1)."""
+    from nq_lab import oos_gate
+
+    return oos_gate
 
 
 def _settings(request: Request) -> Settings:
@@ -106,14 +114,14 @@ def oos_log(
 
 def _sealed_digest(settings: Settings) -> SealedLogDigest | None:
     try:
-        return SealedLogDigest(**oos_gate.sealed_log_digest(settings.oos_log_path))
+        return SealedLogDigest(**_oos_gate().sealed_log_digest(settings.oos_log_path))
     except (OSError, ValueError):
         return None
 
 
 def _load_openings(settings: Settings) -> list[dict]:
     try:
-        return sanitise(oos_gate.load_openings(settings.openings_path))
+        return sanitise(_oos_gate().load_openings(settings.openings_path))
     except (OSError, ValueError, AttributeError):
         return []
 

@@ -20,13 +20,21 @@ No p-value is shown: the split is fixed, but the view is still [POST HOC] (C7).
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics._inputs import PERIODS_DAILY, check_periods, returns_series
 from nq_terminal.analytics.regimes import _stats as regime_row  # one per-regime statistic for RG1 and RG2
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 WINDOW = 200
 ABOVE, BELOW = "above", "below"
@@ -77,7 +85,7 @@ def trend_stats(r, close: pd.Series, periods: int = PERIODS_DAILY, window: int =
     values = series.to_numpy()
     rows = [{"regime": name, **regime_row(values[labels == name], periods)} for name in REGIMES]
     above, below = values[labels == ABOVE], values[labels == BELOW]
-    welch = sps.ttest_ind(above, below, equal_var=False) if len(above) > 1 and len(below) > 1 else None
+    welch = _sps().ttest_ind(above, below, equal_var=False) if len(above) > 1 and len(below) > 1 else None
     return {"rows": rows, "welch_t": float(welch.statistic) if welch is not None else math.nan,
             "welch_df": float(welch.df) if welch is not None else math.nan,
             "unlabelled": int(pd.isna(frame["regime"]).sum()), "window": window, "frame": frame, "tag": TAG,

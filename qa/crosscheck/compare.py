@@ -11,12 +11,13 @@ in the project's result files (anchors).
 """
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass
 
 import numpy as np
 
-from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump
+from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump, decode_body
 from crosscheck.lv6_live_cone import LV6_REFERENCES
 from crosscheck.market_reference import market_references
 from crosscheck.p11_dq import P11_DQ_REFERENCES
@@ -31,7 +32,47 @@ from crosscheck.p2_spa import P2_SPA_REFERENCES
 from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
 from crosscheck.trade_reference import costs_references, trades_references
 
+
+# ---------- D1.4: the cached slow routes, fresh against through the cache ----------
+
+
+def _sha(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
+
+
+def cached_references(inputs: dict) -> dict[str, Ref]:
+    """Per route, the sha256 of a fresh body is the reference for the cached take, for the restart take and for the
+    digests the terminal recorded (a word, so the comparison is exact); the cached take must also have been a memory
+    hit, or the equality would prove nothing about the cache. The cached take is checked against the `repeat` take
+    where the dump has one (the same request again with the cache off, taken at the moment the cached take was: a
+    gate block that counts the process's reads is not the same on a repeat as on the cold take) and against the
+    `fresh` take otherwise; the restart take is a cold start again, so it is checked against `fresh`."""
+    refs = {}
+    repeat = inputs.get("repeat") or {}
+    for name in inputs["routes"]:
+        query = (inputs.get("queries") or {}).get(name) or {}
+        source = f"fresh body of GET {query.get('path', name)}"
+        digest = _sha(decode_body(inputs["fresh"][name], f"fresh/{name}"))
+        again = _sha(decode_body(repeat[name], f"repeat/{name}")) if name in repeat else digest
+        for metric, word in (("cached_body", again), ("cached_recorded", again),
+                             ("restart_body", digest), ("restart_recorded", digest)):
+            refs[f"{name}.{metric}"] = Ref(word, f"{source}, sha256 of the bytes")
+        refs[f"{name}.cache_hit"] = Ref("memory", f"{source}, the second take must come from the cache")
+    return refs
+
+
+def cached_values(dump: Bundle) -> dict:
+    """The dump's values plus the sha256 of each take's body, recomputed here from the dumped bytes, so a body
+    changed after the terminal wrote its digests is caught as well as a wrong digest."""
+    ours = dict(dump.values.get("ours", {}))
+    for take in ("cached", "restart"):
+        for name in dump.inputs["routes"]:
+            ours[f"{name}.{take}_body"] = _sha(decode_body(dump.inputs[take][name], f"{take}/{name}"))
+    return {**dump.values, "ours": ours}
+
+
 BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "market": market_references,
+                     "cached": cached_references,
                      **P1_REFERENCES,
                      # Phase 11: VCONE, SEAS, EVT, ROLL and DQ (RI4, RI5)
                      **P11_VCONE_REFERENCES, **P11_SEAS_REFERENCES, **P11_EVT_REFERENCES, **P11_ROLL_REFERENCES,
@@ -162,8 +203,9 @@ def compare_bundle(dump: Bundle) -> list[Row]:
     """TA1 and TA3 (`trades`) or EX1 to EX4 (`costs`) of one run, or a market view (`market`), against the
     raw-input references."""
     rows = []
+    values = cached_values(dump) if dump.kind == "cached" else dump.values
     for key, ref in BUNDLE_REFERENCES[dump.kind](dump.inputs).items():
-        rows.extend(_rows_for(dump.name, key, ref, dump.values, dump.missing))
+        rows.extend(_rows_for(dump.name, key, ref, values, dump.missing))
     return rows
 
 

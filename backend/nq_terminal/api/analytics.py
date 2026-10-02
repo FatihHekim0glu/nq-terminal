@@ -27,16 +27,21 @@ Errors: an unknown name, run or unrecorded cost is 404; a run that failed its ba
 unusable and gets no analytics), and so is an account whose equity reaches zero or below (it cannot compound; the
 detail names the first such session); a window the gate refuses is 403; a missing or inconsistent source is 503.
 No detail carries a path.
+
+Result cache (D1.3): the two bootstrap routes and `/api/analytics/deflated` answer from `services/result_cache.py`
+through `cached_hypothesis_bootstrap`, `cached_run_bootstrap` and `cached_deflated`, which the HOME prewarm calls too.
+`sources_for(state)` builds the shared services from `app.state`. Every other route here is computed on each request.
 """
 from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi import Path as PathParam
+from fastapi.responses import Response
 
 from nq_terminal import constants
 from nq_terminal.analytics import deflated, series, validity
@@ -44,15 +49,23 @@ from nq_terminal.analytics.exposure import BookUnusable, CostError, ExposureErro
 from nq_terminal.analytics.series import SeriesError, SeriesNotCompoundable, SeriesUnusable, SessionSeries
 from nq_terminal.analytics.tracking import TrackingError
 from nq_terminal.analytics.trades import TradeError
-from nq_terminal.api.data import DAILY_TF, DAILY_VARIANT, get_services
+from nq_terminal.api.data import DAILY_TF, DAILY_VARIANT, get_result_cache, get_services, json_response, services_for
 from nq_terminal.api.live import live_monitor
 from nq_terminal.api.research import MAX_COST, MAX_NAME, NAME_PATTERN
-from nq_terminal.api.runs import get_run_service
+from nq_terminal.api.runs import run_service_for
 from nq_terminal.models.analytics import Analytics, Context, Freq, HomePanel
 from nq_terminal.models.analytics_p1 import BootstrapView, DeflatedView, ExtendedAnalytics, PaperTracking, RunExcursions
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.run_views import RunCosts, RunExposure, RunTradePaths, RunTrades
-from nq_terminal.services import journals, run_books, stored_alpha, tearsheet, tearsheet_extended, tearsheet_trades
+from nq_terminal.services import (
+    journals,
+    result_cache,
+    run_books,
+    stored_alpha,
+    tearsheet,
+    tearsheet_extended,
+    tearsheet_trades,
+)
 from nq_terminal.services.bars import BarService, GateRefusal, UnknownSeries
 from nq_terminal.services.research import ResearchDataError, ResearchService, UnknownNameError, service_for_root
 from nq_terminal.services.runs import RunNotFound, RunService, RunUnreadable
@@ -70,11 +83,16 @@ class Sources:
     version: tuple[int, int] | None
 
 
-def _sources(request: Request) -> Sources:
-    data = get_services(request)
+def sources_for(state: Any) -> Sources:
+    """The shared services of an app (the prewarm calls this with `app.state`; a route with `request.app.state`)."""
+    data = services_for(state)
     version = data.catalog.version(NQ_SYMBOL, DAILY_TF, DAILY_VARIANT) if data.bars is not None else None
-    return Sources(runs=get_run_service(request), research=service_for_root(request.app.state.settings.data_root),
+    return Sources(runs=run_service_for(state), research=service_for_root(state.settings.data_root),
                    bars=data.bars, version=version)
+
+
+def _sources(request: Request) -> Sources:
+    return sources_for(request.app.state)
 
 
 @contextmanager
@@ -284,20 +302,43 @@ def _bootstrap(s: SessionSeries, context: Context) -> BootstrapView:
         raise HTTPException(status_code=422, detail=f"no bootstrap for this series: {exc}") from exc
 
 
+def cached_hypothesis_bootstrap(state: Any, query: Mapping[str, Any]) -> bytes:
+    """The serialised SV5 and SV6 body of a hypothesis (`name`, `cost`, default 1) through the result cache; the
+    route and the prewarm both call it. In memory only: a hypothesis without a recorded benchmark is benchmarked
+    against NQ prices from the gate."""
+    name, cost = query["name"], int(query.get("cost", 1))
+
+    def compute() -> bytes:
+        with _http_errors():
+            s = _hypothesis(sources_for(state), name, cost)
+        return result_cache.json_body(_bootstrap(s, Context(kind="hypothesis", name=name, cost=cost, freq="D")))
+
+    return get_result_cache(state).get(result_cache.ROUTE_HYPOTHESIS_BOOTSTRAP, {"name": name, "cost": cost}, compute)
+
+
 @router.get("/hypothesis/{name}/bootstrap", response_model=BootstrapView)
-def hypothesis_bootstrap(request: Request, name: str = _name(), cost: int = _cost()) -> BootstrapView:
+def hypothesis_bootstrap(request: Request, name: str = _name(), cost: int = _cost()) -> Response:
     """SV5 bootstrap intervals (Sharpe, CAGR, max drawdown) and the SV6 cone of a hypothesis's series."""
-    with _http_errors():
-        s = _hypothesis(_sources(request), name, cost)
-    return _bootstrap(s, Context(kind="hypothesis", name=name, cost=cost, freq="D"))
+    return json_response(cached_hypothesis_bootstrap(request.app.state, {"name": name, "cost": cost}))
+
+
+def cached_run_bootstrap(state: Any, query: Mapping[str, Any]) -> bytes:
+    """The serialised SV5 and SV6 body of a run (`run_id`, `freq`, default D) through the result cache; the route and
+    the prewarm both call it."""
+    run_id, freq = query["run_id"], query.get("freq", "D")
+
+    def compute() -> bytes:
+        with _http_errors():
+            s = _run(sources_for(state), run_id, freq)
+        return result_cache.json_body(_bootstrap(s, Context(kind="run", name=run_id, cost=None, freq=freq)))
+
+    return get_result_cache(state).get(result_cache.ROUTE_RUN_BOOTSTRAP, {"run_id": run_id, "freq": freq}, compute)
 
 
 @router.get("/run/{run_id}/bootstrap", response_model=BootstrapView)
-def run_bootstrap(request: Request, run_id: str = _run_id(), freq: Freq = _freq()) -> BootstrapView:
+def run_bootstrap(request: Request, run_id: str = _run_id(), freq: Freq = _freq()) -> Response:
     """SV5 bootstrap intervals and the SV6 cone of a Nautilus run's account series."""
-    with _http_errors():
-        s = _run(_sources(request), run_id, freq)
-    return _bootstrap(s, Context(kind="run", name=run_id, cost=None, freq=freq))
+    return json_response(cached_run_bootstrap(request.app.state, {"run_id": run_id, "freq": freq}))
 
 
 def registry_trials(research: ResearchService) -> list[deflated.Trial]:
@@ -315,16 +356,27 @@ def registry_trials(research: ResearchService) -> list[deflated.Trial]:
     return trials
 
 
+def cached_deflated(state: Any, query: Mapping[str, Any] | None = None) -> bytes:
+    """The serialised SV3 body through the result cache (disk too: no bar service, no gate read); the route and the
+    prewarm both call it."""
+
+    def compute() -> bytes:
+        with _http_errors():
+            trials = registry_trials(service_for_root(state.settings.data_root))
+            try:
+                return result_cache.json_body(tearsheet_extended.deflated_view(trials))
+            except ValueError as exc:
+                detail = f"the Deflated Sharpe could not be computed: {exc}"
+                raise HTTPException(status_code=503, detail=detail) from exc
+
+    return get_result_cache(state).get(result_cache.ROUTE_DEFLATED, {}, compute, price_free=True)
+
+
 @router.get("/deflated", response_model=DeflatedView)
-def deflated_sharpe(request: Request) -> DeflatedView:
+def deflated_sharpe(request: Request) -> Response:
     """SV3 Deflated Sharpe over the registered hypotheses on the common Basis A daily construction (SV3a); an extra
     view only, never a verdict."""
-    with _http_errors():
-        trials = registry_trials(service_for_root(request.app.state.settings.data_root))
-        try:
-            return tearsheet_extended.deflated_view(trials)
-        except ValueError as exc:
-            raise HTTPException(status_code=503, detail=f"the Deflated Sharpe could not be computed: {exc}") from exc
+    return json_response(cached_deflated(request.app.state))
 
 
 @router.get("/run/{run_id}/trade-paths", response_model=RunTradePaths)

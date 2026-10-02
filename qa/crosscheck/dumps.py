@@ -17,10 +17,19 @@ Schema `nqt-qa-dump/1`. Two kinds:
 - P11 bundles (`vcone`, `seasonality`, `evt`, `roll`, `dq_sidecar`, `dq_nq`, `guards`): the raw inputs of the
   Phase 11 screens with the terminal's values; references in `p11_*.py`.
 
+- `cached` (a `Bundle`, D1.4): the response bodies of the cached slow routes taken three times on one fixture
+  app: `fresh` (a cold cache, so computed), `cached` (the same app again, served from memory) and `restart` (a new
+  app on the same state folder, so served from disk where the route is persisted). Each take maps a route name to
+  the body's exact bytes, base64 encoded; `queries` names the path and parameters of each route. The comparison
+  (`compare.cached_references`) is byte for byte against `fresh`, the cached take against the optional `repeat`
+  take (the request again with the cache off) where the body holds process state such as a read count.
+
 This module only reads. It never imports the backend (ARCHITECTURE section 11).
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import math
 from dataclasses import dataclass, field
@@ -62,7 +71,10 @@ BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "roll": ("dates", "t", "instrument_id", "offset", "c_none", "qa_rolls_total"),
                  "dq_sidecar": ("status", "fence", "sessions"), "dq_nq": ("fence", "sessions", "rejected", "still"),
                  "guards": ("groups", "records"),
-                 **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS, **LV6_INPUTS}
+                 **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS, **LV6_INPUTS,
+                 # D1.4: the cached slow routes, fresh against through the cache and after a restart
+                 "cached": ("routes", "queries", "fresh", "cached", "restart")}
+CACHED_TAKES = ("fresh", "cached", "restart")
 
 
 class DumpError(ValueError):
@@ -182,8 +194,30 @@ def parse_bundle(doc: dict) -> Bundle:
                         "returns, or a window below 2")
     if kind == "trades" and not np.all(np.isfinite(_floats(inputs["pnl"], "pnl"))):
         raise DumpError(f"trades dump {doc.get('case')!r}: pnl holds NaN or infinite values")
+    if kind == "cached":
+        _check_cached(doc, inputs)
     return Bundle(name=str(_require(doc, "case")), kind=kind, source=str(doc.get("source", "")), inputs=dict(inputs),
                   values=_values(doc), missing=dict(doc.get("missing") or {}))
+
+
+def decode_body(text, what: str) -> bytes:
+    """The exact bytes of a base64 encoded response body."""
+    try:
+        return base64.b64decode(text, validate=True)
+    except (TypeError, ValueError, binascii.Error) as exc:
+        raise DumpError(f"{what} is not a base64 body: {exc}") from exc
+
+
+def _check_cached(doc: dict, inputs: dict) -> None:
+    routes = inputs["routes"]
+    if not routes or len(set(routes)) != len(routes) or not all(isinstance(r, str) and r for r in routes):
+        raise DumpError(f"cached dump {doc.get('case')!r}: routes must be a non-empty list of distinct names")
+    for take in (*CACHED_TAKES, *(("repeat",) if "repeat" in inputs else ())):  # `repeat` is optional
+        bodies = inputs[take]
+        if not isinstance(bodies, dict) or set(bodies) != set(routes):
+            raise DumpError(f"cached dump {doc.get('case')!r}: take {take!r} must hold exactly the routes {routes}")
+        for name in routes:
+            decode_body(bodies[name], f"cached dump {doc.get('case')!r} {take}/{name}")
 
 
 def parse_any(doc: dict):

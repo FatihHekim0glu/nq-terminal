@@ -40,11 +40,19 @@ the user picks). Both are [POST HOC] and descriptive.
 from __future__ import annotations
 
 import math
+from types import ModuleType
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 __all__ = ["GROUPINGS", "TradeError", "by_entry", "holding_times", "pnl_values", "slippage_distribution",
            "streaks", "summary_values", "trade_stats", "trade_tiles"]
@@ -178,7 +186,7 @@ def _label(grouping: str, key: int) -> str:
 def _group_row(grouping: str, key: int, values: pd.Series) -> dict:
     n, mean = int(len(values)), float(values.mean())
     sd = float(values.std(ddof=1)) if n > 1 else math.nan
-    half = float(sps.t.ppf(0.5 + CI_LEVEL / 2, n - 1)) * sd / math.sqrt(n) if n > 1 else math.nan
+    half = float(_sps().t.ppf(0.5 + CI_LEVEL / 2, n - 1)) * sd / math.sqrt(n) if n > 1 else math.nan
     return {"key": int(key), "label": _label(grouping, int(key)), "n": n, "mean": mean, "sd": sd,
             "ci_lo": mean - half, "ci_hi": mean + half}
 
@@ -289,7 +297,7 @@ def runs_test(signs: np.ndarray) -> dict:
     sd = math.sqrt(2 * n1 * n2 * (2 * n1 * n2 - n) / (n ** 2 * (n - 1)))
     z = (runs - expected) / sd
     return {"wins": n1, "losses": n2, "runs": runs, "expected": expected, "sd": sd, "z": z,
-            "p": float(2 * sps.norm.sf(abs(z)))}
+            "p": float(2 * _sps().norm.sf(abs(z)))}
 
 
 def streaks(trades: Iterable[Any]) -> dict:

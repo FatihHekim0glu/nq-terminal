@@ -15,6 +15,7 @@ from typing import Any, Mapping
 import uvicorn
 
 from nq_terminal.app import create_app
+from nq_terminal.services.prewarm import PORT_BOUND_KEY
 from nq_terminal.settings import BIND_HOST, load_settings
 
 SHUTDOWN_GRACE_S = 2
@@ -27,7 +28,12 @@ SERVER_OPTIONS: Mapping[str, Any] = {
 
 def main(env: Mapping[str, str] | None = None) -> None:
     settings = load_settings(env)
-    uvicorn.run(create_app(settings), host=BIND_HOST, port=settings.port, **SERVER_OPTIONS)
+    app = create_app(settings)
+    server = uvicorn.Server(uvicorn.Config(app, host=BIND_HOST, port=settings.port, **SERVER_OPTIONS))
+    # uvicorn runs the lifespan startup before it creates the listening socket, so the HOME prewarm polls this and
+    # begins only once the port is bound (services/prewarm.py, api/home_prewarm.py).
+    setattr(app.state, PORT_BOUND_KEY, lambda: server.started)
+    server.run()
 
 
 if __name__ == "__main__":

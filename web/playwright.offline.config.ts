@@ -23,6 +23,7 @@ import { chromium, defineConfig, devices } from '@playwright/test'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CLEAN_DIRS_ENV } from './scripts/e2eTeardown.ts'
 
 // Read by e2e/target.ts in every worker: the config is loaded again in each of them.
 process.env.NQT_E2E_TARGET = 'offline'
@@ -64,6 +65,9 @@ const CHANNEL = process.env.NQT_E2E_CHANNEL || (bundledChromiumMissing() ? 'chro
 const TMP = path.join(WEB_DIR, 'node_modules', '.tmp')
 const OFFLINE_DIST = path.join(TMP, `e2e-offline-${OFFLINE_PORT}`)
 const DEMO_DIST = path.join(TMP, `e2e-demo-${DEMO_PORT}`)
+// Both folders are removed when the run ends (scripts/e2eTeardown.ts), so runs on different ports leave nothing
+// behind on the system drive.
+process.env[CLEAN_DIRS_ENV] = JSON.stringify([OFFLINE_DIST, DEMO_DIST])
 const OFFLINE_CONFIG = 'e2e/offline/vite.offline.config.ts'
 const q = (p: string) => `"${p}"`
 // Vite 8 reads a TypeScript config natively and falls back to bundling it when a module of src has an
@@ -85,6 +89,7 @@ const BUDGETS_SPEC = /perf[\\/]budgets\.spec\.ts$/
 export default defineConfig({
   testDir: './e2e',
   outputDir: 'node_modules/.tmp/e2e-offline-results',
+  globalTeardown: './scripts/e2eTeardown.ts',
   snapshotPathTemplate: '{testDir}/__screenshots__/offline-{platform}/{testFilePath}/{arg}{ext}',
   fullyParallel: false,
   workers: 1,

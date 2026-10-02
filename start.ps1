@@ -166,7 +166,7 @@ function Write-Plan([bool]$BuildNeeded) {
         Write-Output "build: $(if ($BuildNeeded) { 'needed' } else { 'up to date' }) ($Dist)"
     }
     Write-Output "backend: $Python $((Get-BackendArgs) -join ' ') (in $Backend)"
-    Write-Output "env: NQT_PORT=$Port PYTHONUTF8=1"
+    Write-Output "env: NQT_PORT=$Port PYTHONUTF8=1$(if (-not $Dev -and -not $env:NQT_FIXTURE_DIR) { ' NQT_PREWARM=1' })"
     if ($env:NQT_FIXTURE_DIR) { Write-Output "env: NQT_FIXTURE_DIR=$env:NQT_FIXTURE_DIR (fixture mode)" }
     Write-Output "page: $url"
     if ($NoBrowser) { Write-Output 'browser: not opened' } else { Write-Output "browser: opens $url" }
@@ -176,6 +176,9 @@ function Start-Backend {
     $env:NQT_PORT = "$Port"
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
+    # The plain launcher asks the backend to warm the HOME computations once its port is bound; -Dev (uvicorn --reload
+    # restarts the process on each edit) and fixture mode (no price source) do not.
+    if (-not $Dev -and -not $env:NQT_FIXTURE_DIR) { $env:NQT_PREWARM = '1' }
     $process = Start-Process -FilePath $Python -ArgumentList (Get-BackendArgs) -WorkingDirectory $Backend -NoNewWindow -PassThru
     $Started.Add($process)
     Wait-Until { Test-TerminalAnswers $Port } "The backend on ${Loopback}:$Port"
@@ -212,7 +215,7 @@ if ($DryRun) {
 
 # ---------------------------------------------------------------- run
 
-$savedEnv = @{ NQT_PORT = $env:NQT_PORT; PYTHONUTF8 = $env:PYTHONUTF8; PYTHONIOENCODING = $env:PYTHONIOENCODING }
+$savedEnv = @{ NQT_PORT = $env:NQT_PORT; PYTHONUTF8 = $env:PYTHONUTF8; PYTHONIOENCODING = $env:PYTHONIOENCODING; NQT_PREWARM = $env:NQT_PREWARM }
 try {
     if (Test-PortOpen $Port) {
         if (-not (Test-TerminalAnswers $Port)) { Stop-Start "port $Port on $Loopback is taken by another program. Choose another with -Port." }

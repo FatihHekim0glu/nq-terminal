@@ -368,7 +368,7 @@ Write-Output "before: log $($before.log_length) bytes; $(($PinnedFiles | ForEach
 
 $started = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $saved = @{}
-foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN')) {
+foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_JOBS', 'NQT_PREWARM', 'NQT_DESKTOP', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN')) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $testsExit = -1
@@ -383,6 +383,14 @@ try {
     # A smoke run must never reach the owner's TWS, whatever the shell sets: the IB snapshot stays off.
     [Environment]::SetEnvironmentVariable('NQT_IB_READONLY', $null, 'Process')
     # The backend's same-origin check accepts the terminal port, which is the preview in front of it.
+    # The backend keeps its result cache and jobs file in its state folder: a smoke run gets its own, inside the work
+    # folder, so it never writes the owner's terminal\state. The queue is off and the HOME prewarm is off, so the run
+    # reads exactly what the page asks for.
+    $State = Join-Path $Work 'state'
+    New-Item -ItemType Directory -Path $State | Out-Null
+    $env:NQT_STATE_DIR = $State
+    $env:NQT_JOBS = 'off'
+    foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
     $env:NQT_PORT = "$WebPort"
     $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"
     $env:PYTHONUTF8 = '1'

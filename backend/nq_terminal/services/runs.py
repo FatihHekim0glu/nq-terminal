@@ -42,7 +42,6 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from nq_lab.sessions import nyse_sessions
 from nq_terminal.analytics import drawdown as analytics_drawdown
-from nq_terminal.analytics import perf
 from nq_terminal.analytics.series import SeriesError, SeriesUnusable, run_returns
 from nq_terminal.models.common import Page
 from nq_terminal.models.runs import (
@@ -589,6 +588,8 @@ class RunService:
             return None, None, UNUSABLE_REASON
         except SeriesError as exc:
             return None, None, str(exc)
+        from nq_terminal.analytics import perf  # lazy: the start path does not load perf (D1.1)
+
         return _finite(perf.sharpe(r, TRADING_DAYS)), _finite(abs(analytics_drawdown.max_drawdown(r, "B"))), None
 
     def _sharpe_of(self, run_id: str) -> float | None:

@@ -226,18 +226,21 @@ function viteStep(facts: Facts, what: string, args: readonly string[], port: num
   }
 }
 
-function backendEnv(facts: Facts, port: number): Record<string, string> {
+/** NQT_PREWARM=1 asks the backend to warm the HOME computations once its port is bound (the plain launcher only: not
+ *  --dev, whose uvicorn --reload restarts the process on each edit, and not fixture mode, which has no price source). */
+function backendEnv(facts: Facts, port: number, prewarm: boolean): Record<string, string> {
   const env: Record<string, string> = { NQT_PORT: String(port), PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
   if (facts.fixtureDir !== null) env.NQT_FIXTURE_DIR = facts.fixtureDir
+  else if (prewarm) env.NQT_PREWARM = '1'
   return env
 }
 
-function backendStep(facts: Facts, what: string, args: readonly string[], port: number): Step {
+function backendStep(facts: Facts, what: string, args: readonly string[], port: number, prewarm = false): Step {
   return {
     what,
     argv: [facts.python.path, ...args],
     cwd: join(facts.terminalDir, 'backend'),
-    env: backendEnv(facts, port),
+    env: backendEnv(facts, port, prewarm),
     wait: { url: `${pageUrl(port)}api/health`, contains: FENCE },
   }
 }
@@ -303,7 +306,7 @@ export function planStart(options: StartOptions, facts: Facts, resolved: Resolve
         steps.push(install ?? installStep())
         steps.push(corepackStep(facts, 'build web/dist', ['build']))
       }
-      steps.push(backendStep(facts, 'start the backend', ['-m', 'nq_terminal'], port))
+      steps.push(backendStep(facts, 'start the backend', ['-m', 'nq_terminal'], port, true))
       if (state === 'busy') blockers.push(busyMessage(port))
     }
   }

@@ -248,7 +248,9 @@ def test_born_failing_one_unbuildable_trial_refuses_the_whole_view(api, monkeypa
 
     assert get(api, "/api/analytics/deflated")["n_trials"] == 2
     monkeypatch.setattr(series, "hypothesis_series", broken)
-    r = api.get("/api/analytics/deflated")
+    # the first answer is now in the module client's result cache and no input changed, so the same app would answer
+    # 200 from it; a fresh app (its own per-test state folder, so an empty cache) computes again and refuses
+    r = client_for(FIXTURES).get("/api/analytics/deflated")
     assert r.status_code == 503 and "overnight_v0" in r.json()["detail"]
 
 

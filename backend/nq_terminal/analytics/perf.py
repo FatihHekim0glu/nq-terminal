@@ -24,10 +24,10 @@ PF10 stats table: hit rate (positive over non-zero sessions, as quantstats `win_
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics import validity
 from nq_terminal.analytics._inputs import (
@@ -40,6 +40,14 @@ from nq_terminal.analytics._inputs import (
 )
 from nq_terminal.analytics.distribution import monthly_returns
 from nq_terminal.analytics.drawdown import max_drawdown
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 CI_Z = 1.96
 
@@ -165,8 +173,8 @@ def _session_stats(values: np.ndarray, periods: int) -> dict:
     daily = periods == PERIODS_DAILY and len(values) > 0
     return {"hit_rate": float((values > 0).sum() / nonzero) if nonzero else math.nan,
             "best_day": float(values.max()) if daily else None, "worst_day": float(values.min()) if daily else None,
-            "skew": float(sps.skew(values, bias=False)) if len(values) > 2 else math.nan,
-            "excess_kurtosis": float(sps.kurtosis(values, fisher=True, bias=False)) if len(values) > 3 else math.nan}
+            "skew": float(_sps().skew(values, bias=False)) if len(values) > 2 else math.nan,
+            "excess_kurtosis": float(_sps().kurtosis(values, fisher=True, bias=False)) if len(values) > 3 else math.nan}
 
 
 def stats_table(r, basis: str, periods: int = PERIODS_DAILY) -> dict:

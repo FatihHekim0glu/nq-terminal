@@ -20,6 +20,11 @@ layers (details in `research_guard.py`):
 
 The sha256 of each file before and after the session is printed in the terminal summary as the record;
 a change there is accepted only when layers 1 and 2 attribute it to another workflow.
+
+State isolation (W1A). No test may write the real `terminal/state` (the owner's live backend keeps its jobs file,
+and from D1 the result cache, there). An autouse fixture points `NQT_STATE_DIR` and the settings' default state
+folder at a fresh per-test folder beside `tmp_path`, so `load_settings()` and `load_settings({})` both resolve
+there, and the session guard refuses any in-process write under `terminal/state` (`PROTECTED_DIRS`).
 """
 from __future__ import annotations
 
@@ -49,8 +54,9 @@ RESEARCH_FILES = {
 }
 WATCHED_FILES = {ROOT / "live" / "KILL": PRESENCE}  # the live workflow may toggle it; reported as a note
 # No in-process write, remove, rename, mkdir, link or chmod anywhere under these folders.
+REAL_STATE_DIR = BACKEND.parent / "state"
 PROTECTED_DIRS = (RESULTS, ROOT / "backtests" / "output", ROOT / "data", ROOT / "live",
-                  BACKEND / "tests" / "fixtures")
+                  BACKEND / "tests" / "fixtures", REAL_STATE_DIR)
 _NOTES: list[str] = []
 
 
@@ -88,6 +94,37 @@ def research_files_guard():
     _NOTES.extend(sha256_lines(guard.before, {path: _current(path) for path in guard.before}))
     _NOTES.extend(report.notes)
     assert not report.problems, "research files changed by the terminal tests:\n" + "\n".join(report.problems)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def session_state_dir(tmp_path_factory: pytest.TempPathFactory):
+    """One state folder for the whole session, set before any module-scoped fixture builds an app.
+
+    A module-scoped client (for example the `api` fixture in test_p1_api.py) is built before the per-test fixture
+    below runs, so without this its state folder would be the real `terminal/state` and its first cached route
+    (the result cache keeps its bodies in <state>/cache) would try to create it there. The per-test fixture still
+    gives each test its own folder on top of this one."""
+    from nq_terminal import settings as settings_module
+
+    folder = tmp_path_factory.mktemp("nqt-session-state")
+    patch = pytest.MonkeyPatch()
+    patch.setenv("NQT_STATE_DIR", str(folder))
+    patch.setattr(settings_module, "DEFAULT_STATE_DIR", folder)
+    try:
+        yield folder
+    finally:
+        patch.undo()
+
+
+@pytest.fixture(autouse=True)
+def temporary_state_dir(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A fresh state folder per test, for NQT_STATE_DIR and for the default of `load_settings({})`."""
+    from nq_terminal import settings as settings_module
+
+    folder = tmp_path_factory.mktemp("nqt-state")
+    monkeypatch.setenv("NQT_STATE_DIR", str(folder))
+    monkeypatch.setattr(settings_module, "DEFAULT_STATE_DIR", folder)
+    return folder
 
 
 @pytest.fixture(autouse=True)

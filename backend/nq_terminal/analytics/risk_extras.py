@@ -35,11 +35,11 @@ sums).
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
-from scipy import stats as sps
 
-from nq_terminal.analytics import perf, relative
+from nq_terminal.analytics import relative
 from nq_terminal.analytics._inputs import PERIODS_DAILY, check_basis, returns_array
 from nq_terminal.analytics.drawdown import max_drawdown, underwater
 from nq_terminal.analytics.risk import (
@@ -50,6 +50,14 @@ from nq_terminal.analytics.risk import (
     cf_quantile,
     historical_cvar,
 )
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 MIN_RETURNS = 4
 MIN_PAIRS = 3
@@ -86,11 +94,11 @@ def mes_from_moments(mu: float, sigma: float, skew: float, exkurt: float, tail: 
     """The modified ES from the four moments: h, the Edgeworth tail mean E_G, the ES with the operational floor and
     whether the floor was taken (E_G above h)."""
     _check_tail(tail)
-    z = float(sps.norm.ppf(tail))
+    z = float(_sps().norm.ppf(tail))
     h = float(cf_quantile(z, skew, exkurt))
     shape = (1 + h ** 3 * skew / 6 + (h ** 6 - 9 * h ** 4 + 9 * h ** 2 + 3) * skew ** 2 / 72
              + (h ** 4 - 2 * h ** 2 - 1) * exkurt / 24)
-    mean_below = float(-sps.norm.pdf(h) * shape / tail)
+    mean_below = float(-_sps().norm.pdf(h) * shape / tail)
     return {"z": z, "h": h, "edgeworth_mean": mean_below, "floored": bool(mean_below > h),
             "mes": float(-(mu + sigma * min(mean_below, h)))}
 
@@ -102,7 +110,7 @@ def gaussian_es(r, tail: float = 0.05) -> float:
     if not len(values):
         return math.nan
     mu, sigma, _, _ = _population_moments(values)
-    return float(-mu + sigma * sps.norm.pdf(sps.norm.ppf(tail)) / tail)
+    return float(-mu + sigma * _sps().norm.pdf(_sps().norm.ppf(tail)) / tail)
 
 
 def _shown(raw: float, inside: bool, positive: bool, historical: float) -> tuple[float | None, float, str]:
@@ -132,7 +140,7 @@ def modified_es(r, tail: float = 0.05) -> dict:
     inside = monotone and positive
     historical = historical_cvar(values, tail)
     modified, value, method = _shown(raw, monotone, positive, historical)
-    return {"tail": tail, "z": float(sps.norm.ppf(tail)), "mean": mu, "sigma": sigma, "skew": skew,
+    return {"tail": tail, "z": float(_sps().norm.ppf(tail)), "mean": mu, "sigma": sigma, "skew": skew,
             "excess_kurtosis": exkurt, "cf_quantile": found["h"] if found else math.nan,
             "edgeworth_mean": found["edgeworth_mean"] if found else math.nan,
             "floored": bool(found["floored"]) if found else False, "gaussian": gaussian_es(values, tail),
@@ -153,6 +161,8 @@ def ulcer_index(r, basis: str) -> float:
 
 def recovery_factor(r, basis: str) -> float:
     """PF11 total return over abs(MaxDD) on the same basis; NaN without a drawdown."""
+    from nq_terminal.analytics import perf  # lazy: the start path does not load perf (D1.1)
+
     check_basis(basis)
     depth = max_drawdown(r, basis)
     return perf.total_return(r, basis) / abs(depth) if depth < 0 else math.nan
@@ -162,6 +172,8 @@ def treynor_parts(r, bench, basis: str, periods: int = PERIODS_DAILY) -> dict:
     """BR5 with its parts: `cagr` (PF2, whole series), `beta` (BR1 on the aligned rows; NaN with fewer than three
     pairs or a benchmark without spread), `n_pairs` and `value` = cagr / beta (NaN when either is not defined or the
     beta is 0)."""
+    from nq_terminal.analytics import perf  # lazy: the start path does not load perf (D1.1)
+
     x, y, _ = relative.align_pair(r, bench)
     growth = perf.cagr(r, basis, periods)
     beta = math.nan

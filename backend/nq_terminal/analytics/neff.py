@@ -34,14 +34,20 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from types import ModuleType
 
 import numpy as np
-from scipy import stats as sps
-from scipy.cluster.hierarchy import fcluster, linkage
-from scipy.spatial.distance import squareform
 
 from nq_terminal.analytics import spa, validity
 from nq_terminal.analytics._inputs import PERIODS_DAILY
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 CLUSTER_CUT = 0.5  # on 1 - rho, average linkage
 DAILY_PERIODS = PERIODS_DAILY
@@ -107,6 +113,9 @@ def flat_clusters(correlation, cut: float = CLUSTER_CUT) -> list[list[int]]:
         return []
     if k == 1:
         return [[0]]
+    from scipy.cluster.hierarchy import fcluster, linkage  # lazy: scipy.cluster and scipy.spatial (D1.1)
+    from scipy.spatial.distance import squareform
+
     tree = linkage(squareform(1.0 - corr, checks=False), "average")
     labels = fcluster(tree, cut, criterion="distance")
     groups: dict[int, list[int]] = {}
@@ -129,7 +138,7 @@ def expected_max_sr0(variance: float, trials: float, gamma: float) -> float | No
         return None
     if trials <= 1 or variance < 0:
         return None
-    mix = (1 - gamma) * sps.norm.ppf(1 - 1 / trials) + gamma * sps.norm.ppf(1 - 1 / (trials * math.e))
+    mix = (1 - gamma) * _sps().norm.ppf(1 - 1 / trials) + gamma * _sps().norm.ppf(1 - 1 / (trials * math.e))
     return float(math.sqrt(variance) * mix)
 
 

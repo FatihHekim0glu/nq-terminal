@@ -17,13 +17,21 @@ line and its correlation). RD4 (P1): the Jarque-Bera statistic and its chi-squar
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics._inputs import check_basis, dated_series, returns_array
 from nq_terminal.analytics.risk import VAR_TAILS, historical_var
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 MONTHS = list(range(1, 13))
 FD_RULE = "Freedman-Diaconis"
@@ -44,7 +52,7 @@ def histogram(r) -> dict:
     mean = float(values.mean())
     sd = float(values.std(ddof=1)) if len(values) > 1 else math.nan
     if sd > 0:
-        normal = len(values) * np.diff(edges) * sps.norm.pdf(centres, mean, sd)
+        normal = len(values) * np.diff(edges) * _sps().norm.pdf(centres, mean, sd)
     else:
         normal = np.full(len(centres), math.nan)
     return {"edges": edges, "counts": counts, "centres": centres, "normal": normal, "mean": mean, "sd": sd,
@@ -82,7 +90,7 @@ def monthly_heatmap(r, basis: str) -> pd.DataFrame:
 def qq_plot(r) -> dict:
     """RD3: ordered returns against normal quantiles, with the fitted line."""
     values = returns_array(r)
-    (theoretical, ordered), (slope, intercept, corr) = sps.probplot(values, dist="norm")
+    (theoretical, ordered), (slope, intercept, corr) = _sps().probplot(values, dist="norm")
     return {"theoretical": theoretical, "ordered": ordered, "slope": float(slope), "intercept": float(intercept),
             "r": float(corr)}
 
@@ -92,5 +100,5 @@ def jarque_bera(r) -> dict:
     values = returns_array(r)
     if len(values) < 3:
         return {"statistic": math.nan, "p": math.nan, "n": int(len(values))}
-    stat, p = sps.jarque_bera(values)
+    stat, p = _sps().jarque_bera(values)
     return {"statistic": float(stat), "p": float(p), "n": int(len(values))}

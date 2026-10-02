@@ -25,7 +25,6 @@ from typing import Mapping
 
 import pandas as pd
 
-from nq_lab import data as nq_data
 from nq_lab.config import IS_END, IS_START
 from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError
 
@@ -93,6 +92,8 @@ NOT_ASSESSED = Exclusions(assessed=False, days=frozenset(), source=None)
 
 @functools.lru_cache(maxsize=64)
 def provenance_exclusions(symbol: str, variant: str) -> Exclusions:
+    from nq_lab import data as nq_data  # lazy: nq_lab.data imports the gate and pyarrow.dataset (D1.1)
+
     try:
         days = nq_data.excluded_sessions(symbol, variant)
     except (nq_data.DataLayoutError, FileNotFoundError, ValueError, KeyError):

@@ -27,8 +27,6 @@ from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from scipy.cluster.hierarchy import leaves_list, linkage
-from scipy.spatial.distance import squareform
 
 from nq_lab.config import IS_END, IS_START
 from nq_lab.dtsmom_panel import Panel, build_panel, master_days
@@ -115,6 +113,9 @@ def horizon_sessions(days: Sequence[dt.date]) -> dict[str, int]:
 def cluster_order(rho: np.ndarray) -> tuple[int, ...]:
     if len(rho) < 2:
         return tuple(range(len(rho)))
+    from scipy.cluster.hierarchy import leaves_list, linkage  # lazy: scipy.cluster and scipy.spatial (D1.1)
+    from scipy.spatial.distance import squareform
+
     dist = 1.0 - np.nan_to_num(rho, nan=0.0)
     np.fill_diagonal(dist, 0.0)
     return tuple(leaves_list(linkage(squareform(dist, checks=False), method="average")).tolist())

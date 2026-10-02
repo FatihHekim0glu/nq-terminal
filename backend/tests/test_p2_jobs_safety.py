@@ -39,7 +39,7 @@ def test_the_model_and_the_router_need_no_write_allowance(relative: str) -> None
 
 
 def test_only_the_service_may_be_on_the_allow_list() -> None:
-    assert rules.WRITE_ALLOWED == {SERVICE}
+    assert rules.WRITE_ALLOWED == {SERVICE, rules.RESULT_CACHE}
 
 
 def test_the_service_never_starts_a_shell_or_runs_anything_but_the_runner() -> None:

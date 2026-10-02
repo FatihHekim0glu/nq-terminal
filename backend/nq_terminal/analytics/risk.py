@@ -24,12 +24,20 @@ by half or more, so the normal VaR is only reported greyed. The raw expansion is
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics._inputs import returns_array, returns_series
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 VAR_TAILS = {"95": 0.05, "99": 0.01}
 LOSS_WINDOW = 21
@@ -139,7 +147,7 @@ def normal_var(r, tail: float = 0.05) -> float:
     if not len(values):
         return math.nan
     mu, sigma, _, _ = _population_moments(values)
-    return float(-(mu + sigma * sps.norm.ppf(tail)))
+    return float(-(mu + sigma * _sps().norm.ppf(tail)))
 
 
 def cornish_fisher_var(r, tail: float = 0.05) -> dict:
@@ -150,7 +158,7 @@ def cornish_fisher_var(r, tail: float = 0.05) -> dict:
     if len(values) < 4:
         raise ValueError(f"Cornish-Fisher VaR needs at least 4 returns, got {len(values)}")
     mu, sigma, skew, exkurt = _population_moments(values)
-    z = float(sps.norm.ppf(tail))
+    z = float(_sps().norm.ppf(tail))
     normal = float(-(mu + sigma * z))
     raw = float(-(mu + sigma * cf_quantile(z, skew, exkurt))) if math.isfinite(skew) else math.nan
     inside = cf_monotone(skew, exkurt)

@@ -256,18 +256,27 @@ def test_a_request_that_arrived_on_a_lan_interface_gets_403(no_dist):
 def test_the_launcher_binds_loopback_only(monkeypatch):
     from nq_terminal import __main__ as launcher
 
-    calls = []
-    monkeypatch.setattr(launcher.uvicorn, "run", lambda app, **kwargs: calls.append((app, kwargs)))
+    configs, ran = [], []
+
+    class StandInServer:  # the real Server would bind the port
+        def __init__(self, config):
+            configs.append(config)
+
+        def run(self):
+            ran.append(1)
+
+    monkeypatch.setattr(launcher.uvicorn, "Server", StandInServer)
     launcher.main({})
     launcher.main({"NQT_PORT": "9001"})
-    (app, first), (_, second) = calls
-    assert first["host"] == second["host"] == "127.0.0.1"
-    assert (first["port"], second["port"]) == (8765, 9001)
-    assert first["server_header"] is False and first["proxy_headers"] is False
+    first, second = configs
+    assert ran == [1, 1]
+    assert first.host == second.host == "127.0.0.1"
+    assert (first.port, second.port) == (8765, 9001)
+    assert first.server_header is False and first.proxy_headers is False
     # an open live stream must not hold a shutdown for its whole lifetime (TASKS 9.2)
     from nq_terminal.api.live_stream import StreamLimits
-    assert 0 < first["timeout_graceful_shutdown"] == launcher.SHUTDOWN_GRACE_S < StreamLimits().lifetime_s
-    assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
+    assert 0 < first.timeout_graceful_shutdown == launcher.SHUTDOWN_GRACE_S < StreamLimits().lifetime_s
+    assert sorted(non_get_routes(first.app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
 @pytest.mark.parametrize("headers", [

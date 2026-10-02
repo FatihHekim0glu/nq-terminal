@@ -253,7 +253,7 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 18 | GET | `/api/sealed` | `research.sealed_index` | XS | light | 5 / 3 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 19 | GET | `/api/sealed/{name}` | `research.sealed` | XS | light | 6 / 4 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 20 | GET | `/api/runs` | `runs.list_runs` | M | light | 50 / 33 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 21 | GET | `/api/runs/compare` | `runs.compare_runs` | M | heavy | 1145 / 280 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 21 | GET | `/api/runs/compare` | `runs.compare_runs` | M | heavy | 1145 / 280 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `runs.cached_compare` (memory only; single-flight per key) | 1.2 |
 | 22 | GET | `/api/runs/stats` | `runs.run_stats` | XS | medium | 260 / 240 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 23 | GET | `/api/runs/{run_id}` | `runs.run_detail` | S | light | 8 / 6 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 24 | GET | `/api/runs/{run_id}/trades` | `runs.run_trades` | M | medium | 217 / 18 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -261,7 +261,7 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 26 | GET | `/api/runs/{run_id}/log/{section}` | `runs.run_log` | L | light | 29 / 27 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 27 | GET | `/api/runs/{run_id}/equity` | `runs.run_equity` | L | medium | 60 / 56 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 28 | GET | `/api/runs/{run_id}/sidecar/{name}` | `runs.run_sidecar` | S | light | 8 / 6 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 29 | GET | `/api/ledger` | `runs.ledger` | S | very heavy | 4312 / 671 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 29 | GET | `/api/ledger` | `runs.ledger` | S | very heavy | 4312 / 671 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `runs.cached_ledger` (memory and disk (no gated read); single-flight per key) | 1.2 |
 | 30 | GET | `/api/bars` | `data.get_bars` | M | medium | 34 / 9; 55 / 8 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 31 | GET | `/api/data/catalog` | `data.data_catalog` | M | light | 49 / 12 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 32 | GET | `/api/market/universe` | `data.market_universe` | M | medium | 436 / 16 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -269,7 +269,7 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 34 | GET | `/api/qa` | `data.qa_index` | XS | light | 9 / 7 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 35 | GET | `/api/qa/{name}` | `data.qa_report` | S | light | 12 / 10 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 36 | GET | `/api/market/rv` | `data.market_rv` | M | light | 20 / 21 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 37 | GET | `/api/market/two-day` | `data.market_two_day` | M | heavy | 1260 / 891 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 37 | GET | `/api/market/two-day` | `data.market_two_day` | M | heavy | 1260 / 891 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `data.cached_two_day` (memory only; single-flight per key) | 1.2 |
 | 38 | GET | `/api/analytics/hypothesis/{name}` | `analytics.hypothesis_analytics` | L | medium | 390 / 178 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 39 | GET | `/api/analytics/hypothesis/{name}/panel` | `analytics.hypothesis_panel` | L | medium | 113 / 111 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 40 | GET | `/api/analytics/run/{run_id}` | `analytics.run_analytics` | L | medium | 180 / 130 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -279,9 +279,9 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 44 | GET | `/api/analytics/run/{run_id}/exposure` | `analytics.run_exposure` | XL | heavy | 667 / 718 | unchanged; profiled again after 1.1, cache only if it misses its budget | 1.1 |
 | 45 | GET | `/api/analytics/hypothesis/{name}/extended` | `analytics.hypothesis_extended` | L | medium | 279 / 270 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 46 | GET | `/api/analytics/run/{run_id}/extended` | `analytics.run_extended` | M | medium | 258 / 272 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 47 | GET | `/api/analytics/hypothesis/{name}/bootstrap` | `analytics.hypothesis_bootstrap` | M | heavy | 1408 / 1450 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
-| 48 | GET | `/api/analytics/run/{run_id}/bootstrap` | `analytics.run_bootstrap` | M | heavy | 1405 / 1410 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
-| 49 | GET | `/api/analytics/deflated` | `analytics.deflated_sharpe` | S | heavy | 1062 / 459 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 47 | GET | `/api/analytics/hypothesis/{name}/bootstrap` | `analytics.hypothesis_bootstrap` | M | heavy | 1408 / 1450 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `analytics.cached_hypothesis_bootstrap` (memory only; single-flight per key) | 1.2 |
+| 48 | GET | `/api/analytics/run/{run_id}/bootstrap` | `analytics.run_bootstrap` | M | heavy | 1405 / 1410 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `analytics.cached_run_bootstrap` (memory only; single-flight per key) | 1.2 |
+| 49 | GET | `/api/analytics/deflated` | `analytics.deflated_sharpe` | S | heavy | 1062 / 459 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `analytics.cached_deflated` (memory and disk (no gated read); single-flight per key) | 1.2 |
 | 50 | GET | `/api/analytics/run/{run_id}/trade-paths` | `analytics.run_trade_paths` | XS | medium | 111 / 102 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 51 | GET | `/api/analytics/run/{run_id}/excursions` | `analytics.run_excursions` | XS | light | 6 / 5 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 52 | GET | `/api/analytics/paper-tracking` | `analytics.paper_tracking` | XS | light | 4 / 3 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -289,7 +289,7 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 54 | GET | `/api/live/stream` | `live_stream.stream` | stream | - | - | same-origin SSE, cookie checked by the token middleware (EventSource sends same-origin cookies); app smoke asserts stream mode, not polling; minimise-and-restore case | 1.4, 2.4 |
 | 55 | GET | `/api/market/vcone` | `vcone.market_vcone` | S | medium | 228 / 22 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 56 | GET | `/api/market/vcone/universe` | `vcone.market_vcone_universe` | S | medium | 308 / 320 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 57 | GET | `/api/seasonality/instrument/{root}` | `seasonality.instrument_seasonality` | S | very heavy | 2268 / 2066 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 57 | GET | `/api/seasonality/instrument/{root}` | `seasonality.instrument_seasonality` | S | very heavy | 2268 / 2066 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `seasonality.cached_instrument_seasonality` (memory only; single-flight per key) | 1.2 |
 | 58 | GET | `/api/seasonality/hypothesis/{name}` | `seasonality.hypothesis_seasonality` | S | medium | 249 / 48 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 59 | GET | `/api/events/calendar` | `events.event_calendar` | M | light | 21 / 14 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 60 | GET | `/api/events/study` | `events.event_study` | M | medium | 197 / 22 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -298,7 +298,7 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 | 63 | GET | `/api/dq/symbols` | `dq.symbols` | S | medium | 364 / 394 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 64 | GET | `/api/dq/calendar/{symbol}` | `dq.calendar` | M | light | 13 / 13 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 65 | GET | `/api/dq/guards` | `dq.guard_status` | S | light | 41 / 223 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
-| 66 | GET | `/api/analytics/spa` | `spa.family_spa` | S | very heavy | 3575 / 307 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared | 1.2 |
+| 66 | GET | `/api/analytics/spa` | `spa.family_spa` | S | very heavy | 3575 / 307 | unchanged contract plus the mtime-keyed result cache; cached and fresh dumps compared; the route and the prewarm share `spa.cached_spa` (memory only; single-flight per key) | 1.2 |
 | 67 | GET | `/api/analytics/hypothesis/{name}/risk-extras` | `risk_extras.hypothesis_risk_extras` | S | medium | 225 / 50 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 68 | GET | `/api/analytics/run/{run_id}/risk-extras` | `risk_extras.run_risk_extras` | S | medium | 87 / 55 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
 | 69 | GET | `/api/analytics/hypothesis/{name}/trend-regime` | `regimes_capacity_term.hypothesis_trend_regime` | M | medium | 76 / 79 | unchanged (same GET, same JSON), token cookie checked | 1.4 |
@@ -369,7 +369,7 @@ A launch argument (or a protocol handler) can be added later as its own item if 
 | Result cache (new) | backend | route, normalised query, and the (path, mtime_ns, size) of every file the computation read | 64 MiB of serialised bodies, least recently used (estimate) | 1.2 |
 | TanStack Query | page | query key | 30 s stale | none |
 
-- **Result cache rules.** Inputs are recorded by a read hook in `FileCache` and in the bar service during the first computation, so the key cannot miss a file. Bar reads through the gate are keyed on the parquet file's mtime and size from the catalogue. A cache hit performs no price read and therefore writes no gate log line, exactly as a `GatedBarCache` hit does today. Results that depend on the clock (live screens) are never cached. Bootstrap and SPA results are deterministic for a given seed and input, so caching them changes no number; the crosscheck compares cached and fresh bodies byte for byte (1.2).
+- **Result cache rules.** Inputs are recorded by a read hook in `FileCache` and in the bar service during the first computation, so the key cannot miss a file. Bar reads through the gate are keyed on the parquet file's mtime and size from the catalogue. A cache hit performs no price read and therefore writes no gate log line, exactly as a `GatedBarCache` hit does today. Results that depend on the clock (live screens) are never cached. Bootstrap and SPA results are deterministic for a given seed and input, so caching them changes no number; the crosscheck compares cached and fresh bodies byte for byte (1.2), except that the two bodies that end with a gate block (two-day and seasonality) are compared with a repeat computation made with the cache off, because the gate block describes the process (section 15.2).
 
 ## 6. The research gate in the packaged app
 
@@ -596,7 +596,7 @@ The desktop move makes contrast themes more likely to be used, so the later acce
 | Seam | Test |
 |---|---|
 | Start-up imports (1.1) | a fresh interpreter imports `nq_terminal.__main__` and asserts that `scipy.stats`, `nautilus_trader` and the lazy routers are absent from `sys.modules`; a time budget on a quiet machine |
-| Result cache (1.2) | cached and fresh bodies equal byte for byte for every cached route in fixture mode; touching any input file (mtime or size) invalidates; a crosscheck dump taken through the cache |
+| Result cache (1.2) | cached and fresh bodies equal byte for byte for every cached route in fixture mode; touching any input file (mtime or size) invalidates; a crosscheck dump taken through the cache. The two bodies that end with a gate block (two-day and seasonality) describe the process as well as the computation, so a hit or a joined request has its gate block made current (`cached` true, `reads_this_process` as of now, years served as stored) and is compared with a repeat computation made with the cache off; every byte before the gate block is equal to a cold computation. If the bar service has evicted a frame while the result entry survives, a recomputation would say `cached` false where the hit says true; that is the one known difference |
 | Lock and attach (1.3) | a held lock makes a second start print `NQT-ATTACH`; a stale lock is replaced; JOBS never runs twice; JOBS refused with a wrong `sys.prefix` or with `NQT_FIXTURE_DIR` in desktop mode; `uvicorn nq_terminal.app:create_app` without `__main__.py` takes the lock too; a backend with another `NQT_STATE_DIR` and `NQT_JOBS=off` starts beside a held real lock and refuses `POST /api/jobs` and the IB snapshot |
 | Second backends (1.4c) | the real-data smoke, the fixture Playwright suite and `start.ps1 -Dev` each load HOME behind the token on their own origin; none touches 8765's lock |
 | Page build (1.3, 2.1b) | sources newer than the stamp, or a changed `openapi.json`, give `dist: stale`; the shell rebuilds or shows "rebuild needed" |

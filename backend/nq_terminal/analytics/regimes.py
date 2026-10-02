@@ -13,12 +13,20 @@ Per regime: n, mean, annualised Sharpe (sd ddof 1), hit rate over the non-zero s
 from __future__ import annotations
 
 import math
+from types import ModuleType
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics._inputs import PERIODS_DAILY, check_periods, returns_series
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 MIN_HISTORY = 252
 REGIMES = ("low", "mid", "high")
@@ -72,7 +80,7 @@ def regime_stats(r, rv: pd.Series, periods: int = PERIODS_DAILY) -> dict:
     values = series.to_numpy()
     rows = [{"regime": name, **_stats(values[labels == name], periods)} for name in REGIMES]
     high, low = values[labels == "high"], values[labels == "low"]
-    welch = sps.ttest_ind(high, low, equal_var=False) if len(high) > 1 and len(low) > 1 else None
+    welch = _sps().ttest_ind(high, low, equal_var=False) if len(high) > 1 and len(low) > 1 else None
     return {"rows": rows, "welch_t": float(welch.statistic) if welch is not None else math.nan,
             "welch_df": float(welch.df) if welch is not None else math.nan,
             "unlabelled": int(pd.isna(frame["regime"]).sum()), "min_history": MIN_HISTORY, "frame": frame,

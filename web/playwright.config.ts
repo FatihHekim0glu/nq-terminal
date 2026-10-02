@@ -8,6 +8,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CLEAN_DIRS_ENV } from './scripts/e2eTeardown.ts'
 
 const WEB_DIR = path.dirname(fileURLToPath(import.meta.url))
 const TERMINAL_DIR = path.resolve(WEB_DIR, '..')
@@ -48,10 +49,14 @@ const q = (p: string) => `"${p}"`
 // keyboard flow (an empty workspace) and gallery entries that never finished loading. One folder per web port:
 // Playwright refuses a web port already in use before it runs the build, so no two runs share a folder.
 const E2E_DIST = path.join(WEB_DIR, 'node_modules', '.tmp', `e2e-gallery-${WEB_PORT}`)
+// The folder is removed when the run ends (scripts/e2eTeardown.ts), so runs on different ports leave nothing
+// behind on the system drive.
+process.env[CLEAN_DIRS_ENV] = JSON.stringify([E2E_DIST])
 
 export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e/.results',
+  globalTeardown: './scripts/e2eTeardown.ts',
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   fullyParallel: false,
   workers: 1,

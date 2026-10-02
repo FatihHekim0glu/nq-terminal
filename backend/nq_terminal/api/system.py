@@ -12,11 +12,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
+from types import ModuleType
 from typing import Callable
 
 from fastapi import APIRouter, Request
 
-from nq_lab import live_guards, oos_gate
+from nq_lab import live_guards
 from nq_lab.config import IS_END, IS_START
 from nq_terminal.models.common import CacheStats, Fence, Health, Pins, SealedStatus
 from nq_terminal.settings import Settings
@@ -24,6 +25,13 @@ from nq_terminal.settings import Settings
 router = APIRouter(prefix="/api", tags=["system"])
 
 GateStats = tuple[int, int, int]
+
+
+def _oos_gate() -> ModuleType:
+    """`nq_lab.oos_gate`, imported on first use so the start path does not load it (D1.1)."""
+    from nq_lab import oos_gate
+
+    return oos_gate
 
 
 def installed_pins() -> Pins:
@@ -39,7 +47,7 @@ def _pin_ok(check: Callable[[Path], None], path: Path) -> bool | None:
     """True when the gate's check passes, False when it refuses, None when the file cannot be read."""
     try:
         check(path)
-    except oos_gate.OOSAccessError:
+    except _oos_gate().OOSAccessError:
         return False
     except (OSError, ValueError):
         return None
@@ -48,7 +56,7 @@ def _pin_ok(check: Callable[[Path], None], path: Path) -> bool | None:
 
 def _openings_closed(path: Path) -> bool | None:
     try:
-        openings = oos_gate.load_openings(path)
+        openings = _oos_gate().load_openings(path)
     except (OSError, ValueError):
         return None
     return all(entry.get("closed") is True for entry in openings)
@@ -56,8 +64,8 @@ def _openings_closed(path: Path) -> bool | None:
 
 def sealed_status(settings: Settings) -> SealedStatus:
     return SealedStatus(
-        openings_pin_ok=_pin_ok(oos_gate.check_openings_pin, settings.openings_path),
-        sealed_log_pin_ok=_pin_ok(oos_gate.check_sealed_log_pin, settings.oos_log_path),
+        openings_pin_ok=_pin_ok(_oos_gate().check_openings_pin, settings.openings_path),
+        sealed_log_pin_ok=_pin_ok(_oos_gate().check_sealed_log_pin, settings.oos_log_path),
         openings_closed=_openings_closed(settings.openings_path),
     )
 

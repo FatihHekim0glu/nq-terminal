@@ -25,14 +25,22 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from types import ModuleType
 from typing import Sequence
 
 import numpy as np
 import pandas as pd
-from scipy import stats as sps
 
 from nq_terminal.analytics import validity
 from nq_terminal.analytics._inputs import PERIODS_DAILY, check_periods, returns_array
+
+
+def _sps() -> ModuleType:
+    """`scipy.stats`, imported on first use so the start path does not pay for it (D1.1, 04)."""
+    from scipy import stats
+
+    return stats
+
 
 EULER_GAMMA = 0.5772156649015329
 COST = 1  # ticks per side: the one cost every screen records
@@ -63,7 +71,7 @@ def expected_max_sharpe(n_trials: int, variance: float) -> float:
         raise ValueError(f"the expected maximum needs at least two trials, got {n_trials!r}")
     if not (math.isfinite(variance) and variance >= 0):
         raise ValueError(f"the cross-trial variance must be finite and non-negative, got {variance!r}")
-    mix = (1 - EULER_GAMMA) * sps.norm.ppf(1 - 1 / n_trials) + EULER_GAMMA * sps.norm.ppf(1 - 1 / (n_trials * math.e))
+    mix = (1 - EULER_GAMMA) * _sps().norm.ppf(1 - 1 / n_trials) + EULER_GAMMA * _sps().norm.ppf(1 - 1 / (n_trials * math.e))
     return float(math.sqrt(variance) * mix)
 
 

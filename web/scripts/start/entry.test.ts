@@ -410,7 +410,7 @@ describe.skipIf(WINDOWS)('scripts/start.mjs: dry run and doctor', () => {
     expect(r.status).toBe(0)
     expect(r.stdout).toContain('mode: FULL (venv python with fastapi, uvicorn and nq_lab)')
     expect(r.stdout).toContain(`start the backend: ${join(lab, '.venv', 'bin', 'python')} -m nq_terminal (in ${join(ROOT, 'backend')})`)
-    expect(r.stdout).toContain('env: NQT_PORT=8765 PYTHONUTF8=1 PYTHONIOENCODING=utf-8')
+    expect(r.stdout).toContain('env: NQT_PORT=8765 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 NQT_PREWARM=1')
     expect(r.stdout).toContain('build: skipped (--no-build)')
     expect(r.stdout).toContain('page: http://127.0.0.1:8765/')
   })

@@ -30,7 +30,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from nq_lab.config import IS_END
-from nq_lab.data import processed_path
 
 SERIES_FILE = re.compile(r"(?P<symbol>[A-Z0-9]{1,5}\.V\.0)_(?P<timeframe>1m|1d)_back(?:_(?P<variant>[a-z]+))?"
                          r"\.parquet")
@@ -89,6 +88,8 @@ class QaReportInfo:
 
 def processed_dir() -> Path:
     """The processed folder, derived from nq_lab's own path rule (never spelt out here)."""
+    from nq_lab.data import processed_path  # lazy: nq_lab.data imports the gate and pyarrow.dataset (D1.1)
+
     return processed_path().parent
 
 

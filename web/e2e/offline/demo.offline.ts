@@ -31,6 +31,11 @@ const A6_LINES: ReadonlyArray<readonly [line: string, code: string]> = [
   ['HELP', 'HELP'],
 ]
 
+/** Screens whose one alert is the demo's honest refusal of a part it does not hold (src/demo/routes.ts answers those routes 404). */
+const DEMO_REFUSALS: Record<string, string> = {
+  'volmanaged_v0 RET': 'Risk extras not available: not in the demo dataset',
+}
+
 /** An alert inside a panel: a screen that could not show its data. Dockview's own empty live region is outside the panels. */
 const alerts = (page: Page) => page.locator('[data-nqt-panel] [role="alert"]')
 
@@ -71,7 +76,13 @@ test.describe('in-page demo build', () => {
       const watch = await watchFlow(page)
       await openTerminal(page)
       await openScreen(page, line, code)
-      await expect(alerts(page)).toHaveCount(0)
+      const refusal = DEMO_REFUSALS[line]
+      if (refusal !== undefined) {
+        // The demo has no risk extras and says so (the routes answer 404 'not in the demo dataset'): the panel's one alert is that refusal.
+        await expect(alerts(page)).toHaveText([refusal])
+      } else {
+        await expect(alerts(page)).toHaveCount(0)
+      }
       await expectDemoClean(page, watch)
     })
   }

@@ -16,6 +16,10 @@ Services are built lazily, once per app, on the first data request (`get_service
 Input rules: `symbol` must match `^[A-Z0-9]{1,5}\\.V\\.0$` and name a series the catalog lists (else 422 or 404,
 before any serve); times are ISO 8601, naive values are UTC. A window outside the fence gives 403 with the gate's
 own message and the loader is never called (see `services/bars.py`).
+
+Result cache (D1.3). `/api/market/two-day` answers from `services/result_cache.py` through `cached_two_day`, which the
+HOME prewarm calls too. `services_for(state)` and `get_result_cache(state)` give any caller the app's services and
+cache from `app.state`; a cached body is returned as is (`json_response`), byte-equal to a fresh one.
 """
 from __future__ import annotations
 
@@ -23,13 +27,13 @@ import math
 import re
 import threading
 from dataclasses import dataclass, field
-from typing import Callable, Hashable, Literal
+from typing import Any, Callable, Hashable, Literal, Mapping
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi import Path as PathParam
+from fastapi.responses import Response
 
-from nq_lab import data as nq_data
 from nq_lab.config import IS_END, IS_START, ROOT
 from nq_lab.dtsmom_universe import TABLE
 from nq_lab.sessions import nyse_sessions
@@ -53,6 +57,7 @@ from nq_terminal.models.data import (
     Universe,
     UniverseRow,
 )
+from nq_terminal.services import result_cache
 from nq_terminal.services.bars import (
     CALLER,
     DEFAULT_MAX_POINTS,
@@ -63,6 +68,7 @@ from nq_terminal.services.bars import (
     ServeFn,
     SpanTooLong,
     UnknownSeries,
+    counted_serve,
     source_timeframe,
 )
 from nq_terminal.services.catalog import (
@@ -150,15 +156,22 @@ def default_catalog(settings: Settings) -> Catalog:
     return Catalog(folder=settings.data_root / processed_dir().relative_to(ROOT))
 
 
+def _gated_serve() -> ServeFn:
+    """The real gated serve, resolved when a service is built so the start path does not import `nq_lab.data`."""
+    from nq_lab import data as nq_data  # lazy (D1.1)
+
+    return nq_data.serve
+
+
 def build_services(settings: Settings, serve_fn: ServeFn | None, catalog: Catalog | None = None) -> DataServices:
-    serve = serve_fn if serve_fn is not None else (None if settings.fixture_mode else nq_data.serve)
+    serve = counted_serve(serve_fn) if serve_fn is not None else (None if settings.fixture_mode else _gated_serve())
     bars = BarService(serve, cache_bytes=settings.cache_bytes) if serve is not None else None
     return DataServices(bars=bars, catalog=catalog if catalog is not None else default_catalog(settings),
                         files=FileCache(roots=[settings.results_dir]), settings=settings)
 
 
-def get_services(request: Request) -> DataServices:
-    state = request.app.state
+def services_for(state: Any) -> DataServices:
+    """The data services of an app (built once, on first use); the prewarm calls this with `app.state`."""
     services = getattr(state, SERVICES_STATE, None)
     if services is not None:
         return services
@@ -171,6 +184,24 @@ def get_services(request: Request) -> DataServices:
             if services.bars is not None:
                 state.gate_stats = services.bars.stats
     return services
+
+
+def get_services(request: Request) -> DataServices:
+    return services_for(request.app.state)
+
+
+def get_result_cache(state: Any) -> result_cache.ResultCache:
+    """The app's result cache: on `state.settings.state_dir`, its served-series versions from the catalogue."""
+
+    def gate_version(symbol: str, timeframe: str, variant: str) -> tuple[int, int] | None:
+        return services_for(state).catalog.version(symbol, timeframe, variant)
+
+    return result_cache.cache_for(state, gate_version)
+
+
+def json_response(body: bytes) -> Response:
+    """A cached body as the response: the bytes the framework would have made from the model."""
+    return Response(content=body, media_type=result_cache.JSON_MEDIA_TYPE)
 
 
 def _bar_service(services: DataServices) -> BarService:
@@ -212,6 +243,36 @@ def default_window(timeframe: str, start: pd.Timestamp | None, end: pd.Timestamp
 def gate_info(service: BarService, years: tuple[int, ...], cached: bool) -> GateInfo:
     return GateInfo(caller=CALLER, served_years=sorted(set(years)), cached=cached,
                     reads_this_process=service.stats()[0])
+
+
+GATE_MEMBER = b',"gate":'
+
+
+def current_gate(body: bytes, service: BarService) -> bytes:
+    """A stored body (`gate` its last member) with the process-state fields of the gate made current: `cached` true
+    and `reads_this_process` as of now, what a fresh computation would say after the first one. The years served are
+    the stored ones. Only the tail is rewritten, so the rest of the bytes are the stored ones."""
+    cut = body.rfind(GATE_MEMBER)
+    if cut < 0 or not body.endswith(b"}"):
+        raise ValueError("a cached body must end with its gate block")
+    stored = GateInfo.model_validate_json(body[cut + len(GATE_MEMBER):-1])
+    gate = gate_info(service, tuple(stored.served_years), cached=True)
+    return body[:cut + len(GATE_MEMBER)] + gate.model_dump_json(by_alias=True).encode("utf-8") + b"}"
+
+
+def get_with_current_gate(state: Any, route: str, key: Mapping[str, Any], compute: Callable[[], bytes],
+                          service: BarService, **options: Any) -> bytes:
+    """`get` of the result cache for a body that carries a gate block. A body this call computed is served as it came
+    (it is the fresh one); a body from the cache (a hit, or one a concurrent request computed) has its gate made
+    current, so the gate describes this request and not the computation that made the entry."""
+    computed: list[bool] = []
+
+    def run() -> bytes:
+        computed.append(True)
+        return compute()
+
+    body = get_result_cache(state).get(route, key, run, **options)
+    return body if computed else current_gate(body, service)
 
 
 def bars_model(result: BarsResult, service: BarService, sessions: dict) -> Bars:
@@ -442,14 +503,7 @@ def two_day_row(result: BarsResult, symbol: str, sessions: list[pd.Timestamp]) -
                      prior_close=closes[0][-1] if closes[0] else None, last=closes[1][-1] if closes[1] else None)
 
 
-@router.get("/market/two-day", response_model=TwoDay)
-def market_two_day(
-    symbols: str | None = Query(None, max_length=MAX_SYMBOLS_CHARS, description="comma list; default all 27"),
-    services: DataServices = Depends(get_services),
-) -> TwoDay:
-    """MON's 2Day sparkline: hourly closes of the last two in-sample sessions for each asked universe symbol."""
-    wanted = _symbols(symbols)
-    service = _bar_service(services)
+def _two_day(services: DataServices, service: BarService, wanted: list[str]) -> TwoDay:
     sessions = last_sessions()
     lo = sessions[0] - SESSION_SHIFT
     rows, missing, years, cached = [], [], [], True
@@ -471,3 +525,24 @@ def market_two_day(
     return TwoDay(label=LABEL, basis=TWO_DAY_BASIS, bucket=TWO_DAY_TF,
                   sessions=[d.date().isoformat() for d in sessions], rows=rows, missing=missing,
                   gate=gate_info(service, tuple(years), cached))
+
+
+def cached_two_day(state: Any, query: Mapping[str, Any] | None = None) -> bytes:
+    """The serialised /api/market/two-day body through the result cache; the route and the prewarm both call it.
+
+    `query` may hold `symbols` (a comma list, or None for the whole universe). The symbols are checked and the price
+    source looked up before the cache is asked, so a refused request is never stored. The key is the resolved list."""
+    wanted = _symbols((query or {}).get("symbols"))
+    services = services_for(state)
+    service = _bar_service(services)
+    return get_with_current_gate(state, result_cache.ROUTE_TWO_DAY, {"symbols": wanted},
+                                 lambda: result_cache.json_body(_two_day(services, service, wanted)), service)
+
+
+@router.get("/market/two-day", response_model=TwoDay)
+def market_two_day(
+    request: Request,
+    symbols: str | None = Query(None, max_length=MAX_SYMBOLS_CHARS, description="comma list; default all 27"),
+) -> Response:
+    """MON's 2Day sparkline: hourly closes of the last two in-sample sessions for each asked universe symbol."""
+    return json_response(cached_two_day(request.app.state, {"symbols": symbols}))

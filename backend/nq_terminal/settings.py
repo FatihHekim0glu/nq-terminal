@@ -7,6 +7,10 @@ NQT_FIXTURE_DIR  folder laid out like the project root (results/, live/, ...) th
                  and refused when it is a UNC or device path, the project root or any parent of it (e.g.
                  C:\\), or a folder inside the project other than terminal/backend/tests/fixtures, so a
                  stray value cannot relabel real files as fixtures or reach the network.
+NQT_STATE_DIR    the backend's own state folder (default terminal/state, git-ignored); the result cache keeps
+                 its persisted bodies in <state>/cache. A given value is resolved strictly (it must be an existing
+                 folder) and refused when it is a UNC or device path, the project root or any parent of it, or a
+                 folder under results/, data/, live/ or backtests/output/. Tests point it at a temporary folder.
 """
 from __future__ import annotations
 
@@ -25,6 +29,9 @@ MAX_PORT = 65535
 TERMINAL_DIR = Path(__file__).resolve().parents[2]
 WEB_DIST = TERMINAL_DIR / "web" / "dist"
 FIXTURES_DIR = TERMINAL_DIR / "backend" / "tests" / "fixtures"
+TERMINAL_STATE_DIR = TERMINAL_DIR / "state"
+DEFAULT_STATE_DIR = TERMINAL_STATE_DIR  # read at call time, so the test harness can point it elsewhere
+RESEARCH_DIRS = (("results",), ("data",), ("live",), ("backtests", "output"))
 DEV_PORT = 5173  # Vite dev server (start.ps1 -Dev), which proxies /api
 
 
@@ -39,6 +46,7 @@ class Settings:
     cache_bytes: int = DEFAULT_CACHE_BYTES
     fixture_dir: Path | None = None
     web_dist: Path = WEB_DIST
+    state_dir: Path = TERMINAL_STATE_DIR
 
     @property
     def fixture_mode(self) -> bool:
@@ -80,13 +88,18 @@ def _int_in_range(env: Mapping[str, str], name: str, default: int, low: int, hig
     return value
 
 
+def _is_unc_or_device(text: str) -> bool:
+    """UNC (\\\\host\\share) and device (\\\\?\\, \\\\.\\) paths, with either separator."""
+    return text.replace("/", "\\").startswith("\\\\")
+
+
 def _fixture_dir(env: Mapping[str, str]) -> Path | None:
     """The fixture folder, resolved; refused when it could stand in for real files (see the module docstring)."""
     raw = env.get("NQT_FIXTURE_DIR")
     if raw is None or raw.strip() == "":
         return None
     text = raw.strip()
-    if text.replace("/", "\\").startswith("\\\\"):  # UNC (\\host\share) and device (\\?\, \\.\) paths
+    if _is_unc_or_device(text):
         raise SettingsError(f"NQT_FIXTURE_DIR may not be a UNC or device path: {text}")
     try:
         path = Path(text).resolve(strict=True)
@@ -102,6 +115,30 @@ def _fixture_dir(env: Mapping[str, str]) -> Path | None:
     return path
 
 
+def _state_dir(env: Mapping[str, str]) -> Path:
+    """NQT_STATE_DIR resolved strictly and checked (see the module docstring), else the default, which may not
+    exist yet (the jobs file and the result cache create it on their first write)."""
+    raw = env.get("NQT_STATE_DIR")
+    if raw is None or raw.strip() == "":
+        return Path(DEFAULT_STATE_DIR).resolve()
+    text = raw.strip()
+    if _is_unc_or_device(text):
+        raise SettingsError(f"NQT_STATE_DIR may not be a UNC or device path: {text}")
+    try:
+        path = Path(text).resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise SettingsError(f"NQT_STATE_DIR is not a folder: {text}") from exc
+    if not path.is_dir():
+        raise SettingsError(f"NQT_STATE_DIR is not a folder: {path}")
+    root = ROOT.resolve()
+    if root.is_relative_to(path):
+        raise SettingsError(f"NQT_STATE_DIR may not be the project root or one of its parents: {path}")
+    for parts in RESEARCH_DIRS:
+        if path.is_relative_to(root.joinpath(*parts)):
+            raise SettingsError(f"NQT_STATE_DIR may not be inside the research folder {'/'.join(parts)}: {path}")
+    return path
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     """Read the NQT_* variables (from `env`, or the process environment) and fail fast on bad values."""
     source = os.environ if env is None else env
@@ -110,4 +147,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         port=_int_in_range(source, "NQT_PORT", DEFAULT_PORT, 1, MAX_PORT),
         cache_bytes=_int_in_range(source, "NQT_CACHE_BYTES", DEFAULT_CACHE_BYTES, 1, None),
         fixture_dir=_fixture_dir(source),
+        state_dir=_state_dir(source),
     )

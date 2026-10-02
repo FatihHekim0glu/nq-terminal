@@ -20,13 +20,13 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from types import ModuleType
 from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
 
-from nq_lab.dtsmom_stats import LAGS as MONTHLY_NW_LAG
-from nq_terminal.analytics import distribution, drawdown, perf, relative, risk, rolling, validity
+from nq_terminal.analytics import distribution, drawdown, relative, risk, rolling, validity
 from nq_terminal.analytics._inputs import PERIODS_DAILY, PERIODS_MONTHLY
 from nq_terminal.analytics.series import SessionSeries
 from nq_terminal.models.analytics import (
@@ -63,10 +63,17 @@ from nq_terminal.models.analytics import (
 from nq_terminal.models.research import RegistryRow
 from nq_terminal.services.stored_alpha import clean_json
 
+
+def _perf() -> ModuleType:
+    """`nq_terminal.analytics.perf`, imported on first use so the start path does not load it (D1.1)."""
+    from nq_terminal.analytics import perf
+
+    return perf
+
+
 POST_HOC, PRE_REG = "[POST HOC]", "[PRE-REG]"
 BASIS_LABEL = {"A": "screen (arithmetic on a fixed K)", "B": "account (compounded from K)"}
 DAILY_LAGS = relative.NW_LAGS
-MONTHLY_LAGS = (MONTHLY_NW_LAG,)
 MT_TOLERANCE = 1e-12
 NO_CAPITAL = "not defined: one-contract P&L has no capital K"
 NO_BENCH = "no benchmark for this series"
@@ -150,7 +157,7 @@ def equity(r: pd.Series, s: SessionSeries) -> pd.Series:
     """PF1 on the series' basis; the cumulative P&L for a one-contract series."""
     if not s.on_capital:
         return pd.Series(np.cumsum(r.to_numpy()), index=r.index, dtype=float)
-    return perf.equity_curve(r, s.basis, s.capital if s.basis == "B" else 1.0)
+    return _perf().equity_curve(r, s.basis, s.capital if s.basis == "B" else 1.0)
 
 
 def _bench_curve(s: SessionSeries, curve) -> list[float | None] | None:
@@ -163,7 +170,11 @@ def _bench_curve(s: SessionSeries, curve) -> list[float | None] | None:
 
 
 def _lags(s: SessionSeries) -> tuple[int, ...]:
-    return DAILY_LAGS if s.periods == PERIODS_DAILY else MONTHLY_LAGS
+    if s.periods == PERIODS_DAILY:
+        return DAILY_LAGS
+    from nq_lab.dtsmom_stats import LAGS as monthly_nw_lag  # lazy: nq_lab.dtsmom_stats imports scipy (D1.1)
+
+    return (monthly_nw_lag,)
 
 
 # ---------------------------------------------------------------- sections
@@ -186,7 +197,7 @@ def perf_diff_unit(s: SessionSeries) -> str:
 
 def equity_view(s: SessionSeries, u: Units) -> EquityView:
     t, dates = axis(s.r.index)
-    diff = perf.performance_difference(s.r, s.bench, "A" if not s.on_capital else s.basis) if s.bench is not None \
+    diff = _perf().performance_difference(s.r, s.bench, "A" if not s.on_capital else s.basis) if s.bench is not None \
         else None
     return EquityView(unit=u.equity, t=t, date=dates, equity=nums(equity(s.r, s)),
                       bench=_bench_curve(s, lambda b: equity(b, s)), perf_diff=None if diff is None else nums(diff),
@@ -217,8 +228,8 @@ def rolling_view(s: SessionSeries, u: Units) -> RollingView:
                        window_unit=rolling.WINDOW_UNIT[s.periods], t=t, date=dates,
                        sharpe_short=nums(panel[f"sharpe_{short}"]), sharpe_long=nums(panel[f"sharpe_{long}"]),
                        vol_short=nums(panel[f"vol_{short}"]), vol_long=nums(panel[f"vol_{long}"]),
-                       full_sharpe=num(perf.sharpe(s.r, s.periods)),
-                       full_vol=num(perf.annual_volatility(s.r, s.periods)),
+                       full_sharpe=num(_perf().sharpe(s.r, s.periods)),
+                       full_vol=num(_perf().annual_volatility(s.r, s.periods)),
                        vol_extremes=[vol_extremes(panel[f"vol_{w}"], w, u.vol) for w in (short, long)],
                        sharpe_bands=[_band(s, w) for w in (short, long)],
                        band_label=rolling.BAND_LABEL)
@@ -257,7 +268,7 @@ def monthly_view(s: SessionSeries, u: Units) -> MonthlyView:
 def distribution_view(s: SessionSeries, u: Units) -> DistributionView:
     hist = distribution.histogram(s.r)
     qq = distribution.qq_plot(s.r)
-    table = perf.stats_table(s.r, s.basis, s.periods)
+    table = _perf().stats_table(s.r, s.basis, s.periods)
     return DistributionView(
         histogram=HistogramView(unit=u.level, bin_rule=hist["bin_rule"], edges=nums(hist["edges"]),
                                 counts=[int(c) for c in hist["counts"]],
@@ -336,8 +347,8 @@ def _tile(s: SessionSeries, key: str, label: str, value: Any, unit: str, *, tag:
 
 def _capital_tiles(s: SessionSeries, u: Units) -> list[Kpi]:
     on = s.on_capital
-    total = perf.total_return(s.r, s.basis) if on else None
-    cagr = perf.cagr(s.r, s.basis, s.periods) if on else None
+    total = _perf().total_return(s.r, s.basis) if on else None
+    cagr = _perf().cagr(s.r, s.basis, s.periods) if on else None
     return [_tile(s, "total_return", "Total return", total, u.level, note=None if on else NO_CAPITAL),
             _tile(s, "cagr", "CAGR", cagr, "fraction per year, compounded", note=None if on else NO_CAPITAL)]
 
@@ -348,11 +359,11 @@ def min_trl_note(reason: str) -> str | None:
 
 
 def _core_tiles(s: SessionSeries, u: Units, val: ValidityView) -> list[Kpi]:
-    calmar = perf.calmar(s.r, s.basis, s.periods) if s.on_capital else None
+    calmar = _perf().calmar(s.r, s.basis, s.periods) if s.on_capital else None
     trl = val.min_trl.at_zero
-    return [_tile(s, "volatility", "Volatility", perf.annual_volatility(s.r, s.periods), u.vol),
-            _tile(s, "sharpe", "Sharpe", perf.sharpe(s.r, s.periods), u.ratio),
-            _tile(s, "sortino", "Sortino", perf.sortino(s.r, s.periods), u.ratio),
+    return [_tile(s, "volatility", "Volatility", _perf().annual_volatility(s.r, s.periods), u.vol),
+            _tile(s, "sharpe", "Sharpe", _perf().sharpe(s.r, s.periods), u.ratio),
+            _tile(s, "sortino", "Sortino", _perf().sortino(s.r, s.periods), u.ratio),
             _tile(s, "calmar", "Calmar (full sample)", calmar, "ratio",
                   note=NO_CAPITAL if not s.on_capital else "no drawdown"),
             _tile(s, "max_drawdown", "Max drawdown", drawdown.max_drawdown(s.r, s.basis), u.drawdown),
@@ -419,9 +430,9 @@ def build(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = No
     u = units(s)
     rel = relative_view(s, u)
     val = validity_view(s, u, registry, sv7 or {})
-    lo, hi = perf.sharpe_ci(s.r, s.periods)
-    ci = SharpeInterval(basis=s.basis, unit=u.ratio, sharpe=num(perf.sharpe(s.r, s.periods)), lo=num(lo),
-                        hi=num(hi), z=perf.CI_Z, periods_per_year=s.periods)
+    lo, hi = _perf().sharpe_ci(s.r, s.periods)
+    ci = SharpeInterval(basis=s.basis, unit=u.ratio, sharpe=num(_perf().sharpe(s.r, s.periods)), lo=num(lo),
+                        hi=num(hi), z=_perf().CI_Z, periods_per_year=s.periods)
     return Analytics(**info(s, context), kpis=kpi_tiles(s, u, val, rel, stored), ci=ci, equity=equity_view(s, u),
                      drawdown=drawdown_view(s, u), drawdown_table=drawdown_rows(s), rolling=rolling_view(s, u),
                      monthly=monthly_view(s, u), distribution=distribution_view(s, u), risk=risk_view(s, u),
@@ -435,11 +446,11 @@ def home_panel(s: SessionSeries, context: Context, *, stored: StoredAlpha | None
     long = rolling.windows_for(s.periods)[1]
     eq, dd = equity_view(s, u), drawdown_view(s, u)
     present = s.bench.dropna() if s.bench is not None else None
-    bench_sharpe = perf.sharpe(present, s.periods) if present is not None else None
+    bench_sharpe = _perf().sharpe(present, s.periods) if present is not None else None
     return HomePanel(**info(s, context), equity_unit=u.equity, t=eq.t, date=eq.date, equity=eq.equity,
                      bench_equity=eq.bench, underwater=dd.dd, bench_underwater=dd.bench_dd,
                      rolling_sharpe=nums(rolling.rolling_sharpe(s.r, long, s.periods)), rolling_window=long,
                      rolling_unit=rolling.WINDOW_UNIT[s.periods], rolling_unit_label=u.ratio,
-                     drawdown_unit=dd.unit, sharpe=num(perf.sharpe(s.r, s.periods)), bench_sharpe=num(bench_sharpe),
+                     drawdown_unit=dd.unit, sharpe=num(_perf().sharpe(s.r, s.periods)), bench_sharpe=num(bench_sharpe),
                      max_drawdown=dd.max_drawdown, bench_max_drawdown=dd.bench_max_drawdown,
                      alpha=_alpha_tiles(s, relative_view(s, u), stored))

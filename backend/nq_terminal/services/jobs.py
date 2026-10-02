@@ -43,7 +43,7 @@ from nq_terminal.models.jobs import (
     run_config,
 )
 from nq_terminal.services.files import redact_local_paths
-from nq_terminal.settings import TERMINAL_DIR, Settings
+from nq_terminal.settings import Settings
 
 __all__ = ["DuplicateRunId", "Job", "JobError", "JobList", "JobService", "JobsOff", "QueueFull", "UnknownJob",
            "run_config", "service_for"]
@@ -343,4 +343,4 @@ def service_for(settings: Settings) -> JobService:
     """The app's service: real in a normal run, a disabled in-memory one in fixture mode (no process is ever started)."""
     if settings.fixture_mode:
         return JobService(root=settings.root, state_dir=None, python=sys.executable, enabled=False)
-    return JobService(root=settings.root, state_dir=TERMINAL_DIR / "state", python=sys.executable)
+    return JobService(root=settings.root, state_dir=settings.state_dir, python=sys.executable)

@@ -31,6 +31,11 @@ One door (ARCHITECTURE section 5). The service never reads a price file. Every f
 - Roll markers (ANALYTICS MV2): at every `instrument_id` change inside the window,
   `gap_pts = offset_t - offset_{t-1}` and `gap_pct = 100 * gap_pts / raw close of the previous bar`
   (`raw_c` in 1m files, `c_none` in 1d files).
+- Result cache hooks (services/result_cache.py): every frame handed out (a bar-cache hit included) is reported to the
+  result cache's recorder as a gated read keyed on the processed file's (mtime_ns, size) from the catalogue, and moves
+  the process-wide serve counter on entry and exit; every serve moves it before and after the call. `counted_serve`
+  wraps any serve function (`app.state.serve_fn`) the same way, so a gated read in any thread or pool is seen.
+- `nq_lab.oos_gate` is imported inside the functions that use it, not at module import (D1.1).
 """
 from __future__ import annotations
 
@@ -38,13 +43,13 @@ import math
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
-from nq_lab import oos_gate
 from nq_lab.config import IS_END, IS_START
+from nq_terminal.services import result_cache
 
 CALLER = "terminal"
 PRECHECK_REASON = "terminal display pre-check"
@@ -131,6 +136,8 @@ class BarsResult:
 
 def precheck_window(start: pd.Timestamp, end: pd.Timestamp) -> None:
     """The gate's own window rule, before any serve; raises GateRefusal with the gate's message."""
+    from nq_lab import oos_gate
+
     try:
         oos_gate.check_window(start, end, CALLER, PRECHECK_REASON)
     except oos_gate.OOSAccessError as exc:
@@ -274,6 +281,32 @@ def slice_window(frame: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) ->
     return frame.iloc[lo:hi]
 
 
+# ---------------------------------------------------------------- the serve counter
+
+
+class CountedServe:
+    """A serve function that moves the process-wide serve counter before and after every call (refusals too).
+    Other attributes reach the wrapped function, so a test double's call log stays readable."""
+
+    def __init__(self, serve_fn: ServeFn):
+        self.wrapped = serve_fn
+
+    def __call__(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
+        result_cache.bump_serve_count()
+        try:
+            return self.wrapped(*args, **kwargs)
+        finally:
+            result_cache.bump_serve_count()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.wrapped, name)
+
+
+def counted_serve(serve_fn: ServeFn) -> ServeFn:
+    """`serve_fn` wrapped by CountedServe (once: wrapping a wrapped serve returns it unchanged)."""
+    return serve_fn if isinstance(serve_fn, CountedServe) else CountedServe(serve_fn)
+
+
 # ---------------------------------------------------------------- the service
 
 
@@ -309,13 +342,17 @@ class BarService:
         if variant not in VARIANTS:
             raise ValueError(f"unknown variant {variant!r}")
         precheck_window(start, end)
-        parts, years, cached = [], [], True
-        for year, lo, hi in year_windows(source_tf, start, end):
-            part, hit = self._cached_serve(CacheKey(symbol, source_tf, variant, year, version), lo, hi)
-            cached = cached and hit
-            years.extend(range(IS_START.year, IS_END.year) if year is None else [year])
-            if not part.empty:
-                parts.append(part)
+        result_cache.record_gate_read(symbol, source_tf, variant, version)
+        try:
+            parts, years, cached = [], [], True
+            for year, lo, hi in year_windows(source_tf, start, end):
+                part, hit = self._cached_serve(CacheKey(symbol, source_tf, variant, year, version), lo, hi)
+                cached = cached and hit
+                years.extend(range(IS_START.year, IS_END.year) if year is None else [year])
+                if not part.empty:
+                    parts.append(part)
+        finally:
+            result_cache.bump_serve_count()
         frame = pd.concat(parts, ignore_index=True) if len(parts) > 1 else (parts[0] if parts else pd.DataFrame())
         return Served(frame=slice_window(frame, start, end), years=tuple(years), cached=cached)
 
@@ -360,6 +397,9 @@ class BarService:
             return frame, False
 
     def _load(self, key: CacheKey, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+        from nq_lab import oos_gate
+
+        result_cache.bump_serve_count()
         try:
             frame = self._serve(start, end, caller=CALLER, reason=serve_reason(key), symbol=key.symbol,
                                 timeframe=key.timeframe, variant=key.variant)
@@ -369,6 +409,8 @@ class BarService:
             if str(exc).startswith(EMPTY_SERVE_PREFIX):
                 return pd.DataFrame()
             raise GateRefusal(str(exc)) from exc
+        finally:
+            result_cache.bump_serve_count()
         with self._lock:
             self._reads += 1
         frame = frame.sort_values("ts", ignore_index=True) if not frame["ts"].is_monotonic_increasing else frame

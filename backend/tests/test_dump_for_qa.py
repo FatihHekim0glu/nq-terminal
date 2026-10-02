@@ -45,15 +45,20 @@ the terminal never writes there).
 from __future__ import annotations
 
 import ast
+import base64
+import hashlib
 import importlib
 import json
 import math
 import os
+import subprocess
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
 import pytest
+from fastapi.testclient import TestClient
 
 from nq_lab import sizing_stats
 from nq_lab.config import RESULTS, ROOT
@@ -591,6 +596,102 @@ def costs_doc(runs, run_id: str, loader=None) -> dict:
                    "missing": _missing([m for m in wanted if m not in ours], reason or "not returned")})
 
 
+# ---------- the cached slow routes: fresh, through the cache, and after a restart (D1.4) ----------
+
+CACHED_COMPARE = ("nt_dtsmom_v0_fixture_ts1", "nt_overnight_v0_fixture_open")
+CACHED_ROUTES = {  # name -> (path, query), all on the fixture lab (fixture mode, fake serve), every one a 200
+    "runs_compare": ("/api/runs/compare", {"ids": ",".join(CACHED_COMPARE)}),
+    "ledger": ("/api/ledger", {}),
+    "two_day": ("/api/market/two-day", {"symbols": "NQ.V.0,ZN.V.0"}),
+    "bootstrap_hypothesis": ("/api/analytics/hypothesis/volmanaged_v0/bootstrap", {"cost": 1}),
+    "bootstrap_run": ("/api/analytics/run/nt_overnight_v0_fixture_open/bootstrap", {}),
+    "deflated": ("/api/analytics/deflated", {}),
+    "seasonality_nq": ("/api/seasonality/instrument/NQ", {"start_year": 2020, "end_year": 2020}),
+    "spa": ("/api/analytics/spa", {}),
+}
+LOCAL, LOOPBACK = "http://127.0.0.1", ("127.0.0.1", 50000)
+
+
+def _fixture_client(state: Path, log_dir: Path) -> TestClient:
+    """The fixture app of the Playwright backend, with its own state folder (so its result cache is its own)."""
+    from fakes import FIXTURES
+    from fixture_app import create_fixture_app
+    env = {"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_STATE_DIR": str(state)}
+    return TestClient(create_fixture_app(env, log_dir=log_dir), base_url=LOCAL, client=LOOPBACK)
+
+
+def _cache_stats(client: TestClient):
+    """The counters of the app's `ResultCache` (kept on `app.state`, built by the first cached route), or None."""
+    from nq_terminal.services.result_cache import ResultCache
+    for value in vars(client.app.state)["_state"].values():
+        if isinstance(value, ResultCache):
+            return value.stats()
+    return None
+
+
+def take_bodies(client: TestClient) -> tuple[dict[str, bytes], dict[str, str]]:
+    """Every cached route once: its exact body bytes, and where the cache served it from (memory, disk or computed)."""
+    bodies, served = {}, {}
+    for name, (path, query) in CACHED_ROUTES.items():
+        before = _cache_stats(client)
+        response = client.get(path, params=query)
+        after = _cache_stats(client)
+        assert response.status_code == 200, f"{path}: {response.status_code} {response.text[:200]}"
+        assert after is not None, f"{path} did not go through the app's ResultCache (no cache on app.state)"
+        bodies[name] = response.content
+        hits, disk = (after.hits - (before.hits if before else 0)), (after.disk_hits - (before.disk_hits if before else 0))
+        served[name] = "disk" if disk > 0 else "memory" if hits > 0 else "computed"
+    return bodies, served
+
+
+def _b64(body: bytes) -> str:
+    return base64.b64encode(body).decode("ascii")
+
+
+def _sha(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
+
+
+def repeat_bodies(workdir: Path) -> dict[str, bytes]:
+    """Every cached route a second time with the cache switched off, on an app of its own: what a repeat of the
+    request answers at the moment the cached take is made (the gate block of two-day and SEAS counts the process's
+    reads, so a cold body and a repeat differ there)."""
+    from nq_terminal.services.result_cache import ResultCache
+    state, log_dir = workdir / "repeat-state", workdir / "repeat-gate-log"
+    state.mkdir(), log_dir.mkdir()
+    client = _fixture_client(state, log_dir)
+    with mock.patch.object(ResultCache, "get", lambda self, route, query, compute, **kw: compute()):
+        take_bodies(client)
+        return take_bodies(client)[0]
+
+
+def cached_routes_doc(workdir: Path) -> dict:
+    """The eight cached routes taken three times: cold (fresh), again on the same app (cache), and on a new app over
+    the same state folder (a restart); plus the repeat with the cache off that the cached take is checked against.
+    The state folders and the fake gate's logs are temporary."""
+    state, log_dir = workdir / "state", workdir / "gate-log"
+    state.mkdir(), log_dir.mkdir()
+    first = _fixture_client(state, log_dir)
+    fresh, fresh_from = take_bodies(first)
+    cached, cached_from = take_bodies(first)
+    restart, restart_from = take_bodies(_fixture_client(state, log_dir))
+    repeat = repeat_bodies(workdir)
+    ours = {}
+    for name in CACHED_ROUTES:
+        ours.update({f"{name}.cached_recorded": _sha(cached[name]), f"{name}.cache_hit": cached_from[name],
+                     f"{name}.restart_recorded": _sha(restart[name])})
+    return {"schema": SCHEMA, "kind": "cached", "case": "cached_routes_fixture",
+            "source": "the fixture app's eight cached routes (GET), cold, cached and after a restart",
+            "inputs": {"routes": list(CACHED_ROUTES),
+                       "queries": {n: {"path": path, "params": query} for n, (path, query) in CACHED_ROUTES.items()},
+                       "fresh": {n: _b64(b) for n, b in fresh.items()},
+                       "cached": {n: _b64(b) for n, b in cached.items()},
+                       "restart": {n: _b64(b) for n, b in restart.items()},
+                       "repeat": {n: _b64(b) for n, b in repeat.items()},
+                       "served_from": {"fresh": fresh_from, "cached": cached_from, "restart": restart_from}},
+            "values": {"ours": ours}, "missing": {}}
+
+
 def write_dumps(folder: Path, docs: list[dict]) -> list[Path]:
     checked_dump_dir(folder)  # before any mkdir or unlink
     folder.mkdir(parents=True, exist_ok=True)
@@ -599,7 +700,7 @@ def write_dumps(folder: Path, docs: list[dict]) -> list[Path]:
     paths = []
     for doc in docs:
         path = folder / f"{PREFIX}{doc['case']}.json"
-        compact = doc.get("kind") == "costs"  # fills and snapshot grids: thousands of rows
+        compact = doc.get("kind") in ("costs", "cached")  # snapshot grids and response bodies
         text = json.dumps(doc, separators=(",", ":")) if compact else json.dumps(doc, indent=1)
         path.write_text(text, encoding="utf-8")
         paths.append(path)
@@ -733,6 +834,10 @@ def test_a_missing_trades_or_exposure_module_is_recorded_as_a_reason(runs):
 
 
 def _check_bundle(back: dict) -> None:
+    if back["kind"] == "cached":
+        assert set(back["inputs"]["routes"]) == set(CACHED_ROUTES) and len(CACHED_ROUTES) == 8
+        assert all(v == "memory" for v in back["inputs"]["served_from"]["cached"].values())
+        return
     if back["kind"] == "market":
         assert len(back["inputs"]["r"]) == len(back["inputs"]["dates"]) == len(back["values"]["ours"]["rv"])
         return
@@ -750,11 +855,11 @@ def _check_bundle(back: dict) -> None:
             assert snaps["price_basis"].startswith("raw") == back["price_basis"].startswith("raw contract")
 
 
-def test_dump_for_qa_writes_every_case(inputs, runs):
+def test_dump_for_qa_writes_every_case(inputs, runs, tmp_path):
     docs = ([series_doc(inp) for inp in inputs] + [registry_doc()] + [trades_doc(runs, r) for r in TRADE_RUNS]
-            + [costs_doc(runs, r) for r in COST_RUNS] + [market_doc()])
+            + [costs_doc(runs, r) for r in COST_RUNS] + [market_doc(), cached_routes_doc(tmp_path)])
     paths = write_dumps(dump_dir(), docs)
-    assert len(paths) == len(inputs) + 1 + len(TRADE_RUNS) + len(COST_RUNS) + 1
+    assert len(paths) == len(inputs) + 1 + len(TRADE_RUNS) + len(COST_RUNS) + 2
     for path, doc in zip(paths, docs):
         back = json.loads(path.read_text(encoding="utf-8"))
         assert back["schema"] == SCHEMA and back["case"] == doc["case"]
@@ -763,5 +868,94 @@ def test_dump_for_qa_writes_every_case(inputs, runs):
             assert set(back["values"]["ours"]) | set(back["missing"]) >= {
                 m for ms in FAMILIES.values() for m in ms if applicable(m, next(i for i in inputs
                                                                                  if i.name == back["case"]))}
-        elif back["kind"] in ("trades", "costs", "market"):
+        elif back["kind"] in ("trades", "costs", "market", "cached"):
             _check_bundle(back)
+
+
+# ---------- the cached routes: the dump, and the cross-check's verdict on it ----------
+
+QA_PYTHON = QA_ROOT / ".venv" / "Scripts" / "python.exe"
+
+
+@pytest.fixture(scope="module")
+def cached_doc(tmp_path_factory) -> dict:
+    return cached_routes_doc(tmp_path_factory.mktemp("cached-dump"))
+
+
+def test_the_second_take_of_every_cached_route_is_a_cache_hit(cached_doc):
+    served = cached_doc["inputs"]["served_from"]
+    assert served["cached"] == {name: "memory" for name in CACHED_ROUTES}
+    assert set(served["fresh"].values()) == {"computed"}
+
+
+def test_every_cached_body_equals_the_fresh_body_byte_for_byte(cached_doc):
+    inputs = cached_doc["inputs"]
+    for name in CACHED_ROUTES:
+        assert base64.b64decode(inputs["cached"][name]) == base64.b64decode(inputs["repeat"][name]), name
+        assert base64.b64decode(inputs["restart"][name]) == base64.b64decode(inputs["fresh"][name]), name
+
+
+def test_only_the_gate_of_two_day_and_seasonality_differs_between_the_cold_and_the_cached_take(cached_doc):
+    inputs = cached_doc["inputs"]
+    differing = {name for name in CACHED_ROUTES
+                 if inputs["cached"][name] != inputs["fresh"][name]}
+    assert differing == {"two_day", "seasonality_nq"}
+    for name in differing:
+        cold, hit = (json.loads(base64.b64decode(inputs[take][name])) for take in ("fresh", "cached"))
+        assert {k: v for k, v in cold.items() if k != "gate"} == {k: v for k, v in hit.items() if k != "gate"}
+
+
+def test_a_route_on_the_disk_allow_list_is_served_from_disk_after_a_restart(cached_doc):
+    from nq_terminal.services.result_cache import PERSIST_ROUTES
+    persisted = {name for name, (path, _) in CACHED_ROUTES.items() if path in PERSIST_ROUTES}
+    restarted = cached_doc["inputs"]["served_from"]["restart"]
+    assert persisted and all(restarted[name] == "disk" for name in persisted), restarted
+    assert all(restarted[name] != "disk" for name in CACHED_ROUTES if name not in persisted), restarted
+
+
+def test_the_dump_uses_a_temporary_state_folder_not_the_terminal_state(tmp_path):
+    from nq_terminal.settings import TERMINAL_STATE_DIR
+    state = tmp_path / "state"
+    state.mkdir()
+    assert not state.resolve().is_relative_to(TERMINAL_STATE_DIR.resolve())
+    assert _fixture_client(state, tmp_path).app.state.settings.state_dir == state.resolve()
+
+
+def _crosscheck(folder: Path) -> subprocess.CompletedProcess:
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.run([str(QA_PYTHON), "-m", "crosscheck", "--dir", str(folder), "--strict"], cwd=QA_ROOT,
+                          capture_output=True, text=True, timeout=600, creationflags=flags)
+
+
+def _perturbed(doc: dict, kind: str | None) -> dict:
+    """A copy of the dump with the ledger's cached or restart body one byte longer, or the terminal's recorded
+    digest or cache flag of it wrong (`kind` None: nothing changed)."""
+    copy = json.loads(json.dumps(doc))
+    if kind in ("cached", "restart"):
+        copy["inputs"][kind]["ledger"] = _b64(base64.b64decode(copy["inputs"][kind]["ledger"]) + b" ")
+    elif kind == "cached_recorded":
+        copy["values"]["ours"]["ledger.cached_recorded"] = "0" * 64
+    elif kind == "cache_hit":
+        copy["values"]["ours"]["ledger.cache_hit"] = "computed"
+    elif kind == "stale_gate":  # the hit of a route with a process-state gate answers with the cold take's gate
+        copy["inputs"]["cached"]["two_day"] = copy["inputs"]["fresh"]["two_day"]
+    return copy
+
+
+@pytest.mark.skipif(not QA_PYTHON.is_file(), reason="the QA environment (terminal/qa/.venv) is not built")
+@pytest.mark.parametrize("kind, expected_exit", [
+    (None, 0),  # the real dump: every route byte-equal
+    ("cached", 1),  # born failing: a cached body one byte off
+    ("restart", 1),  # a body served after the restart one byte off
+    ("cached_recorded", 1),  # a wrong digest recorded by the terminal
+    ("cache_hit", 1),  # the second take was not a cache hit
+    ("stale_gate", 1)])  # a hit that kept the first computation's gate block
+def test_the_crosscheck_compares_the_cached_dump_byte_for_byte(cached_doc, tmp_path, kind, expected_exit):
+    write_dumps(tmp_path / "dumps", [_perturbed(cached_doc, kind)])
+    done = _crosscheck(tmp_path / "dumps")
+    assert done.returncode == expected_exit, done.stdout[-3000:] + done.stderr[-1000:]
+    if kind is None:
+        assert "FAIL 0" in done.stdout and "SKIP 0" in done.stdout
+    else:
+        route = "two_day" if kind == "stale_gate" else "ledger"
+        assert any(line.lstrip().startswith("FAIL") and route in line for line in done.stdout.splitlines())
