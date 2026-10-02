@@ -1,0 +1,64 @@
+{
+ "mode": "both-dec",
+ "run": 1,
+ "cpuBefore": null,
+ "spawnToFirstFrameMs": 442,
+ "milestones": {
+  "main": 13,
+  "app_creator": 438,
+  "first_frame": 442,
+  "idle_done": 4497,
+  "work_start": 4497,
+  "work_mid": 8520,
+  "done": 13510
+ },
+ "memIdle": {
+  "n": 1,
+  "ws": 129638400,
+  "wsPrivate": 80220160,
+  "privateBytes": 326602752,
+  "cpuTotalPct": 65,
+  "procs": {
+   "pid": 28988,
+   "name": "nq-native-egui",
+   "ws": 129638400,
+   "wsPrivate": 80220160,
+   "privateBytes": 326602752
+  }
+ },
+ "memWork": {
+  "n": 1,
+  "ws": 131829760,
+  "wsPrivate": 82354176,
+  "privateBytes": 328384512,
+  "cpuTotalPct": 70,
+  "procs": {
+   "pid": 28988,
+   "name": "nq-native-egui",
+   "ws": 131829760,
+   "wsPrivate": 82354176,
+   "privateBytes": 328384512
+  }
+ },
+ "cpuTotalDuringWork": 70,
+ "app": {
+  "mode": "both-dec",
+  "frames": 111,
+  "interval_ms": {
+   "median": 63.711,
+   "p95": 222.338,
+   "p99": 268.119,
+   "max": 382.979
+  },
+  "ui_cpu_ms": {
+   "median": 1.582,
+   "p95": 3.098,
+   "max": 5.021
+  },
+  "sorts": 1,
+  "sort_ms_median": 0.044,
+  "data_gen_ms": 2.6,
+  "setup_to_first_frame_ms": 0,
+  "main_epoch": 1790902168170
+ }
+}

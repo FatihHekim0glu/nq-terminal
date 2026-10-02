@@ -1,0 +1,67 @@
+{
+ "mode": "both-dec",
+ "run": 12,
+ "cpuBefore": null,
+ "spawnToFirstFrameMs": 1005,
+ "milestones": {
+  "main": 17,
+  "offscreen_ready": 955,
+  "first_frame": 1005,
+  "idle_done": 5006,
+  "work_start": 5006,
+  "work_mid": 9151,
+  "done": 14161
+ },
+ "memIdle": {
+  "n": 1,
+  "ws": 136568832,
+  "wsPrivate": 88571904,
+  "privateBytes": 333049856,
+  "cpuTotalPct": 34,
+  "procs": {
+   "pid": 61864,
+   "name": "nq-native-egui",
+   "ws": 136568832,
+   "wsPrivate": 88571904,
+   "privateBytes": 333049856
+  }
+ },
+ "memWork": {
+  "n": 1,
+  "ws": 136396800,
+  "wsPrivate": 88342528,
+  "privateBytes": 328142848,
+  "cpuTotalPct": 18,
+  "procs": {
+   "pid": 61864,
+   "name": "nq-native-egui",
+   "ws": 136396800,
+   "wsPrivate": 88342528,
+   "privateBytes": 328142848
+  }
+ },
+ "cpuTotalDuringWork": 18,
+ "app": {
+  "mode": "both-dec",
+  "offscreen": true,
+  "adapter": "NVIDIA GeForce RTX 4080 SUPER Vulkan",
+  "size": "2000x1250@1.25",
+  "frames": 127,
+  "first_frame_ms": 49.6,
+  "frame_ms": {
+   "median": 62.638,
+   "p95": 302.795,
+   "p99": 316.959,
+   "max": 461.97
+  },
+  "cpu_build_ms": {
+   "median": 1.819,
+   "p95": 79.239,
+   "max": 84.3
+  },
+  "sorts": 1,
+  "sort_ms_median": 0.035,
+  "data_gen_ms": 4.1,
+  "init_ms": 13205
+ }
+}

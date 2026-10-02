@@ -1,0 +1,329 @@
+{
+ "target": "edge",
+ "run": 5,
+ "startedAtIso": "2026-10-02T00:37:53.541Z",
+ "load": {
+  "cpuBefore": 18,
+  "cpuAfter": 16
+ },
+ "rootPid": 57168,
+ "tCdpReadyMs": 276,
+ "homeReady": true,
+ "home": {
+  "origin": 1790901475062.4,
+  "frame": 460.69999999552965,
+  "ready": 2251.2999999970198,
+  "settled": 2251.39999999851,
+  "frameT": null,
+  "readyT": null,
+  "settledT": null,
+  "fcp": 320,
+  "vis": "visible",
+  "dpr": 1,
+  "w": 1600,
+  "h": 1000,
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"
+ },
+ "coldStartToHomeReadyMs": 2568,
+ "navStartAfterSpawnMs": 316,
+ "memOpen": {
+  "n": 17,
+  "ws": 1029545984,
+  "wsPrivate": 355782656,
+  "privateBytes": 623902720,
+  "cpuTotalPct": 32,
+  "procs": [
+   {
+    "pid": 44540,
+    "name": "identity_helper",
+    "ws": 43094016,
+    "wsPrivate": 5672960,
+    "privateBytes": 11694080
+   },
+   {
+    "pid": 57168,
+    "name": "msedge#18",
+    "ws": 197513216,
+    "wsPrivate": 60993536,
+    "privateBytes": 72552448
+   },
+   {
+    "pid": 46364,
+    "name": "msedge#19",
+    "ws": 10784768,
+    "wsPrivate": 1720320,
+    "privateBytes": 2707456
+   },
+   {
+    "pid": 48508,
+    "name": "msedge#20",
+    "ws": 108077056,
+    "wsPrivate": 51998720,
+    "privateBytes": 193638400
+   },
+   {
+    "pid": 62636,
+    "name": "msedge#21",
+    "ws": 48492544,
+    "wsPrivate": 12025856,
+    "privateBytes": 17641472
+   },
+   {
+    "pid": 59860,
+    "name": "msedge#22",
+    "ws": 19922944,
+    "wsPrivate": 3149824,
+    "privateBytes": 9048064
+   },
+   {
+    "pid": 49484,
+    "name": "msedge#23",
+    "ws": 169684992,
+    "wsPrivate": 104206336,
+    "privateBytes": 116166656
+   },
+   {
+    "pid": 52428,
+    "name": "msedge#24",
+    "ws": 49090560,
+    "wsPrivate": 12697600,
+    "privateBytes": 21884928
+   },
+   {
+    "pid": 15208,
+    "name": "msedge#25",
+    "ws": 48820224,
+    "wsPrivate": 12886016,
+    "privateBytes": 22085632
+   },
+   {
+    "pid": 49760,
+    "name": "msedge#26",
+    "ws": 47173632,
+    "wsPrivate": 12525568,
+    "privateBytes": 21352448
+   },
+   {
+    "pid": 20792,
+    "name": "msedge#27",
+    "ws": 47132672,
+    "wsPrivate": 12505088,
+    "privateBytes": 21319680
+   },
+   {
+    "pid": 63348,
+    "name": "msedge#28",
+    "ws": 64462848,
+    "wsPrivate": 17739776,
+    "privateBytes": 27492352
+   },
+   {
+    "pid": 35820,
+    "name": "msedge#29",
+    "ws": 50360320,
+    "wsPrivate": 14151680,
+    "privateBytes": 23531520
+   },
+   {
+    "pid": 28988,
+    "name": "msedge#30",
+    "ws": 49385472,
+    "wsPrivate": 17391616,
+    "privateBytes": 28094464
+   },
+   {
+    "pid": 58292,
+    "name": "msedge#31",
+    "ws": 35885056,
+    "wsPrivate": 10174464,
+    "privateBytes": 18612224
+   },
+   {
+    "pid": 37512,
+    "name": "msedge#32",
+    "ws": 18128896,
+    "wsPrivate": 2629632,
+    "privateBytes": 7438336
+   },
+   {
+    "pid": 52372,
+    "name": "msedge#33",
+    "ws": 21536768,
+    "wsPrivate": 3313664,
+    "privateBytes": 8642560
+   }
+  ]
+ },
+ "screens": [
+  {
+   "line": "LEDG",
+   "titled": true,
+   "settled": true,
+   "ms": 355,
+   "panels": 1,
+   "nodes": 690,
+   "canvases": 0,
+   "heap": 23338818,
+   "memPrivMB": 354,
+   "memWsMB": 998,
+   "nproc": 17
+  },
+  {
+   "line": "OOS",
+   "titled": true,
+   "settled": true,
+   "ms": 333,
+   "panels": 1,
+   "nodes": 1343,
+   "canvases": 0,
+   "heap": 18853019,
+   "memPrivMB": 353,
+   "memWsMB": 999,
+   "nproc": 17
+  },
+  {
+   "line": "NQ GP 1d",
+   "titled": true,
+   "settled": true,
+   "ms": 577,
+   "panels": 1,
+   "nodes": 500,
+   "canvases": 15,
+   "heap": 23340163,
+   "memPrivMB": 326,
+   "memWsMB": 876,
+   "nproc": 15
+  },
+  {
+   "line": "volmanaged_v0 EQ",
+   "titled": true,
+   "settled": true,
+   "ms": 2487,
+   "panels": 1,
+   "nodes": 573,
+   "canvases": 3,
+   "heap": 25237312,
+   "memPrivMB": 300,
+   "memWsMB": 740,
+   "nproc": 11
+  },
+  {
+   "line": "LIVE",
+   "titled": true,
+   "settled": true,
+   "ms": 366,
+   "panels": 2,
+   "nodes": 586,
+   "canvases": 0,
+   "heap": 21825189,
+   "memPrivMB": 296,
+   "memWsMB": 737,
+   "nproc": 11
+  },
+  {
+   "line": "27F MON",
+   "titled": true,
+   "settled": true,
+   "ms": 131,
+   "panels": 1,
+   "nodes": 1080,
+   "canvases": 0,
+   "heap": 21932250,
+   "memPrivMB": 294,
+   "memWsMB": 736,
+   "nproc": 11
+  },
+  {
+   "line": "REG",
+   "titled": true,
+   "settled": true,
+   "ms": 1120,
+   "panels": 2,
+   "nodes": 1936,
+   "canvases": 2,
+   "heap": 21988929,
+   "memPrivMB": 300,
+   "memWsMB": 749,
+   "nproc": 11
+  },
+  {
+   "line": "HOME",
+   "titled": true,
+   "settled": true,
+   "ms": 126,
+   "panels": 4,
+   "nodes": 2089,
+   "canvases": 18,
+   "heap": 38872136,
+   "memPrivMB": 292,
+   "memWsMB": 697,
+   "nproc": 9
+  }
+ ],
+ "memAfter": {
+  "n": 8,
+  "ws": 707903488,
+  "wsPrivate": 302379008,
+  "privateBytes": 522321920,
+  "cpuTotalPct": 16,
+  "procs": [
+   {
+    "pid": 57168,
+    "name": "msedge#6",
+    "ws": 198131712,
+    "wsPrivate": 62533632,
+    "privateBytes": 73814016
+   },
+   {
+    "pid": 46364,
+    "name": "msedge#7",
+    "ws": 19689472,
+    "wsPrivate": 2191360,
+    "privateBytes": 3559424
+   },
+   {
+    "pid": 48508,
+    "name": "msedge#8",
+    "ws": 111456256,
+    "wsPrivate": 55267328,
+    "privateBytes": 220356608
+   },
+   {
+    "pid": 62636,
+    "name": "msedge#9",
+    "ws": 50003968,
+    "wsPrivate": 13164544,
+    "privateBytes": 18960384
+   },
+   {
+    "pid": 59860,
+    "name": "msedge#10",
+    "ws": 19988480,
+    "wsPrivate": 3166208,
+    "privateBytes": 9072640
+   },
+   {
+    "pid": 49484,
+    "name": "msedge#11",
+    "ws": 211525632,
+    "wsPrivate": 141438976,
+    "privateBytes": 153649152
+   },
+   {
+    "pid": 63348,
+    "name": "msedge#12",
+    "ws": 62181376,
+    "wsPrivate": 15429632,
+    "privateBytes": 25206784
+   },
+   {
+    "pid": 58292,
+    "name": "msedge#13",
+    "ws": 34926592,
+    "wsPrivate": 9187328,
+    "privateBytes": 17702912
+   }
+  ]
+ },
+ "errors": null
+}

@@ -1,0 +1,17 @@
+[package]
+name = "nq-native-egui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.36"
+egui_plot = "0.37"
+egui_extras = "0.36"
+pollster = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,1 @@
+{"mode":"both-dec","frames":112,"interval_ms":{"median":63.711,"p95":222.338,"p99":268.119,"max":382.979},"ui_cpu_ms":{"median":1.582,"p95":3.098,"max":5.021},"sorts":1,"sort_ms_median":0.044,"data_gen_ms":2.6,"setup_to_first_frame_ms":0,"main_epoch":1790902168170}

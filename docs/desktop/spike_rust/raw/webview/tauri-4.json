@@ -1,0 +1,259 @@
+{
+ "target": "tauri",
+ "run": 4,
+ "startedAtIso": "2026-10-02T00:35:54.321Z",
+ "load": {
+  "cpuBefore": 33,
+  "cpuAfter": 35
+ },
+ "rootPid": 53332,
+ "tCdpReadyMs": 324,
+ "homeReady": true,
+ "home": {
+  "origin": 1790901355951.5,
+  "frame": 166.29999999701977,
+  "ready": 1433.5999999940395,
+  "settled": 1433.5999999940395,
+  "frameT": null,
+  "readyT": null,
+  "settledT": null,
+  "fcp": 164,
+  "vis": "visible",
+  "dpr": 1.25,
+  "w": 1600,
+  "h": 1000,
+  "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"
+ },
+ "coldStartToHomeReadyMs": 1743,
+ "navStartAfterSpawnMs": 310,
+ "milestones": {
+  "main": 20,
+  "setup": 29,
+  "window_built": 314,
+  "page_started": 321,
+  "page_finished": 361
+ },
+ "memOpen": {
+  "n": 7,
+  "ws": 501870592,
+  "wsPrivate": 200376320,
+  "privateBytes": 455757824,
+  "cpuTotalPct": 29,
+  "procs": [
+   {
+    "pid": 55368,
+    "name": "msedgewebview2#14",
+    "ws": 131964928,
+    "wsPrivate": 33992704,
+    "privateBytes": 43892736
+   },
+   {
+    "pid": 43872,
+    "name": "msedgewebview2#15",
+    "ws": 11620352,
+    "wsPrivate": 1671168,
+    "privateBytes": 2621440
+   },
+   {
+    "pid": 63328,
+    "name": "msedgewebview2#16",
+    "ws": 97951744,
+    "wsPrivate": 44634112,
+    "privateBytes": 265580544
+   },
+   {
+    "pid": 56980,
+    "name": "msedgewebview2#17",
+    "ws": 46608384,
+    "wsPrivate": 10031104,
+    "privateBytes": 15511552
+   },
+   {
+    "pid": 6796,
+    "name": "msedgewebview2#18",
+    "ws": 21393408,
+    "wsPrivate": 3026944,
+    "privateBytes": 7843840
+   },
+   {
+    "pid": 41744,
+    "name": "msedgewebview2#19",
+    "ws": 170418176,
+    "wsPrivate": 104394752,
+    "privateBytes": 116621312
+   },
+   {
+    "pid": 53332,
+    "name": "nq-shell",
+    "ws": 21913600,
+    "wsPrivate": 2625536,
+    "privateBytes": 3686400
+   }
+  ]
+ },
+ "screens": [
+  {
+   "line": "LEDG",
+   "titled": true,
+   "settled": true,
+   "ms": 349,
+   "panels": 1,
+   "nodes": 690,
+   "canvases": 0,
+   "heap": 23309453,
+   "memPrivMB": 201,
+   "memWsMB": 491,
+   "nproc": 7
+  },
+  {
+   "line": "OOS",
+   "titled": true,
+   "settled": true,
+   "ms": 342,
+   "panels": 1,
+   "nodes": 1343,
+   "canvases": 0,
+   "heap": 18919474,
+   "memPrivMB": 197,
+   "memWsMB": 489,
+   "nproc": 7
+  },
+  {
+   "line": "NQ GP 1d",
+   "titled": true,
+   "settled": true,
+   "ms": 514,
+   "panels": 1,
+   "nodes": 500,
+   "canvases": 15,
+   "heap": 23538090,
+   "memPrivMB": 203,
+   "memWsMB": 495,
+   "nproc": 7
+  },
+  {
+   "line": "volmanaged_v0 EQ",
+   "titled": true,
+   "settled": true,
+   "ms": 2350,
+   "panels": 1,
+   "nodes": 573,
+   "canvases": 3,
+   "heap": 27515815,
+   "memPrivMB": 221,
+   "memWsMB": 515,
+   "nproc": 7
+  },
+  {
+   "line": "LIVE",
+   "titled": true,
+   "settled": true,
+   "ms": 355,
+   "panels": 2,
+   "nodes": 586,
+   "canvases": 0,
+   "heap": 22335437,
+   "memPrivMB": 219,
+   "memWsMB": 513,
+   "nproc": 7
+  },
+  {
+   "line": "27F MON",
+   "titled": true,
+   "settled": true,
+   "ms": 128,
+   "panels": 1,
+   "nodes": 1080,
+   "canvases": 0,
+   "heap": 20769829,
+   "memPrivMB": 220,
+   "memWsMB": 514,
+   "nproc": 7
+  },
+  {
+   "line": "REG",
+   "titled": true,
+   "settled": true,
+   "ms": 1221,
+   "panels": 2,
+   "nodes": 1936,
+   "canvases": 2,
+   "heap": 22314452,
+   "memPrivMB": 222,
+   "memWsMB": 525,
+   "nproc": 7
+  },
+  {
+   "line": "HOME",
+   "titled": true,
+   "settled": true,
+   "ms": 841,
+   "panels": 4,
+   "nodes": 2089,
+   "canvases": 18,
+   "heap": 39428471,
+   "memPrivMB": 239,
+   "memWsMB": 541,
+   "nproc": 7
+  }
+ ],
+ "memAfter": {
+  "n": 7,
+  "ws": 567136256,
+  "wsPrivate": 249585664,
+  "privateBytes": 510320640,
+  "cpuTotalPct": 35,
+  "procs": [
+   {
+    "pid": 55368,
+    "name": "msedgewebview2#14",
+    "ws": 132526080,
+    "wsPrivate": 33345536,
+    "privateBytes": 43094016
+   },
+   {
+    "pid": 43872,
+    "name": "msedgewebview2#15",
+    "ws": 20574208,
+    "wsPrivate": 2191360,
+    "privateBytes": 3551232
+   },
+   {
+    "pid": 63328,
+    "name": "msedgewebview2#16",
+    "ws": 112664576,
+    "wsPrivate": 58478592,
+    "privateBytes": 285102080
+   },
+   {
+    "pid": 56980,
+    "name": "msedgewebview2#17",
+    "ws": 46538752,
+    "wsPrivate": 9715712,
+    "privateBytes": 15196160
+   },
+   {
+    "pid": 6796,
+    "name": "msedgewebview2#18",
+    "ws": 21594112,
+    "wsPrivate": 3112960,
+    "privateBytes": 7933952
+   },
+   {
+    "pid": 41744,
+    "name": "msedgewebview2#19",
+    "ws": 211353600,
+    "wsPrivate": 140152832,
+    "privateBytes": 151826432
+   },
+   {
+    "pid": 53332,
+    "name": "nq-shell",
+    "ws": 21884928,
+    "wsPrivate": 2588672,
+    "privateBytes": 3616768
+   }
+  ]
+ },
+ "errors": null
+}
