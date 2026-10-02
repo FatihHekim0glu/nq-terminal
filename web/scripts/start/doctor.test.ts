@@ -24,6 +24,8 @@ function facts(over: Partial<Facts> = {}): Facts {
     contract: 'in sync',
     fixtureDir: null,
     buildNeeded: false,
+    stateDir: '/lab/terminal/state',
+    lock: { state: 'none', port: null },
     ...over,
   }
 }
@@ -59,6 +61,7 @@ describe('doctorLines', () => {
       browser: { bundled: true, chrome: true },
       ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' },
       buildNeeded: true,
+      lock: { state: 'live', port: 8765 },
     })
     expect(lines(f)).toEqual([
       'ok    node 24.21.0 at /n/bin/node (needs 24 or later)',
@@ -68,9 +71,10 @@ describe('doctorLines', () => {
       'ok    venv python at /lab/.venv/bin/python',
       'ok    fastapi and uvicorn import in the venv',
       'ok    nq_lab imports in the venv',
-      'ok    port 8765 answers as the terminal (./start.sh opens it and starts nothing)',
+      'ok    port 8765 answers as the terminal (./start.sh attaches to it with a one-time link and starts nothing)',
       'ok    port 5173 is free (Vite dev server)',
       'ok    port 5174 is free (demo)',
+      'ok    lock in /lab/terminal/state names a live backend on port 8765 that proved who it is (./start.sh attaches to it)',
       'ok    API types are in sync with the contract',
       'ok    web/dist is older than the sources (a full start rebuilds it)',
       'mode: FULL (venv python with fastapi, uvicorn and nq_lab). Next: ./start.sh',
@@ -107,6 +111,23 @@ describe('doctorLines', () => {
     expect(out).toContain('FAIL  fastapi and uvicorn cannot be imported by the venv python. Fix: run uv sync in /lab')
     expect(out).toContain('ok    nq_lab imports in the venv')
     expect(out[out.length - 1]).toBe('mode: DEMO ONLY (fastapi or uvicorn missing in the venv). Next: ./start.sh')
+  })
+
+  it('says nothing about the lock when there is none, and words each state when there is one', () => {
+    expect(lines(facts()).some((l) => l.includes('lock'))).toBe(false)
+    const state = (lock: Facts['lock']): string[] => lines(facts({ lock })).filter((l) => l.includes('lock in '))
+    expect(state({ state: 'stale', port: 8765 })).toEqual(['ok    lock in /lab/terminal/state is stale (its backend is gone); the next start replaces it'])
+    expect(state({ state: 'unproven', port: 53117 })).toEqual([
+      'FAIL  lock in /lab/terminal/state names a backend on port 53117 that does not prove who it is. Fix: stop it, or set NQT_STATE_DIR to another folder',
+    ])
+    expect(state({ state: 'untrusted', port: 8765 })).toEqual([
+      'FAIL  lock in /lab/terminal/state is not owner-only, so it is not used. Fix: remove the file if you did not expect it',
+    ])
+  })
+
+  it('calls a terminal on 8765 without a lock an older version that has to be closed', () => {
+    const out = lines(facts({ ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } }))
+    expect(out).toContain('FAIL  port 8765 answers as a terminal that has no lock or token (an older version). Fix: close it, then run ./start.sh')
   })
 
   it('reports a port taken by another program with the way out', () => {

@@ -54,7 +54,7 @@ from nq_terminal.services.events import (
     pick_events,
     unit_for,
 )
-from nq_terminal.services.files import FileCache
+from nq_terminal.services.files import file_cache
 from nq_terminal.services.sessions import Exclusions
 
 router = APIRouter(prefix="/api/events", tags=["events"], responses=error_responses(404, 422, 403, 502, 503))
@@ -72,7 +72,7 @@ def _calendar(request: Request) -> Calendar:
     with _FILES_LOCK:
         files = getattr(state, FILES_STATE, None)
         if files is None:
-            files = FileCache(roots=[state.settings.data_root])
+            files = file_cache(state.settings.file_cache_bytes, roots=[state.settings.data_root])
             setattr(state, FILES_STATE, files)
     try:
         return load_calendar(files, state.settings.data_root)

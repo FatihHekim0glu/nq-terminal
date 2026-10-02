@@ -24,6 +24,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 BOOK = "volmanaged_paper_journal.jsonl"
@@ -32,7 +34,7 @@ ID_LIKE = re.compile(r"(?<![A-Z0-9])(DU|DF|U|F)[A-Z]{0,3}\d{5,10}(?![0-9])")
 
 
 def client(root: Path) -> TestClient:
-    return TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
 
 
 def _root_with(tmp_path: Path, files: dict[str, str]) -> Path:

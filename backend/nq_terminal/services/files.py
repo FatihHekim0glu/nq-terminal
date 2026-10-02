@@ -297,6 +297,10 @@ class FileCache:
         self._bytes = self._hits = self._misses = self._retries = 0
         self._lock = threading.Lock()
 
+    @property
+    def max_bytes(self) -> int:
+        return self._max_bytes
+
     # public API
 
     def read_json(self, path: Path) -> Any:
@@ -413,3 +417,9 @@ class FileCache:
             while len(self._entries) > self._max_entries or self._bytes > self._max_bytes:
                 _, old = self._entries.popitem(last=False)
                 self._bytes -= old.size
+
+
+def file_cache(cap: int | None, *, roots: Iterable[Path], max_bytes: int = DEFAULT_MAX_BYTES, **options: Any) -> FileCache:
+    """A FileCache that honours the settings' cap (`settings.file_cache_bytes`: 128 MiB in desktop mode, None in the
+    browser terminal). A cache that asks for less than the cap keeps its own smaller size."""
+    return FileCache(roots=roots, max_bytes=min(max_bytes, cap) if cap else max_bytes, **options)

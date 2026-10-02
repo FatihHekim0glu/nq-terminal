@@ -18,6 +18,8 @@ from nq_terminal.app import create_app
 from nq_terminal.services.fence import after_fence, fence_filter
 from nq_terminal.settings import load_settings
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 DATE = re.compile(r"^(\d{4})-\d{2}-\d{2}")
@@ -70,7 +72,7 @@ def test_fence_filter_drops_post_fence_entries_born_failing():
 
 @pytest.fixture(scope="module")
 def real_client() -> TestClient:
-    return TestClient(create_app(load_settings({})), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings({})), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.mark.parametrize("name", REPORTS)

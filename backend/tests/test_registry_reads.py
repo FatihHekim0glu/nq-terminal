@@ -17,13 +17,15 @@ from nq_terminal.settings import load_settings
 
 from test_research_support import build_root
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 NAMES = ("tom_v0", "overnight_v0", "volmanaged_v0", "rebal_v0")  # registry file order
 
 
 def fixture_client(root: Path) -> TestClient:
-    return TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
 
 
 def _cut(root: Path, keep_rows: int, mid_line: bool) -> None:

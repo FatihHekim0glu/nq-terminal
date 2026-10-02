@@ -15,7 +15,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
 
 from nq_terminal import __main__ as launcher
 from nq_terminal.api import home_prewarm
@@ -26,6 +25,8 @@ from nq_terminal.settings import load_settings
 from nq_terminal.api import data
 
 from test_result_cache_routes import LOCAL, LOOPBACK, Lab
+
+from conftest import api_client
 
 WAIT_S = 20.0
 TASK_NAMES = ["deflated", "ledger", "two_day", "universe", "gp_bars", "eq_bootstrap"]
@@ -155,7 +156,7 @@ def test_the_lifespan_starts_the_prewarm_once_the_app_starts(monkeypatch):
     monkeypatch.setattr("nq_terminal.app.start_home_prewarm", lambda app: seen.append(app))
     app = create_app(load_settings({}))
     assert seen == []  # building the app starts nothing
-    with TestClient(app, base_url=LOCAL, client=LOOPBACK):
+    with api_client(app, base_url=LOCAL, client=LOOPBACK):
         pass
     assert seen == [app]
 
@@ -172,10 +173,12 @@ def test_the_launcher_hands_the_prewarm_a_check_that_follows_the_server_being_st
         def __init__(self, config):
             built["config"] = config
 
-        def run(self):
+        def run(self, sockets=None):
             built["during_run"] = built["app"].state.port_bound()
             FakeServer.started = True
             built["after_bind"] = built["app"].state.port_bound()
+            for bound in sockets or []:  # the launcher hands over its exclusively bound socket
+                bound.close()
 
     monkeypatch.setattr(launcher.uvicorn, "Server", FakeServer)
     real_create = launcher.create_app

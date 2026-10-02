@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node scripts/bundleCheck.ts dist",
+    "build": "tsc -b && vite build && node scripts/bundleCheck.ts dist && node scripts/buildStamp.mjs",
     "build:gallery": "vite build --mode gallery && node scripts/bundleCheck.ts dist-gallery --gallery",
     "demo": "vite --mode demo --port 5174",
     "build:demo": "vite build --mode demo && node scripts/bundleCheck.ts dist-demo --demo",

@@ -29,6 +29,8 @@ from nq_terminal.settings import TERMINAL_DIR
 from fakes import FIXTURES
 from fixture_app import create_fixture_app
 
+from conftest import api_client, bare_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 CONTRACT = TERMINAL_DIR / "contract" / "openapi.json"
@@ -81,7 +83,7 @@ class Lab:
 
     @property
     def client(self) -> TestClient:
-        return TestClient(self.app, base_url=LOCAL, client=LOOPBACK)
+        return api_client(self.app, base_url=LOCAL, client=LOOPBACK)
 
     @property
     def cache(self) -> rc.ResultCache:
@@ -362,7 +364,7 @@ def test_the_detector_is_born_failing_on_a_planted_cache(lab):
         body = data.get_result_cache(lab.app.state).get("/api/live/status", {}, lambda: b'{"clock": 1}')
         return Response(body, media_type="application/json")
 
-    plant_client = TestClient(planted, base_url=LOCAL, client=LOOPBACK)
+    plant_client = bare_client(planted, base_url=LOCAL, client=LOOPBACK)  # a planted app with no session routes
     assert touches_the_cache(plant_client, lab.cache, "/api/live/status") is True
 
 

@@ -18,6 +18,8 @@ from nq_terminal.settings import TERMINAL_DIR
 from fakes import FIXTURES
 from fixture_app import FixtureHarnessError, create_fixture_app
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 PACKAGE = TERMINAL_DIR / "backend" / "nq_terminal"
@@ -27,7 +29,7 @@ PACKAGE = TERMINAL_DIR / "backend" / "nq_terminal"
 def harness(tmp_path_factory) -> tuple[TestClient, Path]:
     log_dir = tmp_path_factory.mktemp("fixture-log")
     app = create_fixture_app({"NQT_FIXTURE_DIR": str(FIXTURES)}, log_dir=log_dir)
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK), log_dir
+    return api_client(app, base_url=LOCAL, client=LOOPBACK), log_dir
 
 
 def test_research_endpoints_answer_on_the_fixture_registry(harness):
@@ -105,7 +107,7 @@ def _queue_body(run_id: str) -> dict:
 
 def test_the_job_runner_is_off_in_fixture_mode_unless_the_fake_runner_is_asked_for(tmp_path):
     off = create_fixture_app({"NQT_FIXTURE_DIR": str(FIXTURES)}, log_dir=tmp_path / "off")
-    c = TestClient(off, base_url=LOCAL, client=LOOPBACK)
+    c = api_client(off, base_url=LOCAL, client=LOOPBACK)
     assert c.get("/api/jobs").json()["enabled"] is False
     refused = c.post("/api/jobs", json=_queue_body("t_fixture_off"), headers={"X-NQT": "1"})
     assert refused.status_code == 503
@@ -126,7 +128,7 @@ def test_the_fixture_app_never_reaches_tws_even_when_the_shell_sets_the_ib_flag(
     monkeypatch.setenv("IB_PORT", "7497")
     monkeypatch.setattr(client_module, "fetch_raw", trap)
     app = create_fixture_app({"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_IB_READONLY": "1"}, log_dir=tmp_path / "ib")
-    body = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/ib/snapshot").json()
+    body = api_client(app, base_url=LOCAL, client=LOOPBACK).get("/api/ib/snapshot").json()
     assert attempts == []
     assert body["state"] == "disabled"
 
@@ -136,7 +138,7 @@ def test_the_fake_runner_queues_a_job_runs_the_stand_in_script_and_never_touches
 
     env = {"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_FIXTURE_JOBS": "fake"}
     app = create_fixture_app(env, log_dir=tmp_path / "on")
-    c = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    c = api_client(app, base_url=LOCAL, client=LOOPBACK)
     try:
         assert c.get("/api/jobs").json()["enabled"] is True
         posted = c.post("/api/jobs", json=_queue_body("t_fixture_fake"), headers={"X-NQT": "1"})

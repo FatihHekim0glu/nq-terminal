@@ -234,7 +234,7 @@ Contract discipline: pytest dumps `app.openapi()` and compares it with `contract
 
 ### 4.1 Endpoint index
 
-Every path of `contract/openapi.json` (75; 73 are GET only, and `/api/jobs` and `/api/jobs/{job_id}` also carry the POST and the DELETE), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 74 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
+Every path of `contract/openapi.json` (79; 77 are GET only, and `/api/jobs` and `/api/jobs/{job_id}` also carry the POST and the DELETE), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 79 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
 
 <!-- endpoint-index:start -->
 **System**
@@ -322,6 +322,12 @@ Every path of `contract/openapi.json` (75; 73 are GET only, and `/api/jobs` and 
 - `GET /api/jobs/{job_id}`: JOBS (one job and its log tail)
 (`POST /api/jobs` and `DELETE /api/jobs/{job_id}` are the only writes; they are described in section 4 and section 8, not in this GET index.)
 
+**Desktop shell and sessions (D2, no screen)**
+- `GET /api/desktop/proof`: the desktop shell and the launcher (the challenge-response identity proof; no screen yet)
+- `GET /api/session`: the desktop shell (opens a session cookie from the token; no screen yet)
+- `GET /api/session/code`: the desktop shell (mints a single-use launch code for the browser door; no screen yet)
+- `GET /api/session/redeem`: the browser door (swaps a launch code for a session cookie; no screen yet)
+
 **Events, seasonality and data quality**
 - `GET /api/events/calendar`: EVT
 - `GET /api/events/study`: EVT
@@ -370,7 +376,7 @@ Every path of `contract/openapi.json` (75; 73 are GET only, and `/api/jobs` and 
 | Gate bypass | Section 5: one door, injected serve, AST ban, metadata-only catalog |
 | 2022+ leak | `serve` refuses it; sealed CSVs by allowlist; fence on every axis; E2E asserts no served point after 2021-12-31 |
 | Writes to research files | AST scan (backend and any other Python under `terminal/`): no `open(..., "w"/"a"/"x")`, `io.FileIO` in a writing mode, `write_text`, `write_bytes`, `to_csv`, `to_parquet`, `nq_lab.registry.write`, `scripts.*` imports outside `terminal/state`; sha256 session fixture on `oos_access_log.jsonl` (lines only appended with caller `terminal`), `ledger.csv`, `registry.csv`, `oos_openings.json`, plus `live/KILL` presence; the in-process audit hook refuses any write, remove, rename, mkdir, link or chmod under `results/`, `backtests/output/`, `data/`, `live/` and the fixtures, with paths canonicalised (8.3 aliases, the device prefix, hardlinks) |
-| Cross-site requests to localhost (DNS rebinding, CSRF) | Bind `127.0.0.1` in code (`python -m nq_terminal`) and `LoopbackOnlyMiddleware` (403 unless the peer and the local address are loopback); `TrustedHostMiddleware(allowed_hosts=["127.0.0.1", "localhost"])`; no CORS middleware; one origin (DL13); `SameOriginApiMiddleware` refuses a GET under `/api` whose `Sec-Fetch-Site` is not same-origin or none, or whose `Origin` is not the terminal (so another page cannot forge gate reads into the audit log); P2 POST needs a custom header |
+| Cross-site requests to localhost (DNS rebinding, CSRF) | Bind `127.0.0.1` in code (`python -m nq_terminal`) and `LoopbackOnlyMiddleware` (403 unless the peer and the local address are loopback); `TrustedHostMiddleware(allowed_hosts=["127.0.0.1", "localhost"])`; no CORS middleware; one origin (DL13); `SameOriginApiMiddleware` refuses a GET under `/api` whose `Sec-Fetch-Site` is not same-origin or none, or whose `Origin` is not the terminal (so another page cannot forge gate reads into the audit log); `SessionMiddleware` (just outside it) answers 401 to every `/api` request, the live stream included, that lacks the live session cookie `nqt_s_<port>` (HttpOnly, SameSite=Strict, Path=/api, one origin per session; a code from `GET /api/session/code` lives 60 seconds and works once), 403 to an `Origin` that is not the session's, and 403 to a write without a same-origin `Origin`, whatever the cookie says (cookies are not isolated by port on loopback); the proof and the three session routes take their own credentials; P2 POST needs a custom header |
 | Framing, sniffing | Every response: `X-Frame-Options: DENY`, CSP `default-src 'self'` with `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`; no `Server` header |
 | Serving files around the gate | The only mount allowed is a plain `StaticFiles` at `/` serving exactly `web/dist`; the GET-only check refuses any other mount (a data/ or results/ folder, a subclass, another path) |
 | Fixture mode | `NQT_FIXTURE_DIR` is resolved strictly and refused when it is a UNC or device path, the project root or a parent of it, or a folder inside the project other than `terminal/backend/tests/fixtures` |

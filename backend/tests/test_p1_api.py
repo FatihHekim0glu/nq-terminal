@@ -47,6 +47,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 P1_ROUTES = ("/api/analytics/hypothesis/{name}/extended", "/api/analytics/run/{run_id}/extended",
@@ -63,7 +65,7 @@ def client_for(root, serve=None) -> TestClient:
         app.state.serve_fn = serve
         if settings.fixture_mode:
             app.state.catalog = FakeCatalog()
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")

@@ -4,7 +4,9 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
 
 - Middleware, outermost first: security headers; loopback peers only (`LoopbackOnlyMiddleware`, 403 for a
   client or local address that is not loopback); `TrustedHostMiddleware` for 127.0.0.1 and localhost (DNS
-  rebinding control); `SameOriginApiMiddleware` (403 for a cross-site GET under /api). There is no CORS
+  rebinding control); `SessionMiddleware` (401 without a live session cookie, 403 for a foreign origin or a write
+  without a same-origin Origin, under every /api path, the stream included); `SameOriginApiMiddleware` (403 for a
+  cross-site GET under /api). There is no CORS
   middleware, because the built SPA is served from the same origin (PRD DL13). See `security.py`.
 - Every registered route must be GET; `create_app` refuses to build an app that registers anything else, except
   exactly the two JOBS writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3),
@@ -28,10 +30,13 @@ from starlette.routing import BaseRoute, Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
 from nq_terminal import __version__
+from nq_terminal.api import desktop as desktop_api  # 03 2.2, 4.2 (the proof and the session routes)
 from nq_terminal.api import system
 from nq_terminal.api.home_prewarm import start_home_prewarm
+from nq_terminal.desktop import lifecycle, watchdog
 from nq_terminal.api import audit, commands, live  # 2.4
 from nq_terminal.api import research  # 2.2
+from nq_terminal.services import research as research_service
 from nq_terminal.api import runs  # 2.1
 from nq_terminal.api import data  # 2.3
 from nq_terminal.api import ib as ib_api  # 12 (U3: read-only IB snapshot)
@@ -43,9 +48,9 @@ from nq_terminal.security import (
     LoopbackOnlyMiddleware,
     SameOriginApiMiddleware,
     SecurityHeadersMiddleware,
-    terminal_origins,
+    SessionMiddleware,
 )
-from nq_terminal.settings import ALLOWED_HOSTS, DEV_PORT, Settings, load_settings
+from nq_terminal.settings import ALLOWED_HOSTS, Settings, load_settings
 
 READ_METHODS = frozenset({"GET", "HEAD"})
 
@@ -120,7 +125,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
     jobs = getattr(app.state, jobs_api.STATE_KEY, None)
     if jobs is not None:
-        jobs.close()
+        jobs.close(kill_after_s=watchdog.JOB_KILL_AFTER_S, join_s=watchdog.JOB_JOIN_S)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -134,12 +139,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/api/openapi.json",
     )
     app.state.settings = settings
+    research_service.set_file_cache_cap(settings.file_cache_bytes)  # 03 2.6: the research reads share the cap
     # add_middleware puts each new layer outside the previous one: the last added runs first.
-    app.add_middleware(SameOriginApiMiddleware, origins=terminal_origins(ALLOWED_HOSTS, (settings.port, DEV_PORT)))
+    app.add_middleware(SameOriginApiMiddleware, origins=lifecycle.origins(settings, settings.port))
+    app.add_middleware(SessionMiddleware)  # 03 4.2: a live session cookie (and a same-origin write) on every /api path
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(ALLOWED_HOSTS), www_redirect=False)
     app.add_middleware(LoopbackOnlyMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    lifecycle.install(app, settings)  # the lock, taken in the start-up (03 2.1)
     app.include_router(system.router)
+    app.include_router(desktop_api.router)
     for ops in (audit, live, commands): app.include_router(ops.router)  # 2.4: audit, live, commands
     app.include_router(research.router)  # 2.2
     app.include_router(runs.router)  # 2.1

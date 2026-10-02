@@ -5,13 +5,14 @@ can load every entry once the log passes the 5,000 limit. `matched` counts every
 """
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
 
 from nq_terminal.app import create_app
 from nq_terminal.services import audit
 from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
+
+from conftest import api_client
 
 
 def _entries(n: int) -> list[dict]:
@@ -29,7 +30,7 @@ def test_offset_walks_back_from_the_newest_window():
 
 
 def test_the_endpoint_pages_through_the_whole_fixture_log():
-    c = TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url="http://127.0.0.1",
+    c = api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url="http://127.0.0.1",
                    client=("127.0.0.1", 50000))
     whole = c.get("/api/audit/oos-log", params={"limit": 5000}).json()
     seen, offset = [], 0

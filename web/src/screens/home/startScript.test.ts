@@ -97,10 +97,15 @@ describe.runIf(onWindows)('start.ps1 -DryRun: the plan, with nothing started', (
     expect(r.out).not.toContain('NQT_PREWARM') // uvicorn --reload restarts the process on each edit: no prewarm
   })
 
-  it('-Dev refuses another backend port, because the Vite proxy points at 8765', async () => {
+  it('-Dev takes another backend port, because the Vite proxy reads the port from the lock', async () => {
     const r = await dryRun('-Dev', '-Port', '8799')
+    expect(r.status, r.out).toBe(0)
+    expect(r.out).toContain('--port 8799')
+  })
+
+  it('born failing: -Dev refuses a dev port equal to the backend port', async () => {
+    const r = await dryRun('-Dev', '-Port', '8765', '-DevPort', '8765')
     expect(r.status).not.toBe(0)
-    expect(r.out).toContain('8765')
   })
 
   it('refuses a port outside 1024 to 65535', async () => {

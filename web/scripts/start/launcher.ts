@@ -6,17 +6,29 @@
 // (backend, Vite) is started in a process group of its own and polled until its URL answers, every 500 ms for
 // up to 90 s, and the launcher stops at once if it exits first. On Ctrl+C, SIGTERM or SIGHUP every group is
 // sent SIGTERM and, three seconds later, SIGKILL, so nothing the launcher started outlives it.
-import { spawn, type ChildProcess } from 'node:child_process'
+//
+// The backend runs behind a session token (03 sections 2.4 and 4.2). The launcher makes a token and a nonce, writes
+// them to the backend's input (never argv, the environment or a URL) and keeps that pipe open: ending it is the
+// signal the backend stops on, so it goes first when the launcher stops. The backend gets the allow-listed
+// environment of desktop/envlist.py. Readiness is the proof route, checked against the token. Then a one-time launch
+// code is minted and the browser opens http://127.0.0.1:<port>/session.html#<code> (printed with --no-browser).
+// When the lock names a live backend that proves itself, the launcher attaches: it mints a code and starts nothing.
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { constants as osConstants } from 'node:os'
 import { delimiter, dirname } from 'node:path'
 import { doctorLines } from './doctor.ts'
 import { gatherFacts, httpGetLoopback } from './facts.ts'
 import { formatPlan, parseArgs, planStart, resolveMode, usageLines, type Facts, type StartOptions, type StartPlan, type Step } from './plan.ts'
+import { mintCode, newNonce, newToken, readLock, sessionUrl, verifyBackend } from './session.ts'
 
 const STARTUP_MS = 90_000
 const POLL_MS = 500
 const PROBE_MS = 3000
 const TERM_GRACE_MS = 3000
+/** How long a backend gets to stop after its input closes (03 section 2.3: the watchdog stops it within 5 s). */
+const INPUT_STOP_MS = 5000
+const ENV_TIMEOUT_MS = 20_000
+const RELOAD_POLL_MS = 1000
 const KILL_WAIT_MS = 1000
 const WATCH_MS = 50
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
@@ -48,6 +60,8 @@ interface Running {
   /** The process is gone but part of its process group is not; that part has been sent SIGTERM. */
   lingering: boolean
   done: Promise<void>
+  /** The control pipe of a backend: closed first when the launcher stops, which is the backend's signal to stop. */
+  readonly input: NodeJS.WritableStream | null
 }
 
 const exitOf = (child: Running): Exit | null => child.exit
@@ -79,16 +93,50 @@ function groupAlive(pid: number): boolean {
   }
 }
 
-function launch(step: Step, env: NodeJS.ProcessEnv): Running {
-  const [command = '', ...args] = step.argv
-  const proc = spawn(command, args, {
+/** The allow-listed environment for a backend (desktop/envlist.py, run by the venv python); null when it cannot be built. */
+function allowListedEnv(step: Step, env: NodeJS.ProcessEnv): NodeJS.ProcessEnv | null {
+  const [python = ''] = step.argv
+  const code = 'import json; from nq_terminal.desktop.envlist import backend_env; print(json.dumps(backend_env()))'
+  const run = spawnSync(python, ['-X', 'utf8', '-c', code], {
     cwd: step.cwd,
     env: { ...env, ...step.env },
-    stdio: ['ignore', 'inherit', 'inherit'],
+    encoding: 'utf8',
+    timeout: ENV_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  })
+  if (run.status !== 0) return null
+  try {
+    const parsed: unknown = JSON.parse(run.stdout.trim().split('\n').at(-1) ?? '')
+    if (typeof parsed !== 'object' || parsed === null) return null
+    const table: NodeJS.ProcessEnv = {}
+    for (const [key, value] of Object.entries(parsed)) if (typeof value === 'string') table[key] = value
+    return table
+  } catch {
+    return null
+  }
+}
+
+interface Credentials {
+  readonly token: string
+  readonly nonce: string
+}
+
+function launch(step: Step, env: NodeJS.ProcessEnv, credentials: Credentials | null): Running {
+  const [command = '', ...args] = step.argv
+  const piped = step.stdin === 'control' && credentials !== null
+  const proc = spawn(command, args, {
+    cwd: step.cwd,
+    env: env,
+    stdio: [piped ? 'pipe' : 'ignore', 'inherit', 'inherit'],
     detached: true, // its own process group, so the whole tree can be signalled
     windowsHide: true,
   })
-  const running: Running = { step, proc, exit: null, lingering: false, done: Promise.resolve() }
+  if (piped) {
+    proc.stdin?.on('error', () => undefined) // a backend that is already gone is reported by its exit
+    proc.stdin?.write(`TOKEN ${credentials.token}\nNONCE ${credentials.nonce}\n`) // the pipe stays open
+  }
+  const running: Running = { step, proc, exit: null, lingering: false, done: Promise.resolve(), input: piped ? (proc.stdin ?? null) : null }
   running.done = new Promise<void>((resolve) => {
     proc.once('error', () => {
       running.exit ??= { code: 127, signal: null }
@@ -120,6 +168,10 @@ function pause(ms: number, ...wakeups: Array<Promise<unknown>>): Promise<void> {
 
 /** SIGTERM to every group, SIGKILL to those still there after the grace period. Resolves when none is left. */
 async function stopAll(all: readonly Running[]): Promise<void> {
+  // A backend stops itself when its input closes (jobs first, then the lock); give it that chance before any signal.
+  const piped = all.filter((r) => r.input !== null && exitOf(r) === null)
+  for (const r of piped) r.input?.end()
+  if (piped.length > 0) await Promise.all(piped.map((r) => pause(INPUT_STOP_MS, r.done)))
   const pids = all
     .filter((r) => exitOf(r) === null || r.lingering)
     .map((r) => r.proc.pid)
@@ -156,6 +208,27 @@ function showPage(url: string, options: StartOptions, platform: string, io: Io):
   else io.out(`browser: not opened (${url})`)
 }
 
+/**
+ * Mints one launch code with `token` (after the backend proved it holds it) and shows the session page for it: the
+ * browser opens on it, or with --no-browser the link is printed. False, with a message, when no code was issued.
+ */
+async function showSession(plan: StartPlan, token: string, options: StartOptions, platform: string, io: Io): Promise<boolean> {
+  if (plan.session === null) return false
+  const code = await mintCode(plan.session.apiPort, token)
+  if (code === null) {
+    io.err(`start: the backend on 127.0.0.1:${plan.session.apiPort} did not issue a launch code.`)
+    return false
+  }
+  showPage(sessionUrl(plan.session.origin, code), options, platform, io)
+  return true
+}
+
+/** The token of the backend the lock names, once it has proved it holds it; null when it cannot. */
+async function lockToken(stateDir: string): Promise<string | null> {
+  const lock = readLock(stateDir)
+  return lock !== null && (await verifyBackend(lock.token, lock.port, lock.port, lock.pid)) ? lock.token : null
+}
+
 type Readiness = 'ready' | 'exited' | 'timeout' | 'interrupted'
 
 /** Listens for Ctrl+C, SIGTERM and SIGHUP; the first one is remembered and wakes everything that waits. */
@@ -185,6 +258,8 @@ async function runSteps(plan: StartPlan, options: StartOptions, facts: Facts, en
   const { state, interrupted, release } = watchSignals()
   const running: Running[] = []
   const stopped = (): number => signalCode(state.signal ?? 'SIGINT')
+  const credentials: Credentials | null = plan.steps.some((s) => s.stdin === 'control') ? { token: newToken(), nonce: newNonce() } : null
+  let reloadWatch: ReturnType<typeof setInterval> | null = null
 
   const waitReady = async (child: Running, wait: { readonly url: string; readonly contains: string }): Promise<Readiness> => {
     const deadline = Date.now() + startupMs
@@ -209,7 +284,12 @@ async function runSteps(plan: StartPlan, options: StartOptions, facts: Facts, en
   try {
     for (const step of plan.steps) {
       io.out(`start: ${step.what}`)
-      const child = launch(step, env)
+      const stepEnv = step.allowList === true ? allowListedEnv(step, env) : { ...env, ...step.env }
+      if (stepEnv === null) {
+        io.err('start: could not build the allow-listed environment for the backend (desktop/envlist.py).')
+        return 1
+      }
+      const child = launch(step, stepEnv, credentials)
       running.push(child)
       if (step.wait === 'exit') {
         await Promise.race([child.done, interrupted])
@@ -231,13 +311,44 @@ async function runSteps(plan: StartPlan, options: StartOptions, facts: Facts, en
         io.err(`start: ${step.what} did not answer within ${startupMs / 1000} seconds.`)
         return 1
       }
+      if (credentials !== null && step.stdin === 'control' && plan.session !== null) {
+        // Whatever answered the readiness probe must hold the token this launcher made, not merely speak the protocol.
+        if (!(await verifyBackend(credentials.token, plan.session.apiPort))) {
+          io.err(`start: the backend on 127.0.0.1:${plan.session.apiPort} did not prove that it holds this launcher's token.`)
+          return 1
+        }
+      }
     }
     io.out(
       plan.mode === 'DEMO ONLY'
         ? `nq-lab terminal demo: ${plan.url} (fixture data answered in the browser)`
         : `nq-lab terminal: ${plan.url} (read only)`,
     )
-    showPage(plan.url, options, facts.platform, io)
+    if (plan.session === null) {
+      showPage(plan.url, options, facts.platform, io)
+    } else {
+      // The plain launcher knows the token it made; --dev's reloading backend made its own and recorded it in the lock.
+      const token = credentials?.token ?? (await lockToken(facts.stateDir))
+      if (token === null) {
+        io.err('start: the backend did not prove that it holds the token in its lock.')
+        return 1
+      }
+      if (!(await showSession(plan, token, options, facts.platform, io))) return 1
+      if (plan.dev) {
+        // A reload ends every session (they live in memory), so a new link follows when the backend changes.
+        let seen = readLock(facts.stateDir)?.pid ?? null
+        reloadWatch = setInterval(() => {
+          const current = readLock(facts.stateDir)
+          if (current === null || current.pid === seen) return
+          seen = current.pid
+          void lockToken(facts.stateDir).then((fresh) => {
+            if (fresh === null) return
+            io.out('The backend reloaded, which ended the sessions. A new link follows.')
+            return showSession(plan, fresh, options, facts.platform, io)
+          })
+        }, RELOAD_POLL_MS)
+      }
+    }
     io.out('Running. Press Ctrl+C to stop.')
     const longRunning = running.filter((r) => r.step.wait !== 'exit')
     const first = await Promise.race([interrupted.then(() => null), ...longRunning.map((r) => r.done.then(() => r))])
@@ -246,6 +357,7 @@ async function runSteps(plan: StartPlan, options: StartOptions, facts: Facts, en
     io.out(`A process exited with code ${code ?? 'unknown'}; stopping.`)
     return code ?? 1
   } finally {
+    if (reloadWatch !== null) clearInterval(reloadWatch)
     if (state.signal !== null) io.out('Stopping...')
     await stopAll(running)
     release()
@@ -310,7 +422,16 @@ export async function main(argv: readonly string[], ctx: LauncherContext): Promi
   }
   if (plan.alreadyRunning) {
     io.out(`The terminal already runs on ${plan.url}; nothing started.`)
-    showPage(plan.url, options, platform, io)
+    if (plan.attach === null) {
+      showPage(plan.url, options, platform, io)
+      return 0
+    }
+    // Attached: the lock names it and it proved itself in the facts; prove it again before the token is used.
+    const token = await lockToken(facts.stateDir)
+    if (token === null || !(await showSession(plan, token, options, platform, io))) {
+      io.err('start: the backend the lock names did not prove that it holds its token, so it is not used.')
+      return 1
+    }
     return 0
   }
   return runSteps(plan, options, facts, env, io, ctx.startupMs ?? STARTUP_MS)

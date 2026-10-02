@@ -24,6 +24,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 BOOK = "volmanaged_paper_journal.jsonl"
@@ -60,7 +62,7 @@ class Clock:
 
 
 def _status_client(root: Path) -> TestClient:
-    return TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(root)})), base_url=LOCAL, client=LOOPBACK)
 
 
 def session(root: Path, cursor=None, limits: live_stream.StreamLimits = FAST, clock: Clock | None = None,
@@ -265,7 +267,7 @@ def app_for(root: Path, limits: live_stream.StreamLimits = FAST):
 
 
 def client_for(root: Path, limits: live_stream.StreamLimits = FAST) -> TestClient:
-    return TestClient(app_for(root, limits), base_url=LOCAL, client=LOOPBACK)
+    return api_client(app_for(root, limits), base_url=LOCAL, client=LOOPBACK)
 
 
 def parse_stream(text: str) -> list[dict]:
@@ -353,7 +355,7 @@ def test_a_cross_site_stream_is_refused(root: Path, headers: dict):
 
 
 def test_a_non_loopback_client_is_refused(root: Path):
-    c = TestClient(app_for(root), base_url=LOCAL, client=("192.168.1.20", 50000))
+    c = api_client(app_for(root), base_url=LOCAL, client=("192.168.1.20", 50000))
     assert c.get("/api/live/stream").status_code == 403
 
 
@@ -363,7 +365,7 @@ def test_the_stream_is_get_only(root: Path):
 
 def test_streams_are_capped_and_a_slot_is_freed_when_a_stream_ends(root: Path):
     app = app_for(root, live_stream.StreamLimits(poll_s=0.01, lifetime_s=0.05, max_streams=1))
-    c = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    c = api_client(app, base_url=LOCAL, client=LOOPBACK)
     assert c.get("/api/live/stream").status_code == 200
     slots = live_stream.stream_slots(app)
     assert slots.open == 0
@@ -392,7 +394,7 @@ def test_limits_must_be_positive(field: str):
 
 def test_the_stream_shares_the_live_monitor(root: Path):
     app = app_for(root)
-    c = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    c = api_client(app, base_url=LOCAL, client=LOOPBACK)
     c.get("/api/live/status")
     monitor = app.state.live_monitor
     c.get("/api/live/stream")

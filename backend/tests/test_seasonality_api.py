@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
 
 from nq_lab.dtsmom_panel import build_panel, master_days
 from nq_lab.sessions import nyse_sessions
@@ -28,6 +27,8 @@ from nq_terminal.services import seasonality as seas_service
 from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve, synthetic_loader
+
+from conftest import api_client
 
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
@@ -42,7 +43,7 @@ def build(tmp: Path, exclusions=None):
     app.state.catalog = FakeCatalog()
     if exclusions is not None:
         app.state.seasonality_exclusions = exclusions
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK), serve
+    return api_client(app, base_url=LOCAL, client=LOOPBACK), serve
 
 
 @pytest.fixture(scope="module")

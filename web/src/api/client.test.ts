@@ -226,6 +226,17 @@ describe('GET only (PRD G6, DL5)', () => {
     expect(findWriteRequests('/src/api/jobsClient.ts', snippet)).toEqual([expect.stringMatching(pattern)])
   })
 
+  it('lets the session page call fetch to redeem its one-time code, and nothing else', () => {
+    expect(findWriteRequests('/src/session/main.ts', 'request: (path, init) => fetch(path, init)')).toEqual([])
+    expect(findWriteRequests('/src/session/main.ts', "const m = 'POST'")).toEqual([expect.stringMatching(/POST/)])
+    expect(findWriteRequests('/src/session/main.ts', 'new EventSource(u)')).toEqual([expect.stringMatching(/EventSource/)])
+  })
+
+  it('born failing: the session allowance covers that one file only', () => {
+    expect(findWriteRequests('/src/screens/x/main.ts', 'fetch(u)')).toEqual([expect.stringMatching(/fetch/)])
+    expect(findWriteRequests('/src/session/redeem.ts', 'fetch(u)')).toEqual([expect.stringMatching(/fetch/)])
+  })
+
   it('born failing: the jobs allowance covers that one file only, not a copy of it elsewhere', () => {
     const body = "x = 'POST'; y = 'DELETE'; fetch(u)"
     expect(findWriteRequests('/src/api/jobsClient2.ts', body)).toHaveLength(3)

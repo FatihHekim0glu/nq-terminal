@@ -29,6 +29,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 UTC = "UTC"
@@ -50,7 +52,7 @@ def client_for(env: dict, serve=None, catalog=None) -> TestClient:
         app.state.serve_fn = serve
     if catalog is not None:
         app.state.catalog = catalog
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 def get_bars(client: TestClient, **params):

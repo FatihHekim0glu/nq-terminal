@@ -227,6 +227,11 @@ const CLIENT_CHANNELS: ReadonlySet<string> = new Set(['EventSource'])
  */
 const JOBS_CLIENT = '/api/jobsClient.ts'
 const JOBS_WRITE_METHODS = /^(post|delete)$/i
+/**
+ * The session page (session.html) calls fetch once, a GET to /api/session/redeem that trades the one-time code for the
+ * cookie (03 4.2). It is the page's entry module only; nothing else under src/session, and no other path, may fetch.
+ */
+const SESSION_PAGE = '/session/main.ts'
 
 /**
  * Source scan used by the GET-only test over every module under src: quoted write methods (any
@@ -238,7 +243,8 @@ export function findWriteRequests(file: string, source: string): string[] {
     .filter((m) => !(isJobsClient && JOBS_WRITE_METHODS.test(m[2] ?? '')))
     .map((m) => `${file}: write method ${(m[2] ?? '').toUpperCase()}`)
   const isClient = file.endsWith('/api/client.ts')
-  const strayFetch = !isClient && !isJobsClient && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
+  const isSessionPage = file.endsWith(SESSION_PAGE)
+  const strayFetch = !isClient && !isJobsClient && !isSessionPage && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
   const channels = OTHER_CHANNELS
     .filter(([pattern, name]) => pattern.test(source) && !(isClient && CLIENT_CHANNELS.has(name)))
     .map(([, name]) => `${file}: uses ${name}`)

@@ -30,6 +30,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve, synthetic_loader
 
+from conftest import api_client
+
 LOCAL, LOOPBACK = "http://127.0.0.1", ("127.0.0.1", 50000)
 ROUTES = ("/api/analytics/hypothesis/{name}/trend-regime", "/api/analytics/run/{run_id}/trend-regime",
           "/api/analytics/run/{run_id}/capacity", "/api/market/term-structure/{root}")
@@ -54,13 +56,13 @@ def fake(tmp_path: Path) -> ChainServe:
 
 @pytest.fixture
 def client(tmp_path: Path, fake: ChainServe) -> TestClient:
-    return TestClient(make_app(tmp_path, fake), base_url=LOCAL, client=LOOPBACK)
+    return api_client(make_app(tmp_path, fake), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture
 def real(tmp_path: Path, fake: ChainServe) -> TestClient:
     """The real project's result files, read only, with the fake serve for prices."""
-    return TestClient(make_app(tmp_path, fake, data_root=None), base_url=LOCAL, client=LOOPBACK)
+    return api_client(make_app(tmp_path, fake, data_root=None), base_url=LOCAL, client=LOOPBACK)
 
 
 def same(value, ref) -> bool:
@@ -159,14 +161,14 @@ def test_run_trend_regime(client):
 def test_a_monthly_book_has_no_trend_view_and_no_serve(tmp_path):
     base = make_fake_serve(tmp_path / "log" / "oos_access_log.jsonl")
     serve = ChainServe(tmp_path / "chain" / "oos.jsonl", base)
-    client = TestClient(make_app(tmp_path, serve, data_root=None), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(tmp_path, serve, data_root=None), base_url=LOCAL, client=LOOPBACK)
     body = get(client, "/api/analytics/hypothesis/dtsmom_v0/trend-regime", cost=1)
     assert body["available"] is False and body["note"] == rct.TREND_MONTHLY and body["rows"] == []
     assert base.calls == () and body["gate"] is None
 
 
 def test_trend_regime_without_a_price_source_is_503(tmp_path):
-    client = TestClient(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
     r = client.get("/api/analytics/hypothesis/volmanaged_v0/trend-regime", params={"cost": 1})
     assert r.status_code == 503
 
@@ -231,7 +233,7 @@ def test_capacity_of_an_unknown_run_is_404(client):
 
 
 def test_capacity_without_a_price_source_is_503(tmp_path):
-    client = TestClient(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
     assert client.get("/api/analytics/run/nt_volmanaged_v0_fixture_m1/capacity").status_code == 503
 
 
@@ -283,7 +285,7 @@ def test_term_structure_refuses_a_malformed_root(client, fake, root):
 
 
 def test_term_structure_without_a_price_source_is_503(tmp_path):
-    client = TestClient(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(tmp_path), base_url=LOCAL, client=LOOPBACK)
     assert client.get("/api/market/term-structure/NQ").status_code == 503
 
 

@@ -38,8 +38,8 @@ def test_the_model_and_the_router_need_no_write_allowance(relative: str) -> None
     assert rules.scan_source(source(relative), JOB_FILES[relative], rules.PROD) == []
 
 
-def test_only_the_service_may_be_on_the_allow_list() -> None:
-    assert rules.WRITE_ALLOWED == {SERVICE, rules.RESULT_CACHE}
+def test_only_the_service_the_result_cache_and_the_lock_may_be_on_the_allow_list() -> None:
+    assert rules.WRITE_ALLOWED == {SERVICE, rules.RESULT_CACHE, rules.LOCK}
 
 
 def test_the_service_never_starts_a_shell_or_runs_anything_but_the_runner() -> None:

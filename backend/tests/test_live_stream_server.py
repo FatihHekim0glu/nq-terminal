@@ -24,6 +24,7 @@ from nq_terminal.api import live_stream
 from nq_terminal.app import create_app
 from nq_terminal.settings import load_settings
 
+from conftest import session_cookie
 from fakes import FIXTURES
 
 BOOK = "volmanaged_paper_journal.jsonl"
@@ -52,6 +53,12 @@ class Server:
                 raise RuntimeError("the test server did not start")
             time.sleep(0.02)
         return self
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        """The session every request to this server carries: the stream, like every /api path, is behind the cookie."""
+        name, value = session_cookie(self.app)
+        return {name: value}
 
     @property
     def url(self) -> str:
@@ -104,7 +111,7 @@ def test_live_changes_reach_an_open_stream_and_a_restart_resumes(root: Path):
     seen: list[dict] = []
     first = Server(root).start()
     try:
-        with httpx.stream("GET", f"{first.url}/api/live/stream", timeout=READ_TIMEOUT_S) as response:
+        with httpx.stream("GET", f"{first.url}/api/live/stream", cookies=first.cookies, timeout=READ_TIMEOUT_S) as response:
             assert response.status_code == 200
             stream = events(response.iter_lines())
             until(stream, lambda e: e["event"] == "status", seen)
@@ -131,7 +138,7 @@ def test_live_changes_reach_an_open_stream_and_a_restart_resumes(root: Path):
     second = Server(root).start()
     try:
         with httpx.stream("GET", f"{second.url}/api/live/stream", headers={"Last-Event-ID": last_id},
-                          timeout=READ_TIMEOUT_S) as response:
+                          cookies=second.cookies, timeout=READ_TIMEOUT_S) as response:
             resumed: list[dict] = []
             stream = events(response.iter_lines())
             hello = until(stream, lambda e: e["event"] == "hello", resumed)
@@ -158,11 +165,11 @@ def test_an_open_stream_holds_its_slot_on_a_real_server(root: Path):
     server = Server(root, LONG_LIFE).start()
     try:
         url = f"{server.url}/api/live/stream"
-        with httpx.stream("GET", url, timeout=READ_TIMEOUT_S) as response:
+        with httpx.stream("GET", url, cookies=server.cookies, timeout=READ_TIMEOUT_S) as response:
             stream = events(response.iter_lines())  # kept referenced: a dropped iterator closes the connection
             until(stream, lambda e: e["event"] == "hello", [])
             assert live_stream.stream_slots(server.app).open == 1
-            refused = httpx.get(url, timeout=READ_TIMEOUT_S)
+            refused = httpx.get(url, cookies=server.cookies, timeout=READ_TIMEOUT_S)
             assert refused.status_code == 503 and "at most 1" in refused.json()["detail"]
     finally:
         server.stop()
@@ -171,7 +178,7 @@ def test_an_open_stream_holds_its_slot_on_a_real_server(root: Path):
 def test_a_shutdown_does_not_wait_for_an_open_stream_to_reach_its_lifetime(root: Path):
     server = Server(root, LONG_LIFE).start()
     try:
-        with httpx.stream("GET", f"{server.url}/api/live/stream", timeout=READ_TIMEOUT_S) as response:
+        with httpx.stream("GET", f"{server.url}/api/live/stream", cookies=server.cookies, timeout=READ_TIMEOUT_S) as response:
             stream = events(response.iter_lines())  # kept open, so the server has a live stream to shut down
             until(stream, lambda e: e["event"] == "hello", [])
             assert live_stream.stream_slots(server.app).open == 1

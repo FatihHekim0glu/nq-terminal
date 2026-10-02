@@ -1,21 +1,25 @@
-"""GET /api/health: pins, fence, sealed pin status, kill switch, gate counters, fixture mode."""
+"""GET /api/health: pins, fence, sealed pin status, kill switch, gate counters, fixture mode, and (D2) the desktop
+contract number, the full sha256 of contract/openapi.json, the page build state and `port_fixed`."""
 from __future__ import annotations
 
+import dataclasses
+import hashlib
 import json
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
 
 from nq_lab.config import IS_END, IS_START, OOS_LOG
 from nq_lab.oos_gate import OPENINGS
+from nq_terminal.api import system
 from nq_terminal.app import create_app
+from nq_terminal.desktop import build_stamp, handshake, lifecycle
+from nq_terminal.desktop.lifecycle import Runtime
 from nq_terminal.settings import load_settings
 
-LOCAL = "http://127.0.0.1"
-LOOPBACK = ("127.0.0.1", 50000)  # TestClient's default client ("testclient") is not an address
+from conftest import api_client
 
 
 def sealed_lines_only(src: Path) -> str:
@@ -39,7 +43,7 @@ def get_health(root: Path | None, app_state: dict | None = None) -> dict:
     app = create_app(load_settings(env))
     for key, value in (app_state or {}).items():
         setattr(app.state, key, value)
-    r = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/health")
+    r = api_client(app).get("/api/health")
     assert r.status_code == 200
     return r.json()
 
@@ -47,7 +51,8 @@ def get_health(root: Path | None, app_state: dict | None = None) -> dict:
 def test_health_keys_match_the_contract(data_root):
     h = get_health(data_root)
     assert set(h) == {"now_utc", "nautilus_version", "pins", "fence", "sealed", "kill_switch_on",
-                      "gate_reads_this_process", "cache", "fixture_mode"}
+                      "gate_reads_this_process", "cache", "fixture_mode", "contract", "openapi_sha256", "dist",
+                      "port_fixed"}
     assert set(h["pins"]) == {"pandas", "pyarrow", "quantpad_data", "nautilus"}
     assert set(h["sealed"]) == {"openings_pin_ok", "sealed_log_pin_ok", "openings_closed"}
     assert set(h["cache"]) == {"series", "bytes"}
@@ -142,3 +147,54 @@ def test_real_root_health_reads_real_files_read_only():
     assert h["sealed"]["openings_pin_ok"] is True
     assert h["sealed"]["openings_closed"] is True
     assert h["sealed"]["sealed_log_pin_ok"] is not False
+
+
+# ---------------------------------------------------------------- the desktop fields (03 sections 4.4, 4.6 and 7.1)
+
+def health_of(settings, runtime: Runtime | None = None) -> dict:
+    app = create_app(settings)
+    if runtime is not None:
+        lifecycle.set_runtime(app, runtime)
+    r = api_client(app).get("/api/health")
+    assert r.status_code == 200
+    return r.json()
+
+
+def test_health_reports_the_desktop_contract_number_and_the_full_openapi_sha256(data_root):
+    h = get_health(data_root)
+    contract = system.OPENAPI
+    assert h["contract"] == handshake.contract_number() and isinstance(h["contract"], int) and h["contract"] >= 1
+    assert h["openapi_sha256"] == hashlib.sha256(contract.read_bytes()).hexdigest() and len(h["openapi_sha256"]) == 64
+
+
+def test_health_reports_the_page_build_state(tmp_path):
+    settings = dataclasses.replace(load_settings({}), web_dist=tmp_path / "web" / "dist")
+    assert health_of(settings)["dist"] == "missing"
+    (tmp_path / "web" / "dist").mkdir(parents=True)
+    (tmp_path / "web" / "dist" / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    system.reset_build_memo()
+    assert health_of(settings)["dist"] == build_stamp.dist_status(tmp_path / "web", system.OPENAPI) == "stale"
+
+
+@pytest.mark.parametrize(("stdin_control", "desktop", "port", "fixed"), [
+    (True, False, 8765, True),     # start.ps1 on the fixed browser port
+    (False, False, 8765, False),   # a backend started without the launcher's stdin channel
+    (True, False, 8798, False),    # a launcher backend on any other port
+    (False, True, 53117, False),   # the app's backend on its random port
+])
+def test_port_fixed_is_true_only_for_a_launcher_backend_on_8765(stdin_control, desktop, port, fixed):
+    settings = dataclasses.replace(load_settings({}), stdin_control=stdin_control, desktop=desktop, port=port)
+    runtime = Runtime(token="7a" * 32, port=port, pid=4120, mode=settings.mode)
+    assert health_of(settings, runtime)["port_fixed"] is fixed
+
+
+def test_port_fixed_follows_the_bound_port_with_8798_standing_in(monkeypatch):
+    """The port table's stand-in for the fixed browser port: the rule reads the constant, not a literal."""
+    monkeypatch.setattr(system, "FIXED_BROWSER_PORT", 8798)
+    settings = dataclasses.replace(load_settings({}), stdin_control=True, port=8798)
+    assert health_of(settings, Runtime(token="7a" * 32, port=8798, pid=4120, mode="launcher"))["port_fixed"] is True
+    assert system.FIXED_BROWSER_PORT != 8765 and system.port_fixed("launcher", 8765) is False
+
+
+def test_the_fixed_browser_port_is_the_launchers_8765():
+    assert system.FIXED_BROWSER_PORT == 8765

@@ -12,6 +12,16 @@ What this module writes, and where:
   `data/` or `live/`, and only reads (`exists`) the output folder to refuse a run id that is already used.
 Prices stay behind `nq_lab.data.serve`: the child's reads are logged by the gate under the runner's own caller.
 
+The child's environment is the allow list of `desktop/envlist.py` (the base set, PYTHONUTF8 and PYTHONIOENCODING,
+the venv first on PATH; no key, token, NQT_* or IB_* name), and on Windows it starts without a console window.
+
+Who may run jobs (`service_for`, 03 section 8, 05 G06): only the lab's own backend. The factory hands out a running
+service unless this is a fixture backend, `NQT_JOBS=off` is set, or `sys.prefix` is not `<ROOT>/.venv` (ROOT from
+`nq_lab.config`, never the service's own `root` argument), or its state folder is not `<ROOT>/terminal/state` (the
+lock it holds is not the lab's) or its lifespan has released the lock; then it hands out the disabled in-memory service, which
+reads no jobs file, starts nothing and says why. A service built past the factory (the fixture app's fake runner,
+the tests' fakes) is not checked.
+
 A restart marks the job that was running as an error (its process died with the terminal) and runs the queued
 ones again. No error text from the operating system and no path is put in a job: the log tail is the child's own
 output with local paths redacted (the project root dropped, any other home folder shown as `~`), cut to 100
@@ -32,6 +42,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from nq_lab.config import ROOT
+from nq_terminal.desktop import envlist
 from nq_terminal.models.jobs import (
     FINISHED_STATES,
     JOB_ID,
@@ -46,7 +58,7 @@ from nq_terminal.services.files import redact_local_paths
 from nq_terminal.settings import Settings
 
 __all__ = ["DuplicateRunId", "Job", "JobError", "JobList", "JobService", "JobsOff", "QueueFull", "UnknownJob",
-           "run_config", "service_for"]
+           "jobs_refusal", "lock_refusal", "run_config", "service_for"]
 
 LOG = logging.getLogger(__name__)
 MAX_QUEUED = 10
@@ -55,6 +67,7 @@ LOG_TAIL_LINES = 100
 LOG_LINE_CHARS = 400
 KILL_AFTER_SECONDS = 10.0
 JOIN_SECONDS = 15.0
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # 0 off Windows
 STATE_FILE = "jobs.json"
 STATE_VERSION = 1
 EXIT_OK, EXIT_FAILED_CHECKS = 0, 1
@@ -66,6 +79,10 @@ MESSAGES = {
     "error": "the run ended with an error",
     "stopped": "stopped on request",
 }
+OFF_FIXTURE = "the job runner is off in fixture mode"
+OFF_SWITCH = "jobs are off in this backend"
+OFF_NOT_LOCK_HOLDER = "jobs are off in this backend: it does not hold the lock of the lab's own state folder"
+OFF_IDENTITY = "jobs are off in this backend: it is not running from the lab's own environment"
 START_FAILED = "could not start the run"
 INTERRUPTED = "the terminal stopped while this job ran"
 OUTPUT_DIR = ("backtests", "output")
@@ -95,10 +112,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _child_env() -> dict[str, str]:
-    return {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
-
-
 @dataclass
 class _Record:
     """The one mutable thing here: a job while the queue owns it. `Job` (frozen) is what leaves the service."""
@@ -123,7 +136,8 @@ class _Record:
 class JobService:
     def __init__(self, *, root: Path, state_dir: Path | None, python: str,
                  popen: Callable[..., Any] = subprocess.Popen, queue_cap: int = MAX_QUEUED,
-                 max_history: int = MAX_HISTORY, enabled: bool = True, autostart: bool = True) -> None:
+                 max_history: int = MAX_HISTORY, enabled: bool = True, autostart: bool = True,
+                 off_reason: str | None = None) -> None:
         self._root = Path(root)
         self._script = self._root / "backtests" / "run_base.py"
         self._state_dir = None if state_dir is None else Path(state_dir)
@@ -132,6 +146,7 @@ class JobService:
         self._queue_cap = queue_cap
         self._max_history = max_history
         self._enabled = enabled
+        self._off_reason = None if enabled else (off_reason or OFF_SWITCH)
         self._records: dict[str, _Record] = {}
         self._queue: deque[str] = deque()
         self._proc: Any = None
@@ -144,9 +159,18 @@ class JobService:
             self._ensure_worker()
 
     # ----- public -----
+    @property
+    def enabled(self) -> bool:
+        return self._enabled
+
+    @property
+    def off_reason(self) -> str | None:
+        """Why this service starts nothing (None while it is enabled); text for the 503 answer, never a path."""
+        return self._off_reason
+
     def enqueue(self, spec: JobSpec) -> Job:
         if not self._enabled:
-            raise JobsOff("the job runner is off")
+            raise JobsOff(self._off_reason or OFF_SWITCH)
         checked = JobSpec.model_validate(spec.model_dump(mode="json"))  # the door re-checks what the router checked
         with self._cond:
             if any(r.spec.run_id == checked.run_id for r in self._records.values()) or self._output_exists(checked):
@@ -187,14 +211,17 @@ class JobService:
                 self._persist()
             return record.view()
 
-    def close(self) -> None:
+    def close(self, *, kill_after_s: float | None = None, join_s: float | None = None) -> None:
+        """Stop the running child (terminate, then kill after `kill_after_s`) and wait up to `join_s` for the worker.
+
+        The defaults suit a clean shutdown; the stdin watchdog passes shorter ones so the whole stop fits in 5 s."""
         with self._cond:
             self._closed = True
-            self._terminate(self._proc)
+            self._terminate(self._proc, KILL_AFTER_SECONDS if kill_after_s is None else kill_after_s)
             self._cond.notify_all()
         worker = self._worker
         if worker is not None and worker is not threading.current_thread():
-            worker.join(JOIN_SECONDS)
+            worker.join(JOIN_SECONDS if join_s is None else join_s)
 
     # ----- internals -----
     def _record(self, job_id: str) -> _Record:
@@ -211,11 +238,11 @@ class JobService:
         for job_id in finished[: max(0, len(finished) - self._max_history)]:
             del self._records[job_id]
 
-    def _terminate(self, proc: Any) -> None:
+    def _terminate(self, proc: Any, kill_after_s: float = KILL_AFTER_SECONDS) -> None:
         if proc is None:
             return
         proc.terminate()
-        timer = threading.Timer(KILL_AFTER_SECONDS, self._kill_if_alive, args=(proc,))
+        timer = threading.Timer(kill_after_s, self._kill_if_alive, args=(proc,))
         timer.daemon = True
         timer.start()
 
@@ -245,9 +272,9 @@ class JobService:
     def _execute(self, record: _Record) -> None:
         argv = [self._python, "-u", str(self._script), "--config", config_json(record.spec)]
         try:
-            proc = self._popen(argv, cwd=self._root, env=_child_env(), stdin=subprocess.DEVNULL,
+            proc = self._popen(argv, cwd=self._root, env=envlist.child_env(), stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                               errors="replace", bufsize=1)
+                               errors="replace", bufsize=1, creationflags=NO_WINDOW)
         except (OSError, ValueError) as exc:
             LOG.warning("job %s could not start: %s", record.id, exc)
             with self._cond:
@@ -339,8 +366,45 @@ class JobService:
             LOG.warning("the jobs state file could not be written: %s", exc)
 
 
-def service_for(settings: Settings) -> JobService:
-    """The app's service: real in a normal run, a disabled in-memory one in fixture mode (no process is ever started)."""
+def _same_folder(first: str | os.PathLike[str], second: str | os.PathLike[str]) -> bool:
+    """Whether two paths name the same folder, spelled as the filesystem compares them (case, slashes, `..`)."""
+    return os.path.normcase(Path(first).resolve()) == os.path.normcase(Path(second).resolve())
+
+
+LAB_STATE_DIR = ROOT / "terminal" / "state"  # the one folder whose lock a job-running backend holds (read at call time)
+
+
+def jobs_refusal(settings: Settings, *, prefix: str | None = None, lab_root: Path | None = None,
+                 lock_held: bool | None = None) -> str | None:
+    """None when this backend may run jobs; else the words for why not (no path in them).
+
+    A fixture backend never runs one (any mode: a fixture folder relabels real files); `NQT_JOBS=off` is the test and
+    smoke backends' switch; `sys.prefix` must be `<ROOT>/.venv` with ROOT from `nq_lab.config`; and it must hold the
+    lock of `<ROOT>/terminal/state` (03 section 8): its own state folder is that one, and `lock_held` (the running
+    backend's answer, `lifecycle.lock_held_now`) is not False. None means no lifespan has run, which a served backend
+    never is."""
     if settings.fixture_mode:
-        return JobService(root=settings.root, state_dir=None, python=sys.executable, enabled=False)
+        return OFF_FIXTURE
+    if not settings.jobs_enabled:
+        return OFF_SWITCH
+    interpreter = sys.prefix if prefix is None else prefix
+    lab = ROOT if lab_root is None else lab_root
+    if not _same_folder(interpreter, Path(lab) / ".venv"):
+        return OFF_IDENTITY
+    return lock_refusal(settings, lock_held)
+
+
+def lock_refusal(settings: Settings, lock_held: bool | None = None) -> str | None:
+    """None when this backend holds the lock of `<ROOT>/terminal/state`; the real runner and the IB snapshot need it."""
+    if lock_held is False or not _same_folder(settings.state_dir, LAB_STATE_DIR):
+        return OFF_NOT_LOCK_HOLDER
+    return None
+
+
+def service_for(settings: Settings, *, lock_held: bool | None = None) -> JobService:
+    """The app's service: the real runner in the lab's own backend, else a disabled in-memory one (see the docstring)."""
+    reason = jobs_refusal(settings, lock_held=lock_held)
+    if reason is not None:
+        LOG.info("jobs are off: %s", reason)
+        return JobService(root=settings.root, state_dir=None, python=sys.executable, enabled=False, off_reason=reason)
     return JobService(root=settings.root, state_dir=settings.state_dir, python=sys.executable)

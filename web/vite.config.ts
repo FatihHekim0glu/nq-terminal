@@ -1,12 +1,49 @@
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
+import { readLock } from './scripts/start/session.ts'
 
 // One origin in normal use (PRD DL13): uvicorn on 127.0.0.1:8765 serves web/dist at `/`.
-// The dev server (start.ps1 -Dev) proxies /api to it.
-const API_ORIGIN = 'http://127.0.0.1:8765'
+// The dev server (start.ps1 -Dev) proxies /api to the backend that holds the lock: its port is read from the lock
+// file (03 section 2.6), 8765 when there is no lock yet. The proxy is the plain form, so the browser's Origin and
+// Host headers pass unchanged and a session can bind to the dev origin (5173) rather than to the backend's.
+export const DEFAULT_API_PORT = 8765
+const LOOPBACK = '127.0.0.1'
+const DEV_SERVER_PORT = 5173
+const WEB_DIR = fileURLToPath(new URL('.', import.meta.url))
+
+/** The state folder whose lock names the backend: NQT_STATE_DIR, else terminal/state beside this web folder. */
+export function stateDirOf(env: NodeJS.ProcessEnv = process.env): string {
+  const given = env.NQT_STATE_DIR?.trim()
+  return given !== undefined && given !== '' ? path.resolve(given) : path.resolve(WEB_DIR, '..', 'state')
+}
+
+/** The backend origin the dev proxy points at: the lock's port, else 8765. */
+export function devApiOrigin(env: NodeJS.ProcessEnv = process.env): string {
+  return `http://${LOOPBACK}:${readLock(stateDirOf(env))?.port ?? DEFAULT_API_PORT}`
+}
+
+/** Where the dev server proxies /api, read once when this config loads (the lock exists by then under start.ps1 -Dev). */
+export const API_ORIGIN = devApiOrigin()
+
+/** The dev server's port: 5173, or NQT_DEV_PORT when start.ps1 -DevPort moves it (a spare port in the launcher tests). */
+export function devPortOf(env: NodeJS.ProcessEnv = process.env): number {
+  const given = Number(env.NQT_DEV_PORT)
+  return Number.isInteger(given) && given >= 1024 && given <= 65_535 ? given : DEV_SERVER_PORT
+}
+
+/** Every page the build emits: the app, and the launch page that swaps a one-time code for a session (session.html). */
+export const SESSION_PAGE = 'session.html'
+export function buildInputs(mode: string): Record<string, string> | undefined {
+  if (mode === DEMO_MODE) return undefined // the demo has no backend, so no session
+  return {
+    index: path.resolve(WEB_DIR, 'index.html'),
+    session: path.resolve(WEB_DIR, SESSION_PAGE),
+  }
+}
 
 // `vite build --mode gallery` (the E2E run) adds the component gallery at /__gallery/<name> and
 // writes to dist-gallery, so it can never replace the production dist that start.ps1 serves. A
@@ -143,6 +180,7 @@ export default defineConfig(({ mode }) => ({
     // imports, so the frame and its safety labels paint before them. Phase 5 adds one group per chart
     // library (LIBRARY_CHUNKS) that only chart components reach, lazily.
     rolldownOptions: {
+      input: buildInputs(mode),
       output: {
         codeSplitting: { groups: [...CHUNK_GROUPS] },
       },
@@ -150,7 +188,7 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: devPortOf(),
     strictPort: true,
     proxy: mode === DEMO_MODE ? undefined : { '/api': API_ORIGIN },
   },

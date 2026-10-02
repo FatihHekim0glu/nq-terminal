@@ -6,9 +6,12 @@
 //   ids and schemas (the served OpenAPI document and contract/openapi.json), and on the front end the
 //   API routes it calls, the built chunks it loads (named after their modules), the mnemonics and the
 //   screen and panel names in the page. The matcher's born-failing cases are in scan.spec.ts;
-// - the backend answers every write method with 405 except the two JOBS writes, which refuse a request without
-//   the X-NQT header, with another content type or from another origin, and refuses a cross-site read with 403
-//   (these requests come from the test, not the page, which only ever sends GET on a tour).
+// - the backend answers every write method with 405 except the two JOBS writes, which refuse a request without the
+//   X-NQT header, with another content type or from another origin, and the proof and session routes, which refuse a
+//   write with 403; it refuses a cross-site read with 403 too (these requests come from the test, not the page, which
+//   only ever sends GET on a tour). A write carries the page's origin, as a page would send it; without one the session
+//   check refuses it first (403), and every /api path, the live stream included, refuses a missing or wrong session
+//   cookie (401).
 import { expect, test, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -20,6 +23,7 @@ import { expectCleanFlow, message, openTerminal, runLine, settle, status, watchF
 const CONTRACT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'contract', 'openapi.json')
 const RUN = 'nt_volmanaged_v0_fixture_m1'
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'] as const
+const SESSION_ROUTES: ReadonlySet<string> = new Set(['/api/desktop/proof', '/api/session', '/api/session/code', '/api/session/redeem'])
 
 // A context from the fixture index for each context rule of GET /api/commands.
 const CONTEXTS: Readonly<Record<string, readonly string[]>> = {
@@ -161,18 +165,27 @@ test.describe('safety flows', () => {
     expect(actionNames(openApiNames(contract))).toEqual([])
   })
 
-  test('the backend answers every write method with 405 on every route but the two JOBS writes, and refuses a cross-site read', async ({ page }) => {
+  test('the backend answers every write method with 405 on every route but the two JOBS writes, and refuses a cross-site read', async ({ page, baseURL }) => {
     const served = await apiJson<OpenApiDoc>(page, '/api/openapi.json')
+    const origin = new URL(String(baseURL)).origin // a page sends its own origin with a write; the session check passes it on
     const answers: string[] = []
+    const withoutOrigin: string[] = []
     for (const route of Object.keys(served.paths)) {
       const url = route.replace(/\{[^}]+\}/g, 'x')
       for (const method of WRITE_METHODS) {
         if (JOB_WRITES.includes(`${method} ${route}`)) continue
-        const response = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json' } })
-        if (response.status() !== 405) answers.push(`${method} ${url}: ${response.status()}`)
+        const response = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json', origin } })
+        // The proof and the three session routes take no cookie, so a write to them is refused outright (403) instead.
+        const expected = SESSION_ROUTES.has(route) ? 403 : 405
+        if (response.status() !== expected) answers.push(`${method} ${url}: ${response.status()}`)
+        if (OFFLINE) continue // the demo has no session: it answers every write with 405
+        // The same write with no Origin at all is refused by the session check before the router is asked (03 4.2).
+        const bare = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json' } })
+        if (bare.status() !== 403) withoutOrigin.push(`${method} ${url}: ${bare.status()}`)
       }
     }
     expect(answers).toEqual([])
+    expect(withoutOrigin).toEqual([])
     const crossSite = await page.request.get('/api/runs', { headers: { 'sec-fetch-site': 'cross-site' } })
     expect(crossSite.status()).toBe(403)
     const otherOrigin = await page.request.get('/api/health', { headers: { origin: 'http://attacker.example' } })
@@ -181,9 +194,31 @@ test.describe('safety flows', () => {
     expect(sameOrigin.status()).toBe(200)
   })
 
-  test('the backend answers every write method on the two JOBS routes by refusing a request without X-NQT, with another content type, from another origin or cross-site', async ({ page }) => {
+  test('every /api path refuses a missing cookie, a wrong cookie and a foreign origin, the live stream included', async ({ page, playwright, baseURL }) => {
+    test.skip(OFFLINE, 'the demo dataset has no session to refuse: the demo layer answers every GET without one')
+    const origin = new URL(String(baseURL)).origin
+    const paths = ['/api/health', '/api/runs', '/api/live/stream', '/api/openapi.json']
+    const bare = await playwright.request.newContext({ baseURL: origin, storageState: { cookies: [], origins: [] } }) // no cookie, whatever the project saved
+    const cookie = (await page.context().cookies()).find((c) => c.name.startsWith('nqt_s_'))
+    expect(cookie, 'the global set-up saved a session cookie').toBeDefined()
+    try {
+      for (const route of paths) {
+        expect((await bare.get(route)).status(), `${route} without a cookie`).toBe(401)
+        const wrong = await bare.get(route, { headers: { cookie: `${cookie?.name}=${'0'.repeat(43)}` } })
+        expect(wrong.status(), `${route} with a wrong cookie`).toBe(401)
+        const foreign = await page.request.get(route, { headers: { origin: 'http://attacker.example' } })
+        expect(foreign.status(), `${route} from another origin`).toBe(403)
+      }
+      // the proof route holds no secret and needs no cookie (the backend's own start-up check uses it)
+      expect((await bare.get(`/api/desktop/proof?nonce=${'0'.repeat(64)}`)).status(), 'the proof route').toBe(200)
+    } finally {
+      await bare.dispose()
+    }
+  })
+
+  test('the backend answers every write method on the two JOBS routes by refusing a request without X-NQT, with another content type, from another origin or cross-site', async ({ page, baseURL }) => {
     const body = JSON.stringify({ strategy: 'za_orb', params: {}, variant: 'vendor', start: '2015-01-02', end: '2015-02-02', run_id: 't_safety_refused' })
-    const json = { 'content-type': 'application/json' }
+    const json = { 'content-type': 'application/json', origin: new URL(String(baseURL)).origin }
     const marked = { ...json, 'x-nqt': '1' }
     const post = (headers: Record<string, string>) => page.request.fetch('/api/jobs', { method: 'POST', data: body, headers })
     expect((await post(json)).status(), 'no X-NQT header').toBe(403)
@@ -191,7 +226,7 @@ test.describe('safety flows', () => {
     expect((await post({ ...marked, origin: 'http://attacker.example' })).status(), 'another origin').toBe(403)
     expect((await post({ ...marked, 'sec-fetch-site': 'cross-site' })).status(), 'cross-site').toBe(403)
     const remove = (headers: Record<string, string>) => page.request.fetch('/api/jobs/j_000000000000', { method: 'DELETE', headers })
-    expect((await remove({})).status(), 'DELETE without X-NQT').toBe(403)
+    expect((await remove({ origin: json.origin })).status(), 'DELETE without X-NQT').toBe(403)
     expect((await remove({ ...json, origin: 'http://attacker.example', 'x-nqt': '1' })).status(), 'DELETE from another origin').toBe(403)
     for (const method of ['PUT', 'PATCH']) {
       expect((await page.request.fetch('/api/jobs', { method, data: body, headers: marked })).status(), `${method} /api/jobs`).toBe(405)

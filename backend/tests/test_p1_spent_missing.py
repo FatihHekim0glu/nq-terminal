@@ -16,13 +16,15 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 
 
 def _client() -> TestClient:
     app = create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)}))
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 def test_fixture_tree_has_no_sealed_daily_file():

@@ -31,7 +31,9 @@ from nq_terminal.models.runs import (
     TradeRow,
 )
 from nq_terminal.services import result_cache
+from nq_terminal.services.files import file_cache
 from nq_terminal.services.runs import (
+    CACHE_BYTES,
     MAX_COMPARE,
     RunNotFound,
     RunService,
@@ -61,7 +63,8 @@ def run_service_for(state: Any) -> RunService:
             service = getattr(state, "run_service", None)
             if service is None:
                 settings = state.settings
-                service = RunService(data_root=settings.data_root, project_root=settings.root)
+                cache = file_cache(settings.file_cache_bytes, roots=[settings.data_root], max_bytes=CACHE_BYTES)
+                service = RunService(data_root=settings.data_root, project_root=settings.root, cache=cache)
                 state.run_service = service
     return service
 

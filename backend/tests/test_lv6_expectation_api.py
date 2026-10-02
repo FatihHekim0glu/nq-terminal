@@ -25,6 +25,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 URL = "/api/analytics/paper-expectation"
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
@@ -43,7 +45,7 @@ def with_route(app):
 
 @pytest.fixture(scope="module")
 def api() -> TestClient:
-    return TestClient(with_route(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)}))), base_url=LOCAL,
+    return api_client(with_route(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)}))), base_url=LOCAL,
                       client=LOOPBACK)
 
 
@@ -172,7 +174,7 @@ def test_the_route_reads_no_price_on_the_real_files(tracked, tmp_path):
     serve = make_fake_serve(tmp_path / "oos_access_log.jsonl")
     app = with_route(create_app(load_settings({})))
     app.state.serve_fn = serve
-    real = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    real = api_client(app, base_url=LOCAL, client=LOOPBACK)
     tracked(tracking_rows(35))
     body = get(real)
     assert body["refusal"] is None and body["backtest"]["placement"] is not None, body["refusal"]

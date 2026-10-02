@@ -1,5 +1,12 @@
 """System endpoints: GET /api/health.
 
+Desktop fields (03 sections 4.4, 4.6 and 7.1): `contract` is the desktop contract number
+(`contract/desktop_version.json`), `openapi_sha256` the full sha256 of `contract/openapi.json`, `dist` whether the
+served page build is `current`, `stale` or `missing` (`desktop/build_stamp.py`), and `port_fixed` is true only for a
+backend a browser launcher started on the fixed port 8765 (launcher mode, bound there), so the page copies full
+addresses there and the portable `#go=` string everywhere else. The page polls health every 2 s, so the two file
+reads are memoised for `BUILD_MEMO_S`.
+
 Every check reuses nq-lab's own read-only functions (`oos_gate.check_openings_pin`,
 `check_sealed_log_pin`, `load_openings`, `live_guards.kill_switch_on`); nothing is reimplemented and
 nothing is written.
@@ -9,22 +16,65 @@ Gate counters: until the bar service exists (Phase 2.3) they read 0. The service
 """
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
+from typing import Callable, Literal
 
 from fastapi import APIRouter, Request
 
 from nq_lab import live_guards
 from nq_lab.config import IS_END, IS_START
+from nq_terminal.desktop import lifecycle
+from nq_terminal.desktop.build_stamp import OPENAPI, dist_status, openapi_sha256
+from nq_terminal.desktop.handshake import contract_number
 from nq_terminal.models.common import CacheStats, Fence, Health, Pins, SealedStatus
-from nq_terminal.settings import Settings
+from nq_terminal.settings import DEFAULT_PORT, MODE_LAUNCHER, Settings
 
 router = APIRouter(prefix="/api", tags=["system"])
 
 GateStats = tuple[int, int, int]
+FIXED_BROWSER_PORT = DEFAULT_PORT  # the browser door's port (03 section 2.1); read at call time
+BUILD_MEMO_S = 5.0
+
+
+class DesktopHealth(Health):
+    """Health plus the fields the shell and the page compare (03 sections 4.4, 4.6 and 7.1)."""
+
+    contract: int
+    openapi_sha256: str | None
+    dist: Literal["current", "stale", "missing"]
+    port_fixed: bool
+
+
+_BUILD_MEMO: dict[Path, tuple[float, str | None, str]] = {}
+_BUILD_GUARD = threading.Lock()
+
+
+def reset_build_memo() -> None:
+    with _BUILD_GUARD:
+        _BUILD_MEMO.clear()
+
+
+def build_state(web_dir: Path) -> tuple[str | None, str]:
+    """(full sha256 of contract/openapi.json, dist status of `web_dir`), read at most once per BUILD_MEMO_S."""
+    now = time.monotonic()
+    with _BUILD_GUARD:
+        cached = _BUILD_MEMO.get(web_dir)
+    if cached is not None and now - cached[0] < BUILD_MEMO_S:
+        return cached[1], cached[2]
+    state = (openapi_sha256(OPENAPI), dist_status(web_dir, OPENAPI))
+    with _BUILD_GUARD:
+        _BUILD_MEMO[web_dir] = (now, *state)
+    return state
+
+
+def port_fixed(mode: str, port: int) -> bool:
+    """True only for a launcher backend bound on the fixed browser port."""
+    return mode == MODE_LAUNCHER and port == FIXED_BROWSER_PORT
 
 
 def _oos_gate() -> ModuleType:
@@ -92,7 +142,14 @@ def build_health(settings: Settings, stats: GateStats, now: datetime | None = No
     )
 
 
-@router.get("/health", response_model=Health)
-def health(request: Request) -> Health:
-    """Versions, the in-sample fence, sealed-window pin status, kill switch and gate counters."""
-    return build_health(request.app.state.settings, gate_stats(request.app.state))
+def desktop_health(settings: Settings, stats: GateStats, bound_port: int) -> DesktopHealth:
+    sha, dist = build_state(settings.web_dist.parent)
+    return DesktopHealth(**build_health(settings, stats).model_dump(), contract=contract_number(), openapi_sha256=sha,
+                         dist=dist, port_fixed=port_fixed(settings.mode, bound_port))
+
+
+@router.get("/health", response_model=DesktopHealth)
+def health(request: Request) -> DesktopHealth:
+    """Versions, the in-sample fence, sealed-window pin status, kill switch, gate counters and the desktop fields."""
+    settings = request.app.state.settings
+    return desktop_health(settings, gate_stats(request.app.state), lifecycle.runtime(request.app).port)

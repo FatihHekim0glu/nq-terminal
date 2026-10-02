@@ -14,7 +14,9 @@ write it, in the terminal's production code (`nq_terminal/**`):
   (`getattr(OUT, name)`, `vars(OUT)`), which could pick an id at run time.
 - import: `socket`, `_socket` and `ssl` (also loaded by `importlib` or `__import__` with a literal name), any `ibapi`
   module outside `client`, `common`, `execution`, `message` and `wrapper` (the connection and framing modules reach
-  the socket), and star imports of the library or the client module.
+  the socket), and star imports of the library or the client module. The one sanction: `backend/nq_terminal/__main__.py`
+  may `import socket` (no alias, no from-import) and use only the bind names; `connect`, `create_connection` and the send
+  methods are flagged there too, and `socket` stays banned in every other file, `desktop/*.py` included.
 
 Tripwires, not a sandbox: the run-time guard in `sendMsg` and `sendMsgProtoBuf` is the layer that holds.
 """
@@ -40,6 +42,12 @@ NET_MODULES = frozenset({"socket", "_socket", "ssl"})
 IBAPI_SUBMODULES = frozenset({"client", "common", "execution", "message", "wrapper"})
 DYNAMIC_IMPORTERS = frozenset({"import_module", "__import__", "find_spec"})
 CLIENT_MODULE_NAME = "ib_readonly_client"
+# The one sanction: the start-up file binds the loopback listening socket itself (03 section 2.2, port 0). It may
+# `import socket` (no alias) and use only these names; any call that connects or sends is flagged there too.
+MAIN_FILE_SUFFIX = "backend/nq_terminal/__main__.py"
+MAIN_SOCKET_NAMES = frozenset({"socket", "AF_INET", "SOCK_STREAM", "SOL_SOCKET", "SO_EXCLUSIVEADDRUSE"})
+MAIN_SOCKET_BANNED_METHODS = frozenset({"connect", "connect_ex", "create_connection", "send", "sendall", "sendto",
+                                        "sendmsg", "sendfile"})
 
 
 class Finding(NamedTuple):
@@ -76,6 +84,7 @@ class _Scan(ast.NodeVisitor):
     def __init__(self, tree: ast.AST, where: str) -> None:
         self.where = where
         self.is_client_file = where.endswith(CLIENT_FILE_SUFFIX)
+        self.is_main_file = where == MAIN_FILE_SUFFIX
         self.aliases = _aliases(tree)
         self.touches_ib = _touches_ib(self.aliases)
         self.findings: list[Finding] = []
@@ -128,6 +137,8 @@ class _Scan(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             parts = alias.name.split(".")
+            if self.is_main_file and alias.name == "socket" and alias.asname is None:
+                continue
             if parts[0] in NET_MODULES:
                 self.flag("import", node, f"imports {alias.name}")
             elif parts[0] == "ibapi" and len(parts) > 1 and parts[1] not in IBAPI_SUBMODULES:
@@ -152,7 +163,16 @@ class _Scan(ast.NodeVisitor):
         if self.is_out(node) and id(node) not in self.handled:
             self.flag("out_id", node, "uses OUT other than as OUT.<an allowed message id>")
 
+    def check_main_socket_use(self, node: ast.Attribute) -> None:
+        """In the sanctioned start-up file only: the socket module's allowed names, and no connect or send method."""
+        if isinstance(node.value, ast.Name) and node.value.id == "socket" and node.attr not in MAIN_SOCKET_NAMES:
+            self.flag("import", node, f"socket.{node.attr} is not one of the bind names")
+        elif node.attr in MAIN_SOCKET_BANNED_METHODS:
+            self.flag("import", node, f".{node.attr} connects or sends on a socket")
+
     def visit_Attribute(self, node: ast.Attribute) -> None:
+        if self.is_main_file:
+            self.check_main_socket_use(node)
         if self.is_out(node.value):
             self.handled.add(id(node.value))
             if node.attr not in ALLOWED_OUT_NAMES:

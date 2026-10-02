@@ -232,6 +232,11 @@ IB_HEAD = "from ibapi.client import EClient\n"
 PROTO_NAME = next(n for n in sorted(NAMES) if n.endswith("ProtoBuf"))
 OUT_HEAD = "from ibapi.message import OUT\n"
 GUARDED_CLASS = "class ReadOnlyClient(EClient):\n"
+MAIN_AT = "backend/nq_terminal/__main__.py"
+DESKTOP_AT = "backend/nq_terminal/desktop/lock.py"
+MAIN_BIND = ("import socket\ns = socket.socket(socket.AF_INET, socket.SOCK_STREAM)\n"
+             "s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)\ns.bind(('127.0.0.1', 0))\n"
+             "s.getsockname()")
 
 
 def bypass(rule: str, snippet: str, where: str = OTHER_AT):
@@ -289,6 +294,16 @@ BYPASS_CASES = [
     bypass("import", "import socket as s\ns.create_connection(('127.0.0.1', 7497))"),
     bypass("import", "from socket import create_connection"),
     bypass("import", "import ssl"),
+    # the one sanction (__main__.py binds the loopback socket) is narrow: nowhere else, and never to connect or send
+    bypass("import", MAIN_BIND, where=DESKTOP_AT),
+    bypass("import", MAIN_BIND, where=OTHER_AT),
+    bypass("import", "import socket as s\ns.create_connection(('127.0.0.1', 7497))", where=MAIN_AT),
+    bypass("import", "import socket\nsocket.create_connection(('127.0.0.1', 7497))", where=MAIN_AT),
+    bypass("import", "import socket\ns = socket.socket()\ns.connect(('127.0.0.1', 7497))", where=MAIN_AT),
+    bypass("import", "import socket\ns = socket.socket()\ns.sendall(b'x')", where=MAIN_AT),
+    bypass("import", "from socket import socket", where=MAIN_AT),
+    bypass("import", "import _socket", where=MAIN_AT),
+    bypass("import", "import ssl", where=MAIN_AT),
     bypass("import", "import importlib\nm = importlib.import_module('socket')"),
     bypass("import", "m = __import__('ssl')"),
     bypass("import", "m = __import__('socket')", where=CLIENT_AT),
@@ -317,6 +332,7 @@ BYPASS_ALLOWED = [
     pytest.param(OTHER_AT, "def f(obj, name):\n    return getattr(obj, name)", id="dynamic getattr, no ib module"),
     pytest.param(OTHER_AT, "def f(conn):\n    return conn.cursor()", id="a plain conn name"),
     pytest.param(OTHER_AT, "import threading\nimport time\nimport math", id="harmless imports"),
+    pytest.param(MAIN_AT, MAIN_BIND, id="the loopback bind of the start-up file"),
     pytest.param(OTHER_AT, "def f(c):\n    return c.reqAllOpenOrders()", id="the read request"),
 ]
 

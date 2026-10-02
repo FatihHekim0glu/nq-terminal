@@ -21,7 +21,15 @@ const NODE = '/n/bin/node'
 const PYTHON = '/lab/.venv/bin/python'
 const PROMPT_OFF = { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
 const BACKEND_ENV = { NQT_PORT: '8765', PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' }
-const PREWARM_ENV = { ...BACKEND_ENV, NQT_PREWARM: '1' } // the plain launcher asks for the HOME prewarm; --dev and fixtures do not
+// The plain launcher reads TOKEN and NONCE from the backend's input and asks for the HOME prewarm; --dev and fixtures do not.
+const CONTROL_ENV = { ...BACKEND_ENV, NQT_STDIN_CONTROL: '1', NQT_PREWARM: '1' }
+const PROBE = '0'.repeat(64)
+/** Readiness is the proof route: every other /api path needs a session the launcher does not have yet. */
+const proofWait = (port: number): { url: string; contains: string } => ({
+  url: `http://127.0.0.1:${port}/api/desktop/proof?nonce=${PROBE}`,
+  contains: '"proof"',
+})
+const LIVE_LOCK = (port: number): Facts['lock'] => ({ state: 'live', port })
 
 const READY = { path: PYTHON, exists: true, fastapi: true, nqLab: true }
 const NO_PYTHON = { path: PYTHON, exists: false, fastapi: false, nqLab: false }
@@ -41,6 +49,8 @@ function facts(over: Partial<Facts> = {}): Facts {
     contract: 'in sync',
     fixtureDir: null,
     buildNeeded: false,
+    stateDir: '/lab/terminal/state',
+    lock: { state: 'none', port: null },
     ...over,
   }
 }
@@ -118,9 +128,9 @@ describe('parseArgs', () => {
     expect(errorOf(['--port=abc'])).toMatch(/--port/)
   })
 
-  it('refuses --dev with a port other than 8765, because the Vite proxy points there', () => {
-    expect(errorOf(['--dev', '--port', '8790'])).toContain('8765')
-    expect(errorOf(['--port', '8790', '--dev'])).toContain('8765')
+  it('takes --dev with any port: the Vite proxy reads the backend port from the lock', () => {
+    expect(parsed(['--dev', '--port', '8790'])).toEqual(options({ dev: true, port: 8790 }))
+    expect(parsed(['--port', '8790', '--dev'])).toEqual(options({ dev: true, port: 8790 }))
     expect(parsed(['--dev', '--port', '8765'])).toEqual(options({ dev: true, port: 8765 }))
   })
 
@@ -130,7 +140,7 @@ describe('parseArgs', () => {
   })
 
   it('words every error in plain ASCII', () => {
-    const argvs = [['--bogus'], ['--port', '80'], ['--dev', '--port', '8790'], ['--demo', '--full'], ['--port']]
+    const argvs = [['--bogus'], ['--port', '80'], ['--demo', '--dev'], ['--demo', '--full'], ['--port']]
     for (const argv of argvs) {
       expect([...errorOf(argv)].filter((c) => c.charCodeAt(0) > 126 || c.charCodeAt(0) < 32)).toEqual([])
     }
@@ -303,8 +313,10 @@ describe('planStart: the full terminal', () => {
     what: 'start the backend',
     argv: [PYTHON, '-m', 'nq_terminal'],
     cwd: join(DIR, 'backend'),
-    env: PREWARM_ENV,
-    wait: { url: 'http://127.0.0.1:8765/api/health', contains: '"fence"' },
+    env: CONTROL_ENV,
+    wait: proofWait(8765),
+    allowList: true,
+    stdin: 'control',
   }
 
   it('starts only the backend when web/dist is up to date', () => {
@@ -352,8 +364,8 @@ describe('planStart: the full terminal', () => {
     expect(plan.steps).toEqual([
       {
         ...backend,
-        env: { ...BACKEND_ENV, NQT_PORT: '8790', NQT_FIXTURE_DIR: '/fx dir' },
-        wait: { url: 'http://127.0.0.1:8790/api/health', contains: '"fence"' },
+        env: { ...BACKEND_ENV, NQT_PORT: '8790', NQT_STDIN_CONTROL: '1', NQT_FIXTURE_DIR: '/fx dir' },
+        wait: proofWait(8790),
       },
     ])
     expect(plan.url).toBe('http://127.0.0.1:8790/')
@@ -371,12 +383,54 @@ describe('planStart: the full terminal', () => {
     expect(planFor(options({ build: false }), ready({ corepack: false, buildNeeded: true })).blockers).toEqual([])
   })
 
-  it('opens the page and starts nothing when the terminal already answers on the port', () => {
-    const plan = planFor(options(), ready({ buildNeeded: true, ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } }))
+  it('attaches to the backend the lock names and starts nothing: a launch code is minted for it', () => {
+    const plan = planFor(options(), ready({ buildNeeded: true, lock: LIVE_LOCK(8765), ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } }))
     expect(plan.alreadyRunning).toBe(true)
+    expect(plan.attach).toEqual({ port: 8765 })
+    expect(plan.session).toEqual({ origin: 'http://127.0.0.1:8765', apiPort: 8765 })
     expect(plan.steps).toEqual([])
     expect(plan.blockers).toEqual([])
     expect(plan.url).toBe('http://127.0.0.1:8765/')
+  })
+
+  it('attaches to the port the lock records, even when it is not the one asked for (the app starts on a random port)', () => {
+    const plan = planFor(options(), ready({ lock: LIVE_LOCK(53117) }))
+    expect(plan.attach).toEqual({ port: 53117 })
+    expect(plan.session).toEqual({ origin: 'http://127.0.0.1:53117', apiPort: 53117 })
+    expect(plan.url).toBe('http://127.0.0.1:53117/')
+    expect(plan.steps).toEqual([])
+  })
+
+  it('starts the backend behind a session link when there is no lock', () => {
+    const plan = planFor(options(), ready())
+    expect(plan.attach).toBeNull()
+    expect(plan.session).toEqual({ origin: 'http://127.0.0.1:8765', apiPort: 8765 })
+  })
+
+  it('starts its own backend over a stale lock, and over an unproven one (the backend decides who holds the lock)', () => {
+    for (const lock of [{ state: 'stale', port: 8765 }, { state: 'unproven', port: 8765 }] as const) {
+      const plan = planFor(options(), ready({ lock }))
+      expect(plan.attach).toBeNull()
+      expect(plan.steps.map((s) => s.what)).toEqual(['start the backend'])
+      expect(plan.blockers).toEqual([])
+    }
+  })
+
+  it('refuses a lock that is not owner-only, and starts nothing', () => {
+    const plan = planFor(options(), ready({ lock: { state: 'untrusted', port: 8765 } }))
+    expect(plan.blockers).toHaveLength(1)
+    expect(plan.blockers[0]).toContain('not owner-only')
+    expect(plan.blockers[0]).toContain('/lab/terminal/state')
+    expect(plan.attach).toBeNull()
+  })
+
+  it('refuses a terminal on the port that has no lock: an older version cannot be attached to', () => {
+    const plan = planFor(options(), ready({ ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } }))
+    expect(plan.alreadyRunning).toBe(false)
+    expect(plan.steps).toEqual([])
+    expect(plan.blockers).toHaveLength(1)
+    expect(plan.blockers[0]).toContain('no lock file or token')
+    expect(plan.blockers[0]).toContain('8765')
   })
 
   it('refuses a port taken by another program', () => {
@@ -406,7 +460,8 @@ describe('planStart: --dev', () => {
         ],
         cwd: join(DIR, 'backend'),
         env: BACKEND_ENV,
-        wait: { url: 'http://127.0.0.1:8765/api/health', contains: '"fence"' },
+        wait: proofWait(8765),
+        allowList: true,
       },
       {
         what: 'start the Vite dev server',
@@ -416,6 +471,35 @@ describe('planStart: --dev', () => {
         wait: { url: 'http://127.0.0.1:5173/', contains: 'id="root"' },
       },
     ])
+  })
+
+  it('goes to the dev origin for its session, the code coming from the reloading backend it makes', () => {
+    const plan = planFor(options({ dev: true }), ready())
+    expect(plan.session).toEqual({ origin: 'http://127.0.0.1:5173', apiPort: 8765 })
+    expect(plan.steps[0]?.stdin).toBeUndefined() // uvicorn makes its own token and records it in the lock
+    expect(plan.steps[0]?.env.NQT_STDIN_CONTROL).toBeUndefined()
+  })
+
+  it('stops with a message when a backend already holds the lock: --dev needs its own reloading backend', () => {
+    const plan = planFor(options({ dev: true }), ready({ lock: LIVE_LOCK(8765), ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } }))
+    expect(plan.blockers).toHaveLength(1)
+    expect(plan.blockers[0]).toContain('--dev')
+    expect(plan.blockers[0]).toContain('lock')
+    expect(plan.blockers[0]).toContain('/lab/terminal/state')
+    const free = planFor(options({ dev: true }), ready({ lock: { state: 'stale', port: 8765 } }))
+    expect(free.blockers).toEqual([])
+  })
+
+  it('refuses an untrusted lock too', () => {
+    const plan = planFor(options({ dev: true }), ready({ lock: { state: 'untrusted', port: 8765 } }))
+    expect(plan.blockers.join(' ')).toContain('not owner-only')
+  })
+
+  it('takes a backend port other than 8765, the proxy reading it from the lock', () => {
+    const plan = planFor(options({ dev: true, port: 8790 }), ready({ ports: { '8790': 'free', '5173': 'free', '5174': 'free' } }))
+    expect(plan.blockers).toEqual([])
+    expect(plan.steps[0]?.argv).toContain('8790')
+    expect(plan.session).toEqual({ origin: 'http://127.0.0.1:5173', apiPort: 8790 })
   })
 
   it('installs first when the dependencies are missing', () => {
@@ -524,9 +608,11 @@ describe('formatPlan', () => {
       `step 2 of 3: build web/dist: corepack pnpm build (in ${WEB})`,
       '  env: COREPACK_ENABLE_DOWNLOAD_PROMPT=0',
       `step 3 of 3: start the backend: ${PYTHON} -m nq_terminal (in ${join(DIR, 'backend')})`,
-      '  env: NQT_PORT=8765 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 NQT_FIXTURE_DIR=/fx',
+      '  env: NQT_PORT=8765 PYTHONUTF8=1 PYTHONIOENCODING=utf-8 NQT_STDIN_CONTROL=1 NQT_FIXTURE_DIR=/fx',
+      '  env filter: the allow list of desktop/envlist.py; no other variable reaches the backend',
+      '  input: TOKEN and NONCE, written once and kept open; closing it stops the backend',
       'page: http://127.0.0.1:8765/',
-      'browser: not opened',
+      'browser: not opened (the one-time link http://127.0.0.1:8765/session.html#<one-time code> is printed instead)',
     ])
   })
 
@@ -538,8 +624,15 @@ describe('formatPlan', () => {
     expect(step).toContain(`"${join('/with space/terminal', 'web', 'node_modules', 'vite', 'bin', 'vite.js')}"`)
   })
 
+  it('opens the session page on the dev origin for --dev', () => {
+    const f = facts({ python: READY })
+    const opts = options({ dev: true })
+    const lines = formatPlan(planFor(opts, f), opts, f)
+    expect(lines).toContain('browser: opens http://127.0.0.1:5173/session.html#<one-time code>')
+  })
+
   it('says a terminal is already running and starts nothing', () => {
-    const f = facts({ python: READY, ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } })
+    const f = facts({ python: READY, lock: LIVE_LOCK(8765), ports: { '8765': 'terminal', '5173': 'free', '5174': 'free' } })
     const opts = options()
     const lines = formatPlan(planFor(opts, f), opts, f)
     expect(lines).toContain('port: 8765 (terminal)')
