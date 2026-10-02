@@ -1,0 +1,107 @@
+TestClient( occurrences (file:count)
+./test_analytics_api.py:1
+./test_analytics_errors.py:1
+./test_app.py:7
+./test_audit.py:1
+./test_bars_api.py:1
+./test_bars_fixes.py:1
+./test_contract_cleanups.py:3
+./test_dq_api.py:1
+./test_events_api.py:1
+./test_fixture_mode.py:4
+./test_ib_api.py:2
+./test_journals.py:1
+./test_live_status_fixes.py:1
+./test_live_stream.py:5
+./test_lv6_expectation_api.py:2
+./test_market_pair.py:1
+./test_mnemonics.py:1
+./test_oos_log_paging.py:1
+./test_p11_fixes.py:1
+./test_p1_api.py:1
+./test_p1_spent_missing.py:1
+./test_p2_jobs_api.py:3
+./test_p2_neff_api.py:1
+./test_p2_rct_api.py:6
+./test_p2_risk_extras_api.py:2
+./test_p2_spa_api.py:1
+./test_phase8_analytics_views.py:1
+./test_phase8_api_gaps.py:1
+./test_qa_fence.py:1
+./test_registry_reads.py:1
+./test_research_api.py:1
+./test_roll.py:3
+./test_run_views_api.py:1
+./test_runs_support.py:1
+./test_screen_api_gaps.py:1
+./test_seasonality_api.py:1
+./test_system.py:1
+./test_tearsheet_rules.py:2
+./test_vcone_api.py:2
+
+total occurrences: 68
+files: 39
+test files total: 118
+TestClient( outside tests: 0
+
+--- serve_sealed in test_safety_ast.py RULES ---
+22:- serve_sealed: any reference, import, definition or `getattr` string.
+24:  it): the columnar readers, `serve_sealed`, the order calls, `close_opening`, the ungated loaders and
+87:RULES = ("parquet", "dataset", "duckdb", "polars", "serve_sealed", "data_path", "write", "order_call",
+120:    "nq_lab.data.serve_sealed": "serve_sealed", "nq_lab.oos_gate.serve_sealed": "serve_sealed",
+332:        if name == "serve_sealed":
+333:            self.flag("serve_sealed", node, "refers to serve_sealed (the sealed door is never used)")
+378:        if node.name == "serve_sealed":
+379:            self.flag("serve_sealed", node, "defines serve_sealed")
+389:        if text == "serve_sealed" or text in ORDER_NAMES or text in COLUMNAR_READS:
+536:    banned("serve_sealed", "from nq_lab.data import serve_sealed"),
+537:    banned("serve_sealed", "from nq_lab import oos_gate\noos_gate.serve_sealed(a, b)"),
+538:    banned("serve_sealed", "import nq_lab.data\nnq_lab.data.serve_sealed(a, b)", TEST),
+539:    banned("serve_sealed", "door = getattr(gate, 'serve_sealed')"),
+540:    banned("serve_sealed", "def serve_sealed(*args):\n    pass"),
+690:    allowed("def f():\n    \"\"\"Never calls serve_sealed or placeOrder.\"\"\"\n    return 1"),
+
+87:RULES = ("parquet", "dataset", "duckdb", "polars", "serve_sealed", "data_path", "write", "order_call",
+88-         "ledger_append", "ib_client", "gate_door", "test_gate", "dynamic", "syntax")
+89-
+90-
+91-@dataclass(frozen=True)
+92-class Violation:
+93-    rule: str
+94-    where: str
+95-    line: int
+96-    detail: str
+97-
+98-    def __str__(self) -> str:
+99-        return f"{self.where}:{self.line} [{self.rule}] {self.detail}"
+
+--- WRITE_ALLOWED ---
+36-  bound to a module file under `nq_terminal/` (`stored_alpha.extract(...)`) is not a write by its name alone: that
+37:  module is scanned itself. `WRITE_ALLOWED` lists
+38-  modules that may write under
+39-  `terminal/state`: the P2 job runner (`services/jobs.py`, U3) only.
+40-- order_call: `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions`, `reqAutoOpenOrders`,
+41-  `reqOpenOrders`, their six `...ProtoBuf` twins, and the Nautilus `submit_order`, `cancel_order`, `modify_order` family, as a call, a
+42-  reference, an import or a `getattr` string. A `def` of those names is allowed (the P2 read-only client
+43-  overrides them to raise).
+--
+101-
+102:WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py"})
+103-# The qa golden-file tools (`--write PATH` regenerates a golden vector file under terminal/qa) and their tests, which
+104-# write temporary files and run the tools in a subprocess. They sit outside the terminal's own code, in OTHER scope.
+105:QA_WRITE_ALLOWED: frozenset[str] = frozenset({
+106-    "qa/crosscheck/p12_expectation.py", "qa/crosscheck/p12_neff.py", "qa/crosscheck/p12_power.py",
+107-    "qa/tests/test_p12_expectation.py", "qa/tests/test_p12_neff.py", "qa/tests/test_p12_power.py",
+108-})
+109-
+110-BANNED_MODULES = {
+111-    "pyarrow.parquet": "parquet", "fastparquet": "parquet",
+--
+416-        self.check_serve(node, full)
+417:        if self.scope in (PROD, OTHER) and self.where not in WRITE_ALLOWED | QA_WRITE_ALLOWED:
+418-            receiver = self.dotted(node.func.value) if isinstance(node.func, ast.Attribute) else None
+419-            problem = _write_problem(node, full, id(node) in self.pandas_calls, _terminal_module(receiver))
+420-            if problem:
+421-                self.flag("write", node, problem)
+422-        self.generic_visit(node)
+423-

@@ -1,0 +1,87 @@
+Cumulative import time (ms), three runs, and median; self time median; first importer chain
+module | run1 | run2 | run3 | median cum | median self | imported first by (chain, innermost first)
+TOTAL nq_terminal.__main__ [1503.0, 1457.4, 1454.2] median 1457.4
+scipy.stats | not imported at start-up
+scipy | 8.0 | 7.2 | 6.8 | 7.2 | 0.7 | nq_terminal.analytics.perf <- nq_terminal.services.runs <- nq_terminal.api.runs <- nq_terminal.app <- nq_terminal.__main__
+nq_terminal.analytics.perf | 523.1 | 502.5 | 495.1 | 502.5 | 1.0 | nq_terminal.services.runs <- nq_terminal.api.runs <- nq_terminal.app <- nq_terminal.__main__
+nq_lab.oos_gate | 267.3 | 263.5 | 270.9 | 267.3 | 0.4 | nq_terminal.api.system <- nq_terminal.app <- nq_terminal.__main__
+nautilus_trader | not imported at start-up
+pandas | 266.3 | 262.5 | 269.9 | 266.3 | 0.7 | nq_lab.oos_gate <- nq_terminal.api.system <- nq_terminal.app <- nq_terminal.__main__
+pyarrow | 11.3 | 10.5 | 11.2 | 11.2 | 0.7 | pandas.compat.pyarrow <- pandas.compat <- pandas <- nq_lab.oos_gate <- nq_terminal.api.system
+pyarrow.parquet | 1.2 | 1.2 | 1.1 | 1.2 | 0.5 | nq_terminal.services.catalog <- nq_terminal.api.data <- nq_terminal.app <- nq_terminal.__main__
+exchange_calendars | 78.1 | 81.0 | 76.5 | 78.1 | 1.4 | nq_lab.sessions <- nq_terminal.services.research <- nq_terminal.services.audit <- nq_terminal.api.audit <- nq_terminal.app
+numpy | 44.1 | 41.0 | 46.2 | 44.1 | 1.0 | pandas <- nq_lab.oos_gate <- nq_terminal.api.system <- nq_terminal.app <- nq_terminal.__main__
+fastapi | 166.0 | 163.8 | 165.3 | 165.3 | 0.5 | nq_terminal.app <- nq_terminal.__main__
+uvicorn | 114.7 | 96.9 | 96.0 | 96.9 | 0.6 | nq_terminal.__main__
+pydantic | 14.8 | 15.6 | 15.1 | 15.1 | 0.7 | fastapi.exceptions <- fastapi.params <- fastapi.routing <- fastapi.applications <- fastapi
+starlette | 0.5 | 0.5 | 0.5 | 0.5 | 0.5 | fastapi <- nq_terminal.app <- nq_terminal.__main__
+nq_lab | 0.6 | 0.4 | 0.6 | 0.6 | 0.6 | nq_terminal.api.system <- nq_terminal.app <- nq_terminal.__main__
+nq_lab.data | 15.4 | 15.4 | 15.3 | 15.4 | 0.4 | nq_terminal.services.sessions <- nq_terminal.analytics.series <- nq_terminal.services.runs <- nq_terminal.api.runs <- nq_terminal.app
+nq_lab.config | 0.6 | 0.6 | 0.6 | 0.6 | 0.6 | nq_lab.oos_gate <- nq_terminal.api.system <- nq_terminal.app <- nq_terminal.__main__
+ib_async | not imported at start-up
+ibapi | not imported at start-up
+matplotlib | not imported at start-up
+statsmodels | not imported at start-up
+sklearn | not imported at start-up
+numba | not imported at start-up
+modules matching scipy.stats: 67
+modules matching scipy.: 500
+modules matching nautilus_trader: 0
+modules matching pandas.: 299
+modules matching pyarrow.: 33
+modules matching exchange_calendars: 91
+modules matching numpy.: 146
+
+Top 30 by cumulative (median of three), top-level and nested:
+  1457.4 ms  nq_terminal.__main__
+  1347.7 ms  nq_terminal.app
+   539.1 ms  nq_terminal.api.runs
+   522.4 ms  nq_terminal.services.runs
+   502.5 ms  nq_terminal.analytics.perf
+   405.8 ms  scipy.stats._stats_py
+   289.1 ms  nq_terminal.api.system
+   267.3 ms  nq_lab.oos_gate
+   266.3 ms  pandas
+   165.3 ms  fastapi
+   158.7 ms  fastapi.applications
+   149.1 ms  fastapi.routing
+   146.9 ms  pandas.core.api
+   112.0 ms  fastapi.params
+   100.6 ms  nq_terminal.api.audit
+    96.9 ms  uvicorn
+    94.7 ms  scipy.optimize
+    93.9 ms  nq_terminal.services.audit
+    86.7 ms  scipy.sparse._csr
+    85.8 ms  scipy.sparse._compressed
+    84.7 ms  nq_terminal.api.regimes_capacity_term
+    84.4 ms  scipy._lib._util
+    83.8 ms  scipy._lib._array_api
+    83.4 ms  nq_terminal.services.research
+    80.1 ms  scipy.stats.distributions
+    78.6 ms  nq_lab.sessions
+    78.1 ms  exchange_calendars
+    76.7 ms  exchange_calendars.calendar_utils
+    74.7 ms  scipy.spatial
+    72.3 ms  scipy._external.array_api_compat.numpy
+
+nq_terminal / nq_lab modules by self time (median), top 20:
+    48.1 ms self  nq_terminal.app
+    29.4 ms self  nq_terminal.models.analytics_p1
+    12.4 ms self  nq_terminal.api.analytics
+    11.3 ms self  nq_terminal.models.analytics
+    10.4 ms self  nq_terminal.api.runs
+     9.3 ms self  nq_terminal.models.live
+     7.8 ms self  nq_terminal.api.data
+     6.8 ms self  nq_terminal.models.research
+     6.5 ms self  nq_terminal.models.runs
+     6.3 ms self  nq_terminal.models.run_views
+     5.7 ms self  nq_terminal.models.data
+     5.4 ms self  nq_terminal.api.research
+     5.4 ms self  nq_terminal.models.regimes_capacity_term
+     4.4 ms self  nq_terminal.api.live
+     3.8 ms self  nq_terminal.api.regimes_capacity_term
+     3.7 ms self  nq_terminal.models.audit
+     3.2 ms self  nq_terminal.api.jobs
+     3.1 ms self  nq_terminal.models.dq
+     3.0 ms self  nq_terminal.services.events
+     3.0 ms self  nq_terminal.models.events

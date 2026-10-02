@@ -1,0 +1,96 @@
+nq_lab modules that reach scipy at import time (module-level chain):
+   nq_lab.calendar_announce -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_fomc -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_halloween -> scipy
+   nq_lab.calendar_macroday -> nq_lab.calendar_announce -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_overnight -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_preholiday -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_seasonal -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_summary2 -> nq_lab.calendar_stats -> scipy
+   nq_lab.calendar_tom -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.carry_book -> scipy
+   nq_lab.carry_report -> nq_lab.carry_book -> scipy
+   nq_lab.carry_screen -> nq_lab.carry_book -> scipy
+   nq_lab.carry_secondary -> nq_lab.carry_book -> scipy
+   nq_lab.carry_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.cskew_book -> nq_lab.carry_book -> scipy
+   nq_lab.cskew_controls -> nq_lab.carry_book -> scipy
+   nq_lab.cskew_load -> nq_lab.registry -> nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.cskew_report -> nq_lab.carry_book -> scipy
+   nq_lab.cskew_screen -> nq_lab.cskew_book -> nq_lab.carry_book -> scipy
+   nq_lab.cskew_secondary -> scipy
+   nq_lab.cskew_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.dealer_gamma -> scipy
+   nq_lab.dealer_gamma_build -> nq_lab.dealer_gamma_data -> nq_lab.dealer_gamma_guards -> nq_lab.dealer_gamma -> scipy
+   nq_lab.dealer_gamma_clean -> nq_lab.dealer_gamma_guards -> nq_lab.dealer_gamma -> scipy
+   nq_lab.dealer_gamma_data -> nq_lab.dealer_gamma_guards -> nq_lab.dealer_gamma -> scipy
+   nq_lab.dealer_gamma_guards -> nq_lab.dealer_gamma -> scipy
+   nq_lab.dealer_gamma_report -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.dealer_gamma_session -> nq_lab.dealer_gamma -> scipy
+   nq_lab.dtsmom_nt_compare -> nq_lab.dtsmom_report -> nq_lab.dtsmom_secondary -> nq_lab.calendar_stats -> scipy
+   nq_lab.dtsmom_report -> nq_lab.dtsmom_secondary -> nq_lab.calendar_stats -> scipy
+   nq_lab.dtsmom_secondary -> nq_lab.calendar_stats -> scipy
+   nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_confirm -> nq_lab.eomtsy_screen -> nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_nt_compare -> nq_lab.eomtsy_screen -> nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_report -> nq_lab.eomtsy_screen -> nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_screen -> nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_secondary -> nq_lab.eomtsy_screen -> nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.eomtsy_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.es_options_runner -> nq_lab.dealer_gamma_data -> nq_lab.dealer_gamma_guards -> nq_lab.dealer_gamma -> scipy
+   nq_lab.eurodrift -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.eurodrift_report -> nq_lab.eurodrift_secondary -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.eurodrift_rsv -> nq_lab.eurodrift_secondary -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.eurodrift_secondary -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.eurodrift_stats -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.fomc_cycle -> nq_lab.calendar_fomc -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.fomc_cycle_report -> nq_lab.fomc_cycle_secondary -> nq_lab.calendar_stats -> scipy
+   nq_lab.fomc_cycle_secondary -> nq_lab.calendar_stats -> scipy
+   nq_lab.fomc_cycle_stats -> scipy
+   nq_lab.fomc_tone_analysis -> scipy
+   nq_lab.fomc_tone_report -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.fxeom_screen -> nq_lab.fxeom_stats -> nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.fxeom_secondary -> nq_lab.fxeom_stats -> nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.fxeom_stats -> nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.mim_report -> nq_lab.mim_secondary -> nq_lab.mim_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.mim_secondary -> nq_lab.mim_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.mim_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.overnight_drift -> nq_lab.calendar_stats -> scipy
+   nq_lab.rebal_confirm -> nq_lab.calendar_stats -> scipy
+   nq_lab.rebalance_effect -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.rebalance_report -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.rebalance_secondary -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.registry -> nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.reversal_effect -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.reversal_report -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.reversal_secondary -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.reversal_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.round4_summary -> scipy
+   nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.round7_summary -> nq_lab.registry -> nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.round8_summary -> nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy
+   nq_lab.sealed_qa -> nq_lab.rebalance_effect -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sealed_report -> nq_lab.sealed_qa -> nq_lab.rebalance_effect -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_nt -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_nt_compare -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_stats -> scipy
+   nq_lab.sizing_summary -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_tsmom -> nq_lab.calendar_seasonal -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_tsmom_report -> nq_lab.calendar_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_volman -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_volman_report -> nq_lab.calendar_stats -> scipy
+   nq_lab.sizing_volman_variants -> nq_lab.sizing_stats -> scipy
+   nq_lab.volman_oos -> nq_lab.sizing_stats -> scipy
+   nq_lab.vrp_screen -> nq_lab.vrp_secondary -> nq_lab.vrp_stats -> scipy
+   nq_lab.vrp_secondary -> nq_lab.vrp_stats -> scipy
+   nq_lab.vrp_stats -> scipy
+   nq_lab.vt_har_screen -> nq_lab.vt_har_secondary -> nq_lab.registry -> nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+   nq_lab.vt_har_secondary -> nq_lab.registry -> nq_lab.round6_summary -> nq_lab.round5_summary -> nq_lab.round4_summary -> scipy
+
+terminal sites (module-level) importing one of those nq_lab modules:
+   backend/nq_terminal/analytics/relative.py:25 imports nq_lab.sizing_stats (reaches scipy via nq_lab.sizing_stats -> scipy)
+   backend/nq_terminal/analytics/validity.py:30 imports nq_lab.sizing_stats (reaches scipy via nq_lab.sizing_stats -> scipy)
+   backend/nq_terminal/services/tearsheet.py:28 imports nq_lab.dtsmom_stats (reaches scipy via nq_lab.dtsmom_stats -> nq_lab.calendar_stats -> scipy)

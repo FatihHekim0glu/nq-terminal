@@ -1,0 +1,19 @@
+terminal/state listing (Get-ChildItem -Recurse -Force), taken 2026-10-02 04:57, before and after this slice's commands (identical):
+  state\jobs.json   Length 1072   LastWriteTime 2026-10-01 23:15:18 (local)   CreationTime 2026-10-01 23:15:15 (local)
+  No other file or folder.
+
+state\jobs.json content summary: version 1; 1 job
+  id j_0ae1f6183dcc, run_id t_v2_release_check, state ok, created 2026-10-01T22:15:15+00:00,
+  started 2026-10-01T22:15:15+00:00, finished 2026-10-01T22:15:18+00:00, exit_code 0
+  status counts (field "state"): queued 0, running 0, ok 1
+
+Screenshot baselines: git ls-files '*.png' under terminal = 210 (same 210 PNG files on disk under web, none under node_modules)
+  web/e2e/__screenshots__/flows 32, visual 46, p1.spec.ts 28, p11.spec.ts 18, gallery-grids-tiles.spec.ts 16,
+  gallery-echarts.spec.ts 14, books.spec.ts 10, market.spec.ts 6, runs.spec.ts 6, des.spec.ts 4, gallery-candles.spec.ts 4,
+  gallery-linestack.spec.ts 4, gp.spec.ts 4, home.spec.ts 4, live.spec.ts 4, shell.spec.ts 4, gallery-libraries.spec.ts 2,
+  reg.spec.ts 2, tear.spec.ts 2
+  (03 recorded 204 on 2 October 2026; the plan text says 210; the tree has 210)
+
+Free space, read 2026-10-02 04:57 (start of this slice):
+  C: 125,058 MB free (122.13 GB)
+  D: 233,557 MB free (228.08 GB)

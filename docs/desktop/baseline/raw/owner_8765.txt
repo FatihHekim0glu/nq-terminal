@@ -1,0 +1,16 @@
+Read-only check taken 2026-10-02 04:56 (local time), nothing stopped or touched.
+
+Get-NetTCPConnection -LocalPort 8765 -State Listen
+LocalAddress  LocalPort  State   OwningProcess
+127.0.0.1     8765       Listen  49476
+
+Win32_Process for pid 49476 (created 2026-10-02 04:04:15, parent pid 47620)
+  CommandLine: "C:\Users\Fatih Hekimoglu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe" -m nq_terminal
+Parent pid 47620 (the venv launcher)
+  CommandLine: "C:\Users\Fatih Hekimoglu\nq-lab\.venv\Scripts\python.exe" -m nq_terminal
+Children of pid 49476: none
+Command line contains --reload: False
+
+Other processes whose command line matches pytest|playwright|vite|cargo|uvicorn and nq-lab:
+  pid 31860  "C:\Users\Fatih Hekimoglu\nq-lab\.venv\Scripts\python.exe" -m uvicorn fixture_app:app --app-dir backend/tests --host 127.0.0.1 --port 8796
+  (a fixture backend on spare port 8796 from the port table, started by another slice of this wave; no --reload; not touched)

@@ -1,0 +1,40 @@
+== direct imports of nq_terminal.analytics.perf (run 1; cumulative ms; sorted)
+     422.3  scipy.stats._stats_py
+      26.1  scipy.stats._mgc
+      23.3  scipy.stats._morestats
+       8.0  scipy
+       7.9  scipy.stats._new_distributions
+       7.3  scipy.stats._multicomp
+       4.9  scipy.stats._kde
+       3.5  scipy.stats._distribution_infrastructure
+== direct imports of nq_terminal.services.runs (run 1; cumulative ms; sorted)
+     523.1  nq_terminal.analytics.perf
+      17.9  nq_terminal.analytics.series
+       0.5  nq_terminal.analytics.drawdown
+       0.2  nq_terminal.analytics
+== direct imports of nq_terminal.api.system (run 1; cumulative ms; sorted)
+     267.3  nq_lab.oos_gate
+      15.6  pydantic.v1
+       2.7  nq_terminal.models.common
+       1.1  nq_lab.live_guards
+       0.9  nq_terminal.settings
+       0.6  nq_lab
+== direct imports of nq_terminal.app (run 1; cumulative ms; sorted)
+     559.4  nq_terminal.api.runs
+     289.1  nq_terminal.api.system
+     166.0  fastapi
+     100.6  nq_terminal.api.audit
+      87.5  nq_terminal.api.regimes_capacity_term
+      33.0  nq_terminal.api.data
+      18.8  nq_terminal.api.live
+      15.8  nq_terminal.api.events
+
+Cost of each library family, counting only outermost entries (ms), runs 1..3 and median; ordering caveat: the first importer pays
+  scipy                   530.3    509.6    502.6   median    509.6
+  pandas                  266.8    263.1    270.4   median    266.8
+  numpy                   124.3    117.8    119.9   median    119.9
+  pyarrow                  45.8     44.1     46.3   median     45.8
+  exchange_calendars       78.1     81.0     76.5   median     78.1
+  fastapi                 166.0    163.8    165.3   median    165.3
+  pydantic                 74.3     73.7     73.9   median     73.9
+  uvicorn                 114.7     96.9     96.0   median     96.9

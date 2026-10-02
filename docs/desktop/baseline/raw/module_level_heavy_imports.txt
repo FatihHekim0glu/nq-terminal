@@ -1,0 +1,117 @@
+backend/nq_terminal/analytics/_inputs.py:13 | import numpy as np
+backend/nq_terminal/analytics/_inputs.py:14 | import pandas as pd
+backend/nq_terminal/analytics/bootstrap.py:45 | import numpy as np
+backend/nq_terminal/analytics/bootstrap.py:46 | import pandas as pd
+backend/nq_terminal/analytics/capacity.py:26 | import numpy as np
+backend/nq_terminal/analytics/capacity.py:27 | import pandas as pd
+backend/nq_terminal/analytics/deflated.py:30 | import numpy as np
+backend/nq_terminal/analytics/deflated.py:31 | import pandas as pd
+backend/nq_terminal/analytics/deflated.py:32 | from scipy import stats as sps
+backend/nq_terminal/analytics/distribution.py:21 | import numpy as np
+backend/nq_terminal/analytics/distribution.py:22 | import pandas as pd
+backend/nq_terminal/analytics/distribution.py:23 | from scipy import stats as sps
+backend/nq_terminal/analytics/drawdown.py:19 | import numpy as np
+backend/nq_terminal/analytics/drawdown.py:20 | import pandas as pd
+backend/nq_terminal/analytics/excursions.py:35 | import numpy as np
+backend/nq_terminal/analytics/excursions.py:36 | import pandas as pd
+backend/nq_terminal/analytics/expectation.py:48 | import numpy as np
+backend/nq_terminal/analytics/expectation.py:49 | import pandas as pd
+backend/nq_terminal/analytics/exposure.py:51 | import numpy as np
+backend/nq_terminal/analytics/exposure.py:52 | import pandas as pd
+backend/nq_terminal/analytics/neff.py:38 | import numpy as np
+backend/nq_terminal/analytics/neff.py:39 | from scipy import stats as sps
+backend/nq_terminal/analytics/neff.py:40 | from scipy.cluster.hierarchy import fcluster, linkage
+backend/nq_terminal/analytics/neff.py:41 | from scipy.spatial.distance import squareform
+backend/nq_terminal/analytics/perf.py:28 | import numpy as np
+backend/nq_terminal/analytics/perf.py:29 | import pandas as pd
+backend/nq_terminal/analytics/perf.py:30 | from scipy import stats as sps
+backend/nq_terminal/analytics/regimes.py:17 | import numpy as np
+backend/nq_terminal/analytics/regimes.py:18 | import pandas as pd
+backend/nq_terminal/analytics/regimes.py:19 | from scipy import stats as sps
+backend/nq_terminal/analytics/relative.py:22 | import numpy as np
+backend/nq_terminal/analytics/relative.py:23 | import pandas as pd
+backend/nq_terminal/analytics/risk.py:28 | import numpy as np
+backend/nq_terminal/analytics/risk.py:29 | import pandas as pd
+backend/nq_terminal/analytics/risk.py:30 | from scipy import stats as sps
+backend/nq_terminal/analytics/risk_extras.py:39 | import numpy as np
+backend/nq_terminal/analytics/risk_extras.py:40 | from scipy import stats as sps
+backend/nq_terminal/analytics/risk_extras.py:42 | from nq_terminal.analytics import perf, relative
+backend/nq_terminal/analytics/rolling.py:27 | import numpy as np
+backend/nq_terminal/analytics/rolling.py:28 | import pandas as pd
+backend/nq_terminal/analytics/seasonality.py:27 | import numpy as np
+backend/nq_terminal/analytics/seasonality.py:28 | import pandas as pd
+backend/nq_terminal/analytics/series.py:51 | import numpy as np
+backend/nq_terminal/analytics/series.py:52 | import pandas as pd
+backend/nq_terminal/analytics/series.py:57 | from nq_lab.sessions import nyse_sessions
+backend/nq_terminal/analytics/spa.py:36 | import numpy as np
+backend/nq_terminal/analytics/stress.py:17 | import numpy as np
+backend/nq_terminal/analytics/stress.py:18 | import pandas as pd
+backend/nq_terminal/analytics/term_structure.py:30 | import numpy as np
+backend/nq_terminal/analytics/term_structure.py:31 | import pandas as pd
+backend/nq_terminal/analytics/tracking.py:21 | import numpy as np
+backend/nq_terminal/analytics/trades.py:45 | import numpy as np
+backend/nq_terminal/analytics/trades.py:46 | import pandas as pd
+backend/nq_terminal/analytics/trades.py:47 | from scipy import stats as sps
+backend/nq_terminal/analytics/trend_regime.py:24 | import numpy as np
+backend/nq_terminal/analytics/trend_regime.py:25 | import pandas as pd
+backend/nq_terminal/analytics/trend_regime.py:26 | from scipy import stats as sps
+backend/nq_terminal/analytics/validity.py:26 | import numpy as np
+backend/nq_terminal/analytics/validity.py:27 | import pandas as pd
+backend/nq_terminal/analytics/validity.py:28 | from scipy import stats as sps
+backend/nq_terminal/api/analytics.py:37 | import pandas as pd
+backend/nq_terminal/api/audit.py:19 | from nq_lab import guards, oos_gate
+backend/nq_terminal/api/data.py:28 | import pandas as pd
+backend/nq_terminal/api/data.py:32 | from nq_lab import data as nq_data
+backend/nq_terminal/api/data.py:35 | from nq_lab.sessions import nyse_sessions
+backend/nq_terminal/api/events.py:19 | import pandas as pd
+backend/nq_terminal/api/system.py:19 | from nq_lab import live_guards, oos_gate
+backend/nq_terminal/services/bars.py:43 | import numpy as np
+backend/nq_terminal/services/bars.py:44 | import pandas as pd
+backend/nq_terminal/services/bars.py:46 | from nq_lab import oos_gate
+backend/nq_terminal/services/catalog.py:28 | import pandas as pd
+backend/nq_terminal/services/catalog.py:29 | import pyarrow as pa
+backend/nq_terminal/services/catalog.py:30 | import pyarrow.parquet as pq
+backend/nq_terminal/services/catalog.py:33 | from nq_lab.data import processed_path
+backend/nq_terminal/services/dq.py:24 | import exchange_calendars as xc
+backend/nq_terminal/services/events.py:47 | import numpy as np
+backend/nq_terminal/services/events.py:48 | import pandas as pd
+backend/nq_terminal/services/fence.py:21 | import pandas as pd
+backend/nq_terminal/services/files.py:52 | import pandas as pd
+backend/nq_terminal/services/ib_readonly_client.py:31 | from ibapi.client import EClient
+backend/nq_terminal/services/ib_readonly_client.py:32 | from ibapi.common import PROTOBUF_MSG_ID
+backend/nq_terminal/services/ib_readonly_client.py:33 | from ibapi.execution import ExecutionFilter
+backend/nq_terminal/services/ib_readonly_client.py:34 | from ibapi.message import OUT
+backend/nq_terminal/services/ib_readonly_client.py:35 | from ibapi.wrapper import EWrapper
+backend/nq_terminal/services/instruments.py:22 | import pandas as pd
+backend/nq_terminal/services/market.py:28 | import numpy as np
+backend/nq_terminal/services/market.py:29 | import pandas as pd
+backend/nq_terminal/services/market.py:30 | from scipy.cluster.hierarchy import leaves_list, linkage
+backend/nq_terminal/services/market.py:31 | from scipy.spatial.distance import squareform
+backend/nq_terminal/services/paper_expectation.py:26 | import numpy as np
+backend/nq_terminal/services/regimes_capacity_term.py:28 | import numpy as np
+backend/nq_terminal/services/regimes_capacity_term.py:29 | import pandas as pd
+backend/nq_terminal/services/research.py:30 | import numpy as np
+backend/nq_terminal/services/research.py:31 | import pandas as pd
+backend/nq_terminal/services/research.py:35 | from nq_lab.sessions import nyse_sessions
+backend/nq_terminal/services/roll.py:31 | import numpy as np
+backend/nq_terminal/services/roll.py:32 | import pandas as pd
+backend/nq_terminal/services/run_books.py:24 | import numpy as np
+backend/nq_terminal/services/run_books.py:25 | import pandas as pd
+backend/nq_terminal/services/runs.py:43 | from nq_lab.sessions import nyse_sessions
+backend/nq_terminal/services/runs.py:45 | from nq_terminal.analytics import perf
+backend/nq_terminal/services/seasonality.py:27 | import numpy as np
+backend/nq_terminal/services/seasonality.py:28 | import pandas as pd
+backend/nq_terminal/services/seasonality.py:32 | from nq_lab.sessions import nyse_sessions
+backend/nq_terminal/services/sessions.py:26 | import pandas as pd
+backend/nq_terminal/services/sessions.py:28 | from nq_lab import data as nq_data
+backend/nq_terminal/services/spa_family.py:39 | import numpy as np
+backend/nq_terminal/services/spa_family.py:40 | import pandas as pd
+backend/nq_terminal/services/tearsheet.py:25 | import numpy as np
+backend/nq_terminal/services/tearsheet.py:26 | import pandas as pd
+backend/nq_terminal/services/tearsheet.py:29 | from nq_terminal.analytics import distribution, drawdown, perf, relative, risk, rolling, validity
+backend/nq_terminal/services/tearsheet_extended.py:21 | import numpy as np
+backend/nq_terminal/services/tearsheet_extended.py:22 | import pandas as pd
+backend/nq_terminal/services/tearsheet_extended.py:25 | from nq_terminal.analytics import bootstrap, deflated, distribution, perf, regimes, relative, risk, rolling, stress
+backend/nq_terminal/services/tearsheet_trades.py:16 | import pandas as pd
+backend/nq_terminal/services/vcone.py:22 | import numpy as np
+backend/nq_terminal/services/vcone.py:23 | import pandas as pd

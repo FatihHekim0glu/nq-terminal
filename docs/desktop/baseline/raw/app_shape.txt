@@ -1,0 +1,36 @@
+fixture_mode True
+top-level len(app.routes) (route, 21 included-router nodes, 1 mount) 23
+route contexts from iter_route_contexts 79
+distinct (method, path) pairs excluding HEAD and OPTIONS 78
+distinct paths in the route list 76
+non-GET pairs ['DELETE /api/jobs/{job_id}', 'POST /api/jobs']
+app.openapi() paths 75 operations 77
+contract/openapi.json paths 75 operations 77
+app.openapi() == contract (whole document) True
+paths only in app []
+paths only in contract []
+route-list paths not in openapi (static or schema-excluded) ['/api/openapi.json']
+routes by tag-less prefix counts:
+   /api/analytics 22
+   /api/audit 3
+   /api/bars 1
+   /api/commands 1
+   /api/confirmations 1
+   /api/data 1
+   /api/dq 3
+   /api/events 2
+   /api/health 1
+   /api/hypotheses 3
+   /api/ib 1
+   /api/instruments 1
+   /api/jobs 4
+   /api/ledger 1
+   /api/live 6
+   /api/market 9
+   /api/multiple-testing 1
+   /api/openapi.json 1
+   /api/qa 2
+   /api/registry 1
+   /api/runs 9
+   /api/sealed 2
+   /api/seasonality 2

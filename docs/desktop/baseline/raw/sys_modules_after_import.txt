@@ -1,0 +1,19 @@
+scipy                                         True
+scipy.stats                                   True
+scipy.optimize                                True
+scipy.spatial                                 True
+nautilus_trader                               False
+pandas                                        True
+numpy                                         True
+pyarrow                                       True
+pyarrow.parquet                               True
+pyarrow.dataset                               True
+exchange_calendars                            True
+nq_lab.oos_gate                               True
+nq_lab.sessions                               True
+nq_lab.data                                   True
+nq_terminal.analytics.perf                    True
+ibapi                                         False
+nq_terminal.services.ib_readonly_client       False
+nq_terminal.services.jobs                     True
+total modules 1750
