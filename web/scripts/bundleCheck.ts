@@ -24,6 +24,11 @@ export const BUNDLE_BUDGET = {
    * rule 8 below), 116.5 kB after wave 8 (workspaces) and 112.8 kB after shell diet 3 (wave 9: the record watch's
    * reader, the address bar's link reader and the tape, key map and placeholder copy load on demand, useQueries with
    * its QueriesObserver load with REG and DES, and cmdk's unused command-score is stubbed; vite.config.ts).
+   * Shell diet 4 (v2.1 polish) took it to 109.5 kB: the key actions, the command line's menus and its suggestion sheet load on
+   * demand (chrome/KeyToolbar.lazy.ts, chrome/CommandLine.menus.load.ts), Radix's Slot (src/vendor/radixPrimitiveStub.tsx),
+   * TanStack's infinite-query paging (src/vendor/infiniteQueryBehaviorStub.ts) and useMutation are out of it, and the module
+   * preload polyfill is off. The ceiling below is left where it was, so the shell has 5 kB of room; shellBudget.test.ts pins
+   * the 109.9 kB target.
    * scripts/shellBudget.test.ts names each piece and pins this ceiling. The ceiling is that size plus 2 kB, so a
    * later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else out first, or raise
    * this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.

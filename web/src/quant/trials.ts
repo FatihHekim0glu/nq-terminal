@@ -1,10 +1,11 @@
 // [POST HOC] Basis A, per session (SV3a), unless a function says otherwise. The effective number of trials and the bar it
 // sets, the third piece of ROADMAP 19: two eigenvalue estimators of the effective N, the expected maximum Sharpe ratio
-// SR0 of N trials that have no skill, and the Probabilistic Sharpe ratio that turns an SR0 into a DSR. Computed in the
-// browser (ANALYTICS_CATALOG C8, client phase); the backend mirror in analytics/deflated.py is pending. Pinned to
-// numpy and scipy by the golden vectors of qa/crosscheck/p12_neff.py (src/quant/trials.test.ts): the paper example
-// (SR0 0.1132, DSR 0.9004) and the served SV3 view at N = 21 (DEFLATED_REAL: SR0 to 1e-12, every dsr_null to 1e-9).
-// Never shown as a served number. Nothing here decides anything: an N or an SR0 is an extra view, and it never
+// SR0 of N trials that have no skill, and the Probabilistic Sharpe ratio that turns an SR0 into a DSR. TEST REFERENCE
+// since 2026-10-02: the backend serves these numbers (analytics/neff.py, the C8 mirror) and no production file imports
+// this module (importGuard.test.ts). Pinned to numpy and scipy by the golden vectors of qa/crosscheck/p12_neff.py
+// (src/quant/trials.test.ts): the paper example (SR0 0.1132, DSR 0.9004) and the served SV3 view at N = 21
+// (DEFLATED_REAL: SR0 to 1e-12, every dsr_null to 1e-9).
+// Nothing here decides anything: an N or an SR0 is an extra view, and it never
 // overrides a frozen pass bar.
 //
 // - participationRatio(l) = (sum l)^2 / sum l^2: M for M equal eigenvalues, 1 for one non-zero eigenvalue.
@@ -22,6 +23,9 @@
 //   observations. With SR0 from expectedMaxSr0 it is the DSR.
 // - sessionSharpe(r) = mean / sd of the returns, the sd with n - 1 in the denominator (SV3a step 4).
 import { normalCdf, normalQuantile } from './normal'
+
+/** Last places an eigenvalue may sit off an integer and still count as that integer (Li and Ji), times the spectrum size. */
+const SNAP_ULPS = 8
 
 /** Refuses a spectrum that cannot be summarised: empty, or holding a value that is not finite. */
 function checkSpectrum(eigenvalues: readonly number[]): void {
@@ -48,13 +52,18 @@ export function participationRatio(eigenvalues: readonly number[]): number {
 
 /**
  * The Li and Ji (2005) effective number of trials: the sum over the eigenvalues of (|l| >= 1 ? 1 : 0) + (|l| -
- * floor(|l|)). A negative eigenvalue counts by its size. Throws for an empty spectrum or a value that is not finite.
+ * floor(|l|)). A negative eigenvalue counts by its size. An eigenvalue within SNAP_ULPS x k last places of an integer of
+ * 1 or more is that integer (as the served count reads it: a solver's rounding must not pick the side of the jump).
+ * Throws for an empty spectrum or a value that is not finite.
  */
 export function liJiCount(eigenvalues: readonly number[]): number {
   checkSpectrum(eigenvalues)
   let count = 0
   for (const value of eigenvalues) {
-    const size = Math.abs(value)
+    const abs = Math.abs(value)
+    const nearest = Math.round(abs)
+    const slack = SNAP_ULPS * Number.EPSILON * Math.max(1, abs) * eigenvalues.length
+    const size = nearest >= 1 && Math.abs(abs - nearest) <= slack ? nearest : abs
     count += (size >= 1 ? 1 : 0) + (size - Math.floor(size))
   }
   return count

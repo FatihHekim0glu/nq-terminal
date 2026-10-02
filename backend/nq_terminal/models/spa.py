@@ -12,6 +12,7 @@ from pydantic import Field
 
 from nq_terminal.models.analytics import Basis, Num, Tag
 from nq_terminal.models.common import ResponseModel
+from nq_terminal.models.neff import SpaEffectiveMembers
 
 
 class SpaPValues(ResponseModel):
@@ -80,6 +81,9 @@ class SpaView(ResponseModel):
         description="Pearson correlation of the members' loss differentials d_i on the common index, k by k in the "
                     "order of `members`; null where a member does not vary")
     correlation_note: str
+    effective_members: SpaEffectiveMembers = Field(
+        description="SV8 step 8: the effective number of members read from `correlation` (participation ratio, Li and "
+                    "Ji, clusters at 1 - rho 0.5, the most correlated pair); it does not adjust any p-value")
     excluded: list[SpaExcluded]
     note: str
     buy_and_hold: SpaView | None = Field(

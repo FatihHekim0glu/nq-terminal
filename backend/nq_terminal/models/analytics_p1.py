@@ -13,6 +13,7 @@ from pydantic import Field
 
 from nq_terminal.models.analytics import Basis, Context, Kpi, Num, Tag
 from nq_terminal.models.common import ResponseModel
+from nq_terminal.models.neff import EffectiveNView
 
 
 class _Series(ResponseModel):
@@ -275,6 +276,9 @@ class DeflatedView(ResponseModel):
     euler_gamma: float
     dominant: str | None = Field(description="the trial farthest from the mean per-session Sharpe, named")
     rows: list[DeflatedRow]
+    effective_n: EffectiveNView = Field(
+        description="SV3b: the effective number of trials from the daily trials' own return correlations, and the SR0 "
+                    "and DSR each N would set (an extra view beside the served N)")
 
 
 # ---------------------------------------------------------------- TA2

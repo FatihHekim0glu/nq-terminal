@@ -84,4 +84,5 @@ export const METRIC_ENTRIES: readonly MetricEntry[] = [
   { id: 'LV4', label: 'Journal table', code: 'JRNL', aliases: ['journal'] },
   { id: 'LV5', label: 'Paper against model tracking', code: 'LIVE', aliases: ['paper tracking'] },
   { id: 'LV6', label: 'Paper book against its backtest expectation', code: 'LIVE', aliases: ['expectation cone', 'paper expectation'] },
+  { id: 'LV6b', label: 'Live-start cone of the paper book', code: 'LIVE', aliases: ['live-start cone', 'live start cone'] },
 ]

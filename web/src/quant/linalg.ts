@@ -1,8 +1,9 @@
 // [POST HOC] Basis A, per session (SV3a). The correlation of the registered trials and its eigenvalues, the first
-// half of the effective number of trials (ROADMAP 19). Computed in the browser (ANALYTICS_CATALOG C8, client phase);
-// the backend mirror in analytics/deflated.py is pending. Pinned to numpy by the golden vectors of
-// qa/crosscheck/p12_neff.py (numpy.corrcoef and numpy.linalg.eigvalsh, src/quant/linalg.test.ts) to 1e-12. Never
-// shown as a served number, and nothing here decides anything: it is arithmetic on a matrix.
+// half of the effective number of trials (ROADMAP 19). TEST REFERENCE since 2026-10-02: the backend serves these numbers
+// (analytics/neff.py, the C8 mirror) and no production file imports this module (importGuard.test.ts); neffReference.ts
+// uses it to show that the served values equal what the browser computed. Pinned to numpy by the golden vectors of
+// qa/crosscheck/p12_neff.py (numpy.corrcoef and numpy.linalg.eigvalsh, src/quant/linalg.test.ts) to 1e-12. Nothing
+// here decides anything: it is arithmetic on a matrix.
 //
 // - pearsonMatrix: Pearson correlation of M columns of equal length T from centred sums (each column minus its mean,
 //   one correction pass), never Spearman. The diagonal is exactly 1, the matrix is exactly symmetric and no entry

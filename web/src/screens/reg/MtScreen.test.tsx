@@ -31,7 +31,7 @@ import { fillCopy } from '../../copy/workspace'
 import { ReplicationBody } from './MtReplication'
 import MtScreen from './MtScreen'
 import { DEFLATED_REAL } from './deflatedFixtures'
-import { dailyTrialNames } from './effectiveNModel'
+import { EFFECTIVE_N_REAL } from './effectiveN.real.fixtures'
 import { MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import { buildReplication, replicationScatter } from './replicationModel'
 import { PANEL_ID, backendDown, mountScreen, panelParams, stubApi } from './testHarness'
@@ -466,10 +466,9 @@ describe('MT: ReplicationBody', () => {
   })
 })
 
-// 87) Effective trials (roadmap #19 slice 2): the trials' own correlations, refused unless the browser formula
-// reproduces the served SV3 numbers. The shared harness answers no analytics GET, so every series is a 404 there.
+// 87) Effective trials (roadmap #19 slice 2): the trials' own correlations, served by the backend as effective_n on the
+// SV3 view (ANALYTICS_CATALOG SV3b). The shared harness answers the SV3 view with the captured real effective_n.
 const HYPOTHESIS_PREFIX = '/api/analytics/hypothesis/'
-const DAILY = dailyTrialNames(DEFLATED_REAL)
 
 function neffPanel(): HTMLElement {
   return screen.getByRole('tabpanel', { name: '87) Effective trials' })
@@ -483,59 +482,49 @@ async function openEffectiveTrials(): Promise<void> {
 }
 
 describe('MT: 87) Effective trials', () => {
-  it('has 15 daily trials on the served view, the ones the series GETs are asked for', () => {
-    expect(DAILY).toHaveLength(15)
+  it('has 15 daily trials on the served view, the ones the matrix is drawn for', () => {
+    expect(EFFECTIVE_N_REAL.daily).toHaveLength(15)
+    expect(EFFECTIVE_N_REAL.daily).toEqual(DEFLATED_REAL.rows.filter((r) => r.periods === 252).map((r) => r.name))
   })
 
-  it('asks for no daily series before 87 is selected, on 85 or on 86', async () => {
+  it('asks for no daily series on 85, on 86 or on 87: the SV3 view carries the numbers', async () => {
     const seen = stubApi()
     await ready()
     await screen.findByRole('region', { name: DEFLATED.label })
     fireEvent.click(screen.getByRole('tab', { name: '86) Replication' }))
     await screen.findByRole('region', { name: REPLICATION.label })
+    fireEvent.click(screen.getByRole('tab', { name: '87) Effective trials' }))
+    await screen.findByRole('table', { name: EFFECTIVE_N.estimates.caption })
     expect(seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX))).toEqual([])
-  })
-
-  it('asks for each daily trial once at cost 1 when 87 is selected, and only with GET', async () => {
-    const seen = stubApi()
-    await openEffectiveTrials()
-    await waitFor(() => expect(seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX))).toHaveLength(15))
-    const asked = seen.filter((s) => s.url.startsWith(HYPOTHESIS_PREFIX)).map((s) => s.url)
-    expect(new Set(asked)).toEqual(new Set(DAILY.map((name) => `${HYPOTHESIS_PREFIX}${name}?cost=1`)))
     expect(seen.every((s) => s.method === 'GET')).toBe(true)
   })
 
-  it('gives the unavailable line as a status, with no alert, when the series answer 404', async () => {
+  it('draws the served estimates, heatmap and DSR table for the real trials, with no alert', async () => {
     stubApi()
     await openEffectiveTrials()
-    const line = fillCopy(EFFECTIVE_N.refused.unavailable, { n: 15, total: 15, name: 'za_v0', detail: 'not found' })
-    const status = await within(neffPanel()).findByText(line)
-    expect(status.getAttribute('role')).toBe('status')
-    expect(line).toBe('Not computed: 15 of 15 daily trials series could not be read (first za_v0: not found). Every trial is needed, as in SV3.')
+    const table = await within(neffPanel()).findByRole('table', { name: EFFECTIVE_N.estimates.caption })
+    expect(within(table).getAllByRole('row')).toHaveLength(5)
+    expect(within(neffPanel()).getByRole('table', { name: EFFECTIVE_N.dsrCaption })).toBeTruthy()
+    expect(within(neffPanel()).getAllByRole('img')).toHaveLength(1)
+    expect(neffPanel().textContent).toContain('Common window 2012-01-03 to 2021-12-31: 2,484 sessions')
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
-    expect(within(neffPanel()).queryByRole('img')).toBeNull()
   })
 
-  it('gives 14 of 15 when only volmanaged_v0 answers, as the demo does', async () => {
+  it('gives a served refusal as a status line, with no alert and no chart', async () => {
     stubApi()
     const spy = vi.mocked(globalThis.fetch)
     const answer = spy.getMockImplementation()!
-    spy.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input)
-      if (url === `${HYPOTHESIS_PREFIX}volmanaged_v0?cost=1`) {
-        const body = { distribution: { series: { date: ['2020-01-02', '2020-01-03'], r: [0.01, -0.01], t: [0, 1], unit: 'x' } } }
-        return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }))
-      }
-      if (url.startsWith(HYPOTHESIS_PREFIX)) {
-        return Promise.resolve(new Response(JSON.stringify({ detail: 'not in the demo dataset' }), { status: 404, headers: { 'content-type': 'application/json' } }))
-      }
-      return answer(input, init)
-    })
+    const refused = { ...EFFECTIVE_N_REAL, refusal: { kind: 'too_few', name: null, sessions: 120 }, window: null, correlation: [], eigenvalues: [], clusters: [], sequence: [], estimates: [], dsr: [] }
+    spy.mockImplementation((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input) === '/api/analytics/deflated'
+        ? Promise.resolve(new Response(JSON.stringify({ ...DEFLATED_REAL, effective_n: refused }), { status: 200, headers: { 'content-type': 'application/json' } }))
+        : answer(input, init),
+    )
     await openEffectiveTrials()
-    const status = await within(neffPanel()).findByText(/^Not computed: 14 of 15 daily trials series could not be read/)
-    expect(status.textContent).toContain('(first za_v0: not in the demo dataset)')
+    const status = await within(neffPanel()).findByText('Not computed: only 120 sessions are common to every daily trial (at least 252 are needed).')
     expect(status.getAttribute('role')).toBe('status')
     expect(screen.queryAllByRole('alert')).toHaveLength(0)
+    expect(within(neffPanel()).queryByRole('img')).toBeNull()
   })
 
   it('opens from the tab and from Number <GO> 87, names its panel, and 85 brings the family back', async () => {
@@ -563,12 +552,13 @@ describe('MT: 87) Effective trials', () => {
     expect(settings.getAttribute('aria-disabled')).toBe('true')
   })
 
-  it('tags the view [POST HOC] and says it is computed in the browser', async () => {
+  it('tags the view [POST HOC] and says it is served by the backend', async () => {
     stubApi()
     await openEffectiveTrials()
     const view = screen.getByRole('region', { name: EFFECTIVE_N.label })
     expect(within(view).getByText('[POST HOC]')).toBeTruthy()
-    expect(within(view).getByText(EFFECTIVE_N.computed)).toBeTruthy()
+    expect(within(view).getByText(EFFECTIVE_N.source)).toBeTruthy()
+    expect(view.textContent).not.toMatch(/computed in the browser/i)
     expect(view.textContent).toContain('the 15 daily trials in the matrix; the 6 monthly books counted as independent trials.')
   })
 })

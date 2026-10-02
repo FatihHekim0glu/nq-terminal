@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // A failed GET /api/analytics/paper-tracking is announced once. LV5 (TrackingPanel) reads the same query and
-// already renders a role=alert; LV6 needs that read too, but words it as a refusal (it cannot be placed on the
-// cone without the paper path) and leaves the alert to LV5. A read only LV6 makes still alerts on its own.
+// already renders a role=alert; LV6 reads it too, and words it as a refusal (the served expectation fails with it,
+// since it is built from the same journal) and leaves the alert to LV5. The expectation read alone still alerts.
 import type { ReactNode } from 'react'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,10 +13,6 @@ import { EXPECTATION } from '../../copy/expectation'
 import { TRACKING } from '../../copy/tracking'
 import { fillCopy } from '../../copy/workspace'
 import { stubLayout } from '../../grids/testing'
-import { VOLMANAGED } from '../des/desTestData'
-import { RUNS } from '../runs/runs.fixtures'
-import { RUN_ANALYTICS } from '../tear/tear.fixtures'
-import { HYP_BOOTSTRAP } from '../tear/tearP1.fixtures'
 import ExpectationPanel from './ExpectationPanel'
 import { DISABLED_SNAPSHOT } from './ib/ibSnapshot.fixtures'
 import { BOOK_CLOSE_ROWS, ROUTES_BODY, page, performance, status } from './liveFixtures'
@@ -32,6 +28,7 @@ vi.mock('../../charts/LineStack', () => ({
 }))
 
 const TRACKING_URL = '/api/analytics/paper-tracking'
+const EXPECTATION_URL = '/api/analytics/paper-expectation'
 const DETAIL = 'live folder unreadable'
 
 function json(body: unknown, statusCode = 200): Response {
@@ -48,10 +45,7 @@ function serveWithTrackingFault(trackingStatus = 500): void {
     if (url.startsWith('/api/live/journal')) return json(page(BOOK_CLOSE_ROWS))
     if (url.startsWith('/api/live/routes')) return json(ROUTES_BODY)
     if (url === '/api/ib/snapshot') return json(DISABLED_SNAPSHOT)
-    if (url === '/api/hypotheses/volmanaged_v0') return json(VOLMANAGED)
-    if (url === '/api/runs') return json(RUNS)
-    if (url === '/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=1') return json(HYP_BOOTSTRAP)
-    if (url === '/api/analytics/run/nt_volmanaged_v0_fixture_m1?freq=D') return json(RUN_ANALYTICS)
+    if (url.startsWith(EXPECTATION_URL)) return json({ detail: DETAIL }, 503)
     return json({ detail: 'unexpected' }, 404)
   })
 }
@@ -101,17 +95,16 @@ describe('LV6 when the paper tracking read fails', () => {
 })
 
 describe('LV6 keeps its own alert for the reads only it makes', () => {
-  it('still raises one alert for a failed hypothesis read', async () => {
+  it('still raises one alert for a failed expectation read', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
       if (url.startsWith(TRACKING_URL)) return json(TRACKING_POPULATED)
-      if (url === '/api/hypotheses/volmanaged_v0') return json({ detail: 'card unreadable' }, 503)
-      if (url === '/api/runs') return json(RUNS)
+      if (url.startsWith(EXPECTATION_URL)) return json({ detail: 'view unreadable' }, 503)
       return json({ detail: 'unexpected' }, 404)
     })
     withClient(<ExpectationPanel />)
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe(fillCopy(EXPECTATION.failed, { detail: 'card unreadable' }))
+    expect(alert.textContent).toBe(fillCopy(EXPECTATION.failed, { detail: 'view unreadable' }))
     expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 })

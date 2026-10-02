@@ -47,8 +47,8 @@ function gapped(answer: { status: number; body: unknown }) {
 const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 74 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(74)
+  it('has exactly the 75 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(75)
     expect(Object.keys(DEMO_ROUTES).sort()).toEqual(CONTRACT_PATHS)
   })
 
@@ -56,7 +56,7 @@ describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(73)
+    expect(Object.keys(incomplete)).toHaveLength(74)
   })
 })
 
@@ -221,6 +221,7 @@ const PROBES: readonly Probe[] = [
   ['LIVE performance', () => get('/api/live/performance'), (p: Schemas['Performance']) => p.present],
   ['LIVE routes', () => get('/api/live/routes'), (r: Schemas['LiveRoutes']) => r.present],
   ['LIVE tracking', () => get('/api/analytics/paper-tracking'), (t: Schemas['PaperTracking']) => t.present],
+  ['LIVE expectation', () => get('/api/analytics/paper-expectation'), (e: Schemas['PaperExpectation']) => e.backtest !== null && e.live !== null],
   ['LIVE closes', () => get('/api/live/journal', { query: { file: BOOK, type: 'close', limit: 5000 } }), (p: Schemas['Page_JournalRowOut_']) => p.items.every((r) => r.data['type'] === 'close')],
   ['JRNL rows', () => get('/api/live/journal', { query: { limit: 5000, offset: 0 } }), (p: Schemas['Page_JournalRowOut_']) => p.total === demoLiveJournalRows.length],
   ['CORR pair', () => get('/api/market/pair-corr', { query: { a: 'NQ.V.0', b: 'ZN.V.0', window: DEFAULT_WINDOW } }), (p: Schemas['PairCorrelationSeries']) => p.corr.length === p.t.length],

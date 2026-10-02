@@ -1,4 +1,4 @@
-// The first-paint shell diet (roadmap wave 6, SHELL-DIET; wave 7, SHELL-DIET-2; wave 9, SHELL-DIET-3): code that first paint does not
+// The first-paint shell diet (roadmap wave 6, SHELL-DIET; wave 7, SHELL-DIET-2; wave 9, SHELL-DIET-3; v2.1 polish, SHELL-DIET-4): code that first paint does not
 // need loads through a dynamic import, and the shell's gzip ceiling is pinned close to its measured size so later
 // waves cannot grow it back unnoticed. One real production build; each moved piece is found by a string only it holds:
 // present somewhere in the build (it still exists) and absent from every chunk that loads with index.html.
@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { CHUNK_GROUPS } from '../vite.config.ts'
 import { BUNDLE_BUDGET, RADIX_DIALOG_MARKERS, analyseBundle, type BundleReport } from './bundleCheck.ts'
 
 const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -41,6 +42,14 @@ const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
  * A change that cuts the shell further can lower both.
  */
 const PINNED_SHELL_CEILING = 114_900
+/**
+ * Shell diet 4 (v2.1 polish): the shell was 114,480 B before it and is 109,658 B after (the key actions, the command line's
+ * menus and suggestion sheet load on demand; Radix's Slot, TanStack's infinite-query paging, useMutation and the module
+ * preload polyfill are out of the shell). The owner's target is 109,900 B at most, which leaves 5 kB under the ceiling
+ * above for the next waves. Unlike the ceiling this is a ratchet: to grow the shell past it on purpose, move something else
+ * out first, or raise this number in the same change as the feature that needs it, with the reason in the commit.
+ */
+const SHELL_TARGET_AFTER_DIET_4 = 109_900
 /** The gallery build's shell, which is about 0.9 kB larger (113,738 B measured), plus the same 2 kB. */
 const PINNED_GALLERY_SHELL_CEILING = 115_800
 
@@ -72,13 +81,24 @@ const ON_DEMAND: ReadonlyArray<readonly [string, string]> = [
   // page and the stylesheet load with the first dossier printed (export/print/run.tsx).
   ['the print dossier runner, page and stylesheet (export/print/*)', 'nqt-print-root'],
   ['the print dossier menu copy (copy/dossier.ts, read by chrome/panelExport.ts)', 'Print dossier'],
+  // Shell diet 4 (v2.1 polish): what a key press or a menu needs loads on demand through a small loader in the shell
+  // (chrome/KeyToolbar.lazy.ts, chrome/CommandLine.menus.load.ts) and is preloaded at the first idle moment.
+  ['the key actions and their copy (chrome/KeyToolbar.actions.ts, copy/navKeys.ts)', 'F5 would reload'],
+  ["the command line's menu builders and the sector menu copy (chrome/CommandLine.menus.ts, copy/sectorMenu.ts)", 'No futures in nq-lab carry this sector key.'],
+  ['the numbered menu sheet (chrome/CommandLine.menu.tsx)', 'menu-crumb'],
+  ['the suggestion sheet (chrome/CommandLine.sheet.tsx)', 'grp-head'],
+  // useMutation and its MutationObserver are called by JOBS only: the vendor group skips them, like useQueries.
+  ['useMutation with its MutationObserver (JOBS only; vite.config.ts vendor group)', 'mutateAsync'],
 ]
 
 /** Strings the shell must still hold: they prove the search below can find shell code at all. */
 const IN_SHELL: ReadonlyArray<readonly [string, string]> = [
   ['the health poll (api/queries.ts)', '/api/health'],
   ['the workspace loading copy (copy/workspace.ts)', 'The workspace is still loading'],
-  ['the reserved F-key lines (copy/navKeys.ts)', 'F5 would reload'],
+  ['the key actions loader and its failure line (chrome/KeyToolbar.lazy.ts, copy/chrome.ts)', 'The keys could not load'],
+  ['the menu loader and its failure line (chrome/CommandLine.menus.load.ts, copy/chrome.ts)', 'The menu could not load'],
+  ['the infinite-query stub (src/vendor/infiniteQueryBehaviorStub.ts, vite.config.ts infiniteStub)', 'Infinite queries are not available'],
+  ['the Radix primitive stub (src/vendor/radixPrimitiveStub.tsx, vite.config.ts RESOLVE_ALIASES)', 'needs Radix'],
   ['the record watch status segment (chrome/RecordWatch.view.tsx, copy/watch.ts)', 'A record that should not change was rewritten'],
 ]
 
@@ -118,6 +138,11 @@ describe('the shell ceiling', () => {
   it('holds for a real production build, with no other bundle rule broken', () => {
     expect(report.violations).toEqual([])
     expect(report.shellGzip).toBeLessThanOrEqual(BUNDLE_BUDGET.shellGzip)
+  })
+
+  it('stays at the shell diet 4 target (109.9 kB gzip), 5 kB under the ceiling', () => {
+    expect(report.shellGzip).toBeLessThanOrEqual(SHELL_TARGET_AFTER_DIET_4)
+    expect(BUNDLE_BUDGET.shellGzip - report.shellGzip).toBeGreaterThanOrEqual(5_000)
   })
 })
 
@@ -207,6 +232,47 @@ describe('useQueries and its QueriesObserver', () => {
       [['query-core', queryCore], ['react-query', reactQuery]] as const
     ).flatMap(([name, dir]) => jsFiles(dir).filter((f) => readFileSync(path.join(dir, f), 'utf-8').includes('getQueries()')).map((f) => `${name}/${f}`))
     expect(holders).toEqual(['query-core/queriesObserver.js'])
+  })
+})
+
+// Shell diet 4: useMutation and its MutationObserver are called by JOBS only (screens/jobs/useJobs.ts), so the vendor group
+// skips those two files as well (about 0.5 kB gzip). QueryClient's MutationCache and Mutation stay: the client builds them.
+describe('useMutation and its MutationObserver', () => {
+  const reactQuery = modernBuild('@tanstack/react-query', WEB_DIR)
+  const queryCore = modernBuild('@tanstack/query-core', reactQuery)
+  const jsFiles = (dir: string) => readdirSync(dir).filter((f) => f.endsWith('.js'))
+  const vendor = CHUNK_GROUPS.find((g) => g.name === 'vendor')
+  const inVendorGroup = (file: string) => vendor?.test.test(file) ?? false
+
+  it('are found in the installed TanStack build, and hold mutateAsync (the build marker) in useMutation.js alone', () => {
+    expect(jsFiles(reactQuery)).toContain('useMutation.js')
+    expect(jsFiles(queryCore)).toContain('mutationObserver.js')
+    const holders = (
+      [['query-core', queryCore], ['react-query', reactQuery]] as const
+    ).flatMap(([name, dir]) => jsFiles(dir).filter((f) => readFileSync(path.join(dir, f), 'utf-8').includes('mutateAsync')).map((f) => `${name}/${f}`))
+    expect(holders).toEqual(['react-query/useMutation.js'])
+  })
+
+  it('are left out of the vendor group (they load with JOBS), while the files the shell needs stay in it', () => {
+    const base = '/app/node_modules/.pnpm/@tanstack+query-core@5.103.2/node_modules/@tanstack/query-core/build/modern/'
+    for (const skipped of ['mutationObserver.js', 'useMutation.js', 'queriesObserver.js', 'useQueries.js']) expect(inVendorGroup(base + skipped), skipped).toBe(false)
+    for (const kept of ['mutation.js', 'mutationCache.js', 'queryClient.js', 'queryObserver.js', 'useBaseQuery.js']) expect(inVendorGroup(base + kept), kept).toBe(true)
+    expect(inVendorGroup('C:\\app\\node_modules\\.pnpm\\x\\node_modules\\@tanstack\\react-query\\build\\modern\\useMutation.js')).toBe(false)
+  })
+})
+
+// Shell diet 4: Radix's Slot came in through cmdk's primitive import (src/vendor/radixPrimitiveStub.tsx now stands in).
+describe('Radix\'s Slot', () => {
+  const MARKER = 'radix.slottable'
+
+  it('still holds its marker in the installed package (so its absence from the build means something)', () => {
+    const slot = modernBuild('@radix-ui/react-slot', path.dirname(installedEntry('@radix-ui/react-dialog', 'cmdk')))
+    const files = readdirSync(slot).filter((f) => f.endsWith('.mjs'))
+    expect(files.some((f) => readFileSync(path.join(slot, f), 'utf-8').includes(MARKER)), `@radix-ui/react-slot no longer holds ${MARKER}: update the marker`).toBe(true)
+  })
+
+  it('is in no chunk of the build: the primitive stub stands in', () => {
+    expect(buildText.includes(MARKER), 'Radix\'s Slot is back in the build: is the alias in vite.config.ts still matching cmdk\'s import?').toBe(false)
   })
 })
 

@@ -161,6 +161,14 @@ def test_participation_ratio_and_li_ji_of_the_panel_by_independent_sums():
     assert li_ji(np.array([-1.5, 0.25])) == pytest.approx(1 + 0.5 + 0.25, abs=1e-15)  # |l| is used
 
 
+def test_born_failing_li_ji_snaps_a_solver_rounding_of_an_integer_eigenvalue_to_it():
+    ones = np.linalg.eigvalsh(np.ones((3, 3)))[::-1]  # 2.9999999999999996, not 3: the matrix of ones
+    assert ones[0] != 3.0
+    assert li_ji(ones) == pytest.approx(1.0, abs=1e-12)  # the two noise eigenvalues add about 6e-16
+    assert li_ji(np.array([2.0000000000000004, 1.0, 0.0])) == 2.0
+    assert li_ji(np.array([2.999999, 0.000001, 0.0])) == pytest.approx(2.0, abs=1e-9)  # a real fraction stays
+
+
 # ---- linkage and clusters --------------------------------------------------------------------------------------
 
 def test_linkage_heights_grow_by_a_clear_gap_and_the_first_merge_is_the_closest_pair():

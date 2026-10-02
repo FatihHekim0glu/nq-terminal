@@ -20,10 +20,10 @@ import { cancelStep, chooseItem, chooseSuggestion, runText } from './CommandLine
 import { ComboInput } from './CommandLine.input'
 import { useCommandLineKeys } from './CommandLine.keys'
 import { handleLineKey } from './CommandLine.lineKeys'
-import { MenuSheet, menuOptionId } from './CommandLine.menu'
-import { helpMenu, relatedMenu, type MenuModel } from './CommandLine.menus'
+import { menuOptionId } from './CommandLine.menuId'
+import type { MenuModel } from './CommandLine.menus'
+import { useMenuSheet, useSuggestionSheet, withMenus } from './CommandLine.menus.load'
 import { PreviewAnnouncer, usePreviewText } from './CommandLine.preview'
-import { Sheet } from './CommandLine.sheet'
 import { NO_OPTION, useCommandLineParts, type CommandLineOptions, type CommandLineParts, type Fallback } from './CommandLine.state'
 import { MessageLine } from './MessageLine'
 import { clearMessage } from './MessageLine.store'
@@ -93,12 +93,12 @@ function useHandle(ref: Ref<CommandLineHandle> | undefined, p: CommandLineParts)
       focus()
     },
     help: (code) => {
-      p.menus.open(helpMenu(code))
+      withMenus((m) => p.menus.open(m.helpMenu(code)))
       focus()
     },
     related: () => {
       const f = fallbackOf(p)
-      p.menus.open(relatedMenu(f && typeof f !== 'string' ? f : null, p.options.index))
+      withMenus((m) => p.menus.open(m.relatedMenu(f && typeof f !== 'string' ? f : null, p.options.index)))
       focus()
     },
     showMenu: (menu) => {
@@ -178,6 +178,8 @@ export function CommandLine(props: CommandLineProps) {
   const menuId = `${ids}-menu`
   const hintId = `${ids}-hint`
   const msgId = `${ids}-msg`
+  const MenuSheet = useMenuSheet()
+  const Sheet = useSuggestionSheet()
   const note = indexNote(props.index, props.indexError ?? false)
   const menu = p.menus.menu
   const popupId = menu ? (menu.items.length > 0 ? menuId : undefined) : p.sheetOpen ? listId : undefined
@@ -221,12 +223,12 @@ export function CommandLine(props: CommandLineProps) {
           </div>
           {p.sheetOpen ? (
             <div className="cmd-pop">
-              <Sheet groups={p.groups} typed={typed} onChoose={(value) => chooseSuggestion(p, value)} listRef={listRef} />
+              {Sheet ? <Sheet groups={p.groups} typed={typed} onChoose={(value) => chooseSuggestion(p, value)} listRef={listRef} /> : null}
               {note ? <p className="cmd-note">{note}</p> : null}
               {previewRow}
             </div>
           ) : null}
-          {menu ? (
+          {menu && MenuSheet ? (
             <div className="cmd-pop">
               <MenuSheet id={menuId} menu={menu} row={p.menus.row} onChoose={(item) => chooseItem(p, item)} onClose={p.menus.close} />
             </div>

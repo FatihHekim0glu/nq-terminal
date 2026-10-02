@@ -1531,6 +1531,74 @@
         "title": "CompareStats",
         "type": "object"
       },
+      "ConePlacement": {
+        "description": "The paper and model paths on one cone, with the anchor session and the latest step that has a value.",
+        "properties": {
+          "anchor_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Date"
+          },
+          "beyond": {
+            "description": "the larger beyond count of the two paths",
+            "minimum": 0.0,
+            "title": "Beyond",
+            "type": "integer"
+          },
+          "first_index": {
+            "description": "the paper path's first row, else the model's, else 0",
+            "minimum": 0.0,
+            "title": "First Index",
+            "type": "integer"
+          },
+          "horizon": {
+            "minimum": 0.0,
+            "title": "Horizon",
+            "type": "integer"
+          },
+          "latest_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Date"
+          },
+          "latest_step": {
+            "description": "1-based; 0 when neither path has a value on the cone",
+            "minimum": 0.0,
+            "title": "Latest Step",
+            "type": "integer"
+          },
+          "model": {
+            "$ref": "#/components/schemas/PathPlacement"
+          },
+          "paper": {
+            "$ref": "#/components/schemas/PathPlacement"
+          }
+        },
+        "required": [
+          "horizon",
+          "first_index",
+          "anchor_date",
+          "paper",
+          "model",
+          "latest_step",
+          "latest_date",
+          "beyond"
+        ],
+        "title": "ConePlacement",
+        "type": "object"
+      },
       "ConeView": {
         "description": "SV6: pointwise percentiles of resampled paths at each step, not a band whole paths stay inside; realised overlaid.",
         "properties": {
@@ -2846,6 +2914,10 @@
             "description": "the trial farthest from the mean per-session Sharpe, named",
             "title": "Dominant"
           },
+          "effective_n": {
+            "$ref": "#/components/schemas/EffectiveNView",
+            "description": "SV3b: the effective number of trials from the daily trials' own return correlations, and the SR0 and DSR each N would set (an extra view beside the served N)"
+          },
           "euler_gamma": {
             "title": "Euler Gamma",
             "type": "number"
@@ -2971,7 +3043,8 @@
           "n_note",
           "euler_gamma",
           "dominant",
-          "rows"
+          "rows",
+          "effective_n"
         ],
         "title": "DeflatedView",
         "type": "object"
@@ -3542,6 +3615,332 @@
           "bench_max_drawdown"
         ],
         "title": "DrawdownView",
+        "type": "object"
+      },
+      "EffectiveNDsr": {
+        "properties": {
+          "clusters": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clusters"
+          },
+          "li_ji": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Li Ji"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "participation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "DSR under V0 at the participation-ratio N",
+            "title": "Participation"
+          },
+          "periods": {
+            "title": "Periods",
+            "type": "integer"
+          },
+          "served": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the served DSR under V0 at the registered N",
+            "title": "Served"
+          }
+        },
+        "required": [
+          "name",
+          "periods",
+          "served",
+          "participation",
+          "li_ji",
+          "clusters"
+        ],
+        "title": "EffectiveNDsr",
+        "type": "object"
+      },
+      "EffectiveNEstimate": {
+        "properties": {
+          "id": {
+            "enum": [
+              "registered",
+              "participation",
+              "li_ji",
+              "clusters"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "n_daily": {
+            "description": "the estimated number of daily trials (the registered count for `registered`)",
+            "title": "N Daily",
+            "type": "number"
+          },
+          "n_total": {
+            "description": "n_daily plus the monthly books, counted as independent trials",
+            "title": "N Total",
+            "type": "number"
+          },
+          "served": {
+            "description": "true for the registered row, the N and SR0 SV3 itself serves",
+            "title": "Served",
+            "type": "boolean"
+          },
+          "sr0_annual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sr0 Annual"
+          },
+          "sr0_session": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "SR0 per session at n_total under the served null variance V0",
+            "title": "Sr0 Session"
+          }
+        },
+        "required": [
+          "id",
+          "n_daily",
+          "n_total",
+          "sr0_session",
+          "sr0_annual",
+          "served"
+        ],
+        "title": "EffectiveNEstimate",
+        "type": "object"
+      },
+      "EffectiveNRefusal": {
+        "properties": {
+          "kind": {
+            "description": "no_daily: the view names no daily trial; too_few: fewer sessions than the minimum are common to every daily trial (`sessions` says how many); degenerate: a daily trial does not vary on the common window (`name` says which)",
+            "enum": [
+              "no_daily",
+              "too_few",
+              "degenerate"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sessions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sessions"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "sessions"
+        ],
+        "title": "EffectiveNRefusal",
+        "type": "object"
+      },
+      "EffectiveNView": {
+        "description": "SV3b: the effective number of trials from the registered daily trials' own return correlations, and the SR0\nand DSR each N would set, beside the served N. An extra view: it never overrides a frozen pass bar.",
+        "properties": {
+          "cluster_cut": {
+            "description": "the cut on 1 - rho of the average-linkage tree",
+            "title": "Cluster Cut",
+            "type": "number"
+          },
+          "clusters": {
+            "description": "flat clusters at the cut as indexes into `daily`: members ascending, ordered by first member",
+            "items": {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "title": "Clusters",
+            "type": "array"
+          },
+          "construction": {
+            "title": "Construction",
+            "type": "string"
+          },
+          "correlation": {
+            "description": "Pearson, daily trials on the common window; empty when refused",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Correlation",
+            "type": "array"
+          },
+          "daily": {
+            "description": "the daily trials (P = 252) in the served order: the rows of `correlation`",
+            "items": {
+              "type": "string"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "dsr": {
+            "description": "one row per registered trial, in the SV3 row order",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveNDsr"
+            },
+            "title": "Dsr",
+            "type": "array"
+          },
+          "eigenvalues": {
+            "description": "largest first",
+            "items": {
+              "type": "number"
+            },
+            "title": "Eigenvalues",
+            "type": "array"
+          },
+          "estimates": {
+            "items": {
+              "$ref": "#/components/schemas/EffectiveNEstimate"
+            },
+            "title": "Estimates",
+            "type": "array"
+          },
+          "min_common_sessions": {
+            "title": "Min Common Sessions",
+            "type": "integer"
+          },
+          "monthly": {
+            "description": "the monthly books, counted as independent trials",
+            "items": {
+              "type": "string"
+            },
+            "title": "Monthly",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectiveNRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "description": "`daily` indexes grouped by cluster, the largest cluster first",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Sequence",
+            "type": "array"
+          },
+          "window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectiveNWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "construction",
+          "note",
+          "cluster_cut",
+          "min_common_sessions",
+          "daily",
+          "monthly",
+          "refusal",
+          "window",
+          "correlation",
+          "eigenvalues",
+          "clusters",
+          "sequence",
+          "estimates",
+          "dsr"
+        ],
+        "title": "EffectiveNView",
+        "type": "object"
+      },
+      "EffectiveNWindow": {
+        "properties": {
+          "first": {
+            "description": "first session on which every daily trial has a return",
+            "title": "First",
+            "type": "string"
+          },
+          "last": {
+            "title": "Last",
+            "type": "string"
+          },
+          "sessions": {
+            "title": "Sessions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "first",
+          "last",
+          "sessions"
+        ],
+        "title": "EffectiveNWindow",
         "type": "object"
       },
       "EndStats": {
@@ -4602,6 +5001,156 @@
         "title": "ExcursionRow",
         "type": "object"
       },
+      "ExpectationCone": {
+        "description": "One cone the paths can be placed on: the backtest start (SV6) or the live start (LV6b).",
+        "properties": {
+          "block": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the Politis-White stationary block length on the resampled series",
+            "title": "Block"
+          },
+          "cone": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConeView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConePlacement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectationRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reps": {
+            "title": "Reps",
+            "type": "integer"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "source": {
+            "description": "the series the cone resamples, in words",
+            "title": "Source",
+            "type": "string"
+          },
+          "source_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source End"
+          },
+          "source_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "sessions resampled",
+            "title": "Source N"
+          },
+          "source_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Start"
+          },
+          "start": {
+            "enum": [
+              "backtest",
+              "live"
+            ],
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "refusal",
+          "cone",
+          "source",
+          "source_n",
+          "source_start",
+          "source_end",
+          "block",
+          "reps",
+          "seed",
+          "placement"
+        ],
+        "title": "ExpectationCone",
+        "type": "object"
+      },
+      "ExpectationRefusal": {
+        "description": "Why a path is not placed, as a code and the values its words name (journal, hypothesis, run, unit, n).",
+        "properties": {
+          "code": {
+            "enum": [
+              "empty",
+              "no_book",
+              "no_cost",
+              "no_run",
+              "no_capital",
+              "unit",
+              "no_bootstrap",
+              "live_short",
+              "live_flat"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "params"
+        ],
+        "title": "ExpectationRefusal",
+        "type": "object"
+      },
       "ExpectedJournal": {
         "properties": {
           "empty_state": {
@@ -5228,6 +5777,19 @@
           "no_record"
         ],
         "title": "GuardStatusReport",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
         "type": "object"
       },
       "Health": {
@@ -9902,6 +10464,124 @@
         "title": "PairCorrelationSeries",
         "type": "object"
       },
+      "PaperExpectation": {
+        "description": "LV6 and LV6b: the paper book's paths as a fraction of K on the backtest-start and the live-start cones.",
+        "properties": {
+          "backtest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectationCone"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "capital": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "K in USD",
+            "title": "Capital"
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "ticks per side the backtest cone is read at",
+            "title": "Cost"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "journal": {
+            "title": "Journal",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "live": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectationCone"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpectationRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a refusal that needs no cone; both cones are then null"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the linked Nautilus reproduction whose served capital is K",
+            "title": "Run Id"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "journal",
+          "tag",
+          "label",
+          "basis",
+          "hypothesis",
+          "cost",
+          "run_id",
+          "capital",
+          "refusal",
+          "backtest",
+          "live"
+        ],
+        "title": "PaperExpectation",
+        "type": "object"
+      },
       "PaperRoll": {
         "description": "One MNQ contract: its expiry, the date the book rolls out of it (at that session's close) and into what.",
         "properties": {
@@ -10207,6 +10887,75 @@
           "value"
         ],
         "title": "PassCheck",
+        "type": "object"
+      },
+      "PathPlacement": {
+        "description": "One cumulative path on one cone (the browser's `pathOnCone`).",
+        "properties": {
+          "bands": {
+            "description": "one per cone step: the band of the fraction, null when unplaced",
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "below5",
+                    "p5to25",
+                    "p25to50",
+                    "p50to75",
+                    "p75to95",
+                    "above95"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Bands",
+            "type": "array"
+          },
+          "beyond": {
+            "description": "rows with a value past the cone's horizon: counted, never placed",
+            "minimum": 0.0,
+            "title": "Beyond",
+            "type": "integer"
+          },
+          "first_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "row of the first finite value; step 1 of the cone is this row",
+            "title": "First Index"
+          },
+          "fraction": {
+            "description": "one per cone step: cumulative USD / K, null where the row has no value",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Fraction",
+            "type": "array"
+          }
+        },
+        "required": [
+          "first_index",
+          "fraction",
+          "bands",
+          "beyond"
+        ],
+        "title": "PathPlacement",
         "type": "object"
       },
       "Performance": {
@@ -14233,6 +14982,116 @@
         "title": "SpaCritical",
         "type": "object"
       },
+      "SpaEffectiveMembers": {
+        "description": "SV8 step 8: the effective number of members from the correlation of the loss differentials. It describes the\ndependence the maximum statistic ran over and does not adjust any p-value.",
+        "properties": {
+          "clusters": {
+            "description": "UPGMA clusters at 1 - rho = `cut` as member names (family order inside a cluster), the largest cluster first",
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Clusters",
+            "type": "array"
+          },
+          "cut": {
+            "title": "Cut",
+            "type": "number"
+          },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
+          "li_ji": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Li and Ji (2005)",
+            "title": "Li Ji"
+          },
+          "participation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "(sum of eigenvalues)^2 / sum of squared eigenvalues",
+            "title": "Participation"
+          },
+          "refusal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaEffectiveRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strongest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpaStrongestPair"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the most correlated pair of differentials"
+          }
+        },
+        "required": [
+          "k",
+          "cut",
+          "refusal",
+          "participation",
+          "li_ji",
+          "clusters",
+          "strongest"
+        ],
+        "title": "SpaEffectiveMembers",
+        "type": "object"
+      },
+      "SpaEffectiveRefusal": {
+        "properties": {
+          "kind": {
+            "description": "single: one member only; undefined: a member does not vary on the common index, so it has no correlation (`name` says which)",
+            "enum": [
+              "single",
+              "undefined"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "SpaEffectiveRefusal",
+        "type": "object"
+      },
       "SpaExcluded": {
         "properties": {
           "name": {
@@ -14385,6 +15244,29 @@
         "title": "SpaPValues",
         "type": "object"
       },
+      "SpaStrongestPair": {
+        "properties": {
+          "a": {
+            "title": "A",
+            "type": "string"
+          },
+          "b": {
+            "title": "B",
+            "type": "string"
+          },
+          "rho": {
+            "title": "Rho",
+            "type": "number"
+          }
+        },
+        "required": [
+          "a",
+          "b",
+          "rho"
+        ],
+        "title": "SpaStrongestPair",
+        "type": "object"
+      },
       "SpaView": {
         "description": "SV8: White's Reality Check, Hansen's SPA and Romano-Wolf StepM over the registered NQ one-contract hypotheses.",
         "properties": {
@@ -14466,6 +15348,10 @@
           "critical_values": {
             "$ref": "#/components/schemas/SpaCritical",
             "description": "percentile 100 (1 - size) of the maximum replicated mean"
+          },
+          "effective_members": {
+            "$ref": "#/components/schemas/SpaEffectiveMembers",
+            "description": "SV8 step 8: the effective number of members read from `correlation` (participation ratio, Li and Ji, clusters at 1 - rho 0.5, the most correlated pair); it does not adjust any p-value"
           },
           "excluded": {
             "items": {
@@ -14588,6 +15474,7 @@
           "members",
           "correlation",
           "correlation_note",
+          "effective_members",
           "excluded",
           "note",
           "buy_and_hold"
@@ -17210,6 +18097,46 @@
         "title": "UniverseRow",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "ValidityView": {
         "description": "SV1 and SV2 at SR* = 0 and at the benchmark Sharpe; SV4 from the registry; SV7 copied from the screen.",
         "properties": {
@@ -18324,6 +19251,71 @@
           }
         },
         "summary": "Hypothesis Trend Regime",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/paper-expectation": {
+      "get": {
+        "description": "LV6 and LV6b: the paper and model paths on the backtest-start and the live-start cones, [POST HOC].",
+        "operationId": "paper_expectation_view_api_analytics_paper_expectation_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "file",
+            "required": false,
+            "schema": {
+              "default": "volmanaged_paper_journal.jsonl",
+              "maxLength": 160,
+              "title": "File",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperExpectation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Paper Expectation View",
         "tags": [
           "analytics"
         ]

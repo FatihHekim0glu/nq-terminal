@@ -30,12 +30,16 @@ export function outDirFor(mode: string): string {
 // inline Command list). Because Command.Dialog hangs off the Command object, tree-shaking cannot drop it, and
 // the dialog with its layer, focus and scroll-lock dependencies was about 10 kB gzip of the shell. This alias
 // sends that one import to a stub that throws if it is ever rendered (src/vendor/radixDialogStub.tsx). It is
-// scoped to the exact specifier: the other Radix packages cmdk uses (primitive, id, compose-refs) stay real.
+// scoped to the exact specifier: the other Radix packages cmdk uses (id, compose-refs) stay real.
+// A second alias (shell diet 4) sends cmdk's "@radix-ui/react-primitive" to src/vendor/radixPrimitiveStub.tsx: cmdk reads two
+// elements from it (div and input), and the real package's other fifteen elements and its Slot (the asChild mode the terminal
+// never uses) were about 1 kB gzip of the shell. scripts/shellBudget.test.ts fails if the Slot's code comes back.
 // scripts/bundleCheck.ts (rule 8) and scripts/shellBudget.test.ts fail if the dialog code comes back.
 // (cmdk's command-score is stubbed by the cmdkScoreStub plugin below, not by an alias: an alias would match the
 // hashed chunk name './chunk-NZJY6EH4.mjs' from any importer, and the plugin scopes it to cmdk's entry file.)
 export const RESOLVE_ALIASES = [
   { find: /^@radix-ui\/react-dialog$/, replacement: fileURLToPath(new URL('./src/vendor/radixDialogStub.tsx', import.meta.url)) },
+  { find: /^@radix-ui\/react-primitive$/, replacement: fileURLToPath(new URL('./src/vendor/radixPrimitiveStub.tsx', import.meta.url)) },
 ] as const
 
 // cmdk scores every item with its own fuzzy matcher (command-score, about 0.4 kB gzip), which the terminal never
@@ -55,6 +59,26 @@ export function cmdkScoreStub(): Plugin {
     enforce: 'pre',
     resolveId(source, importer) {
       return source === CMDK_SCORE_CHUNK && importer !== undefined && CMDK_ENTRY.test(importer) ? COMMAND_SCORE_STUB : null
+    },
+  }
+}
+
+// TanStack Query's query.js imports infiniteQueryBehavior (the paging code behind useInfiniteQuery) by a plain import, so it
+// sits in the shell's vendor chunk (about 0.45 kB gzip) although the terminal has no infinite query. This plugin sends that
+// one import, from query-core's query.js only, to src/vendor/infiniteQueryBehaviorStub.ts, which throws if a query ever asks
+// for it. query-core's own infiniteQueryBehavior.js and infiniteQueryObserver.js are untouched (nothing imports them). The
+// specifier and importer are pinned against the installed query-core by src/vendor/infiniteQueryBehaviorStub.test.ts, and
+// scripts/shellBudget.test.ts fails if the paging code is in any build.
+const QUERY_INFINITE_SPECIFIER = './infiniteQueryBehavior.js'
+const QUERY_CORE_QUERY = /[\\/]node_modules[\\/](?:.*[\\/])?query-core[\\/]build[\\/]modern[\\/]query\.js$/
+const INFINITE_STUB = fileURLToPath(new URL('./src/vendor/infiniteQueryBehaviorStub.ts', import.meta.url))
+
+export function infiniteStub(): Plugin {
+  return {
+    name: 'nqt:infinite-query-stub',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      return source === QUERY_INFINITE_SPECIFIER && importer !== undefined && QUERY_CORE_QUERY.test(importer) ? INFINITE_STUB : null
     },
   }
 }
@@ -87,24 +111,28 @@ export const LIBRARY_CHUNKS = [
 // a library group would capture it and the shell, which needs the helper for its lazy screens, would
 // then load that whole library chunk. It is captured first, into a tiny chunk of its own.
 // The last group, vendor, takes every other node_modules file the app uses, so a library only lazy code needs would
-// still be in the shell. It skips two TanStack Query files: useQueries and its QueriesObserver are called by REG and
-// DES only (about 0.85 kB gzip), so they fall out of the vendor group and load with those screens. The lookahead
-// names the two files, and scripts/shellBudget.test.ts checks that `getQueries(){` (their marker) is in no shell chunk.
+// still be in the shell. It skips four TanStack Query files: useQueries and its QueriesObserver are called by REG and
+// DES only (about 0.85 kB gzip), and useMutation and its MutationObserver by JOBS only (about 0.5 kB), so they fall out of
+// the vendor group and load with those screens. The lookahead names the four files, and scripts/shellBudget.test.ts checks
+// that `getQueries(){` and `mutateAsync` (their markers) are in no shell chunk.
 export const PRELOAD_HELPER = /(^|[\\/\0])vite[\\/]preload-helper/
 export const CHUNK_GROUPS = [
   { name: 'preload', test: PRELOAD_HELPER, priority: 50 },
   { name: 'react', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?(react|react-dom|scheduler)[@\\/]/, priority: 40 },
   { name: 'dockview', test: /[\\/]node_modules[\\/](\.pnpm[\\/])?dockview(-core|-react)?[@\\/]/, priority: 20 },
   ...LIBRARY_CHUNKS.map((c) => ({ ...c, priority: 30 })),
-  { name: 'vendor', test: /[\\/]node_modules[\\/](?!.*[\\/](?:queriesObserver|useQueries)\.js$)/, priority: 10 },
+  { name: 'vendor', test: /[\\/]node_modules[\\/](?!.*[\\/](?:queriesObserver|useQueries|mutationObserver|useMutation)\.js$)/, priority: 10 },
 ] as const
 
 export default defineConfig(({ mode }) => ({
-  plugins: [cmdkScoreStub(), react(), tailwindcss()],
+  plugins: [cmdkScoreStub(), infiniteStub(), react(), tailwindcss()],
   resolve: { alias: [...RESOLVE_ALIASES] },
   build: {
     outDir: outDirFor(mode),
     emptyOutDir: true,
+    // Every browser the terminal runs in (a current Chromium, Firefox or Safari) preloads modules natively; the polyfill
+    // is dead code there (about 0.25 kB gzip of the shell).
+    modulePreload: { polyfill: false },
     // Never inline assets as data: URIs. The backend CSP falls back to default-src 'self' for fonts,
     // so an inlined woff2 would be blocked. Self-hosted files only.
     assetsInlineLimit: 0,

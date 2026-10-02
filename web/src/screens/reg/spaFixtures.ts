@@ -1,5 +1,6 @@
 // Hand-built GET /api/analytics/spa answers for the SV8 panel tests (not project results: the members' numbers are
-// invented so both StepM branches, a rejection at the first step and one at the step down, are drawn).
+// invented so both StepM branches, a rejection at the first step and one at the step down, are drawn; the effective
+// members are the backend's for this correlation matrix, from qa/golden/p2_neff_served.json).
 import type { SpaView } from './spaTypes'
 
 const TEXT = {
@@ -56,6 +57,7 @@ export const SPA_HELD: SpaView = {
     [0.08, 0.61, 1],
   ],
   correlation_note: "Correlation of the members' loss differentials d_i = r_i - r_bh on the common index (the series the bootstrap resamples): the dependence the maximum statistic runs over. Every d_i holds -r_bh, so for a low-exposure member (a sparse calendar book) the correlation is pulled towards 1; it is not the number of independent hypotheses, so read it beside the returns' correlation of MT 87; a member that does not vary has none",
+  effective_members: { k: 3, cut: 0.5, refusal: null, participation: 2.3773046648000427, li_ji: 3, clusters: [['overnight_v0', 'halloween_v0'], ['za_v0']], strongest: { a: 'overnight_v0', b: 'halloween_v0', rho: 0.61 } },
   excluded: [],
 }
 
@@ -91,6 +93,7 @@ export const SPA_REJECTS: SpaView = {
     [0.08, 0.61, 1],
   ],
   correlation_note: "Correlation of the members' returns on the common index (against cash the differential is the return, so this is the series the bootstrap resamples and the matrix of MT 87); a member that does not vary has none",
+  effective_members: { k: 3, cut: 0.5, refusal: null, participation: 2.3773046648000427, li_ji: 3, clusters: [['overnight_v0', 'halloween_v0'], ['za_v0']], strongest: { a: 'overnight_v0', b: 'halloween_v0', rho: 0.61 } },
   excluded: [
     { name: 'volmanaged_v0', reason: 'its series is in return on capital per session, not USD per session on one NQ contract' },
     { name: 'tsmom_v0', reason: 'a monthly book: its result files hold no daily series' },

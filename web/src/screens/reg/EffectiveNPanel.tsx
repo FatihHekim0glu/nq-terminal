@@ -1,10 +1,10 @@
 // MT 87) Effective trials (ANALYTICS_CATALOG SV3b, roadmap #19 slice 2): the effective number of trials from the
-// registered daily trials' own return correlations, then the SR0 and DSR each N would set. [POST HOC], computed in
-// the browser, an extra view only (no verdict). GETs: /api/analytics/deflated (SV3, shared with 85) Family) and, once
-// the SV3 view has named its daily trials, /api/analytics/hypothesis/{name}?cost=1 for each of them (useTrialSeries).
-// computeEffectiveN refuses unless the browser formula reproduces what SV3 served; a refusal is a status line, never an
-// alert, and draws no matrix. A failure of the SV3 view itself is the one alert (PanelFault, as on 85). Plain tables
-// and one heatmap: no MonitorGrid and no numbered item.
+// registered daily trials' own return correlations, then the SR0 and DSR each N would set. [POST HOC], served by the
+// backend as `effective_n` on the SV3 view (analytics/neff.py), an extra view only (no verdict). One GET:
+// /api/analytics/deflated (SV3, shared with 85) Family); the browser reads no per-trial series and computes nothing.
+// A refusal the data gives (no daily trial, too few common sessions, a trial that does not vary) is a status line,
+// never an alert, and draws no matrix; so is an answer that carries no effective_n. A failure of the SV3 view itself is
+// the one alert (PanelFault, as on 85). Plain tables and one heatmap: no MonitorGrid and no numbered item.
 import { useMemo, type ReactNode } from 'react'
 import { useDeflated } from '../../api/queries'
 import { Heatmap } from '../../charts/echarts/Heatmap'
@@ -12,45 +12,39 @@ import PanelFault, { PanelLoading } from '../../chrome/PanelFault'
 import { DEFLATED } from '../../copy/deflated'
 import { EFFECTIVE_N } from '../../copy/effectiveN'
 import { SPEC } from '../../copy/tiles'
-import { fillCopy } from '../../copy/workspace'
-import type { DeflatedView } from './deflatedModel'
 import {
   basisText,
   clustersText,
-  computeEffectiveN,
-  dailyTrialNames,
   dsrHeaders,
   dsrRows,
   effectiveNHeatmap,
   estimateRows,
   refusalText,
+  servedOf,
   windowText,
-  type EffectiveNOk,
-  type EffectiveNResult,
 } from './effectiveNModel'
-import { useTrialSeries } from './useTrialSeries'
+import type { DeflatedWithEffective, EffectiveNServed } from './effectiveNTypes'
 import './reg.css'
 
 const CHART_ID = 'mt-neff-heatmap'
-const NO_NAMES: readonly string[] = []
 const ESTIMATE_COLS = ['nDaily', 'nTotal', 'sr0Session', 'sr0Annual'] as const
 
-function Section({ view, children }: { readonly view: DeflatedView | undefined; readonly children: ReactNode }) {
+function Section({ served, children }: { readonly served: EffectiveNServed | null; readonly children: ReactNode }) {
   return (
     <section className="reg-confirm mt-neff" aria-label={EFFECTIVE_N.label}>
       <p className="reg-band">
         <span className="reg-band-title">{EFFECTIVE_N.title}</span>{' '}
         <span className="reg-warn">{SPEC.postHoc}</span>{' '}
-        <span className="reg-muted">{view === undefined ? '' : basisText(view)}</span>
+        <span className="reg-muted">{served === null ? '' : basisText(served)}</span>
       </p>
-      <p className="reg-msg reg-muted">{EFFECTIVE_N.computed}</p>
+      <p className="reg-msg reg-muted">{EFFECTIVE_N.source}</p>
       {children}
     </section>
   )
 }
 
-function EstimatesTable({ result }: { readonly result: EffectiveNOk }) {
-  const rows = useMemo(() => estimateRows(result), [result])
+function EstimatesTable({ served }: { readonly served: EffectiveNServed }) {
+  const rows = useMemo(() => estimateRows(served), [served])
   const cols = EFFECTIVE_N.estimates.cols
   return (
     <table className="nqt-grid mt-deflated-table">
@@ -76,8 +70,8 @@ function EstimatesTable({ result }: { readonly result: EffectiveNOk }) {
   )
 }
 
-function DsrTable({ result, view }: { readonly result: EffectiveNOk; readonly view: DeflatedView }) {
-  const rows = useMemo(() => dsrRows(result), [result])
+function DsrTable({ served, view }: { readonly served: EffectiveNServed; readonly view: DeflatedWithEffective }) {
+  const rows = useMemo(() => dsrRows(served), [served])
   const headers = dsrHeaders(view)
   return (
     <table className="nqt-grid mt-deflated-table">
@@ -105,61 +99,49 @@ function DsrTable({ result, view }: { readonly result: EffectiveNOk; readonly vi
   )
 }
 
-function OkView({ result, view }: { readonly result: EffectiveNOk; readonly view: DeflatedView }) {
-  const heatmap = useMemo(() => effectiveNHeatmap(result), [result])
+function OkView({ served, view }: { readonly served: EffectiveNServed; readonly view: DeflatedWithEffective }) {
+  const heatmap = useMemo(() => effectiveNHeatmap(served), [served])
   return (
     <>
-      <p className="reg-msg">{windowText(result)}</p>
-      <EstimatesTable result={result} />
-      <p className="reg-msg">{clustersText(result)}</p>
+      {served.window === null ? null : <p className="reg-msg">{windowText(served.window)}</p>}
+      <EstimatesTable served={served} />
+      <p className="reg-msg">{clustersText(served)}</p>
       <div className="mt-neff-chart"><Heatmap data={heatmap} chartId={CHART_ID} /></div>
       <p className="reg-msg reg-muted">{EFFECTIVE_N.diagonalNote}</p>
-      <DsrTable result={result} view={view} />
+      <DsrTable served={served} view={view} />
     </>
   )
 }
 
-/** A computed result as content: the refusal as a status line, or the estimates, the heatmap and the DSR table. */
-function Content({ result, view }: { readonly result: EffectiveNResult; readonly view: DeflatedView }) {
-  return result.ok ? <OkView result={result} view={view} /> : <p role="status" className="reg-msg">{refusalText(result.refusal)}</p>
+/** The served view as content: a status line for a refusal or an answer without it, else the estimates, heatmap and DSR table. */
+function Content({ served, view }: { readonly served: EffectiveNServed | null; readonly view: DeflatedWithEffective }) {
+  if (served === null) return <p role="status" className="reg-msg">{EFFECTIVE_N.notServed}</p>
+  if (served.refusal !== null) return <p role="status" className="reg-msg">{refusalText(served.refusal)}</p>
+  return <OkView served={served} view={view} />
 }
 
-/** The whole view over a computed result: the band, the note, then the refusal or the view. */
-export function EffectiveNBody({ result, view }: { readonly result: EffectiveNResult; readonly view: DeflatedView }) {
+/** The whole view over an SV3 answer: the band, the note, then the status line or the view. */
+export function EffectiveNBody({ view }: { readonly view: DeflatedWithEffective }) {
+  const served = servedOf(view)
   return (
-    <Section view={view}>
-      <Content result={result} view={view} />
+    <Section served={served}>
+      <Content served={served} view={view} />
     </Section>
   )
 }
 
 export default function EffectiveNPanel() {
   const query = useDeflated()
-  const view = query.data
-  const names = useMemo(() => (view === undefined ? NO_NAMES : dailyTrialNames(view)), [view])
-  const read = useTrialSeries(names, names.length > 0)
-  const finished = view !== undefined && read.done === read.total
-  const result = useMemo(
-    () => (view !== undefined && finished ? computeEffectiveN({ view, series: read.series, failed: read.failed }) : null),
-    [view, finished, read.series, read.failed],
-  )
-  // One Section for every state, so the region is the same element from loading to the finished view, and one
-  // status line for reading and for a refusal, so the refusal reaches a screen reader as a change of the live
-  // region it is already in (a remounted region can go unannounced).
+  // The generated type has `effective_n` only once the contract is regenerated; the answer carries it either way.
+  const view = query.data as DeflatedWithEffective | undefined
+  // One Section for every state, so the region is the same element from loading to the finished view.
   let content: ReactNode
   if (query.isError) {
     content = <PanelFault error={query.error} failedText={DEFLATED.failed} className="reg-msg" />
   } else if (view === undefined) {
     content = <PanelLoading text={DEFLATED.loading} className="reg-msg" />
-  } else if (result === null || !result.ok) {
-    const reading = result === null
-    content = (
-      <p role="status" aria-busy={reading} className="reg-msg">
-        {reading ? fillCopy(EFFECTIVE_N.reading, { done: read.done, total: read.total }) : refusalText(result.refusal)}
-      </p>
-    )
   } else {
-    content = <OkView result={result} view={view} />
+    content = <Content served={servedOf(view)} view={view} />
   }
-  return <Section view={view}>{content}</Section>
+  return <Section served={view === undefined ? null : servedOf(view)}>{content}</Section>
 }

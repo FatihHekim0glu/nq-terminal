@@ -37,6 +37,7 @@ from nq_terminal.api import ib as ib_api  # 12 (U3: read-only IB snapshot)
 from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, the only writes)
 from nq_terminal.api import regimes_capacity_term, risk_extras  # 12 (RK4, PF11, BR5, RG2, EX5, MV6)
 from nq_terminal.api import spa as spa_api  # 12 (SV8)
+from nq_terminal.api import paper_expectation as expectation_api  # 12 (LV6, LV6b)
 from nq_terminal.security import (
     LoopbackOnlyMiddleware,
     SameOriginApiMiddleware,
@@ -144,7 +145,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from nq_terminal.api import live_stream; app.include_router(live_stream.router)  # noqa: E702  9.2 (SSE)
     from nq_terminal.api import dq, events, roll, seasonality, vcone  # 11: DQ, EVT, ROLL, SEAS, VCONE
     for p11 in (vcone, seasonality, events, roll, dq): app.include_router(p11.router)  # noqa: E701  before the mount
-    for p12 in (spa_api, risk_extras, regimes_capacity_term, ib_api, jobs_api):  # 12: P2, before the mount
+    for p12 in (spa_api, risk_extras, regimes_capacity_term, ib_api, jobs_api, expectation_api):  # 12: P2, before the mount
         app.include_router(p12.router)
     _mount_web(app, settings.web_dist)
     assert_get_only(app, jobs_api.ALLOWED_WRITE_ROUTES)

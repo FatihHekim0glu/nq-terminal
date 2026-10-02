@@ -96,18 +96,26 @@ describe('SV8 panel on MT: the two benchmarks', () => {
 })
 
 describe('SV8 panel on MT: the effective number of members', () => {
-  it('states the effective members beside the p-values, with where it was computed', () => {
+  it('states the served effective members beside the p-values, with where they came from', () => {
     render(<SpaPanel query={ready()} />)
     const region = screen.getByRole('region', { name: SPA.label })
-    expect(within(region).getByText(/^Effective number of members: 2\.\d\d by eigenvalue participation and /)).toBeTruthy()
+    expect(within(region).getByText(/^Effective number of members: 2\.38 by eigenvalue participation and 3 by Li and Ji/)).toBeTruthy()
     expect(within(region).getByText('Most correlated pair of differentials: overnight_v0 and halloween_v0, rho 0.61.')).toBeTruthy()
-    expect(within(region).getByText(SPA.effective.computed)).toBeTruthy()
+    expect(within(region).getByText(SPA.effective.source)).toBeTruthy()
+    expect(region.textContent).not.toMatch(/computed in the browser/i)
   })
 
-  it('says why nothing is drawn when a member has no correlation, and keeps the rest of the panel', () => {
-    const gap = { ...SPA_REJECTS, correlation: [[1, null, 0.1], [null, null, null], [0.1, null, 1]] }
-    render(<SpaPanel query={ready(gap)} />)
+  it('shows the figures the answer carries and computes none: another served count is shown as it is', () => {
+    const served = { ...SPA_REJECTS.effective_members, participation: 1.234, li_ji: 2, clusters: [['za_v0', 'overnight_v0', 'halloween_v0']] }
+    render(<SpaPanel query={ready({ ...SPA_REJECTS, effective_members: served })} />)
+    expect(screen.getByText(/^Effective number of members: 1\.23 by eigenvalue participation and 2 by Li and Ji \(2005\), of 3; 1 cluster at 1 - rho 0\.5/)).toBeTruthy()
+  })
+
+  it('says why nothing is drawn when the backend served a refusal, and keeps the rest of the panel', () => {
+    const refusal = { ...SPA_REJECTS.effective_members, refusal: { kind: 'undefined', name: 'overnight_v0' } as const, participation: null, li_ji: null, clusters: [], strongest: null }
+    render(<SpaPanel query={ready({ ...SPA_REJECTS, effective_members: refusal })} />)
     expect(screen.getByText('Not computed: overnight_v0 does not vary on the common index, so it has no correlation.')).toBeTruthy()
+    expect(screen.queryByText(/^Effective number of members:/)).toBeNull()
     expect(screen.getByRole('table', { name: spaCaption(SPA_REJECTS) })).toBeTruthy()
   })
 

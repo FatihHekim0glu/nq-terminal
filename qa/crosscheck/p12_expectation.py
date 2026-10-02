@@ -23,8 +23,11 @@ only. It says where the path sits, never whether it is right or wrong.
 A capital that is zero, negative or not finite raises ValueError (K <= 0 has no fraction); so does a negative or
 non-integer horizon.
 
-The golden file (`build_golden`, `--write`, `--check`) is what the terminal's TypeScript port (`pathOnCone` in
-web/src/screens/live/expectationModel.ts) is tested against, case by case.
+The golden file (`build_golden`, `--write`, `--check`) is what the served placement (`path_on_cone` in
+terminal/backend/nq_terminal/analytics/expectation.py, `backend/tests/test_lv6_expectation.py`) and the browser's
+client-phase port it replaced (`pathOnCone` in web/src/screens/live/expectationReference.ts, now a test reference
+only) are tested against, case by case. The served views themselves are compared with this function through the
+`lv6` dump bundles (`crosscheck/lv6_live_cone.py`).
 
     uv run python -m crosscheck.p12_expectation --write golden/p12_expectation.json
     uv run python -m crosscheck.p12_expectation --check golden/p12_expectation.json

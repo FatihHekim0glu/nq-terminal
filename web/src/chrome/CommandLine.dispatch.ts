@@ -11,7 +11,8 @@ import { MESSAGES } from '../copy/chrome'
 import { WORKSPACE } from '../copy/workspace'
 import { requestHelpTopic } from '../screens/help/helpTopic.store'
 import { takeOpened } from './CommandLine.bus'
-import { functionMenu, helpMenu, lastMenu, relatedMenu, searchMenu, sectorMenu, type MenuItem } from './CommandLine.menus'
+import type { MenuItem } from './CommandLine.menus'
+import { withMenus } from './CommandLine.menus.load'
 import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
 import { postMessage } from './MessageLine.store'
 import type { SuggestionGroup } from '../commands/suggest'
@@ -27,7 +28,7 @@ function contextOf(p: CommandLineParts): ResolvedContext | null {
 
 function loadContext(p: CommandLineParts, context: ResolvedContext): void {
   p.options.onContext?.(context)
-  p.menus.open(functionMenu(context, p.options.index))
+  withMenus((m) => p.menus.open(m.functionMenu(context, p.options.index)))
   postMessage(withValue(COMMAND_LINE.loaded, displayContext(context, p.options.index)))
 }
 
@@ -49,16 +50,16 @@ function numberGo(p: CommandLineParts, n: number, newPanel: boolean): string | n
 
 function openMenuAction(p: CommandLineParts, action: LineAction): void {
   const index = p.options.index
-  if (action.kind === 'sector') p.menus.open(sectorMenu(action.sector, index))
+  if (action.kind === 'sector') withMenus((m) => p.menus.open(m.sectorMenu(action.sector, index)))
   else if (action.kind === 'help') {
-    p.menus.open(helpMenu(action.code))
+    withMenus((m) => p.menus.open(m.helpMenu(action.code)))
     // An open HELP panel also shows that function's page beside the menu.
     requestHelpTopic(action.code)
   }
-  else if (action.kind === 'last') p.menus.open(lastMenu(p.history.history.entries))
+  else if (action.kind === 'last') withMenus((m) => p.menus.open(m.lastMenu(p.history.history.entries)))
   else if (action.kind === 'menu') {
     if (p.menus.stack.length > 1) p.menus.up()
-    else if (!p.options.onMenu?.()) p.menus.open(relatedMenu(contextOf(p), index))
+    else if (!p.options.onMenu?.()) withMenus((m) => p.menus.open(m.relatedMenu(contextOf(p), index)))
   }
 }
 
@@ -116,7 +117,7 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
         postMessage(COMMAND_LINE.searchEmpty)
         return 'HL '
       }
-      p.menus.open(searchMenu(action.query, p.options.index, { lazy: true }))
+      withMenus((m) => p.menus.open(m.searchMenu(action.query, p.options.index, { lazy: true })))
       return ''
     case 'tape':
       postMessage(p.options.onTape?.() ? MESSAGES.tapeOn : MESSAGES.tapeOff)

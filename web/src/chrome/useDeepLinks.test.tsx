@@ -2,6 +2,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { StrictMode, createRef } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import CommandZone from '../AppCommandBar'
 import { parseLine } from '../commands/line'
 import { describeError } from '../commands/messages'
@@ -14,6 +15,11 @@ import { onLineRequest, type LineRequest } from './CommandLine.bus'
 import { markWorkspaceReady, resetWorkspaceReady } from './deepLink'
 import { resetMessage, useMessage } from './MessageLine.store'
 import { useDeepLinks, type DeepLinkEnv } from './useDeepLinks'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 const INDEX: CommandIndexData = {
   grammar: '<context> <FUNCTION> [args]',

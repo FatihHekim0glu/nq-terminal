@@ -4,6 +4,7 @@
 // from the captured fixture modules and the few built in src/demo/data; a path, id or request the dataset has
 // no honest body for answers 404 'not in the demo dataset', never another body relabelled.
 import type { ApiPath, RequestOf } from '../api/types'
+import { PAPER_EXPECTATION } from '../screens/live/expectationFixtures'
 import { NOT_IN_DEMO, refuse, served, servedOr, type DemoAnswer } from './data/answer'
 import {
   ANALYTICS, BOOTSTRAP, COSTS, EXCURSION_VIEWS, EXPOSURE, EXTENDED, PANELS, PAPER_TRACKING, TRADES, TRADE_PATH_VIEWS,
@@ -114,6 +115,7 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/analytics/run/{run_id}/excursions': ({ params }) => servedOrGap(EXCURSION_VIEWS.get(params.run_id)),
   '/api/analytics/deflated': () => served(DEFLATED),
   '/api/analytics/paper-tracking': ({ query }) => forBookJournal(PAPER_TRACKING, query.get('file')),
+  '/api/analytics/paper-expectation': ({ query }) => forBookJournal(PAPER_EXPECTATION, query.get('file')),
 
   // Audit
   '/api/audit/oos-log': ({ query }) => oosLog(query),

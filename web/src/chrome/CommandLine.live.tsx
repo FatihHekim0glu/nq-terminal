@@ -8,6 +8,7 @@ import { useCommands } from '../api/queries'
 import { loadSearchIndex } from '../commands/searchIndexLoader'
 import { contextFor, useLinkGroups, type PanelLink } from '../state/linkGroups'
 import { CommandLine, type CommandLineProps } from './CommandLine'
+import { preloadMenus } from './CommandLine.menus.load'
 
 export interface LiveCommandLineProps extends Omit<CommandLineProps, 'index' | 'indexError' | 'fallbackContext'> {
   /** The focused panel's link ('-' for an unlinked panel), or null when no panel has focus. */
@@ -19,6 +20,8 @@ export function LiveCommandLine({ focusedGroup, ...rest }: LiveCommandLineProps)
   // HL finds metrics, instruments and help text once this chunk is in; until then it shows today's results.
   useEffect(() => {
     void loadSearchIndex()
+    // The menus' code (builders and sheet) loads as chunks of their own, so a menu opens at once when its turn comes.
+    preloadMenus()
   }, [])
   const fallback = useLinkGroups((state) => (focusedGroup === null ? null : contextFor(state, focusedGroup)))
   // A failed background refetch (the index re-reads every COMMANDS_POLL_MS) keeps the last good data:

@@ -9,7 +9,8 @@ import { MNEMONICS, findMnemonic, type MnemonicCode, type MnemonicDef } from '..
 import { loadSearchIndex, loadedSearchIndex, type SearchHit } from '../commands/searchIndexLoader'
 import { FUTURES_SECTORS, displayContext, displayInstrument, sectorForRoot, type SectorCode } from '../commands/sectors'
 import type { CommandIndexData, ResolvedContext } from '../commands/types'
-import { ARGUMENT_NAMES, CHROME_WORDS, COMMAND_LINE, SECTOR_MENU, SUGGESTION_DETAILS } from '../copy/commands'
+import { ARGUMENT_NAMES, CHROME_WORDS, SUGGESTION_DETAILS } from '../copy/commands'
+import { COMMAND_MENUS, SECTOR_MENU } from '../copy/menus'
 import { SEARCH } from '../copy/search'
 import { fillCopy } from '../copy/workspace'
 
@@ -83,7 +84,7 @@ export function sectorMenu(sector: SectorCode, index: CommandIndexData | null): 
   const drafts = categories.map(({ c, list }) => {
     const name = SECTOR_MENU.categories[c]
     const sub = menu(`sector:COMDTY:${c}`, name, list.map((i) => instrumentDraft(i.root, i.symbol, index)), [title])
-    return { label: `${name}${COMMAND_LINE.categoryMark}`, detail: '', category: true, act: { kind: 'open', menu: sub } as const }
+    return { label: `${name}${COMMAND_MENUS.categoryMark}`, detail: '', category: true, act: { kind: 'open', menu: sub } as const }
   })
   return menu('sector:COMDTY', title, drafts)
 }
@@ -91,18 +92,18 @@ export function sectorMenu(sector: SectorCode, index: CommandIndexData | null): 
 /** The last commands, newest first (spec 5.1 item 8). */
 export function lastMenu(entries: readonly string[]): MenuModel {
   const recent = [...entries].reverse().slice(0, LAST_COUNT)
-  const intro = recent.length === 0 ? [COMMAND_LINE.lastEmpty] : []
-  return menu('last', COMMAND_LINE.lastTitle, recent.map((line) => ({ label: line, detail: '', act: { kind: 'run', line } })), [], intro)
+  const intro = recent.length === 0 ? [COMMAND_MENUS.lastEmpty] : []
+  return menu('last', COMMAND_MENUS.lastTitle, recent.map((line) => ({ label: line, detail: '', act: { kind: 'run', line } })), [], intro)
 }
 
 /** Related functions for the focused panel: its context's functions, or the built screens that take none. */
 export function relatedMenu(context: ResolvedContext | null, index: CommandIndexData | null): MenuModel {
   if (context) {
     const fns = functionMenu(context, index)
-    return { ...fns, key: `related:${fns.key}`, title: COMMAND_LINE.menuTitle, breadcrumb: [COMMAND_LINE.menuTitle, fns.title] }
+    return { ...fns, key: `related:${fns.key}`, title: COMMAND_MENUS.menuTitle, breadcrumb: [COMMAND_MENUS.menuTitle, fns.title] }
   }
   const drafts = MNEMONICS.filter((m) => m.accepts.length === 0 && isBuilt(m.code)).map((m) => ({ label: m.code, detail: m.screen, act: functionAct(m, null) }))
-  return menu('related', COMMAND_LINE.menuTitle, drafts)
+  return menu('related', COMMAND_MENUS.menuTitle, drafts)
 }
 
 function example(m: MnemonicDef): string | null {
@@ -116,7 +117,7 @@ function example(m: MnemonicDef): string | null {
 /** One function's help (spec 5.1 item 6): what it shows, what it takes, an example to fill in. */
 export function helpMenu(code: MnemonicCode): MenuModel {
   const m = findMnemonic(code) as MnemonicDef
-  const intro = [withValue(COMMAND_LINE.helpContext, m.context), withValue(COMMAND_LINE.helpArgument, ARGUMENT_NAMES[m.argument])]
+  const intro = [withValue(COMMAND_MENUS.helpContext, m.context), withValue(COMMAND_MENUS.helpArgument, ARGUMENT_NAMES[m.argument])]
   const line = example(m) ?? m.code
   const drafts: Draft[] = [
     { label: line, detail: m.screen, act: m.accepts.length === 0 ? { kind: 'run', line } : { kind: 'fill', line } },
@@ -168,6 +169,6 @@ export function searchMenu(query: string, index: CommandIndexData | null, opts: 
   const runs = (index?.runs ?? []).filter((r) => matches(r, q)).map((r) => ({ label: r, detail: SUGGESTION_DETAILS.run, act: { kind: 'run', line: `${r} RUN` } as const }))
   const found = search ? search.search(query).map((hit) => hitDraft(hit, index)) : functionAndWordDrafts(q)
   const drafts = [...found, ...hyps, ...runs].slice(0, search ? SEARCH_LIMIT : TODAY_LIMIT)
-  const intro = [...(drafts.length === 0 ? [withValue(COMMAND_LINE.searchNone, query)] : []), ...(loading ? [SEARCH.loading] : [])]
-  return menu(`search:${q}`, withValue(COMMAND_LINE.searchTitle, query), drafts, [], intro)
+  const intro = [...(drafts.length === 0 ? [withValue(COMMAND_MENUS.searchNone, query)] : []), ...(loading ? [SEARCH.loading] : [])]
+  return menu(`search:${q}`, withValue(COMMAND_MENUS.searchTitle, query), drafts, [], intro)
 }

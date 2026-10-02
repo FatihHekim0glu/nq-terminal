@@ -9,8 +9,10 @@ implementation computed; `terminal/qa/crosscheck/p1_reference.py` recomputes eac
   `UpCaptureRatio`, `DownCaptureRatio` and `BetaRatio` per rolling window and over the whole sample.
 - `bootstrap` (SV5, SV6): the series, seed and replication count, with the block length, the interval bounds and
   the cone percentiles; the reference redraws with arch's `StationaryBootstrap` at the same seed.
-- `deflated` (SV3): every registered trial's series at 1 tick as the route builds it, with N, V, SR0 and each DSR;
-  `stored` carries the paper fixture (0.1132, 0.9004), `ours` the terminal's value of it rounded to 4 decimals.
+- `deflated` (SV3, SV3b): every registered trial's series (with its session dates) at 1 tick as the route builds it,
+  with N, V, SR0 and each DSR, and the served `effective_n` (the `neff_*` keys: the effective number of trials, the
+  SR0 and DSR each sets); `stored` carries the paper fixture (0.1132, 0.9004), `ours` the terminal's value of it
+  rounded to 4 decimals.
 - `paths` (TA2, TA4, TA5): three hand-built trades over six bars (the golden fixture), and za's and overnight's
   first trades over synthetic 1-minute bars from the tests' fake serve (no gate read of real prices), bars cut to
   the trades' spans and each trade's block moved to its fill level (the bar ending at the entry closes at the entry
@@ -40,6 +42,7 @@ from nq_terminal.analytics import (
     deflated,
     distribution,
     excursions,
+    neff,
     perf,
     regimes,
     relative,
@@ -50,13 +53,16 @@ from nq_terminal.analytics import (
     tracking,
     trades,
 )
-from nq_terminal.services import journals, run_books
+from nq_terminal.services import journals, run_books, tearsheet_extended
 from nq_terminal.services.research import ResearchService
 from nq_terminal.services.runs import RunService
 
 from fakes import FIXTURES, make_fake_serve
 
 PREFIX = "nqt_p1_"
+NEFF_KEYS = ("neff_window_sessions", "neff_correlation", "neff_eigenvalues", "neff_participation", "neff_li_ji",
+             "neff_clusters", "neff_n_total", "neff_sr0_session", "neff_dsr_participation", "neff_dsr_li_ji",
+             "neff_dsr_clusters")
 SERIES_CASES = (("volmanaged_v0", 1), ("dtsmom_v0", 1), ("za_v0", 1))
 RUN_CASES = ("nt_dtsmom_v0_ts1",)
 BOOT_CASES = ("volmanaged_v0", "dtsmom_v0", "synthetic_b")
@@ -222,6 +228,22 @@ def bootstrap_doc(case: Case) -> dict:
 # ---------------------------------------------------------------- deflated
 
 
+def neff_values(view) -> dict:
+    """The served `effective_n` of the SV3 view as the dump's `ours` keys (see `p1_reference.neff_references`)."""
+    if view.refusal is not None:
+        return {}
+    names, by = view.daily, {e.id: e for e in view.estimates}
+    ranked = [[names[i] for i in group] for group in neff.rank_clusters(view.clusters)]
+    return {"neff_window_sessions": float(view.window.sessions),
+            "neff_correlation": {f"{a}|{b}": view.correlation[i][j] for i, a in enumerate(names)
+                                 for j, b in enumerate(names) if i <= j},
+            "neff_eigenvalues": list(view.eigenvalues), "neff_participation": by["participation"].n_daily,
+            "neff_li_ji": by["li_ji"].n_daily, "neff_clusters": ";".join(",".join(g) for g in ranked),
+            "neff_n_total": {k: by[k].n_total for k in neff.ESTIMATORS},
+            "neff_sr0_session": {k: e.sr0_session for k, e in by.items()},
+            **{f"neff_dsr_{k}": {d.name: getattr(d, k) for d in view.dsr} for k in neff.ESTIMATORS}}
+
+
 def deflated_doc() -> dict:
     research = _research()
     trials = []
@@ -230,6 +252,7 @@ def deflated_doc() -> dict:
             s = series.hypothesis_series(research, row.name, deflated.COST)
             trials.append(deflated.Trial(row.name, s.kind, s.periods, s.r))
     found = deflated.registry_dsr(trials)
+    served = tearsheet_extended.deflated_view(trials).effective_n
     paper_sr0 = deflated.expected_max_sharpe(100, 1 / (2 * 250))
     paper_dsr = deflated.deflated_sharpe(2.5 / math.sqrt(250), paper_sr0, 1250, -3.0, 10.0)
     ours = {"n_trials": float(found["n_trials"]), "variance": found["variance"], "sr0_session": found["sr0_session"],
@@ -240,9 +263,10 @@ def deflated_doc() -> dict:
             "dsr_null": {row["name"]: row["dsr_null"] for row in found["rows"]},
             "loo_variance": {found["leave_one_out"]["name"]: found["leave_one_out"]["variance"]},
             "loo_sr0_session": {found["leave_one_out"]["name"]: found["leave_one_out"]["sr0_session"]},
-            "paper_sr0": round(paper_sr0, 4), "paper_dsr": round(paper_dsr, 4)}
+            "paper_sr0": round(paper_sr0, 4), "paper_dsr": round(paper_dsr, 4), **neff_values(served)}
     registered = sum(1 for row in research.registry_rows() if row.registered)
-    inputs = {"trials": [{"name": t.name, "periods": t.periods, "r": t.r.tolist()} for t in trials],
+    inputs = {"trials": [{"name": t.name, "periods": t.periods, "r": t.r.tolist(),
+                          "dates": [d.strftime("%Y-%m-%d") for d in t.r.index]} for t in trials],
               "paper": {"n_trials": 100, "variance": 1 / (2 * 250), "t": 1250, "skew": -3.0, "kurt": 10.0,
                         "sr": 2.5 / math.sqrt(250)}}
     stored = {"paper_sr0": 0.1132, "paper_dsr": 0.9004, "n_trials": float(registered)}
@@ -397,6 +421,21 @@ def test_p1_dumps_hold_every_case(cases, tmp_path_factory):
     for path, doc in zip(paths, docs):
         back = json.loads(path.read_text(encoding="utf-8"))
         assert back["schema"] == SCHEMA and back["case"] == doc["case"] and back["values"]["ours"]
+
+
+def test_the_deflated_dump_carries_each_trials_dates_and_the_served_effective_n():
+    """SV3b (C8 mirror): the reference recomputes the effective number of trials from the dated series, and `ours` is
+    what `GET /api/analytics/deflated` serves as `effective_n`."""
+    doc = deflated_doc()
+    trials, ours = doc["inputs"]["trials"], doc["values"]["ours"]
+    assert all(len(t["dates"]) == len(t["r"]) for t in trials)
+    daily = [t["name"] for t in trials if t["periods"] == 252]
+    assert set(NEFF_KEYS) <= set(ours) and len(ours["neff_dsr_li_ji"]) == len(trials)
+    assert ours["neff_window_sessions"] >= 252 and len(ours["neff_eigenvalues"]) == len(daily)
+    assert len(ours["neff_correlation"]) == len(daily) * (len(daily) + 1) // 2
+    assert set(ours["neff_sr0_session"]) == {"registered", "participation", "li_ji", "clusters"}
+    assert set(ours["neff_n_total"]) == {"participation", "li_ji", "clusters"}
+    assert sorted(n for g in ours["neff_clusters"].split(";") for n in g.split(",")) == sorted(daily)
 
 
 def test_born_failing_the_paper_fixture_rounds_to_the_published_values():

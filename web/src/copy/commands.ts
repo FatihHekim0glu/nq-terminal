@@ -129,28 +129,6 @@ export const ARGUMENT_NAMES = {
   timeframe: 'an optional timeframe: 1m, 5m, 1h or 1d',
 } as const
 
-/** Autocomplete group headings: uppercase, as the data itself is a heading (spec 3.3). */
-export const SUGGESTION_GROUPS = {
-  function: 'FUNCTIONS',
-  instrument: 'INSTRUMENTS',
-  hypothesis: 'HYPOTHESES',
-  run: 'RUNS',
-  universe: 'UNIVERSE',
-  argument: 'ARGUMENTS',
-  search: 'SEARCH',
-} as const
-
-/** The "More ..." row under a group that has more rows than the sheet shows. */
-export const SUGGESTION_MORE = {
-  function: 'More functions...',
-  instrument: 'More instruments...',
-  hypothesis: 'More hypotheses...',
-  run: 'More runs...',
-  universe: 'More...',
-  argument: 'More...',
-  search: 'More...',
-} as const
-
 export const SUGGESTION_DETAILS = {
   hypothesis: 'registered hypothesis',
   confirmation: 'sealed-window confirmation',
@@ -165,8 +143,6 @@ export const SUGGESTION_DETAILS = {
 export const COMMAND_LINE = {
   label: 'Command line',
   hint: 'Enter runs the command, Shift+Enter opens it in a new panel, Tab completes, the Up and Down keys in an empty line walk the history, Esc closes the list, then clears the line, then returns to the panel.',
-  suggestionsLabel: 'Suggestions',
-  hideHint: '<UP ARROW> to hide',
   ran: 'Opened {value}.',
   ranNewPanel: 'Opened {value} in a new panel.',
   loaded: 'Loaded {value}. Type a number for its function.',
@@ -175,37 +151,7 @@ export const COMMAND_LINE = {
   searchEmpty: 'Type what to search for after HL.',
   indexError: 'Suggestions are unavailable: the command index did not load.',
   registryError: 'Hypothesis names are missing: {value}',
-  lastTitle: 'Last commands',
-  lastEmpty: 'No commands yet.',
-  menuTitle: 'Related functions',
-  searchTitle: 'Search: {value}',
-  searchNone: 'Nothing matches {value}.',
-  helpTitle: '{value}',
-  helpContext: 'Context: {value}',
-  helpArgument: 'Argument: {value}',
-  menuCancel: '<Cancel> X',
-  menuCancelLabel: 'Close the menu',
-  menuLabel: 'Menu',
-  categoryMark: ' >',
   layoutUnavailable: 'The workspace is not ready yet.',
   watchUnavailable: 'The change watch has not read the records yet.',
   grabUnavailable: 'No panel is focused: click a panel or press Alt+1, then GRAB <GO>.',
-} as const
-
-/** Sector menus (spec 5.1 item 4): COMDTY opens these categories. */
-export const SECTOR_MENU = {
-  INDEX: 'Index',
-  COMDTY: 'Comdty',
-  CURNCY: 'Curncy',
-  EQUITY: 'Equity',
-  GOVT: 'Govt',
-  CORP: 'Corp',
-  categories: {
-    rates: 'Rates',
-    energy: 'Energy',
-    metals: 'Metals',
-    grains: 'Grains',
-    livestock: 'Livestock',
-  },
-  none: 'No futures in nq-lab carry this sector key.',
 } as const

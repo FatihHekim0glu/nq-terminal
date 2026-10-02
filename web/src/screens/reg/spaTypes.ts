@@ -2,6 +2,7 @@
 // generated contract types, so a field the backend changes is a compile error here.
 import type { Schemas } from '../../api/types'
 
+export type SpaEffectiveMembers = Schemas['SpaEffectiveMembers']
 export type SpaView = Schemas['SpaView']
 export type SpaMember = Schemas['SpaMember']
 export type SpaExcluded = Schemas['SpaExcluded']

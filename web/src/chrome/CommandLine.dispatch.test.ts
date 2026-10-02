@@ -4,10 +4,16 @@
 // numberGo -> chooseItem -> runText, the same path the digits themselves take (CommandLine.lineKeys.ts
 // covers the arrowed-menu-row path, the other half of the same defect).
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import type { CommandIndexData } from '../commands/types'
 import { runText } from './CommandLine.dispatch'
 import { useCommandLineParts, type CommandLineOptions } from './CommandLine.state'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 const INDEX: CommandIndexData = {
   grammar: '<context> <FUNCTION> [args]',

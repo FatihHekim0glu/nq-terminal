@@ -130,6 +130,13 @@ describe('participationRatio and liJiCount', () => {
     expect(liJiCount([0.9999999])).toBeCloseTo(0.9999999, 12)
   })
 
+  it('Li and Ji reads an eigenvalue a few last places off an integer as that integer (a solver rounds 3 to 2.9999999999999996)', () => {
+    expect(liJiCount([2.9999999999999996, 0, 0])).toBe(1)
+    expect(liJiCount([3.0000000000000004, 0, 0])).toBe(1)
+    expect(liJiCount([1.9999999999999998, 1, 0])).toBe(2)
+    expect(liJiCount([2.999999, 0.000001, 0])).toBeCloseTo(2, 9) // 1 + 0.999999 + 0.000001: a real fraction is not snapped
+  })
+
   it('refuse an empty spectrum, a value that is not finite and a spectrum of zeros', () => {
     expect(() => participationRatio([])).toThrow('eigenvalue')
     expect(() => participationRatio([1, Number.NaN])).toThrow('eigenvalue')

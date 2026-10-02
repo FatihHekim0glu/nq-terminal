@@ -3,7 +3,7 @@
 // 22px status line (decision D7). Data comes only through the typed GET client (src/api) under one
 // ApiProvider; link-group contexts and user layouts come from the zustand stores (src/state). The
 // Workspace (and dockview with it) loads as its own chunk, so the frame and its safety labels paint
-// first. The chrome's keys and buttons run through KeyToolbar.actions.ts; nothing here can place,
+// first. The chrome's keys and buttons run through KeyToolbar.actions.ts, a chunk of its own that KeyToolbar.lazy.ts loads at the first idle moment; nothing here can place,
 // change or withdraw anything. The Workspace reports the layout owner (the screen whose layout the panels
 // are arranged under, and whether the viewer has edited it): the frame strip and the status line show it
 // with an edited mark, and RESET, UNDO and the <GO> preview row on the command line act on it.
@@ -31,10 +31,12 @@ import { toggleTape, useTapeOn } from './chrome/EventTape.store'
 import { FrameStrip, type ColourScheme } from './chrome/FrameStrip'
 import { KeyToolbar } from './chrome/KeyToolbar'
 import { LazyBoundary } from './chrome/LazyBoundary'
-import { createChromeActions, runGlobalKey, runKey, runNav, workspaceMenu, type ChromeActions, type ChromeEnv, type ChromeWorkspace } from './chrome/KeyToolbar.actions'
+import type { ChromeEnv, ChromeWorkspace } from './chrome/KeyToolbar.actions'
+import { createLazyChrome, type LazyChrome } from './chrome/KeyToolbar.lazy'
 import { postMessage } from './chrome/MessageLine.store'
 import { NavToolbar } from './chrome/NavToolbar'
 import { activateNumbered } from './chrome/NumberedActions'
+import { workspaceMenu } from './chrome/WorkspaceMenu'
 import { useIdleReady, useRecordWatch, type RecordWatchView } from './chrome/RecordWatch.view'
 import { killState } from './chrome/StatusBar.format'
 import { LiveStatusBar, useHealthState } from './chrome/StatusBar.live'
@@ -257,13 +259,12 @@ interface ChromeHeaderProps {
   readonly focused: FocusedPanel | null
   readonly panel: { readonly id: string | null; readonly number: number | null }
   readonly refs: ChromeRefs
-  readonly env: ChromeEnv
-  readonly actions: ChromeActions
+  readonly chrome: LazyChrome
   readonly watch: RecordWatchView
 }
 
 /** The four chrome rows above the workspace. */
-function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: ChromeHeaderProps) {
+function ChromeHeader({ shown, focused, panel, refs, chrome, watch }: ChromeHeaderProps) {
   const tapeOn = useTapeOn()
   const scheme = useScheme()
   const look = useLook(() => postMessage(MESSAGES.theme))
@@ -287,23 +288,23 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         scheme={scheme.scheme}
         look={look.look}
         onLook={look.choose}
-        onOpen={(code) => actions.runAndFocus(code)}
+        onOpen={(code) => chrome.runAndFocus(code)}
         onNew={openNew}
         onTape={() => toggleTape()}
         onScheme={scheme.choose}
-        onUndo={() => actions.runAndFocus('UNDO')}
-        onReset={() => actions.runAndFocus('RESET')}
+        onUndo={() => chrome.runAndFocus('UNDO')}
+        onReset={() => chrome.runAndFocus('RESET')}
         workspaces={saved}
         workspace={shown.workspace}
-        onOpenWorkspace={(name) => actions.runAndFocus(`LOAD ${name}`)}
+        onOpenWorkspace={(name) => chrome.runAndFocus(`LOAD ${name}`)}
         onDemo={() => {
           // The DEMO DATA key (demo only): the HELP panel shows its own page, where About this demo comes first.
           requestHelpTopic('HELP')
-          actions.runAndFocus('HELP')
+          chrome.runAndFocus('HELP')
         }}
       />
-      <KeyToolbar onKey={(key) => runKey(actions, env, key)} />
-      <NavToolbar focused={nav} kill={killState(health)} onAction={(a) => runNav(actions, env, a)} />
+      <KeyToolbar onKey={(key) => chrome.key(key)} />
+      <NavToolbar focused={nav} kill={killState(health)} onAction={(a) => chrome.nav(a)} />
       <CommandZone
         commandRef={refs.cmd}
         focusedGroup={group}
@@ -317,7 +318,7 @@ function ChromeHeader({ shown, focused, panel, refs, env, actions, watch }: Chro
         onContext={loadContext}
         onNumber={(n) => (panel.id ? activateNumbered(panel.id, n) : false)}
         onTape={() => toggleTape()}
-        onBack={() => actions.back(false)}
+        onBack={() => chrome.back(false)}
         onMenu={() => refs.workspace.current?.openRelatedMenu?.(panel.id ?? undefined) ?? false}
         onGrab={() => refs.workspace.current?.grab() ?? false}
         focusedCode={() => focused?.params.code ?? null}
@@ -355,12 +356,16 @@ function Terminal() {
   refs.focused.current = focused
   // Built once: the env reads the refs above, which always hold the latest values.
   const [env] = useState(() => chromeEnv(refs, () => setKeymapOpen((o) => !o)))
-  const [actions] = useState(() => createChromeActions(env))
-  useTerminalKeys(() => keyWhere(refs.cmd.current), (action) => runGlobalKey(actions, env, action))
+  const [chrome] = useState(() => createLazyChrome(env))
+  // The key actions load as a chunk of their own after the first idle moment (chrome/KeyToolbar.lazy.ts).
+  useEffect(() => {
+    if (idle) chrome.preload()
+  }, [idle, chrome])
+  useTerminalKeys(() => keyWhere(refs.cmd.current), (action) => chrome.global(action))
   return (
     <div className="nqt-frame">
       <h1 className="sr-only">{CHROME.appTitle}</h1>
-      <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} env={env} actions={actions} watch={watch} />
+      <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} chrome={chrome} watch={watch} />
       <ConnectionStrip />
       {shown.code === 'HOME' && shown.workspace === null ? (
         <LazyBoundary onError={() => {}}>

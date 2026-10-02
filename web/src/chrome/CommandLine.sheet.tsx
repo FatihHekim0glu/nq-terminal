@@ -5,7 +5,7 @@
 // the options and the arrow keys; rows keep role="option".
 import { Command } from 'cmdk'
 import type { SheetGroup } from '../commands/suggest'
-import { COMMAND_LINE, SUGGESTION_GROUPS, SUGGESTION_MORE } from '../copy/commands'
+import { COMMAND_MENUS, SUGGESTION_GROUPS, SUGGESTION_MORE } from '../copy/menus'
 import { MORE_PREFIX } from './CommandLine.state'
 
 export interface SheetProps {
@@ -33,14 +33,14 @@ function Heading({ group, first }: { readonly group: SheetGroup['group']; readon
   return (
     <span className="grp-head">
       <span>{SUGGESTION_GROUPS[group]}</span>
-      {first ? <i className="grp-hint">{COMMAND_LINE.hideHint}</i> : null}
+      {first ? <i className="grp-hint">{COMMAND_MENUS.hideHint}</i> : null}
     </span>
   )
 }
 
 export function Sheet({ groups, typed, onChoose, listRef }: SheetProps) {
   return (
-    <Command.List ref={listRef} className="cmd-list" label={COMMAND_LINE.suggestionsLabel} onMouseDown={(e) => e.preventDefault()}>
+    <Command.List ref={listRef} className="cmd-list" label={COMMAND_MENUS.suggestionsLabel} onMouseDown={(e) => e.preventDefault()}>
       {groups.map(({ group, items, more }, i) => (
         <Command.Group key={group} heading={<Heading group={group} first={i === 0} />}>
           {items.map((s) => (

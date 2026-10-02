@@ -3,12 +3,18 @@
 // its group's context), while the parsed line reads NQ DES. The message line must say what the panel shows:
 // the Workspace reports it through the bus right after it runs, the command line words the message from it.
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import type { CommandIndexData } from '../commands/types'
 import { reportOpened, takeOpened } from './CommandLine.bus'
 import { runText } from './CommandLine.dispatch'
 import { useCommandLineParts, type CommandLineOptions } from './CommandLine.state'
 import { resetMessage, useMessage } from './MessageLine.store'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 const INDEX: CommandIndexData = {
   grammar: '<context> <FUNCTION> [args]',

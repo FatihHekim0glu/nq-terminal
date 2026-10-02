@@ -118,3 +118,116 @@ def test_born_failing_a_correlation_with_a_missing_pair_is_caught(refs):
     short = dict(refs["correlation"].value)
     short.pop("a_v0|b_v0")
     assert all(row.status == FAIL for row in rows(refs, {"correlation": short}))
+
+
+# ---------------------------------------------------------------- the effective number of members (SV8 step 8)
+
+
+EFFECTIVE_KEYS = ("effective_participation", "effective_li_ji", "effective_clusters", "effective_pair",
+                  "effective_rho")
+
+
+def correlated_inputs() -> dict:
+    """Four members whose differentials (against a zero benchmark: their own returns) form two blocks."""
+    rng = np.random.default_rng(31)
+    t = 500
+    f1, f2 = rng.standard_normal(t), rng.standard_normal(t)
+    models = np.column_stack([f1 + 0.4 * rng.standard_normal(t), f1 + 0.5 * rng.standard_normal(t),
+                              f2 + 0.6 * rng.standard_normal(t), rng.standard_normal(t)]) + 0.05
+    return {"names": NAMES, "dates": [f"d{i}" for i in range(t)], "bench": [0.0] * t,
+            "models": {n: models[:, j].tolist() for j, n in enumerate(NAMES)}, "reps": 200, "seed": 7, "size": 0.05}
+
+
+@pytest.fixture(scope="module")
+def eff_refs() -> dict:
+    return spa_references(correlated_inputs())
+
+
+def test_the_reference_names_the_effective_member_keys(eff_refs):
+    assert all(key in eff_refs for key in EFFECTIVE_KEYS)
+    assert EFFECTIVE_KEYS == tuple(k for k in eff_refs if k.startswith("effective_"))
+
+
+def test_the_effective_members_are_read_from_the_correlation_of_the_differentials(eff_refs):
+    data = correlated_inputs()
+    d = np.column_stack([data["models"][n] for n in NAMES])
+    eig = np.linalg.eigvalsh(np.corrcoef(d, rowvar=False))
+    want = float(eig.sum() ** 2 / (eig ** 2).sum())
+    assert eff_refs["effective_participation"].value == pytest.approx(want, rel=1e-12)
+    assert eff_refs["effective_clusters"].value == "a_v0,b_v0;c_v0;d_v0"
+    assert eff_refs["effective_pair"].value == "a_v0|b_v0"
+    assert 0.8 < eff_refs["effective_rho"].value < 1.0
+    assert 2.0 < eff_refs["effective_participation"].value < 3.5
+
+
+def test_born_failing_identical_members_count_one_li_ji_not_two():
+    from crosscheck.p2_spa import effective_references
+
+    refs = effective_references(["x", "y", "z"], np.ones((3, 3)))  # the eigenvalue 3 comes back as 2.9999999999999996
+    assert refs["effective_li_ji"].value == pytest.approx(1.0, abs=1e-12)
+
+
+def test_the_effective_references_pass_themselves(eff_refs):
+    values = {k: eff_refs[k].value for k in EFFECTIVE_KEYS}
+    assert all(row.status == PASS for row in rows(eff_refs, values))
+
+
+def test_born_failing_a_different_cluster_word_participation_or_pair_never_passes(eff_refs):
+    wrong = {"effective_clusters": "a_v0,b_v0,c_v0;d_v0", "effective_pair": "a_v0|c_v0",
+             "effective_participation": eff_refs["effective_participation"].value + 0.01}
+    assert {r.metric: r.status for r in rows(eff_refs, wrong)} == {k: FAIL for k in wrong}
+
+
+def test_born_failing_the_effective_members_of_the_returns_against_buy_and_hold_are_not_those_of_the_differentials():
+    data = correlated_inputs()
+    held = dict(data, bench=(np.random.default_rng(2).standard_normal(len(data["bench"])) * 3).tolist())
+    cash_refs, held_refs = spa_references(data), spa_references(held)
+    assert cash_refs["effective_rho"].value != held_refs["effective_rho"].value
+
+
+def test_the_correlation_key_for_cash_is_the_return_correlation_so_the_clusters_follow_the_returns(eff_refs):
+    data = correlated_inputs()
+    returns = np.corrcoef(np.column_stack([data["models"][n] for n in NAMES]), rowvar=False)
+    pair = max(((i, j) for i in range(4) for j in range(i + 1, 4)), key=lambda p: abs(returns[p]))
+    assert eff_refs["effective_pair"].value == f"{NAMES[pair[0]]}|{NAMES[pair[1]]}"
+
+
+# ---------------------------------------------------------------- a StepM that rejects in a second step
+
+
+def two_step_inputs() -> dict:
+    """Step 1 rejects the noisy member, step 2 rejects the one quiet member left: nothing remains for a third step."""
+    t = 300
+    bench = np.random.default_rng(3).standard_normal(t)
+    rng = np.random.default_rng(5)
+    quiet = rng.standard_normal(t)
+    models = np.column_stack([bench + 1.0 + rng.standard_normal(t), bench + 0.1025 + (quiet - quiet.mean())])
+    names = ["noisy_v0", "quiet_v0"]
+    return {"names": names, "dates": [f"d{i}" for i in range(t)], "bench": bench.tolist(),
+            "models": {n: models[:, j].tolist() for j, n in enumerate(names)}, "reps": 1000, "seed": 7, "size": 0.05}
+
+
+def test_the_two_step_reference_rejects_both_members_where_arch_s_own_loop_raises():
+    from arch.bootstrap import StepM
+
+    data = two_step_inputs()
+    refs = spa_references(data)
+    assert refs["superior"].value == "noisy_v0,quiet_v0" and refs["k"].value == 2.0
+    loss_b = -np.array(data["bench"])
+    loss_m = -np.column_stack([data["models"][n] for n in data["names"]])
+    stock = StepM(loss_b, loss_m, size=0.05, block_size=refs["block"].value, reps=data["reps"], seed=data["seed"])
+    with pytest.raises(ValueError, match="zero-size array"):
+        stock.compute()
+
+
+def test_the_two_step_member_is_below_the_first_steps_bar_and_rejected_only_at_the_second():
+    refs = spa_references(two_step_inputs())
+    quiet_mean = refs["mean_differential"].value["quiet_v0"]
+    assert quiet_mean < refs["crit_consistent"].value  # the bar the first step used
+    assert refs["superior"].value.endswith("quiet_v0")
+
+
+def test_born_failing_a_one_step_reading_would_name_only_the_noisy_member():
+    refs = spa_references(two_step_inputs())
+    [row] = rows(refs, {"superior": "noisy_v0"})
+    assert row.status == FAIL

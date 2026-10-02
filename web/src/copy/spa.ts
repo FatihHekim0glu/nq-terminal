@@ -41,10 +41,9 @@ export const SPA = {
     clustersOne: '1 cluster',
     clustersMany: '{count} clusters',
     pair: 'Most correlated pair of differentials: {a} and {b}, rho {rho}.',
-    computed: 'Computed in the browser from the served correlation, with the estimators of MT 87) Effective trials; not a served number, and no verdict.',
+    source: 'Served by the backend from the correlation of the members differentials, with the estimators of MT 87) Effective trials; it does not adjust any p-value, and no verdict.',
     single: 'One member only, so no effective number of members is drawn.',
     undefined: 'Not computed: {name} does not vary on the common index, so it has no correlation.',
-    malformed: 'Not computed: the served correlation is not a k by k correlation matrix of the members.',
   },
   cols: {
     name: 'Member',

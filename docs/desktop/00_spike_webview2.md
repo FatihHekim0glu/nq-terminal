@@ -1,6 +1,6 @@
 # Spike 00: the terminal inside WebView2 on this machine
 
-Date run: 2 October 2026 (01:10 to 01:55, UK time). Repository: `nq-lab/terminal`, HEAD `c7f9e61` (v2). Scripts and raw output sit in `docs/desktop/spike_webview2/` (see the last section).
+Date run: 2 October 2026 (01:10 to 01:55, UK time). Repository: `nq-lab/terminal`, HEAD `c7f9e61` (v2). Scripts and raw output sit in `nq-lab/desktop_research/spike_webview2/`, outside the terminal repository (see the last section); the `raw/` paths below are relative to that folder.
 
 ## What this spike answers
 
@@ -222,7 +222,7 @@ How to get Mac numbers without owning a Mac in the room is an open question for 
 
 ## Reproduce
 
-All files are in `docs/desktop/spike_webview2/`; paths inside them point at the session scratch folder and `D:\dev`, so edit the constants at the top of `common.py` and `bench_browser.py` first. In a throwaway venv holding pywebview, psutil and the websocket-client package:
+All files are in `nq-lab/desktop_research/spike_webview2/`, outside the terminal repository; paths inside them point at the session scratch folder and `D:\dev`, so edit the constants at the top of `common.py` and `bench_browser.py` first. In a throwaway venv holding pywebview, psutil and the websocket-client package:
 
 ```
 python bench_backend.py          # backend cold start, 5 x 2 modes

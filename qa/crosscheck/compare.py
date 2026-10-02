@@ -17,6 +17,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from crosscheck.dumps import SIDES, Bundle, Case, RegistryDump
+from crosscheck.lv6_live_cone import LV6_REFERENCES
 from crosscheck.market_reference import market_references
 from crosscheck.p11_dq import P11_DQ_REFERENCES
 from crosscheck.p11_evt import P11_EVT_REFERENCES
@@ -36,7 +37,9 @@ BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "ma
                      **P11_VCONE_REFERENCES, **P11_SEAS_REFERENCES, **P11_EVT_REFERENCES, **P11_ROLL_REFERENCES,
                      **P11_DQ_REFERENCES,
                      # Phase 12 (P2): SV8, RK4 with PF11 and BR5, RG2, EX5 and MV6
-                     **P2_SPA_REFERENCES, **P2_RISK_REFERENCES, **P2_RCT_REFERENCES}
+                     **P2_SPA_REFERENCES, **P2_RISK_REFERENCES, **P2_RCT_REFERENCES,
+                     # v2.1: LV6 and LV6b served
+                     **LV6_REFERENCES}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9

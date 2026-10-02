@@ -61,6 +61,7 @@ TRADED_SHARE = 0.10  # the trade-like trial trades on 10 percent of the sessions
 TRADE_SCALE = 3.0
 FIRST_DATE = "2020-01-01"
 CLUSTER_CUT = 0.5  # pre-registered: on 1 - rho, average linkage
+SNAP_ULPS = 8  # last places an eigenvalue may sit off an integer and still count as that integer (Li and Ji)
 
 # Copied from web/src/screens/reg/deflatedFixtures.ts (DEFLATED_REAL, the terminal's own GET /api/analytics/deflated
 # on the real research files, 2026-09-27, V0 at SR = 0): the served SV3 view at N = 21. The rows are three of its 21.
@@ -119,8 +120,15 @@ def participation_ratio(eigenvalues: np.ndarray) -> float:
 
 
 def li_ji(eigenvalues: np.ndarray) -> float:
-    """Li and Ji (2005): each |eigenvalue| adds 1 when it is at least 1, plus its fractional part."""
+    """Li and Ji (2005): each |eigenvalue| adds 1 when it is at least 1, plus its fractional part.
+
+    An eigenvalue within SNAP_ULPS * k last places of an integer of 1 or more is that integer (a solver returns the
+    exact 3 of a matrix of ones as 2.9999999999999996, and the count jumps by one there).
+    """
     size = np.abs(eigenvalues)
+    nearest = np.round(size)
+    slack = SNAP_ULPS * np.finfo(float).eps * np.maximum(1.0, size) * size.size
+    size = np.where((nearest >= 1) & (np.abs(size - nearest) <= slack), nearest, size)
     return float(np.sum((size >= 1).astype(float) + (size - np.floor(size))))
 
 

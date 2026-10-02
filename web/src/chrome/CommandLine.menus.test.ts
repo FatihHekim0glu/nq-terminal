@@ -4,7 +4,8 @@ import { withValue } from '../commands/messages'
 import { MNEMONICS } from '../commands/registry'
 import { buildSearchIndex, type SearchIndex } from '../commands/searchIndex'
 import type { CommandIndexData, ResolvedContext } from '../commands/types'
-import { CHROME_WORDS, COMMAND_LINE, MNEMONIC_SCREENS } from '../copy/commands'
+import { CHROME_WORDS, MNEMONIC_SCREENS } from '../copy/commands'
+import { COMMAND_MENUS } from '../copy/menus'
 import { SEARCH } from '../copy/search'
 import { functionMenu, relatedMenu, searchMenu } from './CommandLine.menus'
 
@@ -33,7 +34,7 @@ const labels = (context: ResolvedContext | null) => relatedMenu(context, INDEX).
 describe('relatedMenu: the MENU word on the command line (spec 4.7)', () => {
   it('with no context, lists the built screens that take none, in registry order, JOBS (the P2 queue) included', () => {
     const menu = relatedMenu(null, INDEX)
-    expect(menu.title).toBe(COMMAND_LINE.menuTitle)
+    expect(menu.title).toBe(COMMAND_MENUS.menuTitle)
     expect(menu.items.map((i) => i.label)).toEqual(['HOME', 'REG', 'MT', 'RUNS', 'LEDG', 'OOS', 'LIVE', 'JRNL', 'HELP', 'JOBS'])
     expect(menu.items.every((i) => BUILT_CODES.has(i.label as never))).toBe(true)
     expect(menu.items.map((i) => i.n)).toEqual(menu.items.map((_, i) => i + 1))
@@ -42,7 +43,7 @@ describe('relatedMenu: the MENU word on the command line (spec 4.7)', () => {
 
   it('for an instrument, lists VCONE, SEAS, EVT, ROLL and DQ with their titles, each run for that instrument', () => {
     const menu = relatedMenu(NQ, INDEX)
-    expect(menu.breadcrumb).toEqual([COMMAND_LINE.menuTitle, 'NQ1 Index'])
+    expect(menu.breadcrumb).toEqual([COMMAND_MENUS.menuTitle, 'NQ1 Index'])
     for (const code of ['VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ'] as const) {
       const item = menu.items.find((i) => i.label === code)
       expect(item, code).toMatchObject({ detail: MNEMONIC_SCREENS[code], act: { kind: 'run', line: `NQ ${code}` } })
@@ -103,7 +104,7 @@ describe('searchMenu before the search index has loaded (today\'s results, a loa
   })
 
   it('says nothing matched and that the index is loading, when both are true', () => {
-    expect(searchMenu('calmar', INDEX).intro).toEqual([withValue(COMMAND_LINE.searchNone, 'calmar'), SEARCH.loading])
+    expect(searchMenu('calmar', INDEX).intro).toEqual([withValue(COMMAND_MENUS.searchNone, 'calmar'), SEARCH.loading])
   })
 })
 

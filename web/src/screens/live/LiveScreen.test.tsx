@@ -10,10 +10,7 @@ import { LIVE } from '../../copy/live'
 import { STREAM } from '../../copy/liveStream'
 import { TRACKING } from '../../copy/tracking'
 import { stubLayout } from '../../grids/testing'
-import { VOLMANAGED } from '../des/desTestData'
-import { RUNS } from '../runs/runs.fixtures'
-import { RUN_ANALYTICS } from '../tear/tear.fixtures'
-import { HYP_BOOTSTRAP } from '../tear/tearP1.fixtures'
+import { PAPER_EXPECTATION } from './expectationFixtures'
 import { BANNER, BOOK, BOOK_CLOSE_ROWS, ROUTES_BODY, emptyStatus, page, performance, status } from './liveFixtures'
 import { dateSeconds } from './liveModel'
 import LiveScreen from './LiveScreen'
@@ -45,6 +42,7 @@ interface Bodies {
   performance?: unknown
   closeRows?: unknown
   tracking?: unknown
+  expectation?: unknown
 }
 
 const TRACKING_BODY = {
@@ -64,10 +62,7 @@ function routes(b: Bodies = {}) {
     if (url.startsWith('/api/live/journal')) return json(b.closeRows ?? page(BOOK_CLOSE_ROWS))
     if (url.startsWith('/api/live/routes')) return json(ROUTES_BODY)
     if (url.startsWith('/api/analytics/paper-tracking')) return json(b.tracking ?? TRACKING_BODY)
-    if (url === '/api/hypotheses/volmanaged_v0') return json(VOLMANAGED)
-    if (url === '/api/runs') return json(RUNS)
-    if (url === '/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=1') return json(HYP_BOOTSTRAP)
-    if (url === '/api/analytics/run/nt_volmanaged_v0_fixture_m1?freq=D') return json(RUN_ANALYTICS)
+    if (url.startsWith('/api/analytics/paper-expectation')) return json(b.expectation ?? PAPER_EXPECTATION)
     return json({ detail: 'unexpected' }, 404)
   })
 }
@@ -138,7 +133,7 @@ describe('LIVE: the live stream line and LV5 (P1)', () => {
 describe('LIVE: LV6, the paper book on its SV6 cone', () => {
   const expectationRegion = () => screen.findByRole('region', { name: EXPECTATION.label })
 
-  it('answers the five GETs of the card and draws the cone with the paper and model overlays', async () => {
+  it('answers the two GETs of the card and draws the served cone with the paper and model overlays', async () => {
     const spy = routes()
     mount()
     const section = await expectationRegion()
@@ -146,13 +141,8 @@ describe('LIVE: LV6, the paper book on its SV6 cone', () => {
     expect(cone.getAttribute('data-chart-id')).toBe('live-expectation')
     expect(cone.getAttribute('data-overlays')).toBe('paper,model')
     const urls = spy.mock.calls.map(([input]) => String(input))
-    for (const wanted of [
-      '/api/analytics/paper-tracking',
-      '/api/hypotheses/volmanaged_v0',
-      '/api/runs',
-      '/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=1',
-      '/api/analytics/run/nt_volmanaged_v0_fixture_m1?freq=D',
-    ]) expect(urls, wanted).toContain(wanted)
+    for (const wanted of ['/api/analytics/paper-tracking', '/api/analytics/paper-expectation']) expect(urls, wanted).toContain(wanted)
+    expect(urls.filter((u) => u.includes('/bootstrap') || u === '/api/runs' || u.startsWith('/api/hypotheses'))).toEqual([])
     expect(spy.mock.calls.every(([, init]) => (init?.method ?? 'GET') === 'GET')).toBe(true)
   })
 
@@ -171,7 +161,10 @@ describe('LIVE: LV6, the paper book on its SV6 cone', () => {
   })
 
   it('says there is no paper session with a value when the tracking has none, and draws no cone', async () => {
-    routes({ tracking: { ...TRACKING_BODY, paper_cumulative: [null, null, null], model_cumulative: [null, null, null] } })
+    routes({
+      tracking: { ...TRACKING_BODY, paper_cumulative: [null, null, null], model_cumulative: [null, null, null] },
+      expectation: { ...PAPER_EXPECTATION, refusal: { code: 'empty', params: {} }, backtest: null, live: null },
+    })
     mount()
     const section = await expectationRegion()
     await waitFor(() => expect(section.textContent).toContain(EXPECTATION.empty))

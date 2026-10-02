@@ -1,8 +1,8 @@
 // [POST HOC] Basis A, per session (SV3a). Hierarchical clusters of the registered trials on the distance 1 - rho, the
-// second estimator of the effective number of trials (ROADMAP 19). Computed in the browser (ANALYTICS_CATALOG C8,
-// client phase); the backend mirror in analytics/deflated.py is pending. Pinned to scipy by the golden vectors of
-// qa/crosscheck/p12_neff.py (scipy.cluster.hierarchy.linkage with 'average', then fcluster with 'distance',
-// src/quant/cluster.test.ts). Never shown as a served number, and it decides nothing: a cut of a tree.
+// second estimator of the effective number of trials (ROADMAP 19). TEST REFERENCE since 2026-10-02: the backend serves
+// these numbers (analytics/neff.py, the C8 mirror) and no production file imports this module (importGuard.test.ts).
+// Pinned to scipy by the golden vectors of qa/crosscheck/p12_neff.py (scipy.cluster.hierarchy.linkage with 'average',
+// then fcluster with 'distance', src/quant/cluster.test.ts). It decides nothing: a cut of a tree.
 //
 // Pre-registered constant: CLUSTER_CUT = 0.5 on the distance 1 - rho, with average linkage (UPGMA). The linkage is
 // never single or complete: single linkage chains a weak path of trials into one cluster, complete linkage waits for

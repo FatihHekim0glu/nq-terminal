@@ -187,10 +187,10 @@ export const OFFLINE_SCREENS: readonly ScreenCase[] = [
   { name: 'REG-evidence', line: 'REG', code: 'REG', charts: 2, then: { line: '92', tabpanel: '92) Evidence' } },
   { name: 'REG-costs', line: 'REG', code: 'REG', charts: 3, then: { line: '93', tabpanel: '93) Cost survival' } },
   { name: 'REG-map', line: 'REG', code: 'REG', charts: 3, then: { line: '94', tabpanel: '94) Effect map' } },
-  // MT 86 draws the replication of the sealed confirmations (research.ts CONFIRMATIONS). MT 87 needs the daily series of
-  // every SV3a trial and the demo holds volmanaged_v0's only (analytics.ts HYP_ANALYTICS), so it draws nothing and says why.
+  // MT 86 draws the replication of the sealed confirmations (research.ts CONFIRMATIONS). MT 87 draws the served correlation
+  // heatmap of the captured effective number of trials (research.ts DEFLATED carries effective_n, EFFECTIVE_N_REAL).
   { name: 'MT-replication', line: 'MT', code: 'MT', charts: 1, then: { line: '86', tabpanel: '86) Replication' } },
-  { name: 'MT-trials', line: 'MT', code: 'MT', charts: 0, then: { line: '87', tabpanel: '87) Effective trials' } },
+  { name: 'MT-trials', line: 'MT', code: 'MT', charts: 1, then: { line: '87', tabpanel: '87) Effective trials' } },
   // RUNS 90 compare: the two runs of the demo with a Basis B body, rebased on one chart (compare.ts DEMO_COMPARE_RUNS).
   {
     name: 'RUNS-compare', line: 'RUNS', code: 'RUNS', charts: 1,

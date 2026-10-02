@@ -3,6 +3,7 @@
 // index is in, HL finds instruments (and the rest) through the sheet.
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import { ApiProvider } from '../api/ApiProvider'
 import { createApiQueryClient } from '../api/queries'
 import { buildSearchIndex, type SearchIndex } from '../commands/searchIndex'
@@ -11,6 +12,11 @@ import { SEARCH } from '../copy/search'
 import { useLinkGroups } from '../state/linkGroups'
 import { LiveCommandLine } from './CommandLine.live'
 import { resetMessage } from './MessageLine.store'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 // The loader stands in for the dynamic import: each test chooses whether the index has loaded.
 const loader = vi.hoisted(() => ({ index: null as SearchIndex | null, load: vi.fn(async () => null) }))

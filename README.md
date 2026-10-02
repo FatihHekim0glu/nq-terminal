@@ -33,7 +33,7 @@ terminal: amber on black, function keys, a command line.
 
 ## Highlights
 
-- **Read only by construction.** All 74 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
+- **Read only by construction.** All 75 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
   `DELETE /api/jobs/{job_id}`), and tests fail on any other method or on a write call in the backend. See the
   [safety model](#safety-model).
 - **No order path.** The one IB client is read only (an optional paper snapshot on client id 95), and tests fail on an
@@ -180,7 +180,7 @@ Numbers such as `92)` are the item numbers of a panel's views and tabs: type the
 |---|---|
 | `HOME` | Four linked panels: NQ1 Index daily candles, the 27-futures monitor, volmanaged_v0 equity and the registry board. A one-line orientation tells a first visit where to begin |
 | `REG` | 91) Board, the registry by round with verdict, n, p, Holm and BH q, plus the sealed confirmations; 92) Evidence, every row against its recorded evidence (`[PRE-REG]` columns from the result files, `[POST HOC]` columns computed in the browser); 93) Cost survival, one cost ladder per hypothesis on its own scale; 94) Effect map, annual Sharpe against track length for every trial, marked by verdict; 95) Compare, up to eight hypotheses marked with Space, their screen series drawn together. Filters, CSV export, and a Seen column that marks `NEW` and `CHG` rows |
-| `MT` | 85) Family, sorted p against the Bonferroni, Holm and BH lines, the adjusted table, the Deflated Sharpe view and a power table (the smallest annual Sharpe each registered test can detect); 86) Replication, each sealed confirmation's p against its parent's registered p; 87) Effective trials, the effective number of trials estimated from the trials' own return correlations, with the SR0 and Deflated Sharpe each N would set (computed in the browser, an extra view only) |
+| `MT` | 85) Family, sorted p against the Bonferroni, Holm and BH lines, the adjusted table, the Deflated Sharpe view and a power table (the smallest annual Sharpe each registered test can detect); 86) Replication, each sealed confirmation's p against its parent's registered p; 87) Effective trials, the effective number of trials estimated from the trials' own return correlations, with the SR0 and Deflated Sharpe each N would set (served with the Deflated Sharpe view, an extra view only) |
 | `DES` | A hypothesis: 1) Profile with the verbatim spec and pass bar and the re-hashed spec; 2) Pass checks; 3) Costs and blocks; 4) Linked runs; 5) Robustness, the spec curve, exposure-shift placebo, leave-one-year-out and per-year stability, volatility quintiles, tails, recorded subsets and the forks of the hypothesis, all as the screen file records them. An instrument: Profile, Coverage, Notes and Contracts. 98) Report, and in Options the evidence pack and the print dossier |
 | `RUNS`, `RUN` | RUNS: every backtest run with badges and checks, filters 85) to 89), a Space basket of up to eight runs, and 90) Compare, their account equity rebased to 1.0 with the served statistics. RUN: tabs for the chart, trades and fills (the last two as a table or a pivot), the decision, close and roll logs, the config and the notes, and the ledger command to copy for an eligible run |
 | `EQ`, `DD`, `RET`, `RR`, `MRET` | The analytics tear sheet for a hypothesis (Basis A) or a run (Basis B). EQ and DD add a Market context toggle: the frozen stress windows as bands and the volatility regime as a strip. DD adds the deepest drawdowns as episode lanes, linked to its table. RET carries the Sharpe-difference card. A run's books add trade paths, holding times, streaks and the exposure composition |
@@ -188,7 +188,7 @@ Numbers such as `92)` are the item numbers of a panel's views and tabs: type the
 | `GP`, `GIP`, `MON`, `CORR` | Candles with roll markers, fills and an RV22 pane; one session intraday; the 27-futures monitor with 2Day sparklines; the clustered correlation matrix with a rolling pair |
 | `VCONE`, `SEAS`, `EVT`, `ROLL`, `DQ` | Volatility cone and the 27 futures at one horizon; seasonality by month, weekday, week of month, 30 minutes and month by year; event study around CPI, PPI, NFP and FOMC; roll calendar; data quality calendar and guard fingerprints |
 | `OOS`, `LEDG` | The gate's access log and openings (the log as a table or a pivot); the run ledger with its anchor pairs |
-| `LIVE`, `JRNL` | The paper book, read only: target against actual, Routes and Fills, paper against model tracking, and the paper book placed on its hypothesis's backtest expectation cone (`[POST HOC]`, resampled history, not a forecast); its journals with plumbing rows hatched. Server-sent events, or 2 s polling as a fallback |
+| `LIVE`, `JRNL` | The paper book, read only: target against actual, Routes and Fills, paper against model tracking, and the paper book placed on its hypothesis's backtest expectation cone or on a cone resampled from the paper book's own sessions, chosen with a Backtest start / Live start toggle (`[POST HOC]`, resampled history, not a forecast, served by the backend); its journals with plumbing rows hatched. Server-sent events, or 2 s polling as a fallback |
 | `HELP` | Every function with runnable examples, the keys, a drawn keyboard, link groups, licences and a glossary of every label the terminal prints. `HL` searches all of it |
 
 </details>
@@ -439,9 +439,9 @@ flowchart TB
 
 - **Backend.** FastAPI 0.141.1 on uvicorn 0.54.0 in the nq-lab venv, package `nq_terminal`, JSON through orjson. It
   binds 127.0.0.1, answers GET only, and serves the built front end and `/api` from one origin.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 74 paths. pytest compares `app.openapi()` with
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 75 paths. pytest compares `app.openapi()` with
   it; `pnpm gen:api` generates the front end's types with openapi-typescript, and `pnpm test` fails first when they
-  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 74 paths with the screens that
+  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 75 paths with the screens that
   read them, and a test keeps that index equal to the contract.
 - **Front end.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1: dockview panels under a command line built on cmdk,
   with the terminal's own key handler, zustand and TanStack Query. Every screen loads lazily, and one GET client
@@ -458,25 +458,26 @@ flowchart TB
   route table has one handler per contract path, typed so that a missing path fails the compile.
 - **Exports.** [`web/src/export/`](web/src/export) makes the GRAB image, the HTML evidence pack and the print dossier
   from answers already in the browser; it loads on demand and makes no request of its own.
-- **Browser-side formulas.** [`web/src/quant/`](web/src/quant) holds the formulas the terminal computes itself (power,
-  minimum detectable Sharpe, trial correlation and effective N), each pinned to a reference in
-  [`qa/golden/`](qa/golden) and shown as computed in the browser.
+- **Browser-side formulas.** [`web/src/quant/`](web/src/quant) holds the one formula the terminal still computes itself (power and
+  minimum detectable Sharpe), pinned to a reference in [`qa/golden/`](qa/golden) and shown as computed in the browser.
+  The effective number of trials and of members and the paper book's place on its cone are served by the backend; the
+  browser copies of their estimators are test references that no production file imports.
 - **qa.** A separate uv project (Python 3.12) pinning quantstats 0.0.82, empyrical-reloaded 0.5.12, arch 8.0.0,
   statsmodels 0.15.0 and scipy 1.18.1. It reads the JSON dumps the backend tests write and never imports the backend.
 
 [`web/scripts/bundleCheck.ts`](web/scripts/bundleCheck.ts) runs after every `pnpm build`. It fails a build that goes
 over budget or loads a chart or grid library with the shell.
 
-| Chunk, gzip | Budget | Measured 2026-09-29 |
+| Chunk, gzip | Budget | Measured 2026-10-02 |
 |---|---:|---:|
-| Shell (index, React, vendor, runtime, preload, commands, sectors) | 114.9 kB | 113.5 kB |
+| Shell (index, React, vendor, runtime, preload, commands, sectors) | 114.9 kB | 109.5 kB |
 | uPlot | 30.0 kB | 22.1 kB |
 | Lightweight Charts | 75.0 kB | 61.4 kB |
 | ECharts | 230.0 kB | 201.6 kB |
 | TanStack grid | 45.0 kB | 18.7 kB |
 | Perspective | 100.0 kB | 86.1 kB |
 
-`scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 115.8 kB and measured 114.4 kB); raise it only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build, and cmdk's unused command-score is swapped for `src/vendor/commandScoreStub.ts` by the `cmdkScoreStub` plugin there.
+`scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 115.8 kB), plus a 109.9 kB target with at least 5 kB of headroom since shell diet 4 (v2.1), which moved the key actions, the command line menus and three unused library pieces out of first paint; raise a ceiling only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build, and cmdk's unused command-score is swapped for `src/vendor/commandScoreStub.ts` by the `cmdkScoreStub` plugin there.
 
 **Status.** P0, P1 and P2 are built: 30 of the 30 mnemonics open a screen. `JOBS` is the one screen that writes. It
 queues an in-sample backtest (`backtests/run_base.py`, one worker, at most ten jobs waiting), shows each job's status in
@@ -575,9 +576,8 @@ break them.
 Nautilus statistics are the second implementation, inside the backend tests. The `qa` project's reference libraries
 are the third: quantstats 0.0.82, empyrical-reloaded 0.5.12, arch 8.0.0 and statsmodels 0.15.0 recompute every value
 the backend tests dump. Closed forms agree to 1e-9 relative, anchors to the project's own files to 1e-12, and the
-bootstrap exactly under a fixed seed. The few formulas the browser computes itself (power, minimum detectable Sharpe,
-the paper book's place on its cone, the effective number of trials) are labelled "computed in the browser", never
-shown as a served number, and pinned to golden vectors from the same qa project.
+bootstrap exactly under a fixed seed. The one formula the browser still computes itself (power, minimum detectable Sharpe)
+is labelled "computed in the browser", never shown as a served number, and pinned to golden vectors from the same qa project.
 
 **What never reaches the screen.** Nautilus's alpha, its tear sheet and `PortfolioAnalyzer.portfolio_returns()` never
 produce a displayed number: they zero-fill weekends and annualise geometrically.
@@ -589,20 +589,20 @@ for daily series and 12 for monthly ones, sessions only, and the risk-free rate 
 **Born-failing checks.** A tampered spec hash, a shifted anchor, a plumbing row reaching a performance series, a price
 read that bypasses the gate and a wrong annualisation factor (√365) must each make a test fail.
 
-**The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 78 metrics (41 P0, 30 P1, 7 P2),
+**The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2),
 from performance and drawdowns to research integrity and live paper monitoring. All seven P2 metrics are built. The
 strict cross-check runs recorded in it: on 2026-09-27 P1 bundles PASS 1,453, FAIL 0, INFO 84 and Phase 11 bundles
-PASS 467, FAIL 0; on 2026-10-01 the whole dump folder, P2 bundles included, PASS 2,287, FAIL 0, INFO 98.
+PASS 467, FAIL 0; on 2026-10-02 the whole dump folder, P2 and LV6 bundles included, PASS 2,455, FAIL 0, INFO 104.
 
 <br clear="right">
 
-| Layer | What it proves | Size (2026-10-01, working tree on `f1be892`) | Command |
+| Layer | What it proves | Size (2026-10-02, working tree on `c7f9e61`) | Command |
 |---|---|---|---|
-| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 1,550 test functions in 111 files (2,537 cases) | nq-lab venv's pytest, see Test commands |
-| qa cross-check | Every dumped value, recomputed by the reference libraries | 262 tests in 16 files, plus `crosscheck --strict` (2026-10-01: PASS 2,287, FAIL 0, INFO 98) | `uv run --project terminal\qa ...` |
-| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 6,933 tests in 455 files (45 skipped) | `pnpm --dir terminal\web test` |
+| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 1,694 test functions in 118 files (2,985 cases) | nq-lab venv's pytest, see Test commands |
+| qa cross-check | Every dumped value, recomputed by the reference libraries | 296 tests in 18 files, plus `crosscheck --strict` (2026-10-02: PASS 2,455, FAIL 0, INFO 104) | `uv run --project terminal\qa ...` |
+| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 6,972 tests in 467 files (45 skipped) | `pnpm --dir terminal\web test` |
 | Types and build | `tsc -b` over the app; a production build under the bundle budgets | n/a | `test:types`, `build` |
-| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 386 tests in 33 specs (383 run by `pnpm e2e`, 3 perf), 196 screenshot baselines | `pnpm --dir terminal\web e2e` |
+| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 390 tests in 34 specs (387 run by `pnpm e2e`, 3 perf), 210 screenshot baselines | `pnpm --dir terminal\web e2e` |
 | Playwright offline (macOS, Linux) | The same specs against the demo layer, served as `GET /api/*` from Node: no Python and no backend | 185 tests in 14 files, plus 3 performance tests; each command skips 1 | `pnpm --dir web e2e:offline`, `e2e:offline:perf` |
 
 The table gives suite sizes, not pass rates. The backend suite needs the private nq-lab venv. Two tests assume the

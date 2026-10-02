@@ -314,3 +314,37 @@ def test_every_registered_row_of_the_live_registry_is_decided():
         if row["registered"] == "True":
             assert row["name"] in SERIES_SOURCES, f"{row['name']} needs a SERIES_SOURCES entry"
             spa_family.exclusion_reason(row["name"])
+
+
+# ---------------------------------------------------------------- the effective number of members (SV8 step 8)
+
+
+@pytest.mark.parametrize("benchmark", [spa_family.CASH, spa_family.NQ_BUY_AND_HOLD])
+def test_each_row_serves_the_effective_members_the_browser_used_to_compute(real_body, benchmark):
+    """C8 mirror: the served estimators are `analytics.neff` over the row's own served correlation."""
+    from nq_terminal.analytics import neff
+
+    row = real_body if benchmark == spa_family.CASH else real_body["buy_and_hold"]
+    names = [m["name"] for m in row["members"]]
+    want = neff.effective_members(np.array(row["correlation"], dtype=float), names)
+    assert row["effective_members"] == want
+    got = row["effective_members"]
+    assert got["refusal"] is None and got["k"] == len(MEMBERS) and got["cut"] == 0.5
+    assert 1.0 <= got["participation"] <= len(MEMBERS) and got["li_ji"] >= 1.0
+    assert sorted(n for g in got["clusters"] for n in g) == sorted(MEMBERS)
+    assert [len(g) for g in got["clusters"]] == sorted((len(g) for g in got["clusters"]), reverse=True)
+    pair = got["strongest"]
+    i, j = names.index(pair["a"]), names.index(pair["b"])
+    assert i < j and pair["rho"] == row["correlation"][i][j]
+
+
+def test_the_effective_members_use_the_estimators_of_the_correlation_the_view_serves(real_body):
+    got = real_body["effective_members"]
+    eig = np.linalg.eigvalsh(np.array(real_body["correlation"], dtype=float))
+    assert got["participation"] == pytest.approx(float(eig.sum() ** 2 / (eig ** 2).sum()), rel=1e-12)
+
+
+def test_the_fixture_tree_serves_one_member_so_the_effective_members_refuse_with_single(serve):
+    view = client_for(FIXTURES, serve).get(ROUTE).json()
+    assert view["effective_members"] == {"k": 1, "cut": 0.5, "refusal": {"kind": "single", "name": None},
+                                         "participation": None, "li_ji": None, "clusters": [], "strongest": None}

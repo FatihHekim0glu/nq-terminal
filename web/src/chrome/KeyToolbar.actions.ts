@@ -7,13 +7,13 @@ import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import { displayContext, type KeyedSector } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { MESSAGES, NAV_TOOLBAR, FRAME_STRIP } from '../copy/chrome'
-import { SECTOR_TITLES, WORKSPACE_LINES } from '../copy/commands'
+import { SECTOR_TITLES } from '../copy/commands'
 import { NAV_MESSAGES, RESERVED_F_MESSAGES } from '../copy/navKeys'
-import type { Recipe } from '../state/workspaces'
 import type { CommandLineHandle } from './CommandLine'
 import type { GlobalKeyAction, ReservedFKey } from './CommandLine.keys'
-import type { MenuItem, MenuModel } from './CommandLine.menus'
+import type { MenuModel } from './CommandLine.menus'
 import { exportPanel, focusPanelAt, pagePanel } from './KeyToolbar.panels'
+import { workspaceRows, type SavedWorkspaces } from './WorkspaceMenu'
 import type { KeyId } from './KeyToolbar'
 import { postMessage } from './MessageLine.store'
 import type { NavAction } from './NavToolbar'
@@ -47,8 +47,9 @@ export interface ChromeEnv {
   readonly now?: () => number
 }
 
-/** Saved workspaces by name, as the menus need them: only the panels' lines are read. */
-export type SavedWorkspaces = Readonly<Record<string, Pick<Recipe, 'panels'>>>
+// The saved-workspace menu lives in WorkspaceMenu.ts (the command line needs it in the shell); re-exported for the chrome's callers.
+export { workspaceMenu } from './WorkspaceMenu'
+export type { SavedWorkspaces }
 
 export const HELP_TWICE_MS = 500
 
@@ -61,23 +62,6 @@ const RESERVED_MESSAGES: Readonly<Record<ReservedFKey, string>> = {
   F5: RESERVED_F_MESSAGES.F5,
   F6: RESERVED_F_MESSAGES.F6,
   F7: RESERVED_F_MESSAGES.F7,
-}
-
-/** A saved workspace's row: LOAD NAME, with the lines of its first panels to tell it apart. */
-function workspaceRows(saved: SavedWorkspaces, first: number): MenuItem[] {
-  return Object.entries(saved).map(([name, recipe], i) => ({
-    n: first + i,
-    label: name,
-    detail: recipe.panels.slice(0, 4).map((p) => p.line).join(', '),
-    category: false,
-    act: { kind: 'run', line: `LOAD ${name}` } as const,
-  }))
-}
-
-/** LOAD on its own: the saved workspaces, each row running LOAD NAME. */
-export function workspaceMenu(saved: SavedWorkspaces): MenuModel {
-  const items = workspaceRows(saved, 1)
-  return { key: 'workspaces', title: WORKSPACE_LINES.menuTitle, breadcrumb: [WORKSPACE_LINES.menuTitle], intro: items.length === 0 ? [WORKSPACE_LINES.none] : [], items }
 }
 
 function favouritesMenu(saved: SavedWorkspaces): MenuModel {

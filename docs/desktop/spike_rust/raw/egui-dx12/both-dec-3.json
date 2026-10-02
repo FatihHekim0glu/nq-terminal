@@ -1,1 +1,0 @@
-{"mode":"both-dec","offscreen":true,"adapter":"NVIDIA GeForce RTX 4080 SUPER Dx12","size":"2000x1250@1.25","frames":187,"first_frame_ms":14.6,"frame_ms":{"median":19.670,"p95":174.729,"p99":506.671,"max":1457.545},"cpu_build_ms":{"median":1.299,"p95":2.316,"max":75.927},"sorts":2,"sort_ms_median":0.218,"data_gen_ms":2.0,"init_ms":14195.8}

@@ -1,1 +1,0 @@
-{"mode":"both-dec","offscreen":true,"adapter":"NVIDIA GeForce RTX 4080 SUPER Vulkan","size":"2000x1250@1.25","frames":105,"first_frame_ms":22.7,"frame_ms":{"median":62.523,"p95":309.317,"p99":400.613,"max":429.181},"cpu_build_ms":{"median":1.744,"p95":75.840,"max":85.712},"sorts":1,"sort_ms_median":0.026,"data_gen_ms":2.5,"init_ms":13229.2}

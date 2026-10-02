@@ -3,14 +3,15 @@
 // second, separately labelled row (the same GET nests it). One GET,
 // /api/analytics/spa, passed in as `query` (MtScreen's `useSpa(view === 'spa')`, so nothing is read until the view is
 // open). It shows the family facts, the SPA p-values (consistent, lower, upper) and White's Reality Check, StepM's
-// rejections, the effective number of members (the served correlation of their differentials read with 87)'s
-// estimators, spaEffectiveModel), a member table and the registered hypotheses outside the family with their reasons. [POST HOC]: the p-values are
+// rejections, the effective number of members (served by the backend from the correlation of their differentials, with
+// 87)'s estimators; spaEffectiveModel words it), a member table and the registered hypotheses outside the family with
+// their reasons. [POST HOC]: the p-values are
 // family-wise over a family fixed by a rule on the registry, never over a slice picked on screen, and no pass or
 // fail is drawn for any single hypothesis.
 import { useId, useMemo } from 'react'
 import { SPA } from '../../copy/spa'
 import { fillCopy } from '../../copy/workspace'
-import { effectiveLines, effectiveMembers } from './spaEffectiveModel'
+import { effectiveLines } from './spaEffectiveModel'
 import { spaBootstrapLine, spaCaption, spaExcluded, spaFacts, spaNotes, spaPValues, spaRows, spaStepM } from './spaModel'
 import type { SpaQueryState, SpaView } from './spaTypes'
 import './spa.css'
@@ -75,9 +76,9 @@ function BuyAndHoldRow({ view }: { readonly view: SpaView }) {
   )
 }
 
-/** SV8's effective number of members: the served correlation read with SV3b's estimators, in the page's words. */
+/** SV8's effective number of members as the backend serves it (SV3b's estimators over the correlation), in the page's words. */
 function EffectiveMembers({ view }: { readonly view: SpaView }) {
-  const lines = useMemo(() => effectiveLines(effectiveMembers(view)), [view])
+  const lines = useMemo(() => effectiveLines(view.effective_members), [view])
   return (
     <>
       {lines.map((line, i) => <p key={line} className={i === 0 ? 'reg-msg' : 'reg-msg reg-muted'}>{line}</p>)}
@@ -102,17 +103,19 @@ export function SpaBody({ view }: { readonly view: SpaView }) {
 }
 
 export default function SpaPanel({ query }: { readonly query: SpaQueryState }) {
+  // The generated type has `effective_members` only once the contract is regenerated; the answer carries it either way.
+  const view = query.data as SpaView | undefined
   return (
     <section className="reg-confirm mt-spa" aria-label={SPA.label}>
       <p className="reg-band">
         <span className="reg-band-title">{SPA.title}</span>{' '}
-        <span className="reg-warn">{query.data?.tag ?? ''}</span>{' '}
+        <span className="reg-warn">{view?.tag ?? ''}</span>{' '}
         <span className="reg-muted">{SPA.extra}</span>
       </p>
       {query.isError ? (
         <p className="reg-msg down" role="alert">{fillCopy(SPA.failed, { detail: query.error?.detail ?? '' })}</p>
-      ) : query.data ? (
-        <SpaBody view={query.data} />
+      ) : view ? (
+        <SpaBody view={view} />
       ) : (
         <p className="reg-msg" role="status">{SPA.loading}</p>
       )}

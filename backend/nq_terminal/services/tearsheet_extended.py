@@ -46,6 +46,7 @@ from nq_terminal.models.analytics_p1 import (
     StressRow,
     StressView,
 )
+from nq_terminal.services.neff_view import effective_n_view
 from nq_terminal.services.tearsheet import POST_HOC, Units, axis, num, nums, units
 
 NO_BENCH = "no benchmark for this series, so no rolling beta, correlation, capture or scatter"
@@ -277,4 +278,5 @@ def deflated_view(trials: Sequence[deflated.Trial]) -> DeflatedView:
                                                           sr0_annual=num(loo["sr0_annual"]),
                                                           n_trials=loo["n_trials"]),
                         n_note=found["n_note"], euler_gamma=found["euler_gamma"],
-                        dominant=_dominant(found["rows"]), rows=rows)
+                        dominant=_dominant(found["rows"]), rows=rows,
+                        effective_n=effective_n_view(trials, found))

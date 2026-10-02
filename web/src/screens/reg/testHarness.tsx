@@ -1,6 +1,6 @@
 // Test harness for the REG and MT screens (imported by *.test.tsx files only): a fresh query client,
 // the panel's actions and Number <GO> registrar, and a fetch stub that answers the four research
-// GETs, SV3's /api/analytics/deflated, and five GET /api/hypotheses/{name} bodies (92) Evidence's
+// GETs, SV3's /api/analytics/deflated (with its served effective_n, SV3b), and five GET /api/hypotheses/{name} bodies (92) Evidence's
 // details) from the fixture data, and records every request.
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -14,6 +14,7 @@ import { NumberingContext } from '../../chrome/PanelChrome.numbers'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../des/desTestData'
 import { DEFLATED_REAL } from './deflatedFixtures'
+import { EFFECTIVE_N_REAL } from './effectiveN.real.fixtures'
 import { SPA_REJECTS } from './spaFixtures'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 
@@ -37,7 +38,7 @@ export const ANSWERS: Readonly<Record<string, unknown>> = {
   '/api/hypotheses': HYPOTHESES,
   '/api/multiple-testing': MULTIPLE_TESTING,
   '/api/confirmations': CONFIRMATIONS,
-  '/api/analytics/deflated': DEFLATED_REAL,
+  '/api/analytics/deflated': { ...DEFLATED_REAL, effective_n: EFFECTIVE_N_REAL },
   '/api/analytics/spa': SPA_REJECTS,
   '/api/hypotheses/overnight_v0': OVERNIGHT,
   '/api/hypotheses/volmanaged_v0': VOLMANAGED,

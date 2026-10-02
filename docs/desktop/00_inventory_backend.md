@@ -4,7 +4,7 @@ Date checked: 2026-10-02. Scope: `terminal/backend/nq_terminal`, `terminal/qa`, 
 
 ## 0. How this was produced, and how far to trust it
 
-- Source of the tables: scan scripts in `docs/desktop/tools/backend/` (listed in section 12). Module rows come from an AST walk of every `.py` file under `nq_terminal` (110 files), so none can be missed. Routes come from the live FastAPI app object (`iter_route_contexts` plus the generated OpenAPI document), not from reading decorators. Import tables come from `sys.modules` after the app was built and every GET route was called once (the "census").
+- Source of the tables: scan scripts in `nq-lab/desktop_research/tools/backend/`, outside the terminal repository (listed in section 12). Module rows come from an AST walk of every `.py` file under `nq_terminal` (110 files), so none can be missed. Routes come from the live FastAPI app object (`iter_route_contexts` plus the generated OpenAPI document), not from reading decorators. Import tables come from `sys.modules` after the app was built and every GET route was called once (the "census").
 - Code state: HEAD `c7f9e61` (v2) plus 108 uncommitted changes in the working tree made by another run while this inventory was taken (some in analytics, spa, the tests and the QA package). Line counts are the working tree on 2026-10-02; they can drift by a few lines per file. Treat module line counts as +/- 1 percent.
 - Measurements were taken on the owner's Windows 11 machine (AMD Ryzen 9 9950X3D2, 16 cores, 32 GB, about 4.6 GB free at the time), which was busy with other work, so every time is indicative, not a benchmark. Nothing was shown on screen: the app was driven in process (no window, no browser) and one server was started with no console window on a spare high port, then stopped by its own process id. Port 8765 was never contacted.
 - Nothing was written under `results/`, `data/` or `live/`. A guard (Python audit hook) refused any write-mode open under those folders during the sweep and recorded 0 attempts. The one write the terminal can make there, the gate's access-log line on a price read, was redirected to a scratch file in the sweep, and the live server was only sent routes that never reach the gate (checked: they leave no log line).
@@ -555,7 +555,7 @@ Not decisions, only the evidence a plan needs. Fate options are left to the late
 
 ## 12. Reproducing the tables
 
-Scripts (in `docs/desktop/tools/backend/`; they read and write JSON in their own folder or the current folder, so copy them to a scratch folder before running; use the nq-lab venv Python, never a bare `python`; order: `scan_static`, `measure_routes`, `oa_params`, `dep_table`, `extra_scan`, `start_measure`, `qa_scan`, `facts`, `gen_doc`):
+Scripts (in `nq-lab/desktop_research/tools/backend/`, outside the terminal repository; they read and write JSON in their own folder or the current folder, so copy them to a scratch folder before running; use the nq-lab venv Python, never a bare `python`; order: `scan_static`, `measure_routes`, `oa_params`, `dep_table`, `extra_scan`, `start_measure`, `qa_scan`, `facts`, `gen_doc`):
 
 - `scan_static.py`: AST scan of every backend module -> `modules.json` (lines, imports by class, calls, kind, pandas and numpy reference counts).
 - `measure_routes.py`: builds the app, installs the write guard, calls every GET route twice in process, records bytes and times, writes `routes.json` and `census.json`. It uses real data, a scratch gate log and a 256 MiB cache.

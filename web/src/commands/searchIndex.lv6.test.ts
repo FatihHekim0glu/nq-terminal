@@ -23,6 +23,12 @@ describe('searchEntries: LV6', () => {
     }
   })
 
+  it('finds LV6b (the live-start cone) on LIVE', () => {
+    expect(hits('LV6b')[0]).toMatchObject({ rank: 1, entry: { group: 'metric', label: 'LIVE' } })
+    const found = hits('live-start cone').filter((h) => h.entry.group === 'metric' && h.entry.detail.includes('(LV6b)'))
+    expect(found[0]?.entry.label).toBe('LIVE')
+  })
+
   it('leaves LV5 where it was', () => {
     const lv5 = hits('LV5')[0]
     expect(lv5).toMatchObject({ rank: 1, entry: { group: 'metric', label: 'LIVE' } })

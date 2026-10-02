@@ -2,6 +2,8 @@
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './chrome/CommandLine.menus.load'
+import { loadKeyActions } from './chrome/KeyToolbar.lazy'
 import App from './App'
 import { resetConnection } from './api/connection'
 import { resetRecordWatchBoot, resetRecordWatchView } from './chrome/RecordWatch.live'
@@ -36,6 +38,11 @@ import { useWorkspaces, type Recipe } from './state/workspaces'
 import { resetMessage, useMessage } from './chrome/MessageLine.store'
 import { numberedItems } from './chrome/NumberedActions'
 import { ANSWERS as REG_ANSWERS } from './screens/reg/testHarness'
+
+// The command line's menus and sheets and the key actions load as chunks of their own; the app has them by its first idle moment.
+beforeAll(async () => {
+  await Promise.all([loadCommandLineParts(), loadKeyActions()])
+})
 
 // GRAB itself (src/export/grab/run.ts) is reached through a dynamic import from the Workspace chunk; the
 // tests below check what the frame hands it, so the runner is replaced by a spy.

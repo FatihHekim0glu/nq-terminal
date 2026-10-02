@@ -43,6 +43,7 @@ from nq_lab.config import IS_END
 from nq_terminal.analytics import series, spa
 from nq_terminal.constants import SERIES_SOURCES
 from nq_terminal.models.spa import SpaCritical, SpaExcluded, SpaMember, SpaPValues, SpaView
+from nq_terminal.services.neff_view import effective_members_view
 from nq_terminal.services.research import ResearchDataError, UnknownNameError
 from nq_terminal.services.tearsheet import POST_HOC, num
 
@@ -295,6 +296,7 @@ def _row(fam: FamilyInputs, buy_and_hold: SpaView | None) -> SpaView:
                    members=[_member(i, info, fam, found, steps) for i, info in enumerate(fam.info)],
                    correlation=[[num(v) for v in row] for row in found["correlation"]],
                    correlation_note=text["correlation_note"],
+                   effective_members=effective_members_view(found["correlation"], [m.name for m in fam.info]),
                    excluded=[SpaExcluded(name=n, reason=r) for n, r in fam.excluded], note=text["note"],
                    buy_and_hold=buy_and_hold)
 

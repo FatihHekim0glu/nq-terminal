@@ -18,6 +18,13 @@ Each dump kind maps to one function of its raw inputs. Libraries, and where they
 - SV3: scipy moments (bias=True, raw kurtosis) and the Bailey and Lopez de Prado formulas written out; the paper
   fixture is recomputed and rounded to 4 decimals; the null variance V0 (Mertens written out) and the leave-one-out
   variance (pandas, each trial left out in turn) as SV3a steps 5 and 9 define them.
+- SV3b (the effective number of trials the route serves as `effective_n`): when each trial carries its session
+  `dates`, the daily trials' common window by a pandas inner join, their Pearson correlation by pandas `corr` and by
+  numpy `corrcoef`, the eigenvalues by `numpy.linalg.eigvalsh`, participation and Li and Ji as `p12_neff` writes them,
+  the UPGMA clusters by scipy `linkage` ("average") and `fcluster` at 1 - rho = 0.5, and SR0 and every DSR under each
+  N at V0 with the monthly books added to N (`p12_neff.expected_max_sr0` and `probabilistic_sharpe`). No key when
+  the dates are missing, no trial is daily, the window is shorter than 252 sessions or a trial does not vary on it
+  (the route serves a refusal then).
 - TA2: a pandas second implementation of the same bar rule (whole bars count both extremes, bars the entry or exit
   falls inside count only the adverse one); TA4 pandas timedeltas; TA5 quantstats `consecutive_wins` and
   `consecutive_losses` on the P&L, statsmodels `runstest_1samp` (no continuity correction).
@@ -32,6 +39,8 @@ import warnings
 import numpy as np
 import pandas as pd
 from scipy import stats as sps
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
@@ -43,6 +52,14 @@ with warnings.catch_warnings():
     from statsmodels.stats.stattools import jarque_bera
     from statsmodels.stats.weightstats import ttest_ind
 
+from crosscheck.p12_neff import (
+    CLUSTER_CUT,
+    clusters_at,
+    expected_max_sr0,
+    li_ji,
+    participation_ratio,
+    probabilistic_sharpe,
+)
 from crosscheck.reference import DOCUMENTED, Ref
 
 TAILS = {"95": 0.05, "99": 0.01}
@@ -272,6 +289,56 @@ def psr(sr: float, sr0: float, n: int, skew: float, kurt: float) -> float:
     return float(sps.norm.cdf((sr - sr0) * math.sqrt(n - 1) / math.sqrt(1 - skew * sr + (kurt - 1) / 4 * sr ** 2)))
 
 
+MIN_COMMON_SESSIONS = 252
+ESTIMATORS = ("participation", "li_ji", "clusters")
+
+
+def _pair_word(names: list[str], matrix: np.ndarray) -> dict:
+    """The upper triangle with the diagonal as `a|b` keys: a flat dict the comparison already judges."""
+    return {f"{a}|{b}": float(matrix[i][j]) for i, a in enumerate(names) for j, b in enumerate(names) if i <= j}
+
+
+def average_tree(corr: np.ndarray) -> np.ndarray:
+    """scipy's average linkage of the distance 1 - rho."""
+    return linkage(squareform(1.0 - corr, checks=False), "average")
+
+
+def neff_references(trials: list[dict], moments: dict, v0: float, sr0_null: float) -> dict:
+    """SV3b from the trials' dates and returns (no key unless the route would serve a view, not a refusal)."""
+    daily = [t for t in trials if int(t["periods"]) == DAILY and "dates" in t]
+    if not daily or len(daily) != sum(1 for t in trials if int(t["periods"]) == DAILY):
+        return {}
+    panel = pd.concat([pd.Series(_floats(t["r"]), index=t["dates"], name=t["name"]) for t in daily], axis=1,
+                      join="inner").sort_index()
+    if len(panel) < MIN_COMMON_SESSIONS or bool((panel.nunique() < 2).any()):
+        return {}
+    names = list(panel.columns)
+    corr = panel.corr().to_numpy()
+    eig = np.linalg.eigvalsh(corr)[::-1]
+    tree = average_tree(corr)
+    groups = clusters_at(tree, CLUSTER_CUT)
+    ranked = sorted(groups, key=lambda m: (-len(m), m[0]))
+    monthly = sum(1 for t in trials if int(t["periods"]) != DAILY)
+    n_daily = {"participation": participation_ratio(eig), "li_ji": li_ji(eig), "clusters": float(len(groups))}
+    n_total = {k: v + monthly for k, v in n_daily.items()}
+    sr0 = {k: expected_max_sr0(v0, n, EULER) for k, n in n_total.items()}
+    src = "pandas inner join and corr, numpy eigvalsh, scipy linkage('average') and fcluster, SV3a closed forms"
+    out = {"neff_window_sessions": Ref(float(len(panel)), "pandas inner join of the daily trials' session dates"),
+           "neff_correlation": Ref(_pair_word(names, corr), "pandas DataFrame.corr (Pearson) on the common window"),
+           "neff_correlation_numpy": Ref(_pair_word(names, np.corrcoef(panel.to_numpy(), rowvar=False)),
+                                         "numpy corrcoef on the common window", against="neff_correlation"),
+           "neff_eigenvalues": Ref([float(x) for x in eig], "numpy eigvalsh of the correlation, largest first"),
+           "neff_participation": Ref(n_daily["participation"], src), "neff_li_ji": Ref(n_daily["li_ji"], src),
+           "neff_clusters": Ref(";".join(",".join(names[i] for i in g) for g in ranked), src),
+           "neff_n_total": Ref(n_total, src + ": N daily plus the monthly books"),
+           "neff_sr0_session": Ref({"registered": sr0_null, **sr0}, src)}
+    for key in ESTIMATORS:
+        out[f"neff_dsr_{key}"] = Ref(
+            {name: probabilistic_sharpe(m[0], sr0[key] * math.sqrt(DAILY / m[4]), m[1], m[2], m[3])
+             for name, m in moments.items()}, src)
+    return out
+
+
 def deflated_references(inputs: dict) -> dict:
     trials = inputs["trials"]
     moments = {}
@@ -294,7 +361,8 @@ def deflated_references(inputs: dict) -> dict:
     paper = inputs["paper"]
     p_sr0 = expected_max(int(paper["n_trials"]), float(paper["variance"]))
     src = "scipy moments (bias=True, raw kurtosis), Bailey and Lopez de Prado written out"
-    return {"n_trials": Ref(float(len(trials)), "len(trials)"), "variance": Ref(variance, src),
+    neff = neff_references(trials, moments, v0, sr0_null)
+    return {**neff, "n_trials": Ref(float(len(trials)), "len(trials)"), "variance": Ref(variance, src),
             "sr0_session": Ref(sr0, src), "sr0_annual": Ref(sr0 * math.sqrt(DAILY), src), "dsr": Ref(dsr, src),
             "sr_session": Ref(session, src), "variance_null": Ref(v0, src), "sr0_null_session": Ref(sr0_null, src),
             "sr0_null_annual": Ref(sr0_null * math.sqrt(DAILY), src), "dsr_null": Ref(dsr_null, src),

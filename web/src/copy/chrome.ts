@@ -130,6 +130,8 @@ export const MESSAGES = {
   /** The key map or the event tape is fetched on demand; when the fetch fails the terminal stays up and says so. */
   keymapFailed: 'The key map could not load. Reload the page to try again.',
   tapeFailed: 'The event tape could not load. Reload the page to try again.',
+  keysFailed: 'The keys could not load. Reload the page to try again.',
+  menusFailed: 'The menu could not load. Reload the page to try again.',
 } as const
 
 export const STATUS_BAR = {

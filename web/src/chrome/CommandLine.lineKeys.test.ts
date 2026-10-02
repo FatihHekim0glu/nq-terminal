@@ -3,11 +3,17 @@
 // Enter: lineKeys.enter() called chooseItem without the shift flag. CommandLine.dispatch.test.ts covers
 // the other half of the same defect (typing the row's number instead of arrowing to it).
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import type { CommandIndexData } from '../commands/types'
 import { runText } from './CommandLine.dispatch'
 import { handleLineKey } from './CommandLine.lineKeys'
 import { useCommandLineParts, type CommandLineOptions } from './CommandLine.state'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 // D10's suggestion-sheet half: chooseSuggestion only runs a suggestion straight away (instead of just
 // filling the box) for the 'instrument' and 'search' groups. Typing a bare instrument or a search query

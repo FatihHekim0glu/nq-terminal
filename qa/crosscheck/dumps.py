@@ -37,6 +37,9 @@ BASES = ("A", "B")
 # `tests/test_p2_dump_kinds.py` pins each tuple to the reference module's own constant.
 P2_SPA_INPUTS = {"spa": ("names", "dates", "bench", "models", "reps", "seed", "size")}
 P2_RISK_INPUTS = {"p2risk": ("dates", "r", "bench", "basis", "periods", "on_capital")}
+# v2.1: LV6 and LV6b served (`lv6_live_cone.py`, pinned by `tests/test_lv6_live_cone.py`).
+LV6_INPUTS = {"lv6": ("dates", "paper", "paper_cumulative", "model_cumulative", "capital", "backtest_quantiles",
+                      "backtest_horizon", "reps", "seed")}
 P2_RCT_INPUTS = {"p2trend": ("dates", "r", "close_dates", "close", "window", "periods"),
                  "p2capacity": ("legs", "volume"),
                  "p2term": ("root", "front", "next", "business_days"),
@@ -59,7 +62,7 @@ BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "roll": ("dates", "t", "instrument_id", "offset", "c_none", "qa_rolls_total"),
                  "dq_sidecar": ("status", "fence", "sessions"), "dq_nq": ("fence", "sessions", "rejected", "still"),
                  "guards": ("groups", "records"),
-                 **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS}
+                 **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS, **LV6_INPUTS}
 
 
 class DumpError(ValueError):

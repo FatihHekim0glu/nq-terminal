@@ -5,6 +5,8 @@
 // the lazily loaded HELP chunk gets a store of its own and no longer hears App's request.
 import { act, cleanup, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './chrome/CommandLine.menus.load'
+import { loadKeyActions } from './chrome/KeyToolbar.lazy'
 import App from './App'
 import { resetConnection } from './api/connection'
 import { layoutFor } from './chrome/WorkspaceLayouts'
@@ -16,6 +18,11 @@ import { useLayouts } from './state/layouts'
 import { useLinkGroups } from './state/linkGroups'
 import { resetMessage } from './chrome/MessageLine.store'
 import { useWorkspaces } from './state/workspaces'
+
+// The command line's menus and sheets and the key actions load as chunks of their own; the app has them by its first idle moment.
+beforeAll(async () => {
+  await Promise.all([loadCommandLineParts(), loadKeyActions()])
+})
 
 configure({ asyncUtilTimeout: 5000 })
 

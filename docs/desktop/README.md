@@ -33,10 +33,12 @@ The plan to turn the nq-lab terminal from a local web app into native apps for W
 
 | Folder | What it holds |
 |---|---|
-| [spike_webview2/](spike_webview2/) | Scripts and raw output of the WebView2 spike. |
-| [spike_rust/](spike_rust/) | Scripts, shell and chart source, and raw output of the Rust spike. |
-| [tools/](tools/) | Scripts that build the inventory tables and, in `tools/plan/gen_03_tables.py`, the route table and appendices of the migration plan. |
 | [research/](research/) | The seven research lenses listed above. |
+| `nq-lab/desktop_research/spike_webview2/` | Scripts and raw output of the WebView2 spike. |
+| `nq-lab/desktop_research/spike_rust/` | Scripts, shell and chart source, and raw output of the Rust spike. |
+| `nq-lab/desktop_research/tools/` | Scripts that build the inventory tables and, in `tools/plan/gen_03_tables.py`, the route table and appendices of the migration plan. |
+
+The last three folders are scripts and raw output, not documents, so they sit outside the terminal repository, in `nq-lab/desktop_research/` beside it.
 
 ## Status
 

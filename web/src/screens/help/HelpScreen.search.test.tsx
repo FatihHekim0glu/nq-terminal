@@ -10,7 +10,7 @@ import { onLineRequest } from '../../chrome/CommandLine.bus'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { withValue } from '../../commands/messages'
 import { loadSearchIndex, loadedSearchIndex } from '../../commands/searchIndexLoader'
-import { COMMAND_LINE } from '../../copy/commands'
+import { COMMAND_MENUS } from '../../copy/menus'
 import { HELP } from '../../copy/help'
 import { SEARCH } from '../../copy/search'
 import HelpScreen from './HelpScreen'
@@ -36,7 +36,7 @@ function searchField(): HTMLInputElement {
   return within(bar).getByRole('combobox', { name: HELP.searchLabel }) as HTMLInputElement
 }
 
-const nothing = (word: string) => withValue(COMMAND_LINE.searchNone, word)
+const nothing = (word: string) => withValue(COMMAND_MENUS.searchNone, word)
 
 describe('HELP search before and after the search index has loaded', () => {
   it('lists today\'s rows and says the help text is loading, then draws the help text matches when the index arrives', async () => {

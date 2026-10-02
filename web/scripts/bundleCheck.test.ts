@@ -189,26 +189,39 @@ describe('the check matches the Vite config', () => {
     expect([GALLERY_OUT_DIR, DEMO_OUT_DIR]).toEqual(['dist-gallery', 'dist-demo'])
   })
 
-  it('aliases exactly the Radix dialog import to the local stub, and nothing else', () => {
-    // cmdk imports @radix-ui/react-dialog only for Command.Dialog, which the terminal never renders.
-    expect(RESOLVE_ALIASES).toHaveLength(1)
-    const alias = RESOLVE_ALIASES[0]
-    expect(alias.find.test('@radix-ui/react-dialog')).toBe(true)
+  it('aliases exactly the two Radix imports cmdk does not need the real package for, each to its local stub, and nothing else', () => {
+    // cmdk imports @radix-ui/react-dialog only for Command.Dialog, which the terminal never renders, and reads two elements
+    // (div and input) from @radix-ui/react-primitive, whose asChild mode (Radix's Slot) the terminal never uses.
+    expect(RESOLVE_ALIASES).toHaveLength(2)
+    const [dialog, primitive] = RESOLVE_ALIASES
+    expect(dialog.find.test('@radix-ui/react-dialog')).toBe(true)
+    expect(primitive.find.test('@radix-ui/react-primitive')).toBe(true)
     const others = [
       '@radix-ui/react-dialog/dist/index.mjs',
       '@radix-ui/react-dialog-extra',
       'x@radix-ui/react-dialog',
-      '@radix-ui/react-primitive',
+      '@radix-ui/react-primitive/dist/index.mjs',
+      '@radix-ui/react-primitive-extra',
+      'x@radix-ui/react-primitive',
+      '@radix-ui/react-slot',
       '@radix-ui/react-id',
       '@radix-ui/react-compose-refs',
       '@radix-ui/react-popover',
       'cmdk',
       'react',
       './radixDialogStub',
+      './radixPrimitiveStub',
     ]
-    for (const other of others) expect(alias.find.test(other), other).toBe(false)
-    expect(path.relative(WEB_DIR, alias.replacement)).toBe(path.join('src', 'vendor', 'radixDialogStub.tsx'))
-    expect(existsSync(alias.replacement)).toBe(true)
+    for (const other of others) {
+      expect(dialog.find.test(other), `dialog: ${other}`).toBe(false)
+      expect(primitive.find.test(other), `primitive: ${other}`).toBe(false)
+    }
+    expect(dialog.find.test('@radix-ui/react-primitive')).toBe(false)
+    expect(primitive.find.test('@radix-ui/react-dialog')).toBe(false)
+    expect(path.relative(WEB_DIR, dialog.replacement)).toBe(path.join('src', 'vendor', 'radixDialogStub.tsx'))
+    expect(path.relative(WEB_DIR, primitive.replacement)).toBe(path.join('src', 'vendor', 'radixPrimitiveStub.tsx'))
+    expect(existsSync(dialog.replacement)).toBe(true)
+    expect(existsSync(primitive.replacement)).toBe(true)
   })
 
   it('captures React before any library group, so no library chunk can pull React in', () => {

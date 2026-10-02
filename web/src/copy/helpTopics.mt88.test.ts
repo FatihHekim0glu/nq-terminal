@@ -11,12 +11,12 @@ describe('the MT help topic describes 88) Family test', () => {
     expect(line).toBeDefined()
     expect(line).toContain("White's Reality Check")
     expect(line).toContain('Romano-Wolf StepM')
-    expect(line).toContain('computed in the browser')
+    expect(line).toContain('served p-values and the served effective number of members')
     expect(line).toContain('an extra view only')
   })
 
   it('names the SPA GET once 88) is open, as well as the earlier ones', () => {
     expect(MT.data).toContain('GET /api/analytics/spa once 88) Family test is open')
-    expect(MT.data).toContain('once 87) Effective trials is open')
+    expect(MT.data).toContain('its effective number of trials (87) Effective trials)')
   })
 })

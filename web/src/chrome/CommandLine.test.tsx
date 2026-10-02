@@ -2,14 +2,21 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import type { HistoryStorage } from '../commands/history'
 import type { ParsedCommand } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
 import { COMMAND_LINE, PARSE_MESSAGES } from '../copy/commands'
+import { COMMAND_MENUS } from '../copy/menus'
 import { MESSAGES } from '../copy/chrome'
 import { LAYOUT_SEPARATOR } from '../copy/layout'
 import { CommandLine, type CommandLineHandle, type CommandLineProps } from './CommandLine'
 import { resetMessage } from './MessageLine.store'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 // cmdk measures its list with ResizeObserver and scrolls the selected item into view; jsdom has neither.
 beforeAll(() => {
@@ -257,7 +264,7 @@ describe('CommandLine: menus in the sheet (spec 5.1)', () => {
     }
     type('LAST')
     key('Enter')
-    const last = screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle })
+    const last = screen.getByRole('listbox', { name: COMMAND_MENUS.lastTitle })
     expect(within(last).getAllByRole('option').map((o) => o.textContent)).toEqual(['1)HELP', '2)NQ GP', '3)REG'])
   })
 
@@ -313,7 +320,7 @@ describe('CommandLine: suggestions (spec 4.2 autocomplete)', () => {
     type('re')
     const list = screen.getByRole('listbox')
     expect(within(list).getByText('FUNCTIONS')).toBeTruthy()
-    expect(within(list).getByText(COMMAND_LINE.hideHint)).toBeTruthy()
+    expect(within(list).getByText(COMMAND_MENUS.hideHint)).toBeTruthy()
   })
 
   it('born failing: no option is marked active until the user arrows, so Enter and ARIA agree', () => {
@@ -413,7 +420,7 @@ describe('CommandLine: RESET, UNDO, WATCH and GRAB (roadmap #15, #16)', () => {
     expect(message().textContent).toBe('Undone: Home is back as it was.')
     type('LAST')
     key('Enter')
-    const last = within(screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle }))
+    const last = within(screen.getByRole('listbox', { name: COMMAND_MENUS.lastTitle }))
     expect(last.getAllByRole('option').map((o) => o.textContent)).toEqual(['1)UNDO', '2)RESET'])
   })
 
@@ -503,7 +510,7 @@ describe('CommandLine: SAVE, LOAD and FORGET (roadmap #14)', () => {
     expect(input.value).toBe('')
     type('LAST')
     key('Enter')
-    const last = within(screen.getByRole('listbox', { name: COMMAND_LINE.lastTitle }))
+    const last = within(screen.getByRole('listbox', { name: COMMAND_MENUS.lastTitle }))
     expect(last.getAllByRole('option').map((o) => o.textContent)).toEqual(['1)SAVE VMREVIEW'])
   })
 

@@ -1,6 +1,6 @@
 # Spike 00: Rust on this machine, a Tauri shell and a native chart
 
-Date run: 2 October 2026 (01:15 to 02:00, UK time). Repository: `nq-lab/terminal`, HEAD `c7f9e61` (v2). The scripts and source are in `docs/desktop/spike_rust/`, with the raw output (see the last section). Everything here was measured on one Windows 11 machine. Nothing was measured on a Mac.
+Date run: 2 October 2026 (01:15 to 02:00, UK time). Repository: `nq-lab/terminal`, HEAD `c7f9e61` (v2). The scripts and source are in `nq-lab/desktop_research/spike_rust/`, outside the terminal repository, with the raw output (see the last section); the `scripts/` and `raw/` paths below are relative to that folder. Everything here was measured on one Windows 11 machine. Nothing was measured on a Mac.
 
 ## What this spike answers
 
@@ -214,7 +214,7 @@ Files: the egui exe is 10,761,728 bytes (wgpu in, fat LTO). 431 crates in its lo
 
 ## Reproduce
 
-All paths as used here; all in `docs/desktop/spike_rust/scripts/`.
+All paths as used here; all in `nq-lab/desktop_research/spike_rust/scripts/`, outside the terminal repository.
 
 ```
 # toolchain environment for this process only

@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, renderHook } from '@testing-library/react'
 import { createRef } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { loadCommandLineParts } from './CommandLine.menus.load'
 import type { ParsedCommand } from '../commands/parser'
 import type { CommandIndexData } from '../commands/types'
 import { LAYOUT_SEPARATOR } from '../copy/layout'
 import { PreviewAnnouncer, usePreviewText } from './CommandLine.preview'
 import { useCommandLineParts, type CommandLineOptions } from './CommandLine.state'
+
+// The menus and sheets load as chunks of their own; the app has them by its first idle moment, so the tests wait for them.
+beforeAll(async () => {
+  await loadCommandLineParts()
+})
 
 afterEach(() => cleanup())
 

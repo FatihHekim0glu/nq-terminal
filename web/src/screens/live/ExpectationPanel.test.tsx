@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-// The LIVE expectation card (ROADMAP 17 step 1, ANALYTICS_CATALOG LV6, [POST HOC]): the paper book's cumulative P&L
-// placed on the SV6 cone of its hypothesis. What it asks for (the same request shapes as the tear sheet's own
-// bootstrap and run analytics, and only once the tracking has a value), what it draws (the Cone with the paper and
-// model overlays, the lines that name K and its run) and how it refuses in words. The Cone is a stand-in that records
-// its input. GETs only; a role=alert only for a failed read that LV5 does not already announce (not the paper tracking).
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+// The LIVE expectation card (ANALYTICS_CATALOG LV6 and LV6b, [POST HOC]): the paper book's cumulative P&L placed on
+// a served cone, the hypothesis's SV6 cone (backtest start) or one resampled from the paper book's own sessions (live
+// start), chosen with a toggle. What it asks for (the served view and the paper tracking LV5 already reads, GETs only),
+// what it draws (the Cone with the paper and model overlays, the lines that name K and its run), how the toggle works
+// by mouse and keyboard and how it refuses in words. The Cone is a stand-in that records its input. A role=alert only
+// for a failed read that LV5 does not already announce (not the paper tracking).
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiProvider } from '../../api/ApiProvider'
 import { createApiQueryClient } from '../../api/queries'
@@ -12,12 +13,10 @@ import { liveStreamHub } from '../../api/useLiveStream'
 import type { ConeInput } from '../../charts/echarts/coneModel'
 import { EXPECTATION } from '../../copy/expectation'
 import { fillCopy } from '../../copy/workspace'
-import { VOLMANAGED } from '../des/desTestData'
-import { RUNS } from '../runs/runs.fixtures'
-import { RUN_ANALYTICS } from '../tear/tear.fixtures'
 import { HYP_BOOTSTRAP } from '../tear/tearP1.fixtures'
-import ExpectationPanel, { ExpectationCard } from './ExpectationPanel'
-import { expectationView } from './expectationModel'
+import ExpectationPanel, { ExpectationCard, ServedExpectation } from './ExpectationPanel'
+import { PAPER_EXPECTATION, PAPER_EXPECTATION_LIVE, TRACKING_LIVE_BOOK } from './expectationFixtures'
+import type { PaperExpectation } from './expectationModel'
 import { TRACKING_POPULATED } from './trackingFixtures'
 
 const seen = vi.hoisted(() => ({ cones: [] as Array<{ data: ConeInput; chartId: string }> }))
@@ -29,12 +28,8 @@ function standIn(props: { data: ConeInput; chartId: string }) {
 
 vi.mock('../../charts/echarts/Cone', () => ({ Cone: standIn }))
 
-const RUN = 'nt_volmanaged_v0_fixture_m1'
 const TRACKING_URL = '/api/analytics/paper-tracking'
-const DETAIL_URL = '/api/hypotheses/volmanaged_v0'
-const RUNS_URL = '/api/runs'
-const BOOT_URL = '/api/analytics/hypothesis/volmanaged_v0/bootstrap?cost=1'
-const RUN_URL = `/api/analytics/run/${RUN}?freq=D`
+const EXPECTATION_URL = '/api/analytics/paper-expectation'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -43,16 +38,13 @@ function json(body: unknown, status = 200): Response {
 type Answer = () => Response | Promise<Response>
 const DEFAULTS: Readonly<Record<string, Answer>> = {
   [TRACKING_URL]: () => json(TRACKING_POPULATED),
-  [DETAIL_URL]: () => json(VOLMANAGED),
-  [RUNS_URL]: () => json(RUNS),
-  [BOOT_URL]: () => json(HYP_BOOTSTRAP),
-  [RUN_URL]: () => json(RUN_ANALYTICS),
+  [EXPECTATION_URL]: () => json(PAPER_EXPECTATION),
 }
 
 let calls: string[] = []
 let methods: string[] = []
 
-/** Stubs fetch with the five answers the card needs; `override` replaces some of them. */
+/** Stubs fetch with the two answers the card needs; `override` replaces some of them. */
 function serve(override: Readonly<Record<string, Answer>> = {}) {
   calls = []
   methods = []
@@ -79,6 +71,7 @@ function mount() {
 const region = () => screen.getByRole('region', { name: EXPECTATION.label })
 const drawn = () => screen.findByTestId('cone')
 const untilText = (text: string) => waitFor(() => expect(region().textContent).toContain(text))
+const startButton = (name: string) => within(region()).getByRole('button', { name })
 
 beforeEach(() => {
   seen.cones = []
@@ -90,52 +83,19 @@ afterEach(() => {
 })
 
 describe('the expectation card: what it asks for', () => {
-  it('reads exactly the tracking, the hypothesis, the runs, the bootstrap at its cost and the run analytics at D', async () => {
+  it('reads exactly the paper tracking and the served expectation, with GETs only', async () => {
     serve()
     mount()
     await drawn()
-    expect([...calls].sort()).toEqual([TRACKING_URL, DETAIL_URL, RUNS_URL, BOOT_URL, RUN_URL].sort())
+    expect([...new Set(calls)].sort()).toEqual([EXPECTATION_URL, TRACKING_URL].sort())
     expect(methods.every((m) => m === 'GET')).toBe(true)
   })
 
-  it('asks for neither the bootstrap nor the run analytics while the tracking has no value', async () => {
-    const empty = { ...TRACKING_POPULATED, paper_cumulative: [null, null, null, null, null], model_cumulative: [null, null, null, null, null] }
-    serve({ [TRACKING_URL]: () => json(empty) })
+  it('asks for no bootstrap, run list, hypothesis or run analytics: the placement is served', async () => {
+    serve()
     mount()
-    await untilText(EXPECTATION.empty)
-    await waitFor(() => expect(calls).toContain(RUNS_URL))
-    expect(calls.filter((u) => u.includes('/bootstrap') || u.includes('/api/analytics/run/'))).toEqual([])
-  })
-
-  it('asks for neither before the tracking has answered', async () => {
-    serve({ [TRACKING_URL]: () => new Promise<Response>(() => {}) })
-    mount()
-    await waitFor(() => expect(calls).toContain(TRACKING_URL))
-    expect(calls.filter((u) => u.includes('/bootstrap') || u.includes('/api/analytics/run/'))).toEqual([])
-  })
-
-  it('does not ask for the run analytics of a run the list marks as a probe', async () => {
-    const probes = RUNS.map((r) => (r.run_id === RUN ? { ...r, is_probe: true } : r))
-    serve({ [RUNS_URL]: () => json(probes) })
-    mount()
-    await untilText(fillCopy(EXPECTATION.noCapital, { reason: EXPECTATION.noRun }))
-    expect(calls).not.toContain(RUN_URL)
-  })
-
-  it('does not ask for a bootstrap of a hypothesis that records no cost', async () => {
-    const bare = { ...VOLMANAGED, card: { ...VOLMANAGED.card, series_costs: [] } }
-    serve({ [DETAIL_URL]: () => json(bare) })
-    mount()
-    await untilText(fillCopy(EXPECTATION.noCost, { hypothesis: 'volmanaged_v0' }))
-    expect(calls.filter((u) => u.includes('/bootstrap'))).toEqual([])
-  })
-
-  it('reads no hypothesis for a journal no registered hypothesis owns, and says so', async () => {
-    serve({ [TRACKING_URL]: () => json({ ...TRACKING_POPULATED, journal: 'other_paper_journal.jsonl' }) })
-    mount()
-    await untilText(fillCopy(EXPECTATION.noBook, { journal: 'other_paper_journal.jsonl' }))
-    expect(calls.filter((u) => u.startsWith('/api/hypotheses'))).toEqual([])
-    expect(calls.filter((u) => u.includes('/bootstrap') || u.includes('/api/analytics/run/'))).toEqual([])
+    await drawn()
+    expect(calls.filter((u) => u.includes('/bootstrap') || u.startsWith('/api/runs') || u.startsWith('/api/hypotheses') || u.startsWith('/api/analytics/run/'))).toEqual([])
   })
 })
 
@@ -167,22 +127,21 @@ describe('the expectation card: what it draws', () => {
     serve()
     mount()
     await drawn()
-    await waitFor(() => expect(calls).toHaveLength(5))
-    const inputs = new Set(seen.cones.map((c) => c.data))
-    expect(inputs.size).toBe(1)
+    await waitFor(() => expect(calls).toHaveLength(2))
+    expect(new Set(seen.cones.map((c) => c.data)).size).toBe(1)
   })
 
-  it('names K and its run, the anchor, the before-costs basis, the latest placement and the cone label', async () => {
+  it('names K and its run, the anchor, the before-costs basis, the latest placement, the cone label and that it is served', async () => {
     serve()
     mount()
     await drawn()
     const text = region().textContent ?? ''
     expect(text).toContain("K = 1,000,000 USD: the starting capital of nt_volmanaged_v0_fixture_m1, the linked Nautilus reproduction of volmanaged_v0 (the spec's K).")
     expect(text).toContain('counted from the first paper session (2026-12-08), on the SV6 cone of volmanaged_v0 at 1 tick per side.')
-    expect(text).toContain('before costs; the cone is the backtest net of 1 tick per side.')
     expect(text).toContain('Session 2 (2026-12-09): paper +0.0006% (between the 50th and 75th); model +0.0007% (between the 50th and 75th).')
     expect(text).toContain(HYP_BOOTSTRAP.cone.label)
     expect(text).toContain(EXPECTATION.computed)
+    expect(text).not.toMatch(/computed in the browser/i)
   })
 
   it('shows no alert on the way to a drawn cone, and no alarm or verdict word once it is drawn', async () => {
@@ -194,29 +153,73 @@ describe('the expectation card: what it draws', () => {
     expect(region().textContent).not.toMatch(/alarm|breach|verdict|\bfail|violat|warn|wrong/i)
   })
 
-  it('says it is loading until the reads are in, without an alert', async () => {
-    serve({ [BOOT_URL]: () => new Promise<Response>(() => {}) })
+  it('says it is loading until the view is in, without an alert', async () => {
+    serve({ [EXPECTATION_URL]: () => new Promise<Response>(() => {}) })
     mount()
-    await waitFor(() => expect(calls).toContain(BOOT_URL))
+    await waitFor(() => expect(calls).toContain(EXPECTATION_URL))
     expect(region().textContent).toContain(EXPECTATION.loading)
     expect(screen.queryAllByRole('alert')).toEqual([])
     expect(screen.queryByTestId('cone')).toBeNull()
   })
 })
 
-describe('the expectation card: how it refuses', () => {
-  it('shows noCapital and no chart when the run analytics answers 422, without an alert', async () => {
-    serve({ [RUN_URL]: () => json({ detail: 'the balance check of this run failed' }, 422) })
+describe('the expectation card: the cone toggle', () => {
+  it('offers both cones as a named group of pressed-state buttons, the backtest start pressed first', async () => {
+    serve({ [TRACKING_URL]: () => json(TRACKING_LIVE_BOOK), [EXPECTATION_URL]: () => json(PAPER_EXPECTATION_LIVE) })
     mount()
-    await untilText(fillCopy(EXPECTATION.noCapital, { reason: fillCopy(EXPECTATION.noK, { run: RUN }) }))
+    await drawn()
+    const group = within(region()).getByRole('group', { name: EXPECTATION.start.label })
+    const buttons = within(group).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual([EXPECTATION.start.backtest, EXPECTATION.start.live])
+    expect(buttons.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false'])
+  })
+
+  it('draws the live-start cone when Live start is pressed, and back again, by mouse and by keyboard', async () => {
+    serve({ [TRACKING_URL]: () => json(TRACKING_LIVE_BOOK), [EXPECTATION_URL]: () => json(PAPER_EXPECTATION_LIVE) })
+    mount()
+    await drawn()
+    fireEvent.click(startButton(EXPECTATION.start.live))
+    await waitFor(() => expect(seen.cones.at(-1)!.data.name).toBe(EXPECTATION.liveConeName))
+    expect(startButton(EXPECTATION.start.live).getAttribute('aria-pressed')).toBe('true')
+    expect(region().textContent).toContain(EXPECTATION.liveCostNote)
+    expect(seen.cones.at(-1)!.data.steps).toHaveLength(40)
+    const back = startButton(EXPECTATION.start.backtest)
+    back.focus()
+    expect(document.activeElement).toBe(back)
+    fireEvent.click(back) // a native button: Enter and Space click it
+    await waitFor(() => expect(seen.cones.at(-1)!.data.name).toBe(fillCopy(EXPECTATION.coneName, { hypothesis: 'volmanaged_v0' })))
+    expect(document.activeElement).toBe(startButton(EXPECTATION.start.backtest))
+  })
+
+  it('says a short paper book has no live-start cone yet, in words and without an alert', async () => {
+    serve()
+    mount()
+    await drawn()
+    fireEvent.click(startButton(EXPECTATION.start.live))
+    await untilText(fillCopy(EXPECTATION.liveShort, { n: 2, min: 30 }))
     expect(screen.queryByTestId('cone')).toBeNull()
+    expect(screen.queryAllByRole('alert')).toEqual([])
+    expect(startButton(EXPECTATION.start.backtest)).toBeTruthy()
+  })
+})
+
+describe('the expectation card: how it refuses', () => {
+  const refused = (code: string, params: Record<string, string> = {}): PaperExpectation =>
+    ({ ...PAPER_EXPECTATION, refusal: { code: code as never, params }, backtest: null, live: null })
+
+  it('shows the served refusal in words, with no chart, no toggle and no alert', async () => {
+    serve({ [EXPECTATION_URL]: () => json(refused('no_capital', { run: 'nt_volmanaged_v0_fixture_m1' })) })
+    mount()
+    await untilText(fillCopy(EXPECTATION.noCapital, { reason: fillCopy(EXPECTATION.noK, { run: 'nt_volmanaged_v0_fixture_m1' }) }))
+    expect(screen.queryByTestId('cone')).toBeNull()
+    expect(within(region()).queryByRole('group')).toBeNull()
     expect(screen.queryAllByRole('alert')).toEqual([])
   })
 
-  it('shows noCapital when the run serves no capital', async () => {
-    serve({ [RUN_URL]: () => json({ ...RUN_ANALYTICS, capital: null }) })
+  it('shows the empty words when no paper session has a value', async () => {
+    serve({ [EXPECTATION_URL]: () => json(refused('empty')) })
     mount()
-    await untilText(fillCopy(EXPECTATION.noCapital, { reason: fillCopy(EXPECTATION.noK, { run: RUN }) }))
+    await untilText(EXPECTATION.empty)
     expect(screen.queryByTestId('cone')).toBeNull()
   })
 
@@ -228,74 +231,39 @@ describe('the expectation card: how it refuses', () => {
     expect(region().textContent).not.toContain('live folder unreadable')
     expect(screen.queryByTestId('cone')).toBeNull()
   })
-
-  it('shows the empty words when no paper session has a value, and no chart', async () => {
-    const empty = { ...TRACKING_POPULATED, paper_cumulative: [null, null, null, null, null], model_cumulative: [null, null, null, null, null] }
-    serve({ [TRACKING_URL]: () => json(empty) })
-    mount()
-    await untilText(EXPECTATION.empty)
-    expect(screen.queryByTestId('cone')).toBeNull()
-    expect(screen.queryAllByRole('alert')).toEqual([])
-  })
-
-  it('shows the unit words for a cone that is not a summed fraction of K', async () => {
-    const usd = { ...HYP_BOOTSTRAP, cone: { ...HYP_BOOTSTRAP.cone, unit: 'USD' } }
-    serve({ [BOOT_URL]: () => json(usd) })
-    mount()
-    await untilText(fillCopy(EXPECTATION.unitRefused, { unit: 'USD', how: 'summed' }))
-    expect(screen.queryByTestId('cone')).toBeNull()
-    expect(screen.queryAllByRole('alert')).toEqual([])
-  })
 })
 
 describe('the expectation card: a failed read that only LV6 makes is the alert', () => {
-  it('says a failed bootstrap read in an alert', async () => {
-    serve({ [BOOT_URL]: () => json({ detail: 'no bootstrap for this series: too short' }, 422) })
-    mount()
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe(fillCopy(EXPECTATION.failed, { detail: 'no bootstrap for this series: too short' }))
-    expect(screen.queryByTestId('cone')).toBeNull()
-  })
-
-  it('says a failed run analytics read that is not a refusal in an alert', async () => {
-    serve({ [RUN_URL]: () => json({ detail: 'analytics is down' }, 503) })
+  it('says a failed expectation read in an alert', async () => {
+    serve({ [EXPECTATION_URL]: () => json({ detail: 'analytics is down' }, 503) })
     mount()
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe(fillCopy(EXPECTATION.failed, { detail: 'analytics is down' }))
-  })
-
-  it('says a failed hypothesis read and a failed run list read in an alert', async () => {
-    serve({ [DETAIL_URL]: () => json({ detail: 'card unreadable' }, 503) })
-    mount()
-    expect((await screen.findByRole('alert')).textContent).toContain('card unreadable')
-    cleanup()
-    serve({ [RUNS_URL]: () => json({ detail: 'runs unreadable' }, 503) })
-    mount()
-    expect((await screen.findByRole('alert')).textContent).toContain('runs unreadable')
+    expect(screen.queryByTestId('cone')).toBeNull()
   })
 })
 
-describe('ExpectationCard: the pure card the gallery shows', () => {
-  const view = expectationView({
-    tracking: TRACKING_POPULATED, boot: HYP_BOOTSTRAP, capital: RUN_ANALYTICS.capital, runId: RUN, hypothesis: 'volmanaged_v0', cost: 1,
-  })
-
-  it('draws an ok view without any request', () => {
+describe('ExpectationCard and ServedExpectation: the pure cards the gallery shows', () => {
+  it('draws a served view without any request', () => {
     const spy = vi.spyOn(globalThis, 'fetch')
-    render(<ExpectationCard state={view} />)
+    render(<ServedExpectation served={PAPER_EXPECTATION_LIVE} />)
     expect(screen.getByTestId('cone').getAttribute('data-chart-id')).toBe('live-expectation')
     expect(region().textContent).toContain('K = 1,000,000 USD')
     expect(spy).not.toHaveBeenCalled()
   })
 
+  it('opens on the start it is given', () => {
+    render(<ServedExpectation served={PAPER_EXPECTATION_LIVE} initial="live" />)
+    expect(screen.getByTestId('cone').textContent).toBe(EXPECTATION.liveConeName)
+  })
+
   it('draws a refusal as words, a failure as an alert and a pending read as loading', () => {
-    const { rerender } = render(<ExpectationCard state={{ kind: 'refused', text: EXPECTATION.empty }} />)
+    const { rerender } = render(<ExpectationCard state={{ kind: 'refused', text: EXPECTATION.empty, switchable: false }} />)
     expect(region().textContent).toContain(EXPECTATION.empty)
     expect(screen.queryAllByRole('alert')).toEqual([])
     rerender(<ExpectationCard state={{ kind: 'failed', detail: 'nope' }} />)
     expect(screen.getByRole('alert').textContent).toBe(fillCopy(EXPECTATION.failed, { detail: 'nope' }))
     rerender(<ExpectationCard state={{ kind: 'loading' }} />)
     expect(region().textContent).toContain(EXPECTATION.loading)
-    expect(screen.queryAllByRole('alert')).toEqual([])
   })
 })

@@ -11,16 +11,15 @@ describe('the MT help topic describes 87) Effective trials', () => {
     expect(MT.shows.join(' ')).toContain('87) Effective trials')
   })
 
-  it('says it is computed in the browser and an extra view only', () => {
+  it('says it is served by the backend and an extra view only', () => {
     const line = MT.shows.find((s) => s.startsWith('87) Effective trials'))
     expect(line).toBeDefined()
-    expect(line).toContain('computed in the browser')
+    expect(line).toContain('served by the backend')
     expect(line).toContain('an extra view only')
   })
 
-  it('names the per-trial GET once 87) is open, as well as the earlier ones', () => {
-    expect(MT.data).toContain('/api/analytics/hypothesis/{name}')
-    expect(MT.data).toContain('/api/analytics/hypothesis/{name}?cost=1')
-    expect(MT.data).toContain('once 87) Effective trials is open')
+  it('names the SV3 GET that carries it and no per-trial GET', () => {
+    expect(MT.data).toContain('GET /api/analytics/deflated for SV3, its effective number of trials (87) Effective trials)')
+    expect(MT.data).not.toContain('/api/analytics/hypothesis/{name}?cost=1')
   })
 })

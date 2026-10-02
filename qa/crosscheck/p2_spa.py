@@ -15,6 +15,12 @@ that arch 8.0.0 does not studentise the statistic: its variances only set the co
 `correlation` is the Pearson correlation of the loss differentials (the series the bootstrap resamples), recomputed
 with pandas and again with numpy, both against the terminal's own centred-and-scaled product.
 
+The effective number of members (SV8 step 8) is recomputed from that same pandas correlation of the differentials:
+scipy's `eigvalsh` for the eigenvalues (participation ratio and the Li and Ji count), scipy's `linkage` ("average") and
+`fcluster` (criterion "distance", cut 0.5 on 1 - rho) for the clusters, and the largest absolute off-diagonal entry for
+the most correlated pair. The clusters and the pair compare as words (largest cluster first, then by first member;
+`a|b`).
+
 The StepM result compares as one word (the rejected names joined by commas, or "none"), so an empty set and a
 non-empty one never pass each other.
 """
@@ -24,16 +30,21 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from scipy.cluster.hierarchy import fcluster, linkage
+from scipy.linalg import eigvalsh
+from scipy.spatial.distance import squareform
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     from arch.bootstrap import SPA, StepM, optimal_block_length
 
+from crosscheck.p12_neff import li_ji
 from crosscheck.reference import DOCUMENTED, Ref
 
 BUNDLE_INPUTS = ("names", "dates", "bench", "models", "reps", "seed", "size")
 NONE = "none"
 MIN_BLOCK = 1.0
+CLUSTER_CUT = 0.5  # on 1 - rho, average linkage (SV3b's pre-registered cut)
 CORRELATION_KEYS = ("correlation", "correlation_numpy")
 STATISTIC_NOTE = ("arch 8.0.0 SPA: the statistic is max mean(d_i), not studentised; the kernel variances set only the "
                   "consistent recentring (White's form, not Hansen's studentised T^SPA)")
@@ -80,6 +91,30 @@ def correlation_word(names: list[str], matrix) -> dict:
     return {f"{a}|{b}": float(matrix[i][j]) for i, a in enumerate(names) for j, b in enumerate(names) if i <= j}
 
 
+def cluster_word(names: list[str], correlation: np.ndarray) -> str:
+    """UPGMA clusters at the cut as one word: members joined by commas, clusters by semicolons, largest first."""
+    labels = fcluster(linkage(squareform(1.0 - correlation, checks=False), "average"), CLUSTER_CUT,
+                      criterion="distance")
+    groups: dict[int, list[int]] = {}
+    for i, label in enumerate(labels):
+        groups.setdefault(int(label), []).append(i)
+    ranked = sorted(groups.values(), key=lambda members: (-len(members), members[0]))
+    return ";".join(",".join(names[i] for i in members) for members in ranked)
+
+
+def effective_references(names: list[str], correlation: np.ndarray) -> dict:
+    """SV8 step 8 from the correlation of the loss differentials (k >= 2, no member without spread)."""
+    eig = eigvalsh(correlation)
+    rows, cols = np.triu_indices(len(names), 1)
+    top = int(np.argmax(np.abs(correlation[rows, cols])))  # the first on a tie, in row order
+    src = "scipy eigvalsh, linkage('average') and fcluster('distance', 0.5) of the pandas correlation of d"
+    return {"effective_participation": Ref(float(eig.sum() ** 2 / (eig ** 2).sum()), src + ": (sum l)^2 / sum l^2"),
+            "effective_li_ji": Ref(li_ji(eig), src + ": Li and Ji (2005), an eigenvalue a few ulps off an integer snapped"),
+            "effective_clusters": Ref(cluster_word(names, correlation), src),
+            "effective_pair": Ref(f"{names[rows[top]]}|{names[cols[top]]}", "largest |rho| off the diagonal of d"),
+            "effective_rho": Ref(float(correlation[rows[top], cols[top]]), "largest |rho| off the diagonal of d")}
+
+
 def spa_references(inputs: dict) -> dict:
     names, loss_bench, loss_models = _family(inputs)
     reps, seed, size = int(inputs["reps"]), int(inputs["seed"]), float(inputs["size"])
@@ -111,6 +146,8 @@ def spa_references(inputs: dict) -> dict:
         out[f"p_{kind}"] = Ref(float(pvalues[kind]), src)
         out[f"crit_{kind}"] = Ref(float(crit[kind]), src)
     out["reality_check"] = Ref(float(pvalues["upper"]), "arch SPA upper p-value (White's Reality Check)")
+    if len(names) > 1 and np.isfinite(correlation).all():
+        out.update(effective_references(names, correlation))
     return out
 
 
