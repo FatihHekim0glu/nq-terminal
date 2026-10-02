@@ -200,3 +200,64 @@ def test_under_pytest_the_state_dir_is_a_per_test_folder_not_the_real_one(tmp_pa
     for s in (load_settings(), load_settings({})):
         assert not s.state_dir.is_relative_to(real), s.state_dir
         assert s.state_dir.is_relative_to(tmp_path.parent), s.state_dir
+
+
+# ---------------------------------------------------------------- desktop and launcher modes (W2A, 04 D2.1, 02 O5)
+
+def test_the_browser_terminal_keeps_its_defaults():
+    s = load_settings({})
+    assert (s.desktop, s.stdin_control, s.dev, s.jobs_enabled) == (False, False, False, True)
+    assert (s.port, s.cache_bytes, s.file_cache_bytes, s.mode) == (8765, 2 * 1024**3, None, "browser")
+    assert s.reads_stdin is False
+
+
+def test_desktop_mode_binds_port_0_and_uses_the_desktop_caps():
+    s = load_settings({"NQT_DESKTOP": "1"})
+    assert (s.desktop, s.mode, s.reads_stdin, s.port) == (True, "desktop", True, 0)
+    assert (s.cache_bytes, s.file_cache_bytes) == (512 * 1024**2, 128 * 1024**2)
+
+
+def test_desktop_mode_accepts_an_explicit_port_and_cache_cap():
+    s = load_settings({"NQT_DESKTOP": "1", "NQT_PORT": "0", "NQT_CACHE_BYTES": "1048576"})
+    assert (s.port, s.cache_bytes) == (0, 1048576)
+    assert load_settings({"NQT_DESKTOP": "1", "NQT_PORT": "9001"}).port == 9001
+
+
+@pytest.mark.parametrize("value", ["0", "", "true", "yes", " 1", "1 "])
+def test_only_exactly_1_turns_desktop_mode_on(value):
+    s = load_settings({"NQT_DESKTOP": value})
+    assert s.desktop is False and s.port == 8765 and s.cache_bytes == 2 * 1024**3
+
+
+@pytest.mark.parametrize("env", [{"NQT_PORT": "0"}, {"NQT_PORT": "0", "NQT_STDIN_CONTROL": "1"},
+                                 {"NQT_PORT": "0", "NQT_DESKTOP": "true"}, {"NQT_DESKTOP": "1", "NQT_PORT": "-1"}])
+def test_port_0_is_refused_outside_desktop_mode(env):
+    with pytest.raises(SettingsError, match="NQT_PORT"):
+        load_settings(env)
+
+
+def test_launcher_mode_reads_stdin_and_keeps_its_port():
+    s = load_settings({"NQT_STDIN_CONTROL": "1", "NQT_PORT": "8765"})
+    assert (s.stdin_control, s.desktop, s.mode, s.reads_stdin, s.port) == (True, False, "launcher", True, 8765)
+    assert s.cache_bytes == 2 * 1024**3 and s.file_cache_bytes is None
+
+
+@pytest.mark.parametrize(("value", "enabled"), [("off", False), ("OFF", False), (" off ", False), ("on", True),
+                                                ("", True)])
+def test_nqt_jobs_off_turns_the_queue_off(value, enabled):
+    assert load_settings({"NQT_JOBS": value}).jobs_enabled is enabled
+
+
+@pytest.mark.parametrize("value", ["of", "0", "false", "disabled"])
+def test_an_unknown_nqt_jobs_value_is_refused(value):
+    with pytest.raises(SettingsError, match="NQT_JOBS"):
+        load_settings({"NQT_JOBS": value})
+
+
+def test_nqt_dev_is_on_only_for_exactly_1():
+    assert load_settings({"NQT_DEV": "1"}).dev is True
+    assert load_settings({"NQT_DEV": "yes"}).dev is False and load_settings({}).dev is False
+
+
+def test_desktop_mode_keeps_the_state_dir(tmp_path):
+    assert load_settings({"NQT_DESKTOP": "1", "NQT_STATE_DIR": str(tmp_path)}).state_dir == tmp_path.resolve()

@@ -18,6 +18,8 @@ from nq_terminal.settings import load_settings
 from fakes import FIXTURES
 from p2_jobs_fakes import PYTHON, FakePopen, make_fake_root, spec_dict, wait_for
 
+from conftest import api_client, bare_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 HEADERS = {"X-NQT": "1", "Content-Type": "application/json"}
@@ -40,7 +42,7 @@ def client(tmp_path, popen) -> TestClient:
     root = make_fake_root(tmp_path)
     app.state.jobs = JobService(root=root, state_dir=tmp_path / "state", python=PYTHON, popen=popen)
     app.state.test_root = root
-    with TestClient(app, base_url=LOCAL, client=LOOPBACK) as c:
+    with api_client(app, base_url=LOCAL, client=LOOPBACK) as c:
         yield c
     popen.release_all()
     app.state.jobs.close()
@@ -116,7 +118,7 @@ def test_the_terminal_own_origin_is_accepted(client) -> None:
 def test_a_non_loopback_peer_is_403(tmp_path, popen, peer) -> None:
     app = with_jobs(create_app(load_settings({})))
     app.state.jobs = JobService(root=make_fake_root(tmp_path), state_dir=None, python=PYTHON, popen=popen)
-    c = TestClient(app, base_url=LOCAL, client=peer)
+    c = api_client(app, base_url=LOCAL, client=peer)
     assert c.post("/api/jobs", content=json.dumps(spec_dict()), headers=HEADERS).status_code == 403
     assert c.delete("/api/jobs/j_000000000000", headers=HEADERS).status_code == 403
     assert popen.calls == []
@@ -133,6 +135,60 @@ def test_the_write_guard_itself_refuses_a_non_loopback_peer(client) -> None:
     with pytest.raises(Exception) as caught:
         jobs_api.write_guard(Request(scope))
     assert getattr(caught.value, "status_code", None) == 403
+
+
+def guard_request(app: FastAPI, **extra: str):
+    """A POST /api/jobs request from a loopback peer with the X-NQT header and a JSON body type, plus `extra` headers."""
+    from starlette.requests import Request
+
+    headers = {"x-nqt": "1", "content-type": "application/json"} | {k.lower(): v for k, v in extra.items()}
+    scope = {"type": "http", "method": "POST", "path": "/api/jobs", "client": LOOPBACK, "server": ("127.0.0.1", 8765),
+             "headers": [(k.encode(), v.encode()) for k, v in headers.items()], "app": app}
+    return Request(scope)
+
+
+@pytest.mark.parametrize("extra", [
+    {"Origin": "http://evil.example"}, {"Origin": "http://127.0.0.1:1"}, {"Origin": "null"},
+    {"Sec-Fetch-Site": "cross-site"}, {"Sec-Fetch-Site": "same-site"}, {"Sec-Fetch-Site": ""}])
+def test_the_write_guard_itself_refuses_a_foreign_origin_or_fetch_site(client, extra) -> None:
+    """Defence in depth: SessionMiddleware sits outside the router and refuses these first, so the router's own check
+    is called directly; a guard that accepted any Origin or Sec-Fetch-Site would otherwise go unnoticed."""
+    with pytest.raises(Exception) as caught:
+        jobs_api.write_guard(guard_request(client.app, **extra))
+    assert getattr(caught.value, "status_code", None) == 403
+    assert "cross-site" in str(getattr(caught.value, "detail", ""))
+
+
+@pytest.mark.parametrize("extra", [
+    {}, {"Origin": "http://127.0.0.1:8765"}, {"Origin": "http://localhost:8765"}, {"Sec-Fetch-Site": "same-origin"},
+    {"Sec-Fetch-Site": "none"}])
+def test_the_write_guard_itself_accepts_the_terminal_own_origin(client, extra) -> None:
+    """The control for the refusals above: the same call passes when the origin and fetch site are the terminal's."""
+    assert jobs_api.write_guard(guard_request(client.app, **extra)) is None
+
+
+@pytest.fixture
+def router_only(tmp_path, popen) -> TestClient:
+    """The JOBS router on a bare app: no session, host or origin middleware, so only the router's own checks answer."""
+    app = FastAPI()
+    app.state.settings = load_settings({})
+    app.state.jobs = JobService(root=make_fake_root(tmp_path), state_dir=tmp_path / "state", python=PYTHON, popen=popen)
+    app.include_router(jobs_api.router)
+    with bare_client(app) as c:
+        yield c
+    popen.release_all()
+    app.state.jobs.close()
+
+
+@pytest.mark.parametrize("extra", [{"Origin": "http://evil.example"}, {"Sec-Fetch-Site": "cross-site"}])
+def test_the_router_alone_refuses_a_cross_site_post_and_delete(router_only, popen, extra) -> None:
+    c = router_only
+    refused = c.post("/api/jobs", content=json.dumps(spec_dict("t_x")), headers={**HEADERS, **extra})
+    assert refused.status_code == 403 and "cross-site" in refused.json()["detail"]
+    assert c.delete("/api/jobs/j_000000000000", headers={**HEADERS, **extra}).status_code == 403
+    assert c.get("/api/jobs").json()["jobs"] == [] and popen.calls == []
+    same = c.post("/api/jobs", content=json.dumps(spec_dict("t_ok")), headers={**HEADERS, "Origin": "http://127.0.0.1:8765"})
+    assert same.status_code == 201
 
 
 @pytest.mark.parametrize("mutation", [
@@ -233,7 +289,7 @@ def test_other_methods_are_refused(client) -> None:
 
 def test_fixture_mode_lists_nothing_and_refuses_new_jobs() -> None:
     app = with_jobs(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})))
-    with TestClient(app, base_url=LOCAL, client=LOOPBACK) as c:
+    with api_client(app, base_url=LOCAL, client=LOOPBACK) as c:
         listing = c.get("/api/jobs").json()
         assert listing["jobs"] == [] and listing["enabled"] is False
         response = post(c, spec_dict())

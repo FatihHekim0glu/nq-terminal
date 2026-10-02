@@ -1,0 +1,25 @@
+/* The launch page: one message, in the terminal's own look. The colours, fonts and base rules come from the shared
+   stylesheet (src/theme/index.css, imported by main.ts), so every pair here is one the contrast tests already audit in
+   both looks; this file lays the text out and writes no colour literal. */
+.session {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+
+.session-title {
+  margin-bottom: 1rem;
+  color: var(--data);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-bold);
+}
+
+.session-status {
+  margin-bottom: 0.5rem;
+  font-size: var(--fs-quote);
+}
+
+.session-hint {
+  color: var(--muted);
+  font-size: var(--fs-data);
+}

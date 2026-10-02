@@ -16,6 +16,8 @@ from nq_terminal.api.jobs import ALLOWED_WRITE_ROUTES
 from nq_terminal.app import GetOnlyError, assert_get_only, create_app, non_get_routes
 from nq_terminal.settings import ALLOWED_HOSTS, load_settings
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)  # TestClient's default client ("testclient") is not an address
 
@@ -38,8 +40,9 @@ def with_dist(tmp_path: Path):
     return dataclasses.replace(load_settings({}), web_dist=dist)
 
 
-def client(settings) -> TestClient:
-    return TestClient(create_app(settings), base_url=LOCAL, client=LOOPBACK)
+def client(settings, origin: str | None = None) -> TestClient:
+    """The shared client; `origin` is the page origin its session is bound to (default 127.0.0.1 on the port)."""
+    return api_client(create_app(settings), origin=origin, base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.1:8765", "localhost", "localhost:8765"])
@@ -65,12 +68,12 @@ def test_trusted_host_middleware_lists_only_loopback(no_dist):
 def test_no_cors(no_dist):
     app = create_app(no_dist)
     assert not [m for m in app.user_middleware if m.cls is CORSMiddleware]
-    c = TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    c = api_client(app, base_url=LOCAL, client=LOOPBACK)
     r = c.get("/api/health", headers={"origin": "http://evil.example"})
     assert "access-control-allow-origin" not in r.headers
     pre = c.options("/api/health", headers={"origin": "http://evil.example",
                                             "access-control-request-method": "GET"})
-    assert pre.status_code == 405
+    assert pre.status_code == 403  # D2: a method other than GET or HEAD from a foreign origin is refused before routing
     assert "access-control-allow-origin" not in pre.headers
 
 
@@ -175,6 +178,7 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/market/term-structure/{root}",  # P2 (MV6)
     "/api/ib/snapshot",  # P2 (U3, read only)
     "/api/jobs", "/api/jobs/{job_id}",  # P2 (U3, the only writes)
+    "/api/desktop/proof", "/api/session", "/api/session/code", "/api/session/redeem",  # W2A (03 2.2, 4.2)
 }
 PHASE_3_PREFIX = "/api/analytics/"  # section 4 routes a concurrent Phase 3 build adds; checked by the contract
 
@@ -191,7 +195,7 @@ def test_openapi_is_served_under_api(no_dist):
 def test_static_mount_absent_without_dist(no_dist):
     app = create_app(no_dist)
     assert not [r for r in app.routes if isinstance(getattr(r, "app", None), StaticFiles)]
-    assert TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/").status_code == 404
+    assert api_client(app, base_url=LOCAL, client=LOOPBACK).get("/").status_code == 404
 
 
 def test_static_mount_serves_dist_when_present(with_dist):
@@ -239,17 +243,17 @@ def test_a_static_files_subclass_is_caught_born_failing(with_dist, tmp_path: Pat
 
 @pytest.mark.parametrize("peer", [("192.168.1.50", 50000), ("10.0.0.7", 1234), ("testclient", 50000)])
 def test_a_client_that_is_not_loopback_gets_403(no_dist, peer):
-    r = TestClient(create_app(no_dist), base_url=LOCAL, client=peer).get("/api/health", headers={"host": "localhost"})
+    r = api_client(create_app(no_dist), base_url=LOCAL, client=peer).get("/api/health", headers={"host": "localhost"})
     assert r.status_code == 403
 
 
 def test_a_loopback_ipv6_client_is_served(no_dist):
-    r = TestClient(create_app(no_dist), base_url=LOCAL, client=("::1", 50000)).get("/api/health")
+    r = api_client(create_app(no_dist), base_url=LOCAL, client=("::1", 50000)).get("/api/health")
     assert r.status_code == 200
 
 
 def test_a_request_that_arrived_on_a_lan_interface_gets_403(no_dist):
-    c = TestClient(create_app(no_dist), base_url="http://192.168.1.5:8765", client=LOOPBACK)
+    c = api_client(create_app(no_dist), base_url="http://192.168.1.5:8765", client=LOOPBACK)
     assert c.get("/api/health", headers={"host": "127.0.0.1:8765"}).status_code == 403
 
 
@@ -262,14 +266,22 @@ def test_the_launcher_binds_loopback_only(monkeypatch):
         def __init__(self, config):
             configs.append(config)
 
-        def run(self):
-            ran.append(1)
+        def run(self, sockets=None):
+            ran.append(sockets)
+
+    class StandInSocket:  # the real bind would take 8765, which the owner's terminal may hold
+        def __init__(self, settings):
+            self.port = settings.port
+
+        def getsockname(self):
+            return ("127.0.0.1", self.port)
 
     monkeypatch.setattr(launcher.uvicorn, "Server", StandInServer)
+    monkeypatch.setattr(launcher, "bind_socket", StandInSocket)
     launcher.main({})
     launcher.main({"NQT_PORT": "9001"})
     first, second = configs
-    assert ran == [1, 1]
+    assert [len(sockets) for sockets in ran] == [1, 1]  # each server is handed the socket bound here
     assert first.host == second.host == "127.0.0.1"
     assert (first.port, second.port) == (8765, 9001)
     assert first.server_header is False and first.proxy_headers is False
@@ -287,6 +299,7 @@ def test_the_launcher_binds_loopback_only(monkeypatch):
     {"origin": "null"},
     {"origin": "http://127.0.0.1.evil.example:8765"},
     {"origin": "http://localhost:3000"},
+    {"origin": "http://localhost:5173"},  # the Vite dev port is a same origin only under NQT_DEV=1
 ])
 def test_cross_site_api_requests_get_403(no_dist, headers):
     r = client(no_dist).get("/api/health", headers={"host": "127.0.0.1:8765", **headers})
@@ -300,11 +313,29 @@ def test_cross_site_api_requests_get_403(no_dist, headers):
     {"sec-fetch-site": "none"},
     {"origin": "http://127.0.0.1:8765"},
     {"origin": "http://localhost:8765", "sec-fetch-site": "same-origin"},
-    {"origin": "http://localhost:5173"},
 ])
 def test_same_origin_api_requests_are_served(no_dist, headers):
-    r = client(no_dist).get("/api/health", headers={"host": "127.0.0.1:8765", **headers})
+    r = client(no_dist, headers.get("origin")).get("/api/health", headers={"host": "127.0.0.1:8765", **headers})
     assert r.status_code == 200
+
+
+def test_the_vite_dev_origin_is_served_under_nqt_dev(no_dist):
+    dev = dataclasses.replace(no_dist, dev=True)
+    r = client(dev, "http://localhost:5173").get("/api/health", headers={"host": "127.0.0.1:8765",
+                                                                        "origin": "http://localhost:5173"})
+    assert r.status_code == 200
+
+
+def test_the_origin_list_follows_the_bound_port_and_port_zero_has_none(no_dist):
+    bound = dataclasses.replace(no_dist, port=54321)
+    ok = client(bound, "http://localhost:54321").get("/api/health", headers={"host": "127.0.0.1:54321",
+                                                                             "origin": "http://localhost:54321"})
+    old = client(bound, "http://localhost:8765").get("/api/health", headers={"host": "127.0.0.1:54321",
+                                                                             "origin": "http://localhost:8765"})
+    unbound = dataclasses.replace(no_dist, port=0)
+    none = client(unbound, "http://localhost:8765").get("/api/health", headers={"host": "127.0.0.1",
+                                                                                "origin": "http://localhost:8765"})
+    assert (ok.status_code, old.status_code, none.status_code) == (200, 403, 403)
 
 
 def test_a_cross_site_navigation_to_the_spa_is_still_served(with_dist):
@@ -330,4 +361,4 @@ def test_security_headers_on_static_files_and_refusals(with_dist):
     c = client(with_dist)
     _assert_security_headers(c.get("/"))
     _assert_security_headers(c.get("/api/health", headers={"sec-fetch-site": "cross-site"}))
-    _assert_security_headers(TestClient(create_app(with_dist), base_url=LOCAL, client=("10.0.0.7", 1)).get("/"))
+    _assert_security_headers(api_client(create_app(with_dist), base_url=LOCAL, client=("10.0.0.7", 1)).get("/"))

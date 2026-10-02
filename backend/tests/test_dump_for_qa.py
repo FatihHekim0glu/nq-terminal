@@ -63,6 +63,8 @@ from fastapi.testclient import TestClient
 from nq_lab import sizing_stats
 from nq_lab.config import RESULTS, ROOT
 
+from conftest import api_client
+
 SCHEMA = "nqt-qa-dump/1"
 PREFIX = "nqt_qa_"
 ENV = "NQT_QA_DUMP_DIR"
@@ -617,7 +619,7 @@ def _fixture_client(state: Path, log_dir: Path) -> TestClient:
     from fakes import FIXTURES
     from fixture_app import create_fixture_app
     env = {"NQT_FIXTURE_DIR": str(FIXTURES), "NQT_STATE_DIR": str(state)}
-    return TestClient(create_fixture_app(env, log_dir=log_dir), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_fixture_app(env, log_dir=log_dir), base_url=LOCAL, client=LOOPBACK)
 
 
 def _cache_stats(client: TestClient):

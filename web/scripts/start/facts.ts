@@ -9,7 +9,8 @@ import net from 'node:net'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { requiredMajor } from './nodeGuard.mjs'
-import { BACKEND_PORT, DEMO_PORT, DEV_PORT, FENCE, LOOPBACK, type Facts, type PortState } from './plan.ts'
+import { BACKEND_PORT, DEMO_PORT, DEV_PORT, FENCE, LOOPBACK, type Facts, type LockFact, type PortState } from './plan.ts'
+import { answersProof, readLock, verifyBackend } from './session.ts'
 
 const IMPORT_TIMEOUT_MS = 20_000
 const CONTRACT_TIMEOUT_MS = 60_000
@@ -212,11 +213,54 @@ function canConnect(port: number): Promise<boolean> {
   })
 }
 
-/** 'free' when nothing accepts a connection; 'terminal' when /api/health answers 200 with the fence; else 'busy'. */
+/**
+ * 'free' when nothing accepts a connection; 'terminal' when a terminal backend answers: the proof route of this
+ * generation (it needs no session), or the health route of an older one (200 with the fence); else 'busy'.
+ */
 export async function portState(port: number): Promise<PortState> {
   if (!(await canConnect(port))) return 'free'
+  if (await answersProof(port)) return 'terminal'
   const reply = await httpGetLoopback(`http://${LOOPBACK}:${port}/api/health`, HEALTH_TIMEOUT_MS)
   return reply !== null && reply.status === 200 && reply.body.includes(FENCE) ? 'terminal' : 'busy'
+}
+
+/** The state folder of this lab's backend: NQT_STATE_DIR when given, else terminal/state. */
+export function stateDirOf(terminalDir: string, env: NodeJS.ProcessEnv): string {
+  const given = env.NQT_STATE_DIR
+  return given !== undefined && given.trim() !== '' ? resolve(given.trim()) : join(terminalDir, 'state')
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM' // alive, but not ours to signal
+  }
+}
+
+/** The lock file is believed only when this user owns it and nobody else can read or write it (mode 0600 on macOS). */
+function ownerOnly(path: string, platform: string): boolean {
+  if (platform === 'win32') return true // the Windows launcher (start.ps1) checks the access list itself
+  try {
+    const info = statSync(path)
+    const uid = typeof process.getuid === 'function' ? process.getuid() : info.uid
+    return info.uid === uid && (info.mode & 0o077) === 0
+  } catch {
+    return false
+  }
+}
+
+/**
+ * What the lock says about the backend of this lab. A live backend is one whose pid exists and which answers a fresh
+ * nonce with the token holder's MAC: the token is never sent to anything that has not proved itself first.
+ */
+export async function lockFact(stateDir: string, platform: string): Promise<LockFact> {
+  const info = readLock(stateDir)
+  if (info === null) return { state: 'none', port: null }
+  if (!ownerOnly(join(stateDir, 'backend.lock'), platform)) return { state: 'untrusted', port: info.port }
+  if (!processAlive(info.pid)) return { state: 'stale', port: info.port }
+  return { state: (await verifyBackend(info.token, info.port, info.port, info.pid)) ? 'live' : 'unproven', port: info.port }
 }
 
 export async function gatherFacts(input: FactsInput): Promise<Facts> {
@@ -225,7 +269,8 @@ export async function gatherFacts(input: FactsInput): Promise<Facts> {
   const web = join(terminalDir, 'web')
   const labRoot = labRootOf(terminalDir, env)
   const numbers = [...new Set([BACKEND_PORT, DEV_PORT, DEMO_PORT, ...(input.ports ?? [])])]
-  const states = await Promise.all(numbers.map((port) => portState(port)))
+  const stateDir = stateDirOf(terminalDir, env)
+  const [states, lock] = await Promise.all([Promise.all(numbers.map((port) => portState(port))), lockFact(stateDir, platform)])
   const ports: Record<string, PortState> = {}
   numbers.forEach((port, index) => {
     ports[String(port)] = states[index] ?? 'free'
@@ -244,5 +289,7 @@ export async function gatherFacts(input: FactsInput): Promise<Facts> {
     contract: contractState(web, env, input.contract ?? false),
     fixtureDir: env.NQT_FIXTURE_DIR !== undefined && env.NQT_FIXTURE_DIR !== '' ? env.NQT_FIXTURE_DIR : null,
     buildNeeded: buildNeeded(web),
+    stateDir,
+    lock,
   }
 }

@@ -31,6 +31,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, make_fake_serve
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 
@@ -44,12 +46,12 @@ def real_research() -> ResearchService:
 def real_api(tmp_path_factory) -> TestClient:
     app = create_app(load_settings({}))
     app.state.serve_fn = make_fake_serve(tmp_path_factory.mktemp("log") / "oos_access_log.jsonl")
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")
 def api() -> TestClient:
-    return TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url=LOCAL,
+    return api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url=LOCAL,
                       client=LOOPBACK)
 
 

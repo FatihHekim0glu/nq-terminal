@@ -52,7 +52,7 @@ from nq_terminal.models.live import (
     Performance,
 )
 from nq_terminal.services import journals, live_routes
-from nq_terminal.services.files import FileAccessError, FileCache, thaw
+from nq_terminal.services.files import FileAccessError, FileCache, file_cache, thaw
 from nq_terminal.settings import Settings
 
 router = APIRouter(prefix="/api/live", tags=["live"], responses=error_responses(404, 413, 422))
@@ -91,7 +91,7 @@ def live_monitor(request: Request) -> journals.LiveMonitor:
 
 
 def _files(request: Request) -> FileCache:
-    return _state(request, "live_files", lambda: FileCache(roots=(_settings(request).data_root,)))
+    return _state(request, "live_files", lambda: file_cache(_settings(request).file_cache_bytes, roots=(_settings(request).data_root,)))
 
 
 def _utc(mtime_ns: int | None) -> str | None:

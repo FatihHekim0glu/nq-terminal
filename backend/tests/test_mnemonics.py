@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import re
 
-from fastapi.testclient import TestClient
 
 from nq_terminal import constants
 from nq_terminal.app import create_app
 from nq_terminal.settings import TERMINAL_DIR, load_settings
+
+from conftest import api_client
 
 UI_SPEC = TERMINAL_DIR / "docs" / "UI_SPEC.md"
 ROW = re.compile(r"^\|\s*(?P<codes>(?:`[A-Z]+`\s*)+)\|[^|]*\|\s*(?P<pri>P\d)\s*\|\s*$")
@@ -40,7 +41,7 @@ def test_the_mnemonic_table_equals_ui_spec_section_5():
 
 
 def test_commands_serve_the_constants_table():
-    body = TestClient(create_app(load_settings({})), base_url="http://127.0.0.1",
+    body = api_client(create_app(load_settings({})), base_url="http://127.0.0.1",
                       client=("127.0.0.1", 50000)).get("/api/commands").json()
     assert [(m["code"], m["priority"]) for m in body["mnemonics"]] == [(c, p) for c, _, p, _ in constants.MNEMONICS]
     roots = {i["root"]: i["sector"] for i in body["instruments"]}

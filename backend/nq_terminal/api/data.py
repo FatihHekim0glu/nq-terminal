@@ -78,7 +78,7 @@ from nq_terminal.services.catalog import (
     processed_dir,
 )
 from nq_terminal.services.fence import fence_filter
-from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError, redact_local_paths, thaw
+from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError, file_cache, redact_local_paths, thaw
 from nq_terminal.services.market import (
     BASIS,
     HORIZONS,
@@ -167,7 +167,7 @@ def build_services(settings: Settings, serve_fn: ServeFn | None, catalog: Catalo
     serve = counted_serve(serve_fn) if serve_fn is not None else (None if settings.fixture_mode else _gated_serve())
     bars = BarService(serve, cache_bytes=settings.cache_bytes) if serve is not None else None
     return DataServices(bars=bars, catalog=catalog if catalog is not None else default_catalog(settings),
-                        files=FileCache(roots=[settings.results_dir]), settings=settings)
+                        files=file_cache(settings.file_cache_bytes, roots=[settings.results_dir]), settings=settings)
 
 
 def services_for(state: Any) -> DataServices:

@@ -12,7 +12,7 @@ import { RUNS } from './runs'
  * GET /api/health at `now`. Versions and pins as the App tests' fixture health reads them (src/App.test.tsx); the
  * sealed pins as the fixture files hold them (backend/tests/fixtures/manifest.json); no gate read, nothing cached.
  */
-export function health(now: Date): Schemas['Health'] {
+export function health(now: Date): Schemas['DesktopHealth'] {
   return {
     now_utc: now.toISOString(),
     nautilus_version: '1.231.0',
@@ -23,6 +23,11 @@ export function health(now: Date): Schemas['Health'] {
     gate_reads_this_process: 0,
     cache: { series: 0, bytes: 0 },
     fixture_mode: true,
+    // The shell fields (03 4.4, 4.6): the demo is a static page, so it names no contract hash and has no fixed port.
+    contract: 1,
+    openapi_sha256: null,
+    dist: 'current',
+    port_fixed: false,
   }
 }
 

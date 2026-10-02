@@ -17,13 +17,15 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve
 
+from conftest import api_client
+
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory) -> TestClient:
     app = create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)}))
     app.state.serve_fn = make_fake_serve(Path(tmp_path_factory.mktemp("log")) / "oos_access_log.jsonl")
     app.state.catalog = FakeCatalog()
-    return TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+    return api_client(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
 
 def test_the_last_rolling_value_equals_the_universe_matrix(client):

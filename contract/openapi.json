@@ -3117,6 +3117,122 @@
         "title": "DesExtract",
         "type": "object"
       },
+      "DesktopHealth": {
+        "description": "Health plus the fields the shell and the page compare (03 sections 4.4, 4.6 and 7.1).",
+        "properties": {
+          "cache": {
+            "$ref": "#/components/schemas/CacheStats"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "integer"
+          },
+          "dist": {
+            "enum": [
+              "current",
+              "stale",
+              "missing"
+            ],
+            "title": "Dist",
+            "type": "string"
+          },
+          "fence": {
+            "$ref": "#/components/schemas/Fence"
+          },
+          "fixture_mode": {
+            "title": "Fixture Mode",
+            "type": "boolean"
+          },
+          "gate_reads_this_process": {
+            "minimum": 0.0,
+            "title": "Gate Reads This Process",
+            "type": "integer"
+          },
+          "kill_switch_on": {
+            "title": "Kill Switch On",
+            "type": "boolean"
+          },
+          "nautilus_version": {
+            "title": "Nautilus Version",
+            "type": "string"
+          },
+          "now_utc": {
+            "title": "Now Utc",
+            "type": "string"
+          },
+          "openapi_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openapi Sha256"
+          },
+          "pins": {
+            "$ref": "#/components/schemas/Pins"
+          },
+          "port_fixed": {
+            "title": "Port Fixed",
+            "type": "boolean"
+          },
+          "sealed": {
+            "$ref": "#/components/schemas/SealedStatus"
+          }
+        },
+        "required": [
+          "now_utc",
+          "nautilus_version",
+          "pins",
+          "fence",
+          "sealed",
+          "kill_switch_on",
+          "gate_reads_this_process",
+          "cache",
+          "fixture_mode",
+          "contract",
+          "openapi_sha256",
+          "dist",
+          "port_fixed"
+        ],
+        "title": "DesktopHealth",
+        "type": "object"
+      },
+      "DesktopProof": {
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "integer"
+          },
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "proof": {
+            "title": "Proof",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proof",
+          "root",
+          "prefix",
+          "contract",
+          "pid"
+        ],
+        "title": "DesktopProof",
+        "type": "object"
+      },
       "DistributionView": {
         "properties": {
           "histogram": {
@@ -5792,56 +5908,6 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "Health": {
-        "properties": {
-          "cache": {
-            "$ref": "#/components/schemas/CacheStats"
-          },
-          "fence": {
-            "$ref": "#/components/schemas/Fence"
-          },
-          "fixture_mode": {
-            "title": "Fixture Mode",
-            "type": "boolean"
-          },
-          "gate_reads_this_process": {
-            "minimum": 0.0,
-            "title": "Gate Reads This Process",
-            "type": "integer"
-          },
-          "kill_switch_on": {
-            "title": "Kill Switch On",
-            "type": "boolean"
-          },
-          "nautilus_version": {
-            "title": "Nautilus Version",
-            "type": "string"
-          },
-          "now_utc": {
-            "title": "Now Utc",
-            "type": "string"
-          },
-          "pins": {
-            "$ref": "#/components/schemas/Pins"
-          },
-          "sealed": {
-            "$ref": "#/components/schemas/SealedStatus"
-          }
-        },
-        "required": [
-          "now_utc",
-          "nautilus_version",
-          "pins",
-          "fence",
-          "sealed",
-          "kill_switch_on",
-          "gate_reads_this_process",
-          "cache",
-          "fixture_mode"
-        ],
-        "title": "Health",
-        "type": "object"
-      },
       "HistogramView": {
         "description": "RD1: Freedman-Diaconis bins (Sturges when the interquartile range is 0; `bin_rule` names the rule), the\nfitted normal as expected counts, and the VaR lines.",
         "properties": {
@@ -8188,6 +8254,24 @@
           "data"
         ],
         "title": "LastClose",
+        "type": "object"
+      },
+      "LaunchCode": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "expires_in_s": {
+            "title": "Expires In S",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "expires_in_s"
+        ],
+        "title": "LaunchCode",
         "type": "object"
       },
       "LedgerCommand": {
@@ -14693,6 +14777,24 @@
         "title": "SessionFlags",
         "type": "object"
       },
+      "SessionIssued": {
+        "properties": {
+          "cookie": {
+            "title": "Cookie",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "cookie"
+        ],
+        "title": "SessionIssued",
+        "type": "object"
+      },
       "SeverityLevel": {
         "properties": {
           "level": {
@@ -20921,6 +21023,50 @@
         ]
       }
     },
+    "/api/desktop/proof": {
+      "get": {
+        "description": "The challenge-response proof: no Authorization header, no secret in or out.",
+        "operationId": "desktop_proof_api_desktop_proof_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "nonce",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Nonce",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesktopProof"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Desktop Proof",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
     "/api/dq/calendar/{symbol}": {
       "get": {
         "description": "One state per session for `symbol`, with the reason where the day is not plain vendor data.",
@@ -21324,14 +21470,14 @@
     },
     "/api/health": {
       "get": {
-        "description": "Versions, the in-sample fence, sealed-window pin status, kill switch and gate counters.",
+        "description": "Versions, the in-sample fence, sealed-window pin status, kill switch, gate counters and the desktop fields.",
         "operationId": "health_api_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Health"
+                  "$ref": "#/components/schemas/DesktopHealth"
                 }
               }
             },
@@ -21712,7 +21858,7 @@
                 }
               }
             },
-            "description": "the job runner is off (fixture mode)"
+            "description": "the job runner is off in this backend (fixture mode, NQT_JOBS=off, or not the lab's own backend)"
           }
         },
         "summary": "List Jobs",
@@ -21822,7 +21968,7 @@
                 }
               }
             },
-            "description": "the job runner is off (fixture mode)"
+            "description": "the job runner is off in this backend (fixture mode, NQT_JOBS=off, or not the lab's own backend)"
           }
         },
         "summary": "Queue Job",
@@ -21906,7 +22052,7 @@
                 }
               }
             },
-            "description": "the job runner is off (fixture mode)"
+            "description": "the job runner is off in this backend (fixture mode, NQT_JOBS=off, or not the lab's own backend)"
           }
         },
         "summary": "Remove Job",
@@ -21977,7 +22123,7 @@
                 }
               }
             },
-            "description": "the job runner is off (fixture mode)"
+            "description": "the job runner is off in this backend (fixture mode, NQT_JOBS=off, or not the lab's own backend)"
           }
         },
         "summary": "Read Job",
@@ -24591,6 +24737,204 @@
         "summary": "Instrument Seasonality",
         "tags": [
           "seasonality"
+        ]
+      }
+    },
+    "/api/session": {
+      "get": {
+        "description": "The token and one loopback origin buy a session cookie bound to that origin (the shells).",
+        "operationId": "open_session_api_session_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-nqt-origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nqt-Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Session",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
+    "/api/session/code": {
+      "get": {
+        "description": "The token mints a single-use launch code that lives 60 s (the browser launchers).",
+        "operationId": "launch_code_api_session_code_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LaunchCode"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Launch Code",
+        "tags": [
+          "desktop"
+        ]
+      }
+    },
+    "/api/session/redeem": {
+      "get": {
+        "description": "A launch code, sent by the session page, buys a session bound to that page's origin; the code dies.",
+        "operationId": "redeem_code_api_session_redeem_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-nqt-code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Nqt-Code"
+            }
+          },
+          {
+            "in": "header",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          },
+          {
+            "in": "header",
+            "name": "sec-fetch-site",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sec-Fetch-Site"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Redeem Code",
+        "tags": [
+          "desktop"
         ]
       }
     }

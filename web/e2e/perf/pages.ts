@@ -82,11 +82,13 @@ export async function stopTrace(browser: Browser, info: TestInfo, name: string):
   return parseTrace(raw)
 }
 
-/** A fresh context: empty HTTP cache and storage, the project's viewport and locale. */
+/** A fresh context: empty HTTP cache and storage, the project's viewport and locale. It keeps the session cookie the
+ * project's global set-up saved (use.storageState), since every /api path is behind the token (03 4.2). */
 export async function freshContext(browser: Browser, info: TestInfo): Promise<BrowserContext> {
   const use = info.project.use
   return browser.newContext({
     baseURL: use.baseURL,
+    storageState: use.storageState,
     viewport: { width: 1920, height: 1080 },
     deviceScaleFactor: 1,
     colorScheme: 'dark',

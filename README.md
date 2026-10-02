@@ -33,7 +33,7 @@ terminal: amber on black, function keys, a command line.
 
 ## Highlights
 
-- **Read only by construction.** All 75 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
+- **Read only by construction.** All 79 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
   `DELETE /api/jobs/{job_id}`), and tests fail on any other method or on a write call in the backend. See the
   [safety model](#safety-model).
 - **No order path.** The one IB client is read only (an optional paper snapshot on client id 95), and tests fail on an
@@ -366,8 +366,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1
 
 The script checks that the venv imports FastAPI and uvicorn. When `web\dist` is older than the front-end sources it
 rebuilds it (`pnpm install --frozen-lockfile`, then `pnpm build`). It then starts the backend on
-http://127.0.0.1:8765 and opens the browser once `/api/health` answers. Ctrl+C stops everything it started. If the
-terminal already answers on that port, the script opens the browser on it and starts nothing.
+http://127.0.0.1:8765 with an allow-listed environment and opens the browser on a one-time link
+(`/session.html#<code>`) that swaps its code for a session cookie. Every `/api` path, the live stream included,
+answers 401 without that cookie, and a write needs a same-origin `Origin` as well. The code lives 60 seconds and works
+once. The script keeps the backend's input open for as long as its window runs: **closing the window stops the
+backend** (it stops its jobs and exits within 5 seconds); Ctrl+C does the same. When a backend of this lab is already
+running, the script checks that it is the lab's own, opens a fresh link on it and starts nothing; it never stops a
+backend it did not start. If a terminal from before the token holds port 8765, the script says so and stops: close
+that terminal, then start again.
 
 In the browser, type a function code in the command line and press Enter (`<GO>`). `HELP <GO>` lists every function
 and key; see [Keyboard first](#keyboard-first).
@@ -378,13 +384,15 @@ and key; see [Keyboard first](#keyboard-first).
 | Option | Effect |
 |---|---|
 | `-Port 8790` | Serve on another loopback port (default 8765) |
-| `-NoBrowser` | Do not open the browser |
+| `-NoBrowser` | Do not open the browser: print the one-time link instead |
 | `-NoBuild` | Serve `web\dist` as it is, even when it is older than the sources |
 | `-DryRun` | Print the plan (paths, commands, port, build decision) and start nothing |
-| `-Dev` | Backend under `uvicorn --reload` on 8765, plus the Vite dev server on 127.0.0.1:5173 |
+| `-Dev` | Backend under `uvicorn --reload`, plus the Vite dev server on 127.0.0.1:5173 |
+| `-DevPort 5180` | Serve the dev server on another port (default 5173) |
 
-`-Dev` is for front-end work: the dev server proxies `/api` to the backend, and port 8765 must be free, so stop the
-normal server first.
+`-Dev` is for front-end work: the dev server proxies `/api` to the port the backend's lock records and keeps the
+browser's `Origin`. It stops with a message when a backend already holds the lock, so stop the normal server first;
+each reload ends the sessions and the script prints a fresh link.
 
 To see what the script would do without starting anything:
 
@@ -438,10 +446,11 @@ flowchart TB
 ```
 
 - **Backend.** FastAPI 0.141.1 on uvicorn 0.54.0 in the nq-lab venv, package `nq_terminal`, JSON through orjson. It
-  binds 127.0.0.1, answers GET only, and serves the built front end and `/api` from one origin.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 75 paths. pytest compares `app.openapi()` with
+  binds 127.0.0.1, answers GET only (bar the two JOBS writes), refuses every `/api` request that has no live session
+  cookie, and serves the built front end and `/api` from one origin.
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 79 paths. pytest compares `app.openapi()` with
   it; `pnpm gen:api` generates the front end's types with openapi-typescript, and `pnpm test` fails first when they
-  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 75 paths with the screens that
+  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 79 paths with the screens that
   read them, and a test keeps that index equal to the contract.
 - **Front end.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1: dockview panels under a command line built on cmdk,
   with the terminal's own key handler, zustand and TanStack Query. Every screen loads lazily, and one GET client
@@ -596,14 +605,14 @@ PASS 467, FAIL 0; on 2026-10-02 the whole dump folder, P2 and LV6 bundles includ
 
 <br clear="right">
 
-| Layer | What it proves | Size (2026-10-02, working tree on `c7f9e61`) | Command |
+| Layer | What it proves | Size (2026-10-02, working tree on `3c06235`) | Command |
 |---|---|---|---|
-| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 1,694 test functions in 118 files (2,985 cases) | nq-lab venv's pytest, see Test commands |
-| qa cross-check | Every dumped value, recomputed by the reference libraries | 296 tests in 18 files, plus `crosscheck --strict` (2026-10-02: PASS 2,455, FAIL 0, INFO 104) | `uv run --project terminal\qa ...` |
-| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 6,972 tests in 467 files (45 skipped) | `pnpm --dir terminal\web test` |
+| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 2,107 test functions in 144 files (3,675 cases) | nq-lab venv's pytest, see Test commands |
+| qa cross-check | Every dumped value, recomputed by the reference libraries | 296 tests in 18 files, plus `crosscheck --strict` (2026-10-02: PASS 2,495, FAIL 0, INFO 104) | `uv run --project terminal\qa ...` |
+| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 7,080 tests in 477 files (47 skipped) | `pnpm --dir terminal\web test` |
 | Types and build | `tsc -b` over the app; a production build under the bundle budgets | n/a | `test:types`, `build` |
-| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 390 tests in 34 specs (387 run by `pnpm e2e`, 3 perf), 210 screenshot baselines | `pnpm --dir terminal\web e2e` |
-| Playwright offline (macOS, Linux) | The same specs against the demo layer, served as `GET /api/*` from Node: no Python and no backend | 185 tests in 14 files, plus 3 performance tests; each command skips 1 | `pnpm --dir web e2e:offline`, `e2e:offline:perf` |
+| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 391 tests in 34 specs (388 run by `pnpm e2e`, 3 perf), 210 screenshot baselines | `pnpm --dir terminal\web e2e` |
+| Playwright offline (macOS, Linux) | The same specs against the demo layer, served as `GET /api/*` from Node: no Python and no backend | 190 tests in 14 files, plus 3 performance tests; `e2e:offline` skips 2 and `e2e:offline:perf` skips 1 | `pnpm --dir web e2e:offline`, `e2e:offline:perf` |
 
 The table gives suite sizes, not pass rates. The backend suite needs the private nq-lab venv. Two tests assume the
 nq-lab layout, with this repository as `terminal\` inside nq-lab, and fail outside it:
@@ -628,6 +637,16 @@ pnpm --dir terminal\web test
 pnpm --dir terminal\web test:types
 pnpm --dir terminal\web build
 ```
+
+Every `/api` path is behind a session cookie, so tests talk to the app only through the shared client in
+`backend\tests\conftest.py`: `api_client(app)` (or the `authed_client` fixture) holds a live session. `bare_client` has
+none and is for the tests of the refusals, the proof and the session routes only; no test builds a `TestClient`
+itself. A test or smoke backend gets its own temporary `NQT_STATE_DIR` and `NQT_JOBS=off`, so it never shares the lock
+or the job queue with the terminal you use. A backend that a test starts in a process of its own is reached the same
+way as the page does it: `GET /api/session` with the token in `Authorization: NQT <hex>` and the page origin in
+`X-NQT-Origin` gives the cookie, and a write sends that origin as `Origin`. The browser projects redeem a one-time code
+in a global set-up (`web\e2e\session.setup.ts`) and keep the cookie as storage state; the offline project needs none.
+`smoke_real.ps1` reads the token from the backend's own lock, mints a code and hands the link to Playwright.
 
 The Playwright tests start their own fixture backend and a preview server on two spare loopback ports (8795 and
 4273 by default). Nothing they do reaches the research files or the real audit log. Choose other ports when those
@@ -696,13 +715,14 @@ corepack pnpm --dir web e2e:offline:perf
 - **What it leaves out.** Two probes of a real backend's routes (write methods, a cross-site read) are excluded, and
   GIP is not in the offline screen list, because the demo has no 1m bars.
 
-`e2e:offline` lists 185 tests in 14 files. With the demo dataset as it is, one is skipped by name and one more leaves one
+`e2e:offline` lists 190 tests in 14 files. With the demo dataset as it is, two are skipped by name and one more leaves one
 step out and still passes; the step prints an `[offline-skip]` line to the run output. `e2e:offline:perf` lists 3 tests and
 skips one. Every skip is a test whose data the demo dataset does not hold, and each says so:
 
 | Test | Skipped or trimmed because |
 |---|---|
 | `e2e/flows/keyboard.spec.ts`: NQ GIP 2019-03-14, Left and Right reach the chart (the GIP iteration only) | Test skipped. 1m bars are not in the demo dataset |
+| `e2e/flows/safety.spec.ts`: every /api path refuses a missing cookie, a wrong cookie and a foreign origin | Test skipped. The demo layer has no session |
 | `e2e/perf/budgets.spec.ts`: GIP pan and zoom run near 60 fps | Test skipped in `e2e:offline:perf`. 1m bars are not in the demo dataset |
 | `e2e/flows/rules.spec.ts`: the fence test, one step (opening NQ GIP 2019-03-14) | Step left out, the rest of the test runs. 1m bars are not in the demo dataset |
 

@@ -37,7 +37,16 @@ Rules
   module is scanned itself. `WRITE_ALLOWED` lists the modules that may write under `terminal/state`: the P2 job
   runner (`services/jobs.py`, U3) and the result cache (`services/result_cache.py`, 02 section 7.2). The result
   cache may write only through names bound by `_cache_file(...)` or `_cache_folder()`, which confine every path to
-  `<state>/cache` at run time; any other write target in that module is flagged (`CONFINED_WRITERS`).
+  `<state>/cache` at run time; any other write target in that module is flagged (`CONFINED_WRITERS`). The backend
+  lock (`desktop/lock.py`, W2A) is the third: its writes are confined to names bound by `lock_file_text(...)`, the
+  `<state>/backend.lock` path, and its one `mkdir` (a fresh lab has no state folder yet) to a name bound by
+  `lock_folder(...)`, the state folder itself.
+- native writes (PROD, OTHER; W2A): Win32 calls reached through ctypes that create, write, move or delete a file
+  (`CreateFileW`, `DeleteFileW`, `MoveFileExW`, `WriteFile`, `SetFileInformationByHandle` and their kin) or start a
+  process (`CreateProcessW`, `ShellExecuteW`, `WinExec`), as a call, a reference or a `getattr` string, count as
+  writes. Only a WRITE_ALLOWED module may make them: the handle calls freely, the path calls only with a first
+  argument that is a confined name (for the lock, bound by `lock_file_text(...)`), and a process start never. Setting
+  a native function's `argtypes`, `restype` or `errcheck` there is a declaration, not a call.
 - order_call: `placeOrder`, `cancelOrder`, `reqGlobalCancel`, `exerciseOptions`, `reqAutoOpenOrders`,
   `reqOpenOrders`, their six `...ProtoBuf` twins, and the Nautilus `submit_order`, `cancel_order`, `modify_order` family, as a call, a
   reference, an import or a `getattr` string. A `def` of those names is allowed (the P2 read-only client
@@ -54,7 +63,9 @@ Rules
 - dynamic (PROD): `exec`, `eval`, `compile` (also as `builtins.*`), `.exec_module()`, and imports by a
   computed name (`importlib.import_module`, `__import__`, `builtins.__import__`, `importlib.__import__`,
   `importlib.util.find_spec`/`module_from_spec`, `runpy`, `pkgutil.resolve_name`), which would hide a
-  module from these bans. A literal module name given to any of them is checked like an import.
+  module from these bans. A literal module name given to any of them is checked like an import. One sanction (W2A):
+  the test-only fixture entry (`desktop/fixture_main.py`) loads `backend/tests/fixture_app.py` by file path, so it may
+  call `module_from_spec` and `.exec_module()`, and its `spec_from_file_location` must name `FIXTURE_APP`.
 - syntax: a file that does not parse fails, rather than being skipped.
 
 These are tripwires, not a sandbox: a name built at run time can still slip past. The run-time guard in
@@ -101,9 +112,29 @@ class Violation:
 
 
 RESULT_CACHE = "backend/nq_terminal/services/result_cache.py"
-WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py", RESULT_CACHE})
+LOCK = "backend/nq_terminal/desktop/lock.py"
+FIXTURE_MAIN = "backend/nq_terminal/desktop/fixture_main.py"
+WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK})
 # Modules on WRITE_ALLOWED whose writes must target a local name bound only by one of these confining calls.
-CONFINED_WRITERS: dict[str, frozenset[str]] = {RESULT_CACHE: frozenset({"_cache_file", "_cache_folder"})}
+CONFINED_WRITERS: dict[str, frozenset[str]] = {RESULT_CACHE: frozenset({"_cache_file", "_cache_folder"}),
+                                               LOCK: frozenset({"lock_file_text", "lock_folder"})}
+# Win32 calls (through ctypes) that write the file system or start a process (W2A).
+NATIVE_PATH_WRITES = frozenset({
+    "CreateFileW", "CreateFileA", "CreateFile2", "DeleteFileW", "DeleteFileA", "MoveFileW", "MoveFileA", "MoveFileExW",
+    "MoveFileExA", "CopyFileW", "CopyFileA", "CopyFileExW", "ReplaceFileW", "CreateDirectoryW", "CreateDirectoryA",
+    "RemoveDirectoryW", "RemoveDirectoryA", "CreateHardLinkW", "CreateSymbolicLinkW", "SetFileAttributesW",
+    "SetNamedSecurityInfoW",
+})
+NATIVE_HANDLE_WRITES = frozenset({"WriteFile", "WriteFileEx", "SetFileInformationByHandle", "SetEndOfFile",
+                                  "SetSecurityInfo"})
+NATIVE_PROCESS = frozenset({"CreateProcessW", "CreateProcessA", "CreateProcessAsUserW", "ShellExecuteW",
+                            "ShellExecuteA", "ShellExecuteExW", "WinExec"})
+NATIVE_WRITES = NATIVE_PATH_WRITES | NATIVE_HANDLE_WRITES | NATIVE_PROCESS
+NATIVE_DECLARATIONS = frozenset({"argtypes", "restype", "errcheck"})
+# The fixture entry loads the test harness by its file path (W2A); nothing else in PROD may.
+DYNAMIC_ALLOWED: dict[str, frozenset[str]] = {FIXTURE_MAIN: frozenset({"importlib.util.module_from_spec",
+                                                                       "exec_module"})}
+FIXTURE_SPEC, FIXTURE_TARGET = "importlib.util.spec_from_file_location", "FIXTURE_APP"
 CONFINED_CALLS = frozenset({"os.replace", "os.remove", "os.unlink", "os.utime", "open", "builtins.open", "io.open"})
 CONFINED_METHODS = frozenset({"write_bytes", "write_text", "unlink", "mkdir", "replace", "open"})
 SAFE_WRITE_KEYWORDS = frozenset({"parents", "exist_ok", "missing_ok", "encoding", "ns"})
@@ -326,6 +357,7 @@ class Scanner(ast.NodeVisitor):
         self.found: dict[tuple[str, int], Violation] = {}
         self.functions: list[ast.AST] = []
         self.confiners = CONFINED_WRITERS.get(where, frozenset())
+        self.native_ok: set[int] = set()
 
     def flag(self, rule: str, node: ast.AST, detail: str) -> None:
         line = getattr(node, "lineno", 0)
@@ -382,7 +414,23 @@ class Scanner(ast.NodeVisitor):
             if not self.check_qualified(full, node):
                 self.check_identifier(alias.name, node)
 
+    def check_native(self, name: str, node: ast.AST) -> None:
+        """A native file or process call outside its sanction (see `sanction_native`) is a write."""
+        if self.scope in (PROD, OTHER) and name in NATIVE_WRITES and id(node) not in self.native_ok:
+            self.flag("write", node, f"{name} is a native call that writes the file system or starts a process")
+
+    def sanction_native(self, node: ast.Call, name: str) -> bool:
+        """WRITE_ALLOWED only: handle calls, and path calls whose first argument is a confined local name."""
+        if self.where not in WRITE_ALLOWED or name in NATIVE_PROCESS or self.scope != PROD:
+            return False
+        if name in NATIVE_HANDLE_WRITES:
+            return True
+        if not (self.functions and self.confiners and node.args and isinstance(node.args[0], ast.Name)):
+            return False
+        return node.args[0].id in _confined_names(self.functions[-1], self.confiners)
+
     def visit_Name(self, node: ast.Name) -> None:
+        self.check_native(node.id, node)
         target = self.aliases.get(node.id)
         if target and self.check_qualified(target, node):
             return
@@ -396,6 +444,11 @@ class Scanner(ast.NodeVisitor):
             func = node.value.func
             if self.dotted(func) == PARQUET_FILE:  # resolves `pq.ParquetFile` and `PF` bound by an alias
                 self.sanctioned.add(id(func))
+        inner = node.value
+        if (node.attr in NATIVE_DECLARATIONS and isinstance(inner, ast.Attribute) and inner.attr in NATIVE_WRITES
+                and self.where in WRITE_ALLOWED and inner.attr not in NATIVE_PROCESS):
+            self.native_ok.add(id(inner))  # `k.CreateFileW.argtypes = [...]` declares, it does not call
+        self.check_native(node.attr, node)
         if self.check_qualified(self.dotted(node), node):
             return
         self.check_identifier(node.attr, node, isinstance(node.ctx, ast.Load))
@@ -415,6 +468,7 @@ class Scanner(ast.NodeVisitor):
         if not isinstance(node.value, str) or id(node) in self.docstrings:
             return
         text = node.value.strip()
+        self.check_native(text, node)
         if text == "serve_sealed" or text in ORDER_NAMES or text in COLUMNAR_READS:
             self.check_identifier(text, node)
         self.check_literal_name(text, node)
@@ -439,6 +493,9 @@ class Scanner(ast.NodeVisitor):
     # ----- calls -----
     def visit_Call(self, node: ast.Call) -> None:
         full = self.dotted(node.func)
+        native = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+        if native in NATIVE_WRITES and self.sanction_native(node, native):
+            self.native_ok.add(id(node.func))
         if any(_data_pair(a, b) for a, b in zip(node.args, node.args[1:])):
             self.flag("data_path", node, "builds a path into data/processed, data/raw or data/sealed_cache")
         self.check_dynamic(node, full)
@@ -469,15 +526,20 @@ class Scanner(ast.NodeVisitor):
         return bool(paths) and all(isinstance(p, ast.Name) and p.id in safe for p in paths)
 
     def check_dynamic(self, node: ast.Call, full: str | None) -> None:
+        sanctioned = DYNAMIC_ALLOWED.get(self.where, frozenset()) if self.scope == PROD else frozenset()
+        if self.where == FIXTURE_MAIN and full == FIXTURE_SPEC and not (
+                len(node.args) >= 2 and isinstance(node.args[1], ast.Name) and node.args[1].id == FIXTURE_TARGET):
+            self.flag("dynamic", node, f"the fixture entry may load only {FIXTURE_TARGET} by its path")
         if full in DYNAMIC_IMPORTERS:
             literals = [a.value for a in node.args if _is_str(a)]
             for text in literals:
                 self.check_module_literal(text, node)
-            if not literals and self.scope == PROD:
+            if not literals and self.scope == PROD and full not in sanctioned:
                 self.flag("dynamic", node, f"{full} with a computed name hides the module from these bans")
         elif full in DYNAMIC_EXEC and self.scope == PROD:
             self.flag("dynamic", node, f"{full}() runs code these bans cannot see")
-        elif getattr(node.func, "attr", None) in DYNAMIC_ATTRS and self.scope == PROD:
+        elif (getattr(node.func, "attr", None) in DYNAMIC_ATTRS and self.scope == PROD
+              and node.func.attr not in sanctioned):
             self.flag("dynamic", node, f".{node.func.attr}() runs a module these bans cannot see")
 
     def check_module_literal(self, text: str, node: ast.AST) -> None:
@@ -725,6 +787,33 @@ BANNED_CASES = [
     banned("write", "def f(self, a):\n    for t in self._cache_file(a).parent.iterdir():\n        t.unlink()",
            where=RESULT_CACHE),
     banned("write", "def f(self, a, mode):\n    t = self._cache_file(a)\n    open(t, mode)", where=RESULT_CACHE),
+    # W2A: native writes through ctypes, and the backend lock confined to its own file.
+    banned("write", "import ctypes\nk = ctypes.WinDLL('kernel32')\n"
+           "k.CreateFileW('x.txt', 0x40000000, 0, None, 1, 0x80, None)"),
+    banned("write", "k.WriteFile(handle, data, 4, None, None)"),
+    banned("write", "k.DeleteFileW(path)", OTHER),
+    banned("write", "move = getattr(k, 'MoveFileExW')"),
+    banned("write", "create = k.CreateFileW"),
+    banned("write", "from ctypes import windll\nwindll.kernel32.SetFileInformationByHandle(h, 4, info, 1)"),
+    banned("write", "k.ShellExecuteW(None, 'open', url, None, None, 1)"),
+    banned("write", "def f(cmd):\n    k.CreateProcessW(None, cmd, None, None, False, 0, None, None, si, pi)",
+           where=LOCK),
+    banned("write", "def f(path):\n    k.CreateFileW(path, 1, 1, None, 1, 0x80, None)", where=LOCK),
+    banned("write", "def f(state, other):\n    target = lock_file_text(state)\n    target = other\n"
+           "    k.CreateFileW(target, 1, 1, None, 1, 0x80, None)", where=LOCK),
+    banned("write", "k.CreateFileW(lock_file_text(state), 1, 1, None, 1, 0x80, None)", where=LOCK),
+    banned("write", "def f(state):\n    k.DeleteFileW(str(state))", where=LOCK),
+    banned("write", "def f(state):\n    target = state / 'other.lock'\n    k.CreateFileW(target, 1)", where=LOCK),
+    banned("write", "k.CreateProcessW.argtypes = []", where=LOCK),
+    banned("write", "open(path, 'w', encoding='utf-8')", where=LOCK),
+    banned("write", "def f(state):\n    target = lock_file_text(state)\n    open(other, 'wb')", where=LOCK),
+    banned("write", "def f(state, other):\n    folder = lock_folder(state)\n    folder = other\n    folder.mkdir()", where=LOCK),
+    banned("write", "def f(state):\n    lock_folder(state).parent.mkdir(parents=True)", where=LOCK),
+    banned("write", "def f(state):\n    state.mkdir(parents=True, exist_ok=True)", where=LOCK),
+    banned("dynamic", "import importlib.util\nspec = importlib.util.spec_from_file_location('m', other)",
+           where=FIXTURE_MAIN),
+    banned("dynamic", "import importlib.util\nmodule = importlib.util.module_from_spec(spec)", where=LOCK),
+    banned("dynamic", "exec(code)", where=FIXTURE_MAIN),
 ]
 
 
@@ -802,6 +891,18 @@ ALLOWED_CASES = [
             where=RESULT_CACHE),
     allowed("import os\ndef f(self, a):\n    t = self._cache_file(a)\n    t.unlink(missing_ok=True)\n    os.utime(t, ns=(1, 1))",
             where=RESULT_CACHE),
+    # W2A: the lock's sanctioned native calls and the fixture entry's one file-path load.
+    allowed("def f(state):\n    target = lock_file_text(state)\n    k.CreateFileW(target, 1, 1, None, 1, 0x80, None)",
+            where=LOCK),
+    allowed("def f(state):\n    folder = lock_folder(state)\n    folder.mkdir(parents=True, exist_ok=True)", where=LOCK),
+    allowed("k.CreateFileW.argtypes = []\nk.CreateFileW.restype = None\nk.WriteFile.argtypes = []", where=LOCK),
+    allowed("def f(h):\n    k.WriteFile(h, data, 4, None, None)\n    k.SetFileInformationByHandle(h, 4, info, 1)",
+            where=LOCK),
+    allowed("def f(state):\n    target = lock_file_text(state)\n    with open(target, 'rb') as fh:\n        fh.read()",
+            where=LOCK),
+    allowed("import importlib.util\nspec = importlib.util.spec_from_file_location('nqt_fixture_app', FIXTURE_APP)\n"
+            "module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)", where=FIXTURE_MAIN),
+    allowed("k.CreateFileW(path, 1, 1, None, 1, 0x80, None)", TEST),
 ]
 
 
@@ -816,10 +917,11 @@ def test_allowed_code_passes(scope: str, where: str, snippet: str) -> None:
     assert scan_source(textwrap.dedent(snippet), where, scope) == []
 
 
-def test_write_allowed_gained_exactly_the_result_cache() -> None:
-    assert WRITE_ALLOWED == {"backend/nq_terminal/services/jobs.py", RESULT_CACHE}
-    assert set(CONFINED_WRITERS) == {RESULT_CACHE}
-    assert (PACKAGE / "services" / "result_cache.py").is_file()
+def test_write_allowed_is_exactly_the_jobs_the_result_cache_and_the_lock() -> None:
+    assert WRITE_ALLOWED == {"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK}
+    assert set(CONFINED_WRITERS) == {RESULT_CACHE, LOCK} and CONFINED_WRITERS[LOCK] == {"lock_file_text", "lock_folder"}
+    assert (PACKAGE / "services" / "result_cache.py").is_file() and (PACKAGE / "desktop" / "lock.py").is_file()
+    assert set(DYNAMIC_ALLOWED) == {FIXTURE_MAIN} and (PACKAGE / "desktop" / "fixture_main.py").is_file()
 
 
 def test_every_rule_has_born_failing_cases() -> None:

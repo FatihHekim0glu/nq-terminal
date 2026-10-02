@@ -28,6 +28,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve, synthetic_loader
 
+from conftest import api_client
+
 LOCAL, LOOPBACK = "http://127.0.0.1", ("127.0.0.1", 50000)
 QUARTER_MONTHS = (3, 6, 9, 12)
 
@@ -241,7 +243,7 @@ def fake(tmp_path: Path):
 
 @pytest.fixture
 def client(fake) -> TestClient:
-    return TestClient(make_app(serve=fake), base_url=LOCAL, client=LOOPBACK)
+    return api_client(make_app(serve=fake), base_url=LOCAL, client=LOOPBACK)
 
 
 def test_the_router_is_get_only(fake):
@@ -292,7 +294,7 @@ def test_the_qa_report_counts_are_compared(tmp_path, fake):
     es, nq = calendar.markets
     report = {"candidates": {"ES": {"qa": {"rolls_total": len(es.rolls)}}, "NQ": {"qa": {"rolls_total": 3}}}}
     (results / roll.QA_REPORT).write_text(json.dumps(report), encoding="utf-8")
-    client = TestClient(make_app(tmp_path / "data", serve=fake), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(tmp_path / "data", serve=fake), base_url=LOCAL, client=LOOPBACK)
     markets = {m["root"]: m for m in client.get("/api/market/rolls").json()["markets"]}
     assert markets["ES"]["qa_rolls_total"] == len(es.rolls) and markets["ES"]["qa_match"] is True
     assert markets["NQ"]["qa_rolls_total"] == 3 and markets["NQ"]["qa_match"] is False
@@ -300,7 +302,7 @@ def test_the_qa_report_counts_are_compared(tmp_path, fake):
 
 
 def test_no_price_source_answers_503():
-    client = TestClient(make_app(), base_url=LOCAL, client=LOOPBACK)
+    client = api_client(make_app(), base_url=LOCAL, client=LOOPBACK)
     assert client.get("/api/market/rolls").status_code == 503
 
 

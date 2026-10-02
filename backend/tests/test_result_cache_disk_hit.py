@@ -33,9 +33,9 @@ CHILD = textwrap.dedent(
     """
     import hashlib, json, os, sys
     from pathlib import Path
-    from fastapi.testclient import TestClient
 
     sys.path[:0] = [{backend!r}, {tests!r}]
+    from conftest import api_client  # the shared authenticated client, in the child process too
     from fixture_app import create_fixture_app
     from nq_terminal.api import data
     from nq_terminal.services import result_cache as rc
@@ -48,7 +48,7 @@ CHILD = textwrap.dedent(
     app = create_fixture_app(env, log_dir=Path({log!r}))
     serve = CountingServe(app.state.serve_fn)
     app.state.serve_fn = serve
-    client = TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+    client = api_client(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
     out = {{}}
     for name, url in {urls!r}.items():
         response = client.get(url)

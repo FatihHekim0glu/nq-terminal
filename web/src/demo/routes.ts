@@ -152,6 +152,12 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/ib/snapshot': () => served(IB_OFF),
   '/api/jobs': () => served(JOBS_OFF),
   '/api/jobs/{job_id}': () => NOT_IN_DEMO,
+
+  // The desktop shell and session routes: the demo has no backend identity and no session to open (W2A)
+  '/api/desktop/proof': () => NOT_IN_DEMO,
+  '/api/session': () => NOT_IN_DEMO,
+  '/api/session/code': () => NOT_IN_DEMO,
+  '/api/session/redeem': () => NOT_IN_DEMO,
 }
 
 // ---------------------------------------------------------------- matching a URL to a template

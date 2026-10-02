@@ -38,6 +38,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, fake_series_ids, make_fake_serve
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 UTC = "UTC"
@@ -92,7 +94,7 @@ def app_client(root: Path, serve, catalog=None, exclusions=None) -> TestClient:
     app.state.catalog = catalog or FakeCatalog()
     if exclusions is not None:
         app.state.seasonality_exclusions = exclusions
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 # ---------------------------------------------------------------- derive_raw_close

@@ -29,8 +29,8 @@ TERMINAL = BACKEND.parent
 CONTRACT = TERMINAL / "contract" / "openapi.json"
 FIXTURES = BACKEND / "tests" / "fixtures"
 
-BASELINE_ROUTE_PAIRS = 78  # 76 GET, POST /api/jobs, DELETE /api/jobs/{job_id}; docs/desktop/baseline/d1_preflight.md
-BASELINE_CONTRACT_PATHS = 75
+BASELINE_ROUTE_PAIRS = 82  # 80 GET, POST /api/jobs, DELETE /api/jobs/{job_id}; baseline/d1_preflight.md plus the 4 desktop routes (W2A)
+BASELINE_CONTRACT_PATHS = 79
 
 # Libraries and modules that must not load on the start path. `scipy.stats` is the 510 ms family; the rest are the
 # modules that reach it, the heavy modules of 04 D1.1 and the IB client (loaded on demand only).

@@ -23,9 +23,11 @@ function portLine(facts: Facts, port: number, label: string): string {
   const state = facts.ports[String(port)] ?? 'free'
   if (state === 'free') return `${OK}port ${port} is free (${label})`
   if (state === 'terminal') {
-    return port === BACKEND_PORT
-      ? `${OK}port ${port} answers as the terminal (./start.sh opens it and starts nothing)`
-      : `${OK}port ${port} answers as the terminal`
+    if (port !== BACKEND_PORT) return `${OK}port ${port} answers as the terminal`
+    // Behind the token only a backend that the lock names (and that proved itself) can be attached to.
+    return facts.lock.state === 'live'
+      ? `${OK}port ${port} answers as the terminal (./start.sh attaches to it with a one-time link and starts nothing)`
+      : `${FAIL}port ${port} answers as a terminal that has no lock or token (an older version). Fix: close it, then run ./start.sh`
   }
   const fix = port === DEV_PORT ? 'stop that program (only --dev needs this port)' : 'stop that program, or choose another port with --port'
   return `${FAIL}port ${port} is taken by another program (${label}). Fix: ${fix}`
@@ -67,6 +69,24 @@ function contractLine(facts: Facts): string {
   return `${FAIL}could not check the API types against the contract. Fix: install the web dependencies, then run corepack pnpm check:api in web`
 }
 
+/** The lock of the state folder, worded only when there is one: a quiet machine has none and says nothing. */
+function lockLines(facts: Facts): string[] {
+  const { lock, stateDir } = facts
+  const where = `in ${stateDir}`
+  switch (lock.state) {
+    case 'none':
+      return []
+    case 'live':
+      return [`${OK}lock ${where} names a live backend on port ${lock.port ?? 'unknown'} that proved who it is (./start.sh attaches to it)`]
+    case 'stale':
+      return [`${OK}lock ${where} is stale (its backend is gone); the next start replaces it`]
+    case 'unproven':
+      return [`${FAIL}lock ${where} names a backend on port ${lock.port ?? 'unknown'} that does not prove who it is. Fix: stop it, or set NQT_STATE_DIR to another folder`]
+    case 'untrusted':
+      return [`${FAIL}lock ${where} is not owner-only, so it is not used. Fix: remove the file if you did not expect it`]
+  }
+}
+
 function extraPorts(facts: Facts): number[] {
   const fixed = new Set(PORT_LABELS.map(([port]) => String(port)))
   return Object.keys(facts.ports)
@@ -89,6 +109,7 @@ export function doctorLines(facts: Facts, resolved: ResolvedMode): string[] {
   if (facts.fixtureDir !== null) lines.push(`${OK}fixture folder ${facts.fixtureDir} (NQT_FIXTURE_DIR): the backend serves its files`)
   for (const [port, label] of PORT_LABELS) lines.push(portLine(facts, port, label))
   for (const port of extraPorts(facts)) lines.push(portLine(facts, port, 'asked for with --port'))
+  lines.push(...lockLines(facts))
   lines.push(contractLine(facts))
   lines.push(
     facts.buildNeeded

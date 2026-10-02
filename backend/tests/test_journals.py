@@ -20,6 +20,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 PREFLIGHT = "preflight2_2026-09-26_journal.PLUMBING_DELAYED.jsonl"
@@ -30,7 +32,7 @@ REAL_LOGS = ROOT / "live" / "logs"
 
 
 def client(env: dict | None = None) -> TestClient:
-    return TestClient(create_app(load_settings(env or {})), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings(env or {})), base_url=LOCAL, client=LOOPBACK)
 
 
 def fixture_client() -> TestClient:

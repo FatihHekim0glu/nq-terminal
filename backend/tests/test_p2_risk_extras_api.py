@@ -33,6 +33,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 ROUTES = ("/api/analytics/hypothesis/{name}/risk-extras", "/api/analytics/run/{run_id}/risk-extras")
@@ -59,13 +61,13 @@ def tmp_dir(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def api(tmp_dir) -> TestClient:
-    return TestClient(app_with_router(FIXTURES, tmp_dir), base_url=LOCAL, client=LOOPBACK)
+    return api_client(app_with_router(FIXTURES, tmp_dir), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")
 def real_api(tmp_dir) -> TestClient:
     serve = make_fake_serve(tmp_dir / "log" / "oos_access_log.jsonl")
-    return TestClient(app_with_router(None, tmp_dir, serve), base_url=LOCAL, client=LOOPBACK)
+    return api_client(app_with_router(None, tmp_dir, serve), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")

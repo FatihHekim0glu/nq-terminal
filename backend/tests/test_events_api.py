@@ -24,6 +24,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve
 
+from conftest import api_client
+
 LINES = ["2015-01-09 NFP@08:30", "2015-01-15 PPI@08:30", "2015-01-16 CPI@08:30", "2015-01-28 FOMC@14:00",
          "2015-03-18 FOMC@14:00+PPI@08:30", "2015-04-03 NFP@08:30 EXCLUDED (Good Friday, NYSE closed)",
          "2016-06-15 FOMC@14:00", "2021-12-31 CPI@08:30"]
@@ -47,7 +49,7 @@ def _client(root: Path, log: Path | None) -> TestClient:
     if log is not None:
         app.state.serve_fn = make_fake_serve(log)
     app.state.catalog = FakeCatalog()
-    return TestClient(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
+    return api_client(app, base_url="http://127.0.0.1", client=("127.0.0.1", 50000))
 
 
 @pytest.fixture(scope="module")

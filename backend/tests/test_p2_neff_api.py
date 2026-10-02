@@ -19,6 +19,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 ROUTE = "/api/analytics/deflated"
@@ -26,7 +28,7 @@ ROUTE = "/api/analytics/deflated"
 
 def client_for(root) -> TestClient:
     settings = load_settings({} if root is None else {"NQT_FIXTURE_DIR": str(root)})
-    return TestClient(create_app(settings), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(settings), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")

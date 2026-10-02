@@ -15,6 +15,8 @@ from nq_terminal.settings import load_settings
 
 from test_research_support import PRICE_PATTERN, build_root, build_sealed_root, flip_one_byte, real_registry_rows
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 RESEARCH_PATHS = ("/api/registry", "/api/hypotheses", "/api/multiple-testing", "/api/confirmations", "/api/sealed")
@@ -22,7 +24,7 @@ RESEARCH_PATHS = ("/api/registry", "/api/hypotheses", "/api/multiple-testing", "
 
 def client_for(root: Path | None) -> TestClient:
     env = {} if root is None else {"NQT_FIXTURE_DIR": str(root)}
-    return TestClient(create_app(load_settings(env)), base_url=LOCAL, client=LOOPBACK)
+    return api_client(create_app(load_settings(env)), base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture(scope="module")

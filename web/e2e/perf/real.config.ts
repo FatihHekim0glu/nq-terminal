@@ -3,6 +3,12 @@
 // front of it, then runs this config with NQT_SMOKE_WEB_ORIGIN set; nothing here starts a server. It runs
 // the trace arithmetic checks first (trace.spec.ts), then smoke.real.ts. The default E2E config never
 // picks up smoke.real.ts (not a .spec file), so fixture runs cannot reach real files.
+//
+// The second backend is behind the session token (03 section 2.6): smoke_real.ps1 reads the token from the lock of the
+// backend's own temporary state folder, mints a one-time code and hands the session page address to this run in
+// NQT_SMOKE_SESSION_URL. The global set-up (session.setup.ts) opens it on the preview origin in a headless browser, which
+// redeems the code, and saves the cookie as storage state; every context of the run starts with it. Without it every
+// /api call gets 401.
 import { defineConfig, devices } from '@playwright/test'
 import os from 'node:os'
 import path from 'node:path'
@@ -14,8 +20,13 @@ if (!match || Number(match[1]) === USER_BACKEND_PORT) {
   throw new Error(`NQT_SMOKE_WEB_ORIGIN must be http://127.0.0.1:<spare port> (not ${USER_BACKEND_PORT}); run terminal/scripts/smoke_real.ps1. Got "${origin}"`)
 }
 
+// Where the set-up saves the cookie and where the tests read it from (the same path in every process that loads this).
+const SESSION_STORAGE = path.join(os.tmpdir(), `nqt-smoke-real-session-${match[1]}.json`)
+process.env.NQT_SMOKE_STORAGE_STATE = SESSION_STORAGE
+
 export default defineConfig({
   testDir: '.',
+  globalSetup: './session.setup.ts',
   testMatch: ['trace.spec.ts', 'smoke.real.ts'],
   // Outside e2e/.results, which a parallel fixture run empties when it starts.
   outputDir: path.join(os.tmpdir(), 'nqt-smoke-real-results'),
@@ -29,6 +40,7 @@ export default defineConfig({
   use: {
     ...devices['Desktop Chrome'],
     baseURL: origin,
+    storageState: SESSION_STORAGE,
     viewport: { width: 1920, height: 1080 },
     deviceScaleFactor: 1,
     colorScheme: 'dark',

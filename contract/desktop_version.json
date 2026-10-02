@@ -1,0 +1,11 @@
+{
+  "contract": 1,
+  "shell_schema_sha256": "d52faa1a987e6a68fe29b99f0b6a5b07a9347e6594d24655f06563d282120c26",
+  "routes": [
+    "/api/desktop/proof",
+    "/api/session",
+    "/api/session/code",
+    "/api/session/redeem",
+    "/api/health"
+  ]
+}

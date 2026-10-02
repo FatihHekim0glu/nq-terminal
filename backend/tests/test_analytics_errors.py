@@ -28,6 +28,8 @@ from fakes import FIXTURES, FakeCatalog, make_fake_serve
 from research_guard import TEST_MARKER
 from test_runs_support import RUNS, copy_root
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 PROBE = "nt_volmanaged_v0_final_probe_2012-02-16"
@@ -40,7 +42,7 @@ def client_for(root: Path | None, serve=None) -> TestClient:
         app.state.serve_fn = serve
         if settings.fixture_mode:
             app.state.catalog = FakeCatalog()
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 def assert_path_free(detail: str, root: Path | None = None) -> None:

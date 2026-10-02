@@ -23,6 +23,17 @@ Two tests assume the nq-lab layout and fail outside it, on any machine: `web/src
 reads nq-lab's `src/nq_lab/paper_plumbing.py`, and qa's `test_the_default_dump_folder_is_under_terminal_qa` expects the
 qa folder's parent to be named `terminal`.
 
+## Session token
+
+Every `/api` path, the live stream included, is behind a session cookie (03 section 4.2), so a test reaches the app in
+one of three ways. The backend tests use the shared client in `backend/tests/conftest.py` (`api_client(app)` or the
+`authed_client` fixture), which holds a live session; `bare_client` has none and is for the refusal, proof and session
+route tests only, and `test_route_refusal_walk.py` walks the app's own route list and counts the gaps (none). A backend
+that a test starts in a process of its own gets its own temporary `NQT_STATE_DIR` and `NQT_JOBS=off`, and is reached
+with `open_session(port, token)`. The Playwright projects that drive a backend redeem a one-time code in a global
+set-up (`e2e/session.setup.ts`, `e2e/perf/session.setup.ts`) and keep the cookie as storage state; `smoke_real.ps1`
+does the same from its own backend's lock. The offline projects need no token.
+
 ## P2 suites
 
 - **Backtest queue.** `test_p2_jobs_models.py` (JobSpec refusals, pinned to `run_base.FEEDS`, the strategy registry and the fence), `test_p2_jobs_service.py` (queue cap, one worker, exit codes, the state file, a fake `run_base` round trip through the real `Popen` under a path with a space), `test_p2_jobs_api.py` (header, content type, origin, loopback and status codes) and `test_p2_jobs_safety.py` (static bans over the three JOBS files). `test_app.py` and `test_openapi_contract.py` pin the write routes to exactly `POST /api/jobs` and `DELETE /api/jobs/{job_id}` and plant any other non-GET route born failing.
@@ -79,8 +90,9 @@ The step skip prints an `[offline-skip]` line; the run of 2026-09-29 printed thi
 [offline-skip] the fence: GP, GIP, DES, MON and CORR serve nothing past 2021-12-31; a date past it is refused: 1m bars are not in the demo dataset (...)
 ```
 
-`e2e:offline` lists 185 tests in 14 files (`--list`). With the demo dataset as it is, one is skipped (the GIP iteration
-above) and one leaves a step out. `e2e:offline:perf` lists 3 tests in 1 file and skips one (GIP pan and zoom). On a Mac
+`e2e:offline` lists 190 tests in 14 files (`--list`). With the demo dataset as it is, two are skipped (the GIP iteration
+above, and the session probe of `e2e/flows/safety.spec.ts`, because the demo layer has no session) and one leaves a step
+out. `e2e:offline:perf` lists 3 tests in 1 file and skips one (GIP pan and zoom). On a Mac
 (Node 24, Chrome channel, 2026-09-29) the performance project read: HOME first render median 554 ms against a 1,500 ms
 budget, and the 8,411-fill grid opened in 65 ms, sorted in 34 ms and paged in 32 ms against 500 ms each. A screen or
 demo data change moves the screenshots, and `e2e:offline` then fails those baseline comparisons until

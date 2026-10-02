@@ -74,6 +74,7 @@ from nq_terminal.services.files import (
     RETRY_DELAY_S,
     FileCache,
     FileDecodeError,
+    file_cache,
     redact_local_paths,
     sanitise,
     thaw,
@@ -359,7 +360,7 @@ class ResearchService:
         self.sealed_dir = self.results / "sealed"
         self.experiments = self.root / "experiments"
         self.runs_dir = self.root / "backtests" / "output"
-        self.cache = cache if cache is not None else FileCache(roots=[self.root], retry_delay_s=retry_delay_s)
+        self.cache = cache if cache is not None else file_cache(_file_cache_cap, roots=[self.root], retry_delay_s=retry_delay_s)
 
     # file access ------------------------------------------------------------
 
@@ -700,6 +701,18 @@ class ResearchService:
 _SERVICES: dict[Path, ResearchService] = {}
 _SERVICES_LOCK = threading.Lock()
 MAX_SERVICES = 8
+_file_cache_cap: int | None = None  # settings.file_cache_bytes of the running app (128 MiB in desktop mode, 03 2.6)
+
+
+def set_file_cache_cap(cap: int | None) -> None:
+    """Apply the app's file-cache cap to the research services, which are shared per data root for the process (so
+    they cannot take it from a request). `create_app` calls this; a changed cap drops the services built under the
+    old one."""
+    global _file_cache_cap
+    with _SERVICES_LOCK:
+        if cap != _file_cache_cap:
+            _file_cache_cap = cap
+            _SERVICES.clear()
 
 
 def service_for_root(root: Path) -> ResearchService:

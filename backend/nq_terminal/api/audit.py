@@ -33,7 +33,7 @@ from nq_terminal.models.audit import (
 )
 from nq_terminal.models.common import DEFAULT_LIMIT, MAX_LIMIT, error_responses
 from nq_terminal.services import audit
-from nq_terminal.services.files import FileCache, sanitise
+from nq_terminal.services.files import FileCache, file_cache, sanitise
 from nq_terminal.services.research import ResearchDataError
 from nq_terminal.settings import Settings
 
@@ -62,7 +62,7 @@ def _files(request: Request) -> FileCache:
     with _LOCK:
         cache = getattr(state, _STATE_KEY, None)
         if cache is None:
-            cache = FileCache(roots=(_settings(request).data_root,))
+            cache = file_cache(_settings(request).file_cache_bytes, roots=(_settings(request).data_root,))
             setattr(state, _STATE_KEY, cache)
     return cache
 

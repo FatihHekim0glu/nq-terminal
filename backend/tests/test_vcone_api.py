@@ -20,6 +20,8 @@ from nq_terminal.settings import load_settings
 
 from fakes import FIXTURES, FakeCatalog, make_fake_serve, synthetic_loader
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 CONE = "/api/market/vcone"
@@ -37,7 +39,7 @@ def make_client(serve=None) -> TestClient:
     if serve is not None:
         app.state.serve_fn = serve
         app.state.catalog = FakeCatalog()
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 @pytest.fixture
@@ -53,7 +55,7 @@ def priced(fake) -> TestClient:
 def test_router_prefix_and_get_only():
     app = with_vcone(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})))
     assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
-    paths = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/openapi.json").json()["paths"]
+    paths = api_client(app, base_url=LOCAL, client=LOOPBACK).get("/api/openapi.json").json()["paths"]
     for path in (CONE, SMALL):
         assert set(paths[path]) == {"get"}, path
 

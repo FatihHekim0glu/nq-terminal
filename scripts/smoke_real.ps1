@@ -15,8 +15,15 @@
   4. Starts a second backend with the venv Python (uvicorn, nq_terminal.app:create_app) on
      127.0.0.1:ApiPort against the real data root (NQT_FIXTURE_DIR removed), and vite preview of that
      build on 127.0.0.1:WebPort with /api proxied to it. The user's own backend on 8765 is never used.
-  5. Runs web\e2e\perf\real.config.ts: the trace arithmetic checks, then smoke.real.ts (every screen on
-     real files, and the performance budgets measured on real data with a CDP trace).
+     The backend has a state folder of its own (so its own lock and token, and it never meets the user's
+     backend), NQT_JOBS=off (it can run neither a backtest nor the IB snapshot) and only the allow-listed
+     environment of desktop\envlist.py, built by the venv Python: no API key of this shell reaches it.
+  5. Reads the token from that lock after the backend proved it holds it (a fresh nonce), mints a one-time
+     launch code and hands the session page address http://127.0.0.1:WebPort/session.html#<code> to
+     Playwright, whose global set-up redeems it on the preview origin in a headless browser and keeps the
+     cookie. Then runs web\e2e\perf\real.config.ts: the trace arithmetic checks, then smoke.real.ts (every
+     screen on real files, and the performance budgets measured on real data with a CDP trace). Without the
+     cookie every /api call is refused (401).
   6. Stops both servers, then checks that every new log line has caller "terminal" and a window inside
      [2010-01-01, 2022-01-01), that the log's earlier bytes are unchanged (append only), and that the
      three research files are unchanged.
@@ -338,6 +345,135 @@ function Start-Logged([string]$File, [string[]]$Arguments, [string]$Directory, [
 
 function Quote([string]$Text) { return '"' + $Text + '"' }
 
+# ---------------------------------------------------------------- the session door (03 sections 2.6 and 4.2)
+
+function Join-Arguments([string[]]$Arguments) {
+    return (($Arguments | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' ')
+}
+
+function New-HexString {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    return (($bytes | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+
+function ConvertFrom-HexString([string]$Hex) {
+    $bytes = New-Object byte[] ($Hex.Length / 2)
+    for ($i = 0; $i -lt $bytes.Length; $i++) { $bytes[$i] = [Convert]::ToByte($Hex.Substring(2 * $i, 2), 16) }
+    return , $bytes
+}
+
+function Test-SameText([string]$A, [string]$B) {
+    if ($A.Length -ne $B.Length) { return $false }
+    $difference = 0
+    for ($i = 0; $i -lt $A.Length; $i++) { $difference = $difference -bor ([int][char]$A[$i] -bxor [int][char]$B[$i]) }
+    return $difference -eq 0
+}
+
+function Invoke-LoopGet([string]$Url, [hashtable]$Headers = @{}, $Session = $null) {
+    try {
+        if ($null -ne $Session) { return Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri $Url -Headers $Headers -WebSession $Session }
+        return Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri $Url -Headers $Headers
+    } catch {
+        return $null
+    }
+}
+
+function Test-ProofAnswers([int]$Number) {
+    $reply = Invoke-LoopGet "http://${Loopback}:$Number/api/desktop/proof?nonce=$('0' * 64)"
+    return ($null -ne $reply) -and ($reply.StatusCode -eq 200) -and ($reply.Content -match '"proof"')
+}
+
+# The lock of the backend's own state folder: its port and token, once the backend has written it.
+function Read-LockFile([string]$StateDir) {
+    $path = Join-Path $StateDir 'backend.lock'
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try {
+        $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, ([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete))
+        try { $text = (New-Object System.IO.StreamReader($stream, $Utf8)).ReadToEnd() } finally { $stream.Dispose() }
+        $document = $text | ConvertFrom-Json
+        $token = [string]$document.token
+        if ($token -notmatch '^[0-9a-f]{64}$') { return $null }
+        return [pscustomobject]@{ Port = [int]$document.port; Token = $token }
+    } catch {
+        return $null
+    }
+}
+
+# True only when the backend on $ConnectPort answers a fresh nonce with the MAC of the token holder (the token is not
+# sent): HMAC-SHA256 keyed by the token's raw bytes over proof|nonce|port|pid (desktop/handshake.py). $MacPort is the
+# port the backend names in its lock, which is the preview's port here, not the one it listens on.
+function Test-Backend([int]$ConnectPort, [string]$TokenHex, [int]$MacPort) {
+    $nonce = New-HexString
+    $reply = Invoke-LoopGet "http://${Loopback}:$ConnectPort/api/desktop/proof?nonce=$nonce"
+    if ($null -eq $reply -or $reply.StatusCode -ne 200) { return $false }
+    try { $body = $reply.Content | ConvertFrom-Json } catch { return $false }
+    $answerPid = 0
+    if (-not [int]::TryParse("$($body.pid)", [ref]$answerPid)) { return $false }
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256 -ArgumentList (, (ConvertFrom-HexString $TokenHex))
+    try {
+        $mac = (($hmac.ComputeHash([System.Text.Encoding]::ASCII.GetBytes("proof|$nonce|$MacPort|$answerPid")) | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally {
+        $hmac.Dispose()
+    }
+    return Test-SameText ([string]$body.proof) $mac
+}
+
+function Get-LaunchCode([int]$ApiPortNumber, [string]$TokenHex) {
+    $reply = Invoke-LoopGet "http://${Loopback}:$ApiPortNumber/api/session/code" @{ Authorization = "NQT $TokenHex" }
+    if ($null -eq $reply -or $reply.StatusCode -ne 200) { return $null }
+    $code = [string]($reply.Content | ConvertFrom-Json).code
+    if ($code -notmatch '^[0-9a-f]{64}$') { return $null }
+    return $code
+}
+
+# The allow-listed environment for the backend (desktop/envlist.py, run by the venv Python): the base system names, the
+# two Python settings and NQT_* only. No key, token or secret of this shell is in it. Built after this script has set
+# the backend's own NQT_* values, so they are in the list.
+function Get-AllowedEnvironment {
+    $code = 'import json; from nq_terminal.desktop.envlist import backend_env; print(json.dumps(backend_env()))'
+    Push-Location $Backend
+    try {
+        $lines = @(& $Python -X utf8 -c $code)
+        $failed = $LASTEXITCODE -ne 0
+    } finally {
+        Pop-Location
+    }
+    if ($failed -or $lines.Count -eq 0) { throw 'could not build the allow-listed environment for the backend (desktop/envlist.py).' }
+    $table = @{}
+    foreach ($property in ($lines[$lines.Count - 1] | ConvertFrom-Json).PSObject.Properties) { $table[$property.Name] = [string]$property.Value }
+    return $table
+}
+
+# A process with exactly `$Environment` as its environment (nothing inherited), no window, and its output copied to
+# files. The copies run until the process ends; Close-Logs ends them.
+$Logs = New-Object System.Collections.Generic.List[System.IO.Stream]
+function Start-LoggedWithEnvironment([string]$File, [string[]]$Arguments, [string]$Directory, [string]$LogBase, [hashtable]$Environment) {
+    $info = New-Object System.Diagnostics.ProcessStartInfo
+    $info.FileName = $File
+    $info.Arguments = Join-Arguments $Arguments
+    $info.WorkingDirectory = $Directory
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.EnvironmentVariables.Clear()
+    foreach ($name in $Environment.Keys) { $info.EnvironmentVariables[$name] = $Environment[$name] }
+    $process = [System.Diagnostics.Process]::Start($info)
+    foreach ($pair in @(@($process.StandardOutput.BaseStream, "$LogBase.out.log"), @($process.StandardError.BaseStream, "$LogBase.err.log"))) {
+        $logStream = [System.IO.File]::Open($pair[1], [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+        $Logs.Add($logStream)
+        [void]$pair[0].CopyToAsync($logStream)
+    }
+    return $process
+}
+
+function Close-Logs {
+    foreach ($log in $Logs) { try { $log.Dispose() } catch { Write-Verbose 'a log was already closed' } }
+    $Logs.Clear()
+}
+
 # ---------------------------------------------------------------- run
 
 $selfFailures = @(Invoke-SelfTest)
@@ -368,7 +504,7 @@ Write-Output "before: log $($before.log_length) bytes; $(($PinnedFiles | ForEach
 
 $started = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $saved = @{}
-foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_JOBS', 'NQT_PREWARM', 'NQT_DESKTOP', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN')) {
+foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_JOBS', 'NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN', 'NQT_SMOKE_SESSION_URL')) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $testsExit = -1
@@ -390,19 +526,31 @@ try {
     New-Item -ItemType Directory -Path $State | Out-Null
     $env:NQT_STATE_DIR = $State
     $env:NQT_JOBS = 'off'
-    foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
+    foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
     $env:NQT_PORT = "$WebPort"
     $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
-    $apiArgs = @('-m', 'uvicorn', 'nq_terminal.app:create_app', '--factory', '--app-dir', (Quote $Backend),
+    $apiArgs = @('-m', 'uvicorn', 'nq_terminal.app:create_app', '--factory', '--app-dir', $Backend,
         '--host', $Loopback, '--port', "$ApiPort", '--no-server-header', '--no-proxy-headers')
-    $api = Start-Logged $Python $apiArgs $Backend (Join-Path $Work 'backend')
+    $allowed = Get-AllowedEnvironment
+    $api = Start-LoggedWithEnvironment $Python $apiArgs $Backend (Join-Path $Work 'backend') $allowed
     $started.Add($api)
-    Wait-Until { $null -ne (Get-Json "http://${Loopback}:$ApiPort/api/health") } "The backend on ${Loopback}:$ApiPort" $api
-    $health = Get-Json "http://${Loopback}:$ApiPort/api/health"
+    # Every /api path but the proof route needs a session, so readiness is the proof route.
+    Wait-Until { Test-ProofAnswers $ApiPort } "The backend on ${Loopback}:$ApiPort" $api
+    # The token is in the lock of the backend's own state folder; use it only after the backend proves it holds it.
+    $lock = $null
+    Wait-Until { $script:lock = Read-LockFile $State; $null -ne $script:lock } "The lock of the backend on ${Loopback}:$ApiPort" $api
+    if (-not (Test-Backend $ApiPort $lock.Token $lock.Port)) { throw "the backend on ${Loopback}:$ApiPort did not prove that it holds the token in its lock; not using it." }
+    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+    $probeCode = Get-LaunchCode $ApiPort $lock.Token
+    if ($null -eq $probeCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code." }
+    $null = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/session/redeem" @{ 'X-NQT-Code' = $probeCode } $session
+    $healthReply = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/health" @{} $session
+    if ($null -eq $healthReply) { throw "the backend on ${Loopback}:$ApiPort refused a session it had just issued." }
+    $health = $healthReply.Content | ConvertFrom-Json
     if ($health.fixture_mode -ne $false) { throw 'the second backend answers in fixture mode; the smoke run needs the real files.' }
-    Write-Output "backend: ${Loopback}:$ApiPort, real files, fence $($health.fence.is_start) to $($health.fence.is_end)"
+    Write-Output "backend: ${Loopback}:$ApiPort, real files, fence $($health.fence.is_start) to $($health.fence.is_end), own state folder, jobs off, allow-listed environment"
 
     $env:NQT_SMOKE_API_ORIGIN = "http://${Loopback}:$ApiPort"
     $previewArgs = @((Quote $ViteScript), 'preview', '--config', 'e2e/perf/real.preview.config.ts', '--outDir', (Quote $Out),
@@ -413,6 +561,11 @@ try {
     Write-Output "preview: http://${Loopback}:$WebPort/ (api proxied to $ApiPort)"
 
     $env:NQT_SMOKE_WEB_ORIGIN = "http://${Loopback}:$WebPort"
+    # One launch code for the preview origin, made at the last moment (it works once and lives 60 seconds): Playwright's
+    # global set-up opens this address in a headless browser, which redeems it and keeps the cookie.
+    $launchCode = Get-LaunchCode $ApiPort $lock.Token
+    if ($null -eq $launchCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code for the preview." }
+    $env:NQT_SMOKE_SESSION_URL = "http://${Loopback}:$WebPort/session.html#$launchCode"
     $testArgs = @($PlaywrightScript, 'test', '--config', 'e2e/perf/real.config.ts')
     if ($Grep -ne '') { $testArgs += @('--grep', $Grep) }
     Push-Location -LiteralPath $Web
@@ -426,6 +579,7 @@ try {
     $serverProblems.Add($_.Exception.Message)
 } finally {
     foreach ($p in $started) { Stop-Tree $p }
+    Close-Logs
     foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
 }
 

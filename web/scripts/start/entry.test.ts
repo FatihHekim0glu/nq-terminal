@@ -1,7 +1,9 @@
 // The launcher from the outside: gatherFacts on scratch folders, ./start.sh and scripts/start.mjs as real
 // processes (dry run, doctor, usage errors, the Node switch), and a live run against a fake Vite and a fake
 // backend that checks Ctrl+C leaves no process behind. Nothing here installs, builds or binds a fixed port:
-// live runs take a free ephemeral port, and 5173, 5174 and 8765 are only ever read.
+// live runs take a free ephemeral port, and 5173, 5174 and 8765 are only ever read. The backend is behind the
+// session token: the fake backend reads TOKEN and NONCE from its input, signs the proof route with them, mints a
+// launch code for the token holder and exits when its input closes; the launcher is checked to print the session link.
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync, copyFileSync } from 'node:fs'
 import { createServer, get, type Server } from 'node:http'
@@ -12,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { gatherFacts } from './facts.ts'
 import { main } from './launcher.ts'
+import { mac, newToken } from './session.ts'
 
 const WEB = fileURLToPath(new URL('../..', import.meta.url))
 const ROOT = dirname(WEB.replace(/[\\/]$/, ''))
@@ -476,27 +479,68 @@ describe.skipIf(WINDOWS)('scripts/start.mjs: dry run and doctor', () => {
     expect(lines[lines.length - 1]).toBe('mode: FULL (venv python with fastapi, uvicorn and nq_lab). Next: ./start.sh')
   }, 90_000)
 
-  it('opens the page and starts nothing when the terminal already answers on the port', async () => {
+  /** Runs the launcher as a real process and collects what it printed. */
+  function runLauncher(args: string[], env: NodeJS.ProcessEnv): Promise<Ran> {
+    return new Promise<Ran>((resolve) => {
+      const child = spawn(NODE24, [START_MJS, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      child.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
+      child.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
+      child.on('close', (status) => resolve({ status, stdout, stderr }))
+    })
+  }
+
+  it('attaches to the backend the lock names: prints a one-time session link made with the token, and starts nothing', async () => {
+    const marker = join(tmp(), 'backend-started')
+    const lab = labWithPython(`case "$1" in -m) : > "${marker}";; esac\nexit 0`)
+    const token = newToken()
+    const code = 'cd'.repeat(32)
+    const authorisations: Array<string | undefined> = []
+    let port = 0
+    const stub = await listen((req, res) => {
+      authorisations.push(req.headers.authorization)
+      const url = new URL(req.url ?? '', 'http://x')
+      res.setHeader('content-type', 'application/json')
+      if (url.pathname === '/api/desktop/proof') {
+        res.end(JSON.stringify({ proof: mac(token, 'proof', url.searchParams.get('nonce') ?? '', port, process.pid), pid: process.pid }))
+      } else if (url.pathname === '/api/session/code' && req.headers.authorization === `NQT ${token}`) {
+        res.end(JSON.stringify({ code, expires_in_s: 60 }))
+      } else {
+        res.statusCode = 401
+        res.end('{}')
+      }
+    })
+    port = stub.port
+    const state = tmp('nqt-state-')
+    const lock = join(state, 'backend.lock')
+    writeFileSync(lock, JSON.stringify({ v: 1, pid: process.pid, port, token, root: ROOT, started: 'now' }), { mode: 0o600 })
+    chmodSync(lock, 0o600)
+    try {
+      const r = await runLauncher(['--no-browser', '--port', String(port)], baseEnv({ NQT_LAB_ROOT: lab, NQT_STATE_DIR: state }))
+      expect(r.status, r.stderr).toBe(0)
+      expect(r.stdout).toContain(`The terminal already runs on http://127.0.0.1:${port}/; nothing started.`)
+      expect(r.stdout).toContain(`browser: not opened (http://127.0.0.1:${port}/session.html#${code})`)
+      expect(r.stdout).not.toContain(token)
+      expect(existsSync(marker)).toBe(false)
+      // The proof came first: every request before the code request carried no token.
+      expect(authorisations.filter((a) => a !== undefined)).toEqual([`NQT ${token}`])
+    } finally {
+      await closeServer(stub.server)
+    }
+  }, 60_000)
+
+  it('refuses a terminal on the port that has no lock: an older version cannot be attached to, and nothing starts', async () => {
     const marker = join(tmp(), 'backend-started')
     const lab = labWithPython(`case "$1" in -m) : > "${marker}";; esac\nexit 0`)
     const stub = await listen((req, res) => {
       res.end(req.url === '/api/health' ? '{"fence":"ok"}' : 'x')
     })
     try {
-      const r = await new Promise<Ran>((resolve) => {
-        const child = spawn(NODE24, [START_MJS, '--no-browser', '--port', String(stub.port)], {
-          env: baseEnv({ NQT_LAB_ROOT: lab }),
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-        let stdout = ''
-        let stderr = ''
-        child.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
-        child.stderr.on('data', (d: Buffer) => (stderr += d.toString()))
-        child.on('close', (status) => resolve({ status, stdout, stderr }))
-      })
-      expect(r.status).toBe(0)
-      expect(r.stdout).toContain(`The terminal already runs on http://127.0.0.1:${stub.port}/; nothing started.`)
-      expect(r.stdout).toContain('browser: not opened')
+      const r = await runLauncher(['--no-browser', '--port', String(stub.port)], baseEnv({ NQT_LAB_ROOT: lab, NQT_STATE_DIR: tmp('nqt-state-') }))
+      expect(r.status).toBe(1)
+      expect(r.stderr).toContain('no lock file or token')
+      expect(r.stdout).not.toContain('session.html')
       expect(existsSync(marker)).toBe(false)
     } finally {
       await closeServer(stub.server)
@@ -676,13 +720,31 @@ else http.createServer((req, res) => { res.setHeader('content-type', 'text/html'
 const FAKE_BACKEND = `
 import http from 'node:http'
 import fs from 'node:fs'
+import crypto from 'node:crypto'
+import readline from 'node:readline'
 const port = Number(process.env.NQT_PORT)
 setInterval(() => { if (!fs.existsSync(process.env.FAKE_ALIVE_FILE)) process.exit(0) }, 200)
 fs.writeFileSync(process.env.FAKE_ENV_FILE, JSON.stringify({
   NQT_PORT: process.env.NQT_PORT, PYTHONUTF8: process.env.PYTHONUTF8, PYTHONIOENCODING: process.env.PYTHONIOENCODING,
+  NQT_STDIN_CONTROL: process.env.NQT_STDIN_CONTROL ?? null,
   NQT_FIXTURE_DIR: process.env.NQT_FIXTURE_DIR ?? null, cwd: process.cwd(),
 }))
-http.createServer((req, res) => { res.end(req.url === '/api/health' ? '{"fence":"ok"}' : 'x') }).listen(port, '127.0.0.1')
+// TOKEN and NONCE arrive once on the input; end of file means the parent is gone, as in the real backend.
+const values = {}
+readline.createInterface({ input: process.stdin }).on('line', (line) => {
+  const found = /^(TOKEN|NONCE) ([0-9a-f]{64})$/.exec(line)
+  if (found && !(found[1] in values)) values[found[1]] = found[2]
+})
+process.stdin.on('end', () => { fs.writeFileSync(process.env.FAKE_EOF_FILE, 'eof'); process.exit(0) })
+const sign = (kind, nonce) => crypto.createHmac('sha256', Buffer.from(values.TOKEN, 'hex')).update(kind + '|' + nonce + '|' + port + '|' + process.pid, 'ascii').digest('hex')
+http.createServer((req, res) => {
+  const url = new URL(req.url, 'http://x')
+  res.setHeader('content-type', 'application/json')
+  if (url.pathname === '/api/desktop/proof' && values.TOKEN) { res.end(JSON.stringify({ proof: sign('proof', url.searchParams.get('nonce')), pid: process.pid })); return }
+  if (url.pathname === '/api/session/code' && values.TOKEN && req.headers.authorization === 'NQT ' + values.TOKEN) { res.end(JSON.stringify({ code: 'ab'.repeat(32), expires_in_s: 60 })); return }
+  res.statusCode = 404
+  res.end('{}')
+}).listen(port, '127.0.0.1')
 `
 
 /** A terminal folder with a fake Vite and an empty backend folder, so nothing real is started. */
@@ -804,33 +866,42 @@ describe.skipIf(WINDOWS)('a live run: Ctrl+C leaves nothing behind', () => {
     }
   }, 60_000)
 
-  it('runs the backend with the venv python, the port and the environment start.ps1 sets, and stops it on SIGINT', async () => {
+  it('runs the backend behind the token: allow-listed environment, TOKEN and NONCE on its input, a session link, and the input closed first on SIGINT', async () => {
     const dir = fakeTerminal()
     const work = tmp('nqt-fake-')
     const serve = join(work, 'serve.mjs')
     const envFile = join(work, 'env.json')
+    const eofFile = join(work, 'eof')
     writeFileSync(serve, FAKE_BACKEND)
-    const lab = labWithPython(`case "$1" in -m) exec "${NODE24}" "${serve}";; esac\nexit 0`)
+    // The fake python answers the allow-list question with its own environment (the identity list) and runs the fake backend for -m.
+    const lab = labWithPython(
+      `case "$*" in *backend_env*) exec "${NODE24}" -e "process.stdout.write(JSON.stringify(process.env) + '\\n')";; esac\n` +
+        `case "$1" in -m) exec "${NODE24}" "${serve}";; esac\nexit 0`,
+    )
     const fixtures = tmp('nqt-fx-')
     const port = await freePort()
     const driver = drive(
       ['--no-browser', '--no-build', '--port', String(port)],
       dir,
-      baseEnv({ NQT_LAB_ROOT: lab, NQT_FIXTURE_DIR: fixtures, FAKE_ENV_FILE: envFile }),
+      baseEnv({ NQT_LAB_ROOT: lab, NQT_FIXTURE_DIR: fixtures, NQT_STATE_DIR: tmp('nqt-state-'), FAKE_ENV_FILE: envFile, FAKE_EOF_FILE: eofFile }),
     )
     try {
       await waitFor('the launcher to report it is running', () => driver.out().includes('Running.'))
       expect(driver.out()).toContain(`nq-lab terminal: http://127.0.0.1:${port}/ (read only)`)
+      expect(driver.out()).toContain(`browser: not opened (http://127.0.0.1:${port}/session.html#${'ab'.repeat(32)})`)
       const seen = JSON.parse(readFileSync(envFile, 'utf8')) as Record<string, string | null>
       expect(seen).toEqual({
         NQT_PORT: String(port),
         PYTHONUTF8: '1',
         PYTHONIOENCODING: 'utf-8',
+        NQT_STDIN_CONTROL: '1',
         NQT_FIXTURE_DIR: fixtures,
         cwd: realpathSync(join(dir, 'backend')),
       })
+      expect(existsSync(eofFile)).toBe(false)
       driver.child.kill('SIGINT')
       expect(await within('the launcher to exit', driver.exited)).toBe(130)
+      expect(existsSync(eofFile), 'the backend saw its input close').toBe(true)
       expect(await portRefuses(port)).toBe(true)
     } finally {
       driver.dispose()

@@ -1,7 +1,14 @@
 """Terminal settings from NQT_* environment variables; the project root comes from nq_lab.config.
 
-NQT_PORT         port uvicorn binds on 127.0.0.1 (default 8765)
-NQT_CACHE_BYTES  byte cap of the in-memory gated bar cache (default 2 GiB)
+NQT_DESKTOP      exactly "1": desktop mode, a backend the app started (anything else: off). It binds port 0 by default,
+                 reads TOKEN and NONCE on stdin, and uses the desktop cache caps below (02 O5).
+NQT_STDIN_CONTROL exactly "1": launcher mode (start.ps1 sets it): TOKEN and NONCE on stdin, the port stays NQT_PORT.
+NQT_PORT         port bound on 127.0.0.1 (default 8765; default 0 in desktop mode). 0 is allowed only in desktop mode,
+                 where the backend binds a free port itself and reports it in its handshake line.
+NQT_CACHE_BYTES  byte cap of the in-memory gated bar cache (default 2 GiB in the browser, 512 MiB in desktop mode)
+NQT_JOBS         "off": this backend never runs a backtest or the IB snapshot (test and smoke backends); unset, empty
+                 or "on": the queue as today. Any other value is refused.
+NQT_DEV          exactly "1": start.ps1 -Dev; the Vite dev origin (DEV_PORT) joins the same-origin list.
 NQT_FIXTURE_DIR  folder laid out like the project root (results/, live/, ...) that replaces it for every
                  research and live file read; used by tests, E2E and screenshots. It is resolved (strict)
                  and refused when it is a UNC or device path, the project root or any parent of it (e.g.
@@ -33,6 +40,12 @@ TERMINAL_STATE_DIR = TERMINAL_DIR / "state"
 DEFAULT_STATE_DIR = TERMINAL_STATE_DIR  # read at call time, so the test harness can point it elsewhere
 RESEARCH_DIRS = (("results",), ("data",), ("live",), ("backtests", "output"))
 DEV_PORT = 5173  # Vite dev server (start.ps1 -Dev), which proxies /api
+DESKTOP_PORT = 0  # a backend the app starts binds a free port; the launchers keep 8765
+DESKTOP_CACHE_BYTES = 512 * 1024**2  # 02 O5: the app shares the PC with WebView2
+DESKTOP_FILE_CACHE_BYTES = 128 * 1024**2
+SWITCH_ON = "1"
+JOBS_OFF, JOBS_ON = "off", "on"
+MODE_DESKTOP, MODE_LAUNCHER, MODE_BROWSER = "desktop", "launcher", "browser"
 
 
 class SettingsError(ValueError):
@@ -47,10 +60,27 @@ class Settings:
     fixture_dir: Path | None = None
     web_dist: Path = WEB_DIST
     state_dir: Path = TERMINAL_STATE_DIR
+    desktop: bool = False
+    stdin_control: bool = False
+    jobs_enabled: bool = True
+    dev: bool = False
+    file_cache_bytes: int | None = None  # None: each FileCache keeps its own default (the browser terminal)
 
     @property
     def fixture_mode(self) -> bool:
         return self.fixture_dir is not None
+
+    @property
+    def mode(self) -> str:
+        """'desktop' (the app), 'launcher' (start.ps1 with the stdin channel) or 'browser' (anything else)."""
+        if self.desktop:
+            return MODE_DESKTOP
+        return MODE_LAUNCHER if self.stdin_control else MODE_BROWSER
+
+    @property
+    def reads_stdin(self) -> bool:
+        """Whether `python -m nq_terminal` reads TOKEN and NONCE on stdin (desktop or launcher mode only)."""
+        return self.desktop or self.stdin_control
 
     @property
     def data_root(self) -> Path:
@@ -139,13 +169,35 @@ def _state_dir(env: Mapping[str, str]) -> Path:
     return path
 
 
+def _switch(env: Mapping[str, str], name: str) -> bool:
+    """On only for exactly "1" (the same reading as the prewarm switch, services/prewarm.py)."""
+    return env.get(name) == SWITCH_ON
+
+
+def _jobs_enabled(env: Mapping[str, str]) -> bool:
+    raw = (env.get("NQT_JOBS") or "").strip().lower()
+    if raw in ("", JOBS_ON):
+        return True
+    if raw == JOBS_OFF:
+        return False
+    raise SettingsError(f"NQT_JOBS must be 'off' or 'on', got {env.get('NQT_JOBS')!r}")
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     """Read the NQT_* variables (from `env`, or the process environment) and fail fast on bad values."""
     source = os.environ if env is None else env
+    desktop = _switch(source, "NQT_DESKTOP")
     return Settings(
         root=ROOT,
-        port=_int_in_range(source, "NQT_PORT", DEFAULT_PORT, 1, MAX_PORT),
-        cache_bytes=_int_in_range(source, "NQT_CACHE_BYTES", DEFAULT_CACHE_BYTES, 1, None),
+        port=_int_in_range(source, "NQT_PORT", DESKTOP_PORT if desktop else DEFAULT_PORT, 0 if desktop else 1,
+                           MAX_PORT),
+        cache_bytes=_int_in_range(source, "NQT_CACHE_BYTES", DESKTOP_CACHE_BYTES if desktop else DEFAULT_CACHE_BYTES,
+                                  1, None),
         fixture_dir=_fixture_dir(source),
         state_dir=_state_dir(source),
+        desktop=desktop,
+        stdin_control=_switch(source, "NQT_STDIN_CONTROL"),
+        jobs_enabled=_jobs_enabled(source),
+        dev=_switch(source, "NQT_DEV"),
+        file_cache_bytes=DESKTOP_FILE_CACHE_BYTES if desktop else None,
     )

@@ -22,6 +22,8 @@ from nq_terminal.settings import load_settings
 from fakes import FIXTURES
 from ib_fake_server import FakeIbServer, PAPER
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 PATH = "/api/ib/snapshot"
@@ -38,7 +40,7 @@ def make_app(service: IbSnapshotService | None = None):
 
 
 def client_for(app) -> TestClient:
-    return TestClient(app, base_url=LOCAL, client=LOOPBACK)
+    return api_client(app, base_url=LOCAL, client=LOOPBACK)
 
 
 def test_the_route_is_one_get_and_nothing_else():
@@ -151,7 +153,7 @@ def test_a_cross_site_request_is_refused_by_the_same_origin_guard():
 
 def test_a_non_loopback_peer_is_refused():
     app = make_app()
-    response = TestClient(app, base_url=LOCAL, client=("203.0.113.9", 4000)).get(PATH)
+    response = api_client(app, base_url=LOCAL, client=("203.0.113.9", 4000)).get(PATH)
     assert response.status_code == 403
 
 

@@ -31,6 +31,8 @@ from fakes import FIXTURES, FakeCatalog, make_fake_serve
 from test_runs_support import RUNS, copy_root
 from test_runs_support import client as runs_client
 
+from conftest import api_client
+
 LOCAL = "http://127.0.0.1"
 LOOPBACK = ("127.0.0.1", 50000)
 ISO_UTC = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?\+00:00$")
@@ -38,7 +40,7 @@ BOOK = "volmanaged_paper_journal.jsonl"
 
 
 def fixture_client() -> TestClient:
-    return TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url=LOCAL,
+    return api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)})), base_url=LOCAL,
                       client=LOOPBACK)
 
 
@@ -102,7 +104,7 @@ def test_universe_rows_name_the_returns_unit(tmp_path: Path):
     app = create_app(load_settings({"NQT_FIXTURE_DIR": str(FIXTURES)}))
     app.state.serve_fn = make_fake_serve(tmp_path / "log" / "oos_access_log.jsonl")
     app.state.catalog = FakeCatalog()
-    body = TestClient(app, base_url=LOCAL, client=LOOPBACK).get("/api/market/universe").json()
+    body = api_client(app, base_url=LOCAL, client=LOOPBACK).get("/api/market/universe").json()
     assert body["rows"] and {row["returns_unit"] for row in body["rows"]} == {RETURNS_UNIT}
     assert "fraction" in RETURNS_UNIT
     assert "returns_unit" in UniverseRow.model_json_schema(mode="serialization")["required"]
@@ -136,7 +138,7 @@ def test_last_close_fields_use_the_performance_coercion(tmp_path: Path):
            "close_px": 24851.0, "slippage_ticks": 1.0, "fills": [["MNQZ6.CME", 1, 6, 24851.25]],
            "exposure": 0.298212, "halted": False}
     (logs / BOOK).write_text(json.dumps(row) + "\n", encoding="utf-8")
-    api = TestClient(create_app(load_settings({"NQT_FIXTURE_DIR": str(tmp_path)})), base_url=LOCAL,
+    api = api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(tmp_path)})), base_url=LOCAL,
                      client=LOOPBACK)
     close = api.get("/api/live/status").json()["last_close"]
     series = journals.performance_series(journals.JournalTailer(logs / BOOK).poll().rows)

@@ -47,8 +47,8 @@ function gapped(answer: { status: number; body: unknown }) {
 const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 75 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(75)
+  it('has exactly the 79 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(79)
     expect(Object.keys(DEMO_ROUTES).sort()).toEqual(CONTRACT_PATHS)
   })
 
@@ -56,7 +56,7 @@ describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(74)
+    expect(Object.keys(incomplete)).toHaveLength(78)
   })
 })
 
@@ -186,7 +186,7 @@ const gp1y = barsQuery('NQ.V.0', '1d', 'vendor', rangeWindow('1Y'))
 
 // HOME's default layout (GP NQ 1d, MON 27F, EQ volmanaged_v0, REG), the chrome, and each A6 command line's reads.
 const PROBES: readonly Probe[] = [
-  ['health', () => get('/api/health'), (h: Schemas['Health']) => h.fixture_mode === true && h.fence.is_end === '2022-01-01'],
+  ['health', () => get('/api/health'), (h: Schemas['DesktopHealth']) => h.fixture_mode === true && h.fence.is_end === '2022-01-01' && h.port_fixed === false && h.contract === 1],
   ['commands', () => get('/api/commands'), (c: Schemas['CommandIndex']) => c.universe.includes('27F') && c.mnemonics.length === 30],
   ['HOME GP bars', () => get('/api/bars', { query: gp1y }), (b: Schemas['Bars']) => b.t.length > 200 && b.symbol === 'NQ.V.0'],
   ['GP catalog', () => get('/api/data/catalog'), (c: Schemas['DataCatalog']) => c.series.some((s) => s.symbol === 'NQ.V.0')],
