@@ -10,8 +10,7 @@ import { useOosLog } from '../../api/queries'
 import { apiQueryKey } from '../../api/queryKey'
 import { useHypothesis } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
-import { saveText } from '../../chrome/download'
-import { postMessage } from '../../chrome/MessageLine.store'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
@@ -134,7 +133,7 @@ function Page({ tab, detail, link, onTab }: { readonly tab: DesTab; readonly det
 function report(detail: HypothesisDetail): void {
   const file = fillCopy(DES_REPORT.fileName, { name: detail.card.name })
   const saved = saveText(file, desReport(detail), 'text/markdown;charset=utf-8')
-  postMessage(saved ? fillCopy(DES_REPORT.done, { file }) : DES_REPORT.unavailable, saved ? 'info' : 'error')
+  void sayWhenSaved(saved, { saved: fillCopy(DES_REPORT.done, { file }), unavailable: DES_REPORT.unavailable })
 }
 
 export default function HypothesisDes({ name, link }: HypothesisDesProps) {

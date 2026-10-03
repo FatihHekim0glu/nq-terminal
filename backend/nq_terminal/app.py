@@ -1,4 +1,4 @@
-"""FastAPI app for the nq-lab terminal: read-only, GET only (bar the two JOBS writes), loopback only, one origin.
+"""FastAPI app for the nq-lab terminal: read-only, GET only (bar three writes), loopback only, one origin.
 
 Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see `__main__.py`).
 
@@ -9,8 +9,9 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   cross-site GET under /api). There is no CORS
   middleware, because the built SPA is served from the same origin (PRD DL13). See `security.py`.
 - Every registered route must be GET; `create_app` refuses to build an app that registers anything else, except
-  exactly the two JOBS writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3),
-  which carry their own header, origin and content-type checks (`api/jobs.py`). Any other non-GET route is refused.
+  exactly three writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3, and
+  PUT /api/workspaces/{doc}, the workspace store, 03 10.3), which carry their own header, origin and content-type
+  checks (`api/jobs.py`, `api/workspaces.py`). Any other non-GET route is refused.
   The one mount allowed is a plain `StaticFiles` at `/` serving exactly `settings.web_dist`; any other
   mount (a sub-app, a StaticFiles subclass, another path or folder) is refused, so data/ or results/ can
   never be served around the gate and FileCache.
@@ -40,7 +41,8 @@ from nq_terminal.services import research as research_service
 from nq_terminal.api import runs  # 2.1
 from nq_terminal.api import data  # 2.3
 from nq_terminal.api import ib as ib_api  # 12 (U3: read-only IB snapshot)
-from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, the only writes)
+from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, two of the three writes)
+from nq_terminal.api import workspaces as workspaces_api  # 03 10.3 (D3.1: the workspace store, the third write)
 from nq_terminal.api import regimes_capacity_term, risk_extras  # 12 (RK4, PF11, BR5, RG2, EX5, MV6)
 from nq_terminal.api import spa as spa_api  # 12 (SV8)
 from nq_terminal.api import paper_expectation as expectation_api  # 12 (LV6, LV6b)
@@ -105,7 +107,7 @@ def non_get_routes(app: FastAPI) -> list[str]:
 
 
 def assert_get_only(app: FastAPI, allowed: Sequence[str] = ()) -> None:
-    """Refuse every non-GET route except the exact `METHOD /path` strings in `allowed` (the two JOBS writes)."""
+    """Refuse every non-GET route except the exact `METHOD /path` strings in `allowed` (the three writes)."""
     problems = [problem for problem in non_get_routes(app) if problem not in allowed]
     if problems:
         raise GetOnlyError("the terminal API is GET only; refused: " + ", ".join(problems))
@@ -149,6 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     lifecycle.install(app, settings)  # the lock, taken in the start-up (03 2.1)
     app.include_router(system.router)
     app.include_router(desktop_api.router)
+    app.include_router(workspaces_api.router)  # 03 10.3: the third write (PUT /api/workspaces/{doc})
     for ops in (audit, live, commands): app.include_router(ops.router)  # 2.4: audit, live, commands
     app.include_router(research.router)  # 2.2
     app.include_router(runs.router)  # 2.1

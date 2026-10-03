@@ -3,6 +3,7 @@
 // back). This file writes links and deepLink.ts reads them; the link syntax is shared through LINK_KEY.
 // Loaded with the Workspace only (Workspace.tsx is the one importer), not with the first paint, so the
 // builders and the copy (LINK_COPY) stay out of the shell.
+import { bridgeClipboard } from '../bridge'
 import { LINK_COPY } from '../copy/linkCopy'
 import { fillCopy } from '../copy/workspace'
 import { LINK_KEY } from './deepLink'
@@ -35,7 +36,7 @@ export async function copyPanelLink(
   line: string,
   format: LinkFormat,
   where: Pick<Location, 'origin' | 'pathname'> = globalThis.location,
-  clipboard: Pick<Clipboard, 'writeText'> | undefined = globalThis.navigator?.clipboard,
+  clipboard: Pick<Clipboard, 'writeText'> | undefined = bridgeClipboard(),
 ): Promise<void> {
   const url = linkFor(where, line)
   const refused = () => postMessage(fillCopy(LINK_COPY.copyFailed, { url }), 'error')

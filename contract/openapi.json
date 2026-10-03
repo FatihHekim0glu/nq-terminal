@@ -18729,6 +18729,95 @@
         "title": "WaterfallStep",
         "type": "object"
       },
+      "WorkspaceDocument": {
+        "description": "One stored document, or the default of one never written (`version` 0, `saved_at` null).",
+        "properties": {
+          "data": {
+            "title": "Data"
+          },
+          "doc": {
+            "title": "Doc",
+            "type": "string"
+          },
+          "saved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved At"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "schema_version",
+          "version",
+          "saved_at",
+          "data"
+        ],
+        "title": "WorkspaceDocument",
+        "type": "object"
+      },
+      "WorkspaceEntry": {
+        "description": "One line of the index: a document, its version (0 when never written) and its last write time.",
+        "properties": {
+          "doc": {
+            "title": "Doc",
+            "type": "string"
+          },
+          "saved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saved At"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "version",
+          "saved_at"
+        ],
+        "title": "WorkspaceEntry",
+        "type": "object"
+      },
+      "WorkspaceIndex": {
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceEntry"
+            },
+            "title": "Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "documents"
+        ],
+        "title": "WorkspaceIndex",
+        "type": "object"
+      },
       "YearValue": {
         "properties": {
           "value": {
@@ -24935,6 +25024,273 @@
         "summary": "Redeem Code",
         "tags": [
           "desktop"
+        ]
+      }
+    },
+    "/api/workspaces": {
+      "get": {
+        "description": "The seven documents with their versions and last write times (a never-written one is version 0).",
+        "operationId": "list_documents_api_workspaces_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceIndex"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the origin is not the session's"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a name outside the seven documents"
+          }
+        },
+        "summary": "List Documents",
+        "tags": [
+          "workspaces"
+        ]
+      }
+    },
+    "/api/workspaces/{doc}": {
+      "get": {
+        "description": "One document, or its default at version 0 when it was never written.",
+        "operationId": "read_document_api_workspaces__doc__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc",
+            "required": true,
+            "schema": {
+              "title": "Doc",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the origin is not the session's"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a name outside the seven documents"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Document",
+        "tags": [
+          "workspaces"
+        ]
+      },
+      "put": {
+        "description": "Store `data` as the next version of the document, made from the `If-Match` version.",
+        "operationId": "write_document_api_workspaces__doc__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "doc",
+            "required": true,
+            "schema": {
+              "title": "Doc",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The version the page's copy was made from",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the page's copy was made from",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "description": "The document's new content (shape per document)",
+                    "title": "Data"
+                  },
+                  "saved_at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Accepted and ignored: the backend stamps its own time",
+                    "title": "Saved At"
+                  }
+                },
+                "required": [
+                  "data"
+                ],
+                "title": "WorkspaceWrite",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the origin is not the session's"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a name outside the seven documents"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the version is stale or not a whole number; the ETag header is the current version"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the document or the body is over its cap"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the content type is not application/json"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the body or document is not the schema's (meta: not one added import for the caller's own origin)"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the If-Match header is missing"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the workspace files could not be written"
+          }
+        },
+        "summary": "Write Document",
+        "tags": [
+          "workspaces"
         ]
       }
     }

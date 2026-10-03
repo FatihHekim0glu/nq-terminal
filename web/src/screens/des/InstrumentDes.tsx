@@ -12,8 +12,7 @@ import { useId, useRef, useState, type ReactNode } from 'react'
 import { useCommands } from '../../api/queries'
 import { useInstrument } from '../../api/queries.screens'
 import type { Schemas } from '../../api/types'
-import { saveText } from '../../chrome/download'
-import { postMessage } from '../../chrome/MessageLine.store'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { usePanelPage } from '../../chrome/PanelChrome.page'
 import TabStrip from '../../chrome/TabStrip'
@@ -194,7 +193,7 @@ function Page({ tab, d, name, link }: { readonly tab: Tab; readonly d: Detail; r
 function report(d: Detail, name: string): void {
   const file = fillCopy(DES_REPORT.fileName, { name: d.root })
   const saved = saveText(file, instrumentReport(d, name), 'text/markdown;charset=utf-8')
-  postMessage(saved ? fillCopy(DES_REPORT.done, { file }) : DES_REPORT.unavailable, saved ? 'info' : 'error')
+  void sayWhenSaved(saved, { saved: fillCopy(DES_REPORT.done, { file }), unavailable: DES_REPORT.unavailable })
 }
 
 export default function InstrumentDes({ root, link = '-' }: InstrumentDesProps) {

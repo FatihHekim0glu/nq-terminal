@@ -9,9 +9,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useConfirmations } from '../../api/queries'
 import { useHypothesis, useSealedFile, useSealedIndex } from '../../api/queries.screens'
 import { requestLine } from '../../chrome/CommandLine.bus'
-import { saveText } from '../../chrome/download'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
-import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { usePanelPage, type PanelPage } from '../../chrome/PanelChrome.page'
@@ -55,7 +54,7 @@ function saveView(view: SealedView): void {
   }
   const file = `${view.name}.${out.type}`
   const saved = saveText(file, out.text, out.type === 'json' ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8')
-  postMessage(saved ? fillCopy(EXPORT.doneOne, { n: 1, file }) : EXPORT.unavailable, saved ? 'info' : 'error')
+  void sayWhenSaved(saved, { saved: fillCopy(EXPORT.doneOne, { n: 1, file }), unavailable: EXPORT.unavailable })
 }
 
 function Files({ name, rows, chosen, onChoose }: { readonly name: string; readonly rows: readonly SealedFileRow[]; readonly chosen: string | null; readonly onChoose: (file: string) => void }) {

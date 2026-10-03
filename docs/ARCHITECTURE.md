@@ -160,7 +160,7 @@ A test fails if any served column name matches `px|raw|price|_c$|^[OHLC]$` or if
 
 ## 4. API contract
 
-All endpoints are GET except the two JOBS writes (DL5, PRD U3): `POST /api/jobs` and `DELETE /api/jobs/{job_id}`. JSON via orjson. Pagination `offset`, `limit` (default 500, max 5,000). Chart series are columnar: `{"t": [...], "v": [...]}`.
+All endpoints are GET except three writes: the two JOBS writes (DL5, PRD U3), `POST /api/jobs` and `DELETE /api/jobs/{job_id}`, and the workspace store's `PUT /api/workspaces/{doc}` (D3.1, see the workspace store below and `docs/desktop/03_migration_plan.md` section 10). JSON via orjson. Pagination `offset`, `limit` (default 500, max 5,000). Chart series are columnar: `{"t": [...], "v": [...]}`.
 
 Contract rules (Phase 2 improvement run): every response model derives from `models.common.ResponseModel`, so every field is required in the schema (defaults included) and the generated types have no optional field the backend always sends. Every error a router raises is declared with the body `ErrorDetail{detail}` (a string, or FastAPI's validation list on a 422): runs 404, 422, 503; research 404, 422, 500, 503; data 403, 404, 422, 502, 503; audit 422, 503; live 404, 413, 422. `tests/test_app.py` pins the route set and GET only; `tests/test_contract_shapes.py` pins these two rules.
 
@@ -220,6 +220,10 @@ Contract rules (Phase 2 improvement run): every response model derives from `mod
 - `POST /api/jobs` (201, body `JobSpec{strategy, params, variant, start, end, run_id}`) queues one in-sample backtest. 403 without a loopback peer or `X-NQT: 1`, 415 unless `application/json`, 413 over 8 KB, 422 for a refused spec, 409 for a run id already used, 429 when 10 jobs already wait, 503 in fixture mode.
 - `DELETE /api/jobs/{job_id}` stops a queued or running job, or drops a finished job's record; same 403 and 415 rules; it never removes run output.
 
+**Workspace store (D3.1, the third write)**
+- `GET /api/workspaces` -> `WorkspaceIndex{documents[{doc, version, saved_at}]}` for the seven documents (`workspaces`, `layouts`, `linkGroups`, `watch`, `history`, `prefs`, `meta`). `GET /api/workspaces/{doc}` -> `WorkspaceDocument{doc, schema_version, version, saved_at, data}` with the version repeated in the `ETag` header; a document never written answers its default at version 0, and a name outside the seven is 404.
+- `PUT /api/workspaces/{doc}` (body `{data}`, header `If-Match: <version>`, 0 for a document never written) stores the next version: 412 when the version is stale or not a whole number (the `ETag` header is the current one), 413 over the document's cap (the body is capped before it is parsed), 415 for a content type other than `application/json`, 422 for a body that is not the schema's (`meta` accepts only one added import entry for the caller's own session origin), 428 without `If-Match`, 503 when the files cannot be written; 403 without a loopback peer or `X-NQT: 1`. It writes only `<state_dir>/workspaces/` (atomic temporary-file-then-replace, with `.1` to `.5` kept as earlier versions), and no answer or log line carries a path.
+
 **P2 views (U3)**
 - `GET /api/ib/snapshot` -> `IbSnapshot{state:"ok"|"disabled"|"unavailable"|"refused", message, read_only, order_path:"none", client_id:95, accounts_masked[], server_time_utc, fetched_at_utc, cached, age_s, cache_seconds, incomplete[], truncated, notes[], summary[], positions[], open_orders[], executions[]}`. Always 200. Opt-in by `NQT_IB_READONLY=1`; one TWS read is cached 5 s; account ids are masked.
 - `GET /api/analytics/spa` -> `SpaView` (SV8): the SPA, the Reality Check and StepM over the registered NQ family, with the members' differential correlation and, on both rows, the effective number of members (`effective_members`, `analytics/neff.py`).
@@ -234,7 +238,7 @@ Contract discipline: pytest dumps `app.openapi()` and compares it with `contract
 
 ### 4.1 Endpoint index
 
-Every path of `contract/openapi.json` (79; 77 are GET only, and `/api/jobs` and `/api/jobs/{job_id}` also carry the POST and the DELETE), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 79 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
+Every path of `contract/openapi.json` (81; 78 are GET only, and `/api/jobs`, `/api/jobs/{job_id}` and `/api/workspaces/{doc}` also carry the POST, the DELETE and the PUT), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers all 81 (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
 
 <!-- endpoint-index:start -->
 **System**
@@ -320,13 +324,17 @@ Every path of `contract/openapi.json` (79; 77 are GET only, and `/api/jobs` and 
 - `GET /api/ib/snapshot`: LIVE (the read-only IB panel) and the status line's TWS segment; opt-in `NQT_IB_READONLY=1`, client id 95
 - `GET /api/jobs`: JOBS (the queue list and the queue counts)
 - `GET /api/jobs/{job_id}`: JOBS (one job and its log tail)
-(`POST /api/jobs` and `DELETE /api/jobs/{job_id}` are the only writes; they are described in section 4 and section 8, not in this GET index.)
+(`POST /api/jobs`, `DELETE /api/jobs/{job_id}` and `PUT /api/workspaces/{doc}` are the only writes; they are described in section 4, section 8 and `docs/desktop/03_migration_plan.md` section 10, not in this GET index.)
 
 **Desktop shell and sessions (D2, no screen)**
 - `GET /api/desktop/proof`: the desktop shell and the launcher (the challenge-response identity proof; no screen yet)
 - `GET /api/session`: the desktop shell (opens a session cookie from the token; no screen yet)
 - `GET /api/session/code`: the desktop shell (mints a single-use launch code for the browser door; no screen yet)
 - `GET /api/session/redeem`: the browser door (swaps a launch code for a session cookie; no screen yet)
+
+**Workspace store (D3.1, no screen yet)**
+- `GET /api/workspaces`: the desktop shell (the seven stored documents with their versions; no screen yet)
+- `GET /api/workspaces/{doc}`: the desktop shell (one stored document, its default at version 0 when never written; no screen yet)
 
 **Events, seasonality and data quality**
 - `GET /api/events/calendar`: EVT

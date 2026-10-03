@@ -13,6 +13,7 @@
 // a dossier is printed, never because a menu opened. Nothing here makes a request: the health answer is
 // read from the cache the status line already fills.
 import type { QueryClient } from '@tanstack/react-query'
+import { getBridge } from '../bridge'
 import { apiQueryKey } from '../api/queryKey'
 import type { SuccessOf } from '../api/types'
 import { DOSSIER } from '../copy/dossier'
@@ -158,11 +159,6 @@ export function runPrint(target: PanelExportTarget, health: HealthLite | null): 
   return runWith(printRunner, (m) => m.printPanel(request), DOSSIER.failed)
 }
 
-/** Copy image needs a clipboard that takes images; a browser without one shows only Grab as image. */
-function canCopyImage(): boolean {
-  return typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard?.write === 'function'
-}
-
 /**
  * The Options rows for one panel: Grab as image, Copy image where the browser can, and, where the panel's
  * screen registered a dossier, Evidence pack (HTML) and Print dossier after it. `health` is read when a row
@@ -172,7 +168,8 @@ function canCopyImage(): boolean {
  */
 export function panelExportEntries(target: PanelExportTarget, health: () => HealthLite | null): MenuEntry[] {
   const entries: MenuEntry[] = [{ label: GRAB.menuImage, onSelect: () => void runGrab(target, health(), 'file') }]
-  if (canCopyImage()) {
+  // Copy image needs a clipboard that takes images (asked of the bridge); a browser without one shows only Grab as image.
+  if (getBridge().canCopyImage()) {
     entries.push({ label: GRAB.menuCopy, onSelect: () => void runGrab(target, health(), 'clipboard') })
     void grabRunner.load().catch(() => undefined)
   }

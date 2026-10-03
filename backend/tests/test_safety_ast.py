@@ -40,7 +40,9 @@ Rules
   `<state>/cache` at run time; any other write target in that module is flagged (`CONFINED_WRITERS`). The backend
   lock (`desktop/lock.py`, W2A) is the third: its writes are confined to names bound by `lock_file_text(...)`, the
   `<state>/backend.lock` path, and its one `mkdir` (a fresh lab has no state folder yet) to a name bound by
-  `lock_folder(...)`, the state folder itself.
+  `lock_folder(...)`, the state folder itself. The workspace store (`services/workspaces.py`, D3.1, risk G03) is the
+  fourth: its writes, renames and removals are confined to names bound by `_workspace_file(...)` (a store file name
+  inside `<state>/workspaces`) and its one `mkdir` to a name bound by `_workspace_folder()`.
 - native writes (PROD, OTHER; W2A): Win32 calls reached through ctypes that create, write, move or delete a file
   (`CreateFileW`, `DeleteFileW`, `MoveFileExW`, `WriteFile`, `SetFileInformationByHandle` and their kin) or start a
   process (`CreateProcessW`, `ShellExecuteW`, `WinExec`), as a call, a reference or a `getattr` string, count as
@@ -114,10 +116,12 @@ class Violation:
 RESULT_CACHE = "backend/nq_terminal/services/result_cache.py"
 LOCK = "backend/nq_terminal/desktop/lock.py"
 FIXTURE_MAIN = "backend/nq_terminal/desktop/fixture_main.py"
-WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK})
+WORKSPACES = "backend/nq_terminal/services/workspaces.py"
+WRITE_ALLOWED: frozenset[str] = frozenset({"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK, WORKSPACES})
 # Modules on WRITE_ALLOWED whose writes must target a local name bound only by one of these confining calls.
 CONFINED_WRITERS: dict[str, frozenset[str]] = {RESULT_CACHE: frozenset({"_cache_file", "_cache_folder"}),
-                                               LOCK: frozenset({"lock_file_text", "lock_folder"})}
+                                               LOCK: frozenset({"lock_file_text", "lock_folder"}),
+                                               WORKSPACES: frozenset({"_workspace_file", "_workspace_folder"})}
 # Win32 calls (through ctypes) that write the file system or start a process (W2A).
 NATIVE_PATH_WRITES = frozenset({
     "CreateFileW", "CreateFileA", "CreateFile2", "DeleteFileW", "DeleteFileA", "MoveFileW", "MoveFileA", "MoveFileExW",
@@ -787,6 +791,24 @@ BANNED_CASES = [
     banned("write", "def f(self, a):\n    for t in self._cache_file(a).parent.iterdir():\n        t.unlink()",
            where=RESULT_CACHE),
     banned("write", "def f(self, a, mode):\n    t = self._cache_file(a)\n    open(t, mode)", where=RESULT_CACHE),
+    # D3.1: the workspace store may write only inside <state>/workspaces, through its two confining calls.
+    banned("write", "from pathlib import Path\nPath('C:/elsewhere/x.json').write_bytes(b'')", where=WORKSPACES),
+    banned("write", "def f(state):\n    target = state / 'history.json'\n    target.write_bytes(b'')", where=WORKSPACES),
+    banned("write", "def f(self, target):\n    target.write_bytes(b'')", where=WORKSPACES),
+    banned("write", "import os\ndef f(self, a, other):\n    tmp = self._workspace_file(a)\n    os.replace(tmp, other)",
+           where=WORKSPACES),
+    banned("write", "import os\ndef f(self, a, b):\n    t = self._workspace_file(a)\n    t = b\n    os.remove(t)",
+           where=WORKSPACES),
+    banned("write", "def f(self, a):\n    t = self._workspace_file(a)\n    (t.parent / 'x').write_bytes(b'')",
+           where=WORKSPACES),
+    banned("write", "def f(self, a):\n    t = self._workspace_file(a)\n    open(path, 'wb')", where=WORKSPACES),
+    banned("write", "def f(self, a, mode):\n    t = self._workspace_file(a)\n    open(t, mode)", where=WORKSPACES),
+    banned("write", "def f(self, a):\n    t = self._cache_file(a)\n    t.write_bytes(b'')", where=WORKSPACES),
+    banned("write", "import shutil\ndef f(self, a):\n    t = self._workspace_file(a)\n    shutil.copyfile(t, t)",
+           where=WORKSPACES),
+    banned("write", "def f(self):\n    self._state_dir.mkdir(parents=True, exist_ok=True)", where=WORKSPACES),
+    banned("write", "def f(self, a):\n    t = self._workspace_file(a)\n    t.parent.parent.joinpath('x').write_text('')",
+           where=WORKSPACES),
     # W2A: native writes through ctypes, and the backend lock confined to its own file.
     banned("write", "import ctypes\nk = ctypes.WinDLL('kernel32')\n"
            "k.CreateFileW('x.txt', 0x40000000, 0, None, 1, 0x80, None)"),
@@ -891,6 +913,13 @@ ALLOWED_CASES = [
             where=RESULT_CACHE),
     allowed("import os\ndef f(self, a):\n    t = self._cache_file(a)\n    t.unlink(missing_ok=True)\n    os.utime(t, ns=(1, 1))",
             where=RESULT_CACHE),
+    allowed("import os\ndef f(self, a, b, body):\n    tmp = self._workspace_file(a)\n    final = self._workspace_file(b)\n"
+            "    with open(tmp, 'wb') as fh:\n        fh.write(body)\n        os.fsync(fh.fileno())\n"
+            "    os.replace(tmp, final)", where=WORKSPACES),
+    allowed("def f(self):\n    folder = self._workspace_folder()\n    folder.mkdir(parents=True, exist_ok=True)",
+            where=WORKSPACES),
+    allowed("def f(self, a):\n    t = self._workspace_file(a)\n    t.unlink(missing_ok=True)\n    return t.read_bytes()",
+            where=WORKSPACES),
     # W2A: the lock's sanctioned native calls and the fixture entry's one file-path load.
     allowed("def f(state):\n    target = lock_file_text(state)\n    k.CreateFileW(target, 1, 1, None, 1, 0x80, None)",
             where=LOCK),
@@ -917,10 +946,13 @@ def test_allowed_code_passes(scope: str, where: str, snippet: str) -> None:
     assert scan_source(textwrap.dedent(snippet), where, scope) == []
 
 
-def test_write_allowed_is_exactly_the_jobs_the_result_cache_and_the_lock() -> None:
-    assert WRITE_ALLOWED == {"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK}
-    assert set(CONFINED_WRITERS) == {RESULT_CACHE, LOCK} and CONFINED_WRITERS[LOCK] == {"lock_file_text", "lock_folder"}
+def test_write_allowed_is_exactly_the_jobs_the_result_cache_the_lock_and_the_workspace_store() -> None:
+    assert WRITE_ALLOWED == {"backend/nq_terminal/services/jobs.py", RESULT_CACHE, LOCK, WORKSPACES}
+    assert set(CONFINED_WRITERS) == {RESULT_CACHE, LOCK, WORKSPACES}
+    assert CONFINED_WRITERS[LOCK] == {"lock_file_text", "lock_folder"}
+    assert CONFINED_WRITERS[WORKSPACES] == {"_workspace_file", "_workspace_folder"}
     assert (PACKAGE / "services" / "result_cache.py").is_file() and (PACKAGE / "desktop" / "lock.py").is_file()
+    assert (PACKAGE / "services" / "workspaces.py").is_file()
     assert set(DYNAMIC_ALLOWED) == {FIXTURE_MAIN} and (PACKAGE / "desktop" / "fixture_main.py").is_file()
 
 

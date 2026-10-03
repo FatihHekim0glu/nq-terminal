@@ -327,17 +327,21 @@ Rows: 77 from the inventory route table, 1 found only in the working-tree contra
 ### 4.5 The bridge interface in the page
 
 ```ts
-// web/src/bridge/index.ts (sketch)
+// web/src/bridge/index.ts (as built in D3.2)
+export type SaveResult = Promise<'saved' | 'cancelled' | 'failed'> & { started: boolean }
 export interface ShellBridge {
   readonly bridgeVersion: number          // 0 in a browser
   readonly platform: 'browser' | 'windows' | 'macos'
   readonly keys: 'pc' | 'mac'
-  saveFile(name: string, data: Blob): Promise<'saved' | 'cancelled' | 'failed'>
+  saveFile(name: string, data: Blob): SaveResult
   copyText(text: string): Promise<boolean>
-  copyImage(png: Blob): Promise<boolean> // must start inside the click (Safari rule, inventory 10.4)
+  copyImage(png: Blob | Promise<Blob>): Promise<boolean> // starts inside the click (Safari rule, inventory 10.4)
+  canCopyImage(): boolean
 }
 ```
 
+- **Departures from the first sketch.** `saveFile` returns the outcome promise with a synchronous `started` flag, because `saveBlob` and `saveText` hand their callers a boolean at once and those callers stay unchanged. `copyImage` takes a blob or a promise of one (GRAB renders the PNG while the click is still live) and resolves `false` where there is no image clipboard; on a refusal it rejects with the platform's own error, which GRAB shows. `canCopyImage()` replaces the places that tested the clipboard themselves. `bridgeClipboard()` wraps `copyText` as a `writeText` clipboard for `chrome/copyLink.ts`.
+- The bridge is built lazily by `getBridge()` from `window.__NQT_SHELL__` (the read-only object the shell injects before page scripts: `bridgeVersion` of 1 or more, `platform` `windows` or `macos`, `keys` `pc` or `mac`). Anything else (missing, wrong types, version below 1, unknown platform) reads as a browser with `bridgeVersion` 0. So `main.tsx` installs nothing; `installBridge()` exists for tests only.
 - In every shell `saveFile` is today's object-URL anchor; the shell's download handler (D2) turns it into a native save dialog and a write through `writes.rs`. So `saveFile` has one implementation, and the bridge only reports the outcome where the browser cannot.
 - `copyText` and `copyImage` use the Clipboard API first. A native fallback command exists only if G1 or the Windows smoke finds the API failing; it would take bytes only, never a path (02, C3-1).
 - A source scan test, like today's `findWriteRequests`, fails on any `window.__TAURI__`, `invoke(` or `ipc` use in `web/src`.
@@ -964,7 +968,7 @@ Counts: 110 backend modules (keep 95, wrap 14, rewrite 1), 25 screen folders (ke
 | 23 | `screens/seas` | 7 | 2 | keep | unchanged screen, same contract | none | vitest `screens/seas` (2 files); Playwright p11.spec.ts; Mac smoke set (3.1) |
 | 24 | `screens/tear` | 26 | 20 | keep | unchanged screen, same contract | none | vitest `screens/tear` (20 files); Playwright tear.spec.ts; Mac smoke set (3.1) |
 | 25 | `screens/vcone` | 9 | 4 | keep | unchanged screen, same contract | none | vitest `screens/vcone` (4 files); Playwright p11.spec.ts; Mac smoke set (3.1) |
-| 26 | `(src root)` | 3 | 6 | wrap | main.tsx installs the bridge implementation chosen at start | 1.7 | vitest `(src root)` (6 files); new bridge or store tests (section 15) |
+| 26 | `(src root)` | 3 | 6 | wrap | main.tsx unchanged: `getBridge()` builds the bridge lazily from `window.__NQT_SHELL__` on first use | 1.7 | vitest `(src root)` (6 files); new bridge or store tests (section 15) |
 | 27 | `api` | 15 | 12 | wrap | client gains no new channel; health carries the contract version; bridgeVersion check; workspace client added beside jobsClient (the write scan allows exactly it) | 1.3, 1.6, 1.7 | vitest `api` (12 files); new bridge or store tests (section 15) |
 | 28 | `assets` | 6 | 0 | keep | unchanged | none | covered through its callers' tests |
 | 29 | `charts` | 31 | 26 | keep | unchanged; forced-colours drawing in the later accessibility phase | later | vitest `charts` (26 files) |

@@ -24,7 +24,7 @@ import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import { OOS } from '../../copy/oos'
 import { PIVOT } from '../../copy/perspective'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, fillCopy } from '../../copy/workspace'
-import { saveText } from '../../chrome/download'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { OosPivot } from '../../perspective'
 import OosLogGrid from './OosLogGrid'
 import { useOosCallerRequest } from './oosCaller'
@@ -113,7 +113,7 @@ function exportEntries(log: OosLog | undefined): void {
     return
   }
   const saved = saveText(OOS.exportFile, entriesCsv(entries))
-  postMessage(saved ? fillCopy(OOS.exportDone, { n: entries.length }) : OOS.exportUnavailable)
+  void sayWhenSaved(saved, { saved: fillCopy(OOS.exportDone, { n: entries.length }), unavailable: OOS.exportUnavailable })
 }
 
 export default function OosScreen(_props: ScreenProps) {

@@ -29,8 +29,8 @@ TERMINAL = BACKEND.parent
 CONTRACT = TERMINAL / "contract" / "openapi.json"
 FIXTURES = BACKEND / "tests" / "fixtures"
 
-BASELINE_ROUTE_PAIRS = 82  # 80 GET, POST /api/jobs, DELETE /api/jobs/{job_id}; baseline/d1_preflight.md plus the 4 desktop routes (W2A)
-BASELINE_CONTRACT_PATHS = 79
+BASELINE_ROUTE_PAIRS = 85  # 82 (D2) plus the 3 workspace routes (W3A: 2 GET, PUT /api/workspaces/{doc}); on purpose
+BASELINE_CONTRACT_PATHS = 81  # 79 plus /api/workspaces and /api/workspaces/{doc}
 
 # Libraries and modules that must not load on the start path. `scipy.stats` is the 510 ms family; the rest are the
 # modules that reach it, the heavy modules of 04 D1.1 and the IB client (loaded on demand only).
@@ -114,7 +114,7 @@ def test_route_list_is_the_baseline(child_report: dict[str, Any]) -> None:
     routes = [tuple(r) for r in child_report["routes"]]
     assert len(routes) == BASELINE_ROUTE_PAIRS
     non_get = sorted(r for r in routes if r[0] != "GET")
-    assert non_get == [("DELETE", "/api/jobs/{job_id}"), ("POST", "/api/jobs")]
+    assert non_get == [("DELETE", "/api/jobs/{job_id}"), ("POST", "/api/jobs"), ("PUT", "/api/workspaces/{doc}")]
 
 
 def test_every_contract_path_is_still_registered(child_report: dict[str, Any]) -> None:
