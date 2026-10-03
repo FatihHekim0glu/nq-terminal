@@ -1,6 +1,6 @@
 # Owner checks for the Windows app
 
-Status: templates written on 3 October 2026 for the hand-over (wave W6). Nothing in this folder has been run by the owner yet, so every check below reads NOT RUN.
+Status: templates written on 3 October 2026 for the hand-over (wave W6) and brought in line with the tree at commit `f2e03bf`. Nothing in this folder has been run by the owner yet, so every check below reads NOT RUN. Owner items that are not in this folder: the eomtsy research opening is a step of the lab's research, not of the app.
 
 Gate G2 on Windows (04, phase D5) and the four-week dual run (04, phase D6; 03 section 19) both end in checks that only a person at the keyboard can make: a real keyboard, a screen reader, a window that is really minimised, a double-click on the installed app. The automated rows of G2 are in `docs/desktop/g2_windows/results.md`. This folder holds one dated template for each check that stays with the owner, so that each is run the same way every time and leaves a record that can be read later.
 
@@ -53,6 +53,7 @@ The installer, the runbook and the SmartScreen record that these checks lean on 
 - **Blocking finding** (screen readers and keys): something you cannot do, or cannot tell, because of how the app behaves. Examples: a control that the keyboard cannot reach, a value that is read without its name, a table read as one long line, a key that does nothing, a key that leaves the page, a focus trap, a dialog that cannot be closed from the keyboard. A word that is read oddly (a mnemonic spelled out letter by letter, a pause in the wrong place) is a non-blocking finding: write it down, it does not fail the check.
 - **Blocking defect** (the dual run): as defined in 04 under the QA gate: a red parity row, a wrong number, a breach of the research gate or of the write ban, or a crash.
 - **Quiet window**: no build, test run, download, scan or game running, and the 60-second CPU average of the whole machine at or under 10%. The harness checks this itself and labels a run PROVISIONAL when it cannot get a quiet reading in ten minutes.
+- **Window watch**: while the harness or an automated suite launches the app, a watch over every window on the machine records each new visible window and each change of the foreground window, with the program that owns it. Only a window or a change that comes from the app's own process tree fails a run. Windows and foreground changes of other programs (a launcher that starts at sign-in, a notification, a game) are kept as notes in the run's record and do not fail it. This is owner decision 1.6 of the register. A window the watch could not trace to an owner still fails.
 - **Both doors**: the app and the browser terminal. They share one backend per lab through the lock file: whichever starts first owns the backend, the other attaches.
 - **1 MB** in a memory figure is 1,048,576 bytes, as the harness counts it.
 

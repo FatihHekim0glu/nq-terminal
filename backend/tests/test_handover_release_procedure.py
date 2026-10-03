@@ -40,3 +40,54 @@ def test_register_release_tag_names_the_stamped_commit_and_the_follow_up():
     entry = text[start : text.index("\n## 2.", start)]
     assert FOLLOW_UP in entry
     assert "on the final release commit" not in entry
+
+
+def _section_10() -> str:
+    text = HANDOVER.read_text(encoding="utf-8")
+    return text[text.index("## 10. Placeholders to fill") :]
+
+
+def _split_groups() -> tuple[str, str]:
+    section = _section_10()
+    before = section.index("Before the release commit")
+    after = section.index("After the tag, in the follow-up docs-only commit")
+    assert before < after
+    return section[before:after], section[after:]
+
+
+def test_placeholder_section_splits_before_and_after_the_release_commit():
+    _split_groups()
+
+
+def test_build_dependent_placeholders_are_filled_only_in_the_follow_up_commit():
+    before, after = _split_groups()
+    build_dependent = (
+        "{{G2: installer SHA256}}",
+        "{{G2: installer bytes}}",
+        "{{W6: final release commit}}",
+        "{{W6: install test result on the final installer}}",
+        "{{W6: release_check result and date}}",
+        "{{W6: tag result with date and commit}}",
+        "{{W6: soak result}}",
+    )
+    for placeholder in build_dependent:
+        assert placeholder not in before, placeholder
+        assert placeholder in after, placeholder
+
+
+def test_measurement_placeholders_are_filled_before_the_release_commit():
+    before, after = _split_groups()
+    assert "{{G2: idle memory}}" in before
+    assert "{{G2: idle memory}}" not in after
+
+
+def test_placeholder_section_is_removed_only_in_the_follow_up_commit():
+    section = _section_10()
+    assert "then removes this section" not in section
+    assert "removed in the follow-up docs-only commit" in section
+
+
+def test_tag_message_takes_its_hash_from_sha256sums():
+    section = _section_7()
+    assert "{{G2: installer SHA256}}" not in section
+    assert "SHA256SUMS" in section[section.index("git -C") :]

@@ -54,7 +54,7 @@ Write the three figures in the table below.
    Compare-Object $BeforeFolders $AfterFolders | Where-Object SideIndicator -eq '=>' | ForEach-Object InputObject
    'jobs.json changed: ' + ((Get-FileHash -Algorithm SHA256 -LiteralPath "$Lab\terminal\state\jobs.json").Hash -ne $BeforeJobs)
    $log = Get-Content -LiteralPath "$Lab\results\oos_access_log.jsonl"
-   $new = @($log | Select-Object -Skip $BeforeLog | ForEach-Object { $_ | ConvertFrom-Json })
+   $new = @($log | Select-Object -Skip $BeforeLog | Where-Object { $_.StartsWith('{') } | ForEach-Object { $_ | ConvertFrom-Json })
    'new gate log lines: {0}; latest end date served: {1}' -f $new.Count, (($new | Sort-Object end | Select-Object -Last 1).end)
    $new | Group-Object caller | Select-Object Name, Count
    'files under results and live newer than the start (other than the gate log):'
@@ -62,7 +62,7 @@ Write the three figures in the table below.
      Where-Object { $_.LastWriteTime -gt $T0 -and $_.Name -ne 'oos_access_log.jsonl' } | Select-Object -ExpandProperty FullName
    ```
 
-   Expected: the new entries in output are the run's folder and its log file, named after the run id, and nothing else; `jobs.json changed: True` (the one deliberate write); the new gate log lines are the run's own, plus lines of caller `terminal` for any screen you opened meanwhile, and the latest end date is no later than `2022-01-01 00:00:00+00:00` (the window's end is exclusive); no file listed under results or live.
+   Expected: the new entries in output are the run's folder and its log file, named after the run id, and nothing else; `jobs.json changed: True` (the one deliberate write); the new gate log lines are the run's own, plus lines of caller `terminal` for any screen you opened meanwhile (and lines of another caller if a research workflow of the lab wrote while you waited: list them by name, they are not the run's), and the latest end date is no later than `2022-01-01 00:00:00+00:00` (the window's end is exclusive); no file listed under results or live.
 8. [ ] In RUN, open the finished run from its row ("Open in RUN"). It opens and shows its figures.
 9. [ ] Close the app. Nothing is left running (as in the visible run, no process of the app's tree remains).
 10. [ ] Optional, not part of the pass rule: queue a second run and close the window while it is running. Expected: a confirmation first ("stop it?"), and after you confirm the job reads STOPPED (decision O11). This leaves a partial run folder under `backtests\output`; skip it if you want the folder list to stay clean.

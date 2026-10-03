@@ -346,6 +346,21 @@ installs anything.
 FULL and FIXTURE need this folder to sit inside the nq-lab checkout, as [Full setup](#full-setup-with-nq-lab) describes.
 The backend and its tests, and `pnpm e2e`, need `nq_lab` and are not run on a machine without it.
 
+## Windows desktop app
+
+On Windows the terminal also comes as a desktop app: a Tauri shell in [`desktop/`](desktop/README.md) that opens one
+window over the page the lab's own backend serves. The installer is unsigned and per-user, installs without an
+administrator prompt (into `%LOCALAPPDATA%\Programs` by default, or into a folder you pick, which is refused when it is
+a drive root, a network path, Program Files or the Windows folder), and Windows SmartScreen may warn on the first run.
+Install, update, roll back, the access-list runbook and the owner checks are in
+[`docs/desktop/handover_windows.md`](docs/desktop/handover_windows.md); the status of the build is in
+[`docs/desktop/README.md`](docs/desktop/README.md).
+
+The app and the browser door below share one backend per lab, so they can run at the same time: whichever starts first
+owns the backend and the other attaches to it. Every `/api` path, on either door, answers 401 without the session
+token. The app holds the token itself and never shows it. The browser door gets it as a one-time link from
+`start.ps1`. A terminal from before the token (an older backend on port 8765) is refused rather than attached to.
+
 ## Full setup with nq-lab
 
 The second quick start runs the terminal on nq-lab's research files. The steps below are for Windows and
@@ -741,6 +756,7 @@ those baseline comparisons until `e2e:offline:baseline` rewrites them.
 | `qa/` | An independent cross-check that recomputes the headline analytics with reference libraries; it never imports the backend. `qa/golden/` holds the reference values the browser-side formulas are pinned to |
 | `contract/openapi.json` | The API contract. The front end's types are generated from it, and both sides test that they still match it |
 | `docs/` | The design notes: [`PRD.md`](docs/PRD.md), [`ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`UI_SPEC.md`](docs/UI_SPEC.md), [`ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md), the look spec [`BLOOMBERG_LOOK.md`](docs/BLOOMBERG_LOOK.md) and [`TESTING.md`](docs/TESTING.md). [`docs/media/`](docs/media) holds the images on this page. The build log, `TASKS.md`, is kept local and is not in the repository |
+| `desktop/` | The Windows shell (a Tauri 2 crate in `src-tauri/`), its check and release scripts in `scripts/`, and the G2 measurement harness in `harness/`. See [`desktop/README.md`](desktop/README.md) |
 | `start.ps1` | The start command on Windows |
 | `start.sh`, `scripts/start.mjs` | The start command on macOS and Linux (`./start.sh doctor` first). `start.sh` finds Node and hands over to `scripts/start.mjs`, which checks the Node version and runs the launcher in `web/scripts/start/` |
 

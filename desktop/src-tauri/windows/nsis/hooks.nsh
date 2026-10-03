@@ -683,6 +683,10 @@ FunctionEnd
 ; that applies to the folder itself for another principal and grants delete-child (0x40), change-permissions (0x40000),
 ; take-ownership (0x80000) or all rights (0x10000000): with one of those the other account can rename the protected
 ; install folder away and plant its own (CWE-732; delete-child on the parent overrides the child's DACL).
+; Known limit: DELETE (0x10000) on the parent is not tested. A parent that grants another account Modify, as D:\ does to
+; its children through Authenticated Users, lets that account rename the parent away (with add-subdirectory on the
+; grandparent) and plant its own folder; testing it would refuse every folder below D:\ that inherits Modify, the test
+; trees under D:\dev included. The hand-over documents this (single-account PC, or the profile default).
 Function NqtCheckOneAncestor
   Push $0
   Push $1

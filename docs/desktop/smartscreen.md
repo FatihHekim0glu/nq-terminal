@@ -1,6 +1,6 @@
 # SmartScreen and the unsigned installer
 
-Status: draft written on 3 October 2026 for the Windows hand-over (D6). The installer is unsigned by decision (see the last section). The facts about this PC were read on 3 October 2026 with read-only commands. Figures that the final build or the final regression will produce are written as visible placeholders in double curly brackets that start with G2 or W6. The hand-over step fills them (the full list is in section 10 of `handover_windows.md`).
+Status: brought in line with the tree at commit `f2e03bf` on 3 October 2026, for the Windows hand-over (D6). The installer is unsigned by decision (see the last section). The facts about this PC were read on 3 October 2026 (at 23:26 local time) with read-only commands, and the table below gives the results. Figures that the final build will produce are written as visible placeholders in double curly brackets that start with G2 or W6. The hand-over step fills them (the full list is in section 10 of `handover_windows.md`).
 
 ## What SmartScreen does with this installer
 
@@ -20,14 +20,14 @@ A downloaded copy shows the prompt once per file. A new build is a new file, so 
 
 | Question | Command (read-only) | Result on 3 October 2026 |
 |---|---|---|
-| Does the local installer carry the mark? | `Get-Item -Path 'D:\dev\release\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe' -Stream *` | One stream, `:$DATA`. No `Zone.Identifier`, so SmartScreen is not invoked for this copy. |
-| Is it signed? | `Get-AuthenticodeSignature -LiteralPath 'D:\dev\release\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe'` | `NotSigned`. |
+| Does the local installer carry the mark? | `Get-Item -LiteralPath 'D:\dev\release\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe' -Stream *` | One stream, `:$DATA`, 3,253,317 bytes (the older build that the folder held at review time; see below). No `Zone.Identifier`, so SmartScreen is not invoked for this copy. The same command on the reference build of `f2e03bf`, `D:\dev\release-b\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe`, gave the same result: one stream, 3,253,192 bytes. |
+| Is it signed? | `Get-AuthenticodeSignature -LiteralPath 'D:\dev\release\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe'` | `NotSigned`, for both copies. |
 | Is Smart App Control on? | `reg query "HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy" /v VerifiedAndReputablePolicyState` | `0x0`, which is off. (`1` is on, `2` is evaluation mode.) |
 | Windows build | `[System.Environment]::OSVersion.Version.ToString()` | 10.0.26300.0 |
 
 Smart App Control matters more than SmartScreen. When it is on it can refuse an unsigned program outright, with no "Run anyway" button, and it judges every program, not only downloads. It is off here. If a later Windows update or a reset turns it on, the unsigned installer and the unsigned app will not run, and the only fixes are to turn Smart App Control off or to sign the build (see below). Re-read the registry value at the start of every dual-run week: it costs one command.
 
-The numbers in this document describe the 0.1.0 installer built from commit `49229b9`. The final build changes the hash: `{{G2: installer SHA256}}`, size `{{G2: installer bytes}}` bytes.
+The readings above were made on two builds. `D:\dev\release\0.1.0` held a build from `e0834c1` (SHA256 `991fc982de3d3e08cbb46d788ebd889ccc2cbde0c7741c5c70aafe658ba4773af`), and `D:\dev\release-b\0.1.0` holds the reference build of `f2e03bf` (SHA256 `9fb1c339971adc280dc7d4e085c92ea82c88d598ef9470b01bb58ab104f71ee0`). The merge step rebuilds the default folder from the final tree, so the installer you verify is that one: `{{G2: installer SHA256}}`, size `{{G2: installer bytes}}` bytes. A rebuild changes the hash every time. The mark reading does not depend on the build: a file made on this PC and copied by this PC carries no mark, whichever build it is.
 
 ## Verify the installer before you run it
 
@@ -43,7 +43,7 @@ Do this for any copy that did not come straight from the build folder on this PC
 
 2. Compare it with the expected value, which must come from a place other than the copy itself:
    - `SHA256SUMS` in the build folder (`D:\dev\release\0.1.0\SHA256SUMS`), read on the PC that built it;
-   - the value in the hand-over note, `{{G2: installer SHA256}}` (the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
+   - the value in the hand-over note, `{{G2: installer SHA256}}` (the reference build of `f2e03bf` gave `9fb1c339971adc280dc7d4e085c92ea82c88d598ef9470b01bb58ab104f71ee0`, and this changes with every rebuild);
    - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the tagged commit `{{W6: final release commit}}`.
 
 3. If the two hashes differ by even one character, stop. Delete the copy and fetch it again from the build folder. Do not click through the prompt.

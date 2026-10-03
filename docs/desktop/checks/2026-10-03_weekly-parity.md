@@ -26,7 +26,7 @@ The weekly parity list of 03 section 19 and 04 phase D6 (task D6.2), about 15 mi
 ```powershell
 $Lab   = Join-Path $env:USERPROFILE 'nq-lab'
 $Since = [datetime]::Parse('2026-10-03T00:00:00Z').ToUniversalTime()   # the date of last week's run (the first week: the day you start)
-$lines = Get-Content -LiteralPath "$Lab\results\oos_access_log.jsonl" | ForEach-Object { $_ | ConvertFrom-Json }
+$lines = Get-Content -LiteralPath "$Lab\results\oos_access_log.jsonl" | Where-Object { $_.StartsWith('{') } | ForEach-Object { $_ | ConvertFrom-Json }
 $new = @($lines | Where-Object { [datetime]$_.ts_utc -ge $Since })
 'lines since: {0}; other callers: {1}; ending after the fence: {2}' -f $new.Count,
   @($new | Where-Object { $_.caller -ne 'terminal' }).Count,
@@ -34,6 +34,8 @@ $new = @($lines | Where-Object { [datetime]$_.ts_utc -ge $Since })
 ```
 
 Write the three figures here: ____ lines, ____ other callers, ____ after the fence.
+
+The command skips any line that does not start with `{`: the log holds two torn lines (a lone `}`, left by an old test run) that would otherwise print an error each. It was run read-only on 3 October 2026 and printed `lines since: 12607; other callers: 261; ending after the fence: 0` for a start date of that day, with no error. The other callers there were the lab's own research workflows, not the terminal, which is why the rule above says to discount research you ran yourself. A line that is not the terminal's and whose time falls while only the terminal was running is the one to look at.
 
 ## The 16 rows
 

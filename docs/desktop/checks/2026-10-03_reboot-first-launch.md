@@ -62,7 +62,7 @@ Decision 1.1 of the register (`docs/desktop/owner_decisions_windows.md`, "T3: co
 PASS when all of these hold:
 
 - `firstAfterBoot` is true (the machine had been up 30 minutes or less). If it says false, the reading is a normal cold launch, not a post-boot one: file it as such and repeat after the next reboot.
-- `windows` is 0: no window appeared at any point.
+- `windows` is 0: no window of the app's own process tree appeared at any point. The harness hides the window and watches every window on the machine, but it counts only the ones that belong to the app it launched. A window of another program, such as one that starts at sign-in, does not fail the run: it is listed under `watch.notes` in the run's JSON record in the output folder, and you write it in the findings below. A window that the watch could not trace to an owner does fail the run.
 - Every row in the table is at or under its ceiling.
 - Cold start to HOME is within noise of the measure artefact's median {{G2: measure cold HOME median}}. Noise is 10% of the median, or inside the min to max range of the three accepted measure runs.
 
