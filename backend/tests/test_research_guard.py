@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from conftest import RESEARCH_FILES, WATCHED_FILES
-from research_guard import APPEND, APPEND_LOG, PRESENCE, REBUILT, STRICT, TEST_MARKER, ResearchGuard
+from research_guard import APPEND, APPEND_LOG, PRESENCE, REBUILT, STRICT, TEST_MARKER, ResearchGuard, note_child
 
 LOG_LINE = json.dumps({"caller": "rebal_v0", "reason": "screen read"}) + "\n"
 
@@ -86,10 +86,45 @@ def test_other_process_append_of_research_line_is_tolerated(guard, files):
     assert any("gained 1 line" in n for n in report.notes)
 
 
-def test_terminal_line_in_log_is_flagged(guard, files):
-    line = json.dumps({"caller": "terminal", "reason": "terminal display: NQ 1m 2019"}) + "\n"
-    other_process(append_code(files["log"], line))
+TERMINAL_LINE = json.dumps({"caller": "terminal", "reason": "terminal display: NQ 1m 2019"}) + "\n"
+
+
+def test_terminal_line_from_another_workflow_is_a_note(guard, files):
+    """The real-data smoke of another checkout writes terminal lines while this suite runs; nothing here read real data."""
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    report = guard.verify()
+    assert report.problems == []
+    assert any("terminal line" in n and "another workflow" in n for n in report.notes)
+
+
+def test_terminal_line_is_flagged_when_a_test_backend_ran_on_real_data(guard, files):
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    guard.note_real_data_child("-m nq_terminal")
     assert any("terminal line" in p for p in guard.verify().problems)
+
+
+def test_terminal_line_is_flagged_after_an_in_process_refusal(guard, files):
+    with pytest.raises(PermissionError):
+        open(files["ledger"], "a", encoding="utf-8")
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    assert any("terminal line" in p for p in guard.verify().problems)
+
+
+def test_a_backend_started_without_the_fixture_is_recorded(guard, files):
+    note_child(["-m", "nq_terminal"], {"NQT_PORT": "0"})
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    assert any("terminal line" in p for p in guard.verify().problems)
+
+
+def test_a_backend_started_on_the_fixture_is_not_recorded(guard, files):
+    note_child(["-m", "nq_terminal"], {"NQT_FIXTURE_DIR": "D:/fixtures"})
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    assert guard.verify().problems == []
+
+
+def test_a_marker_line_is_flagged_even_from_another_workflow(guard, files):
+    other_process(append_code(files["log"], json.dumps({"caller": "terminal", "reason": TEST_MARKER}) + "\n"))
+    assert any("test marker" in p for p in guard.verify().problems)
 
 
 def test_marker_line_in_ledger_is_flagged(guard, files):
@@ -260,3 +295,16 @@ def test_session_guard_covers_the_research_folders(research_files_guard):
         assert research_files_guard.would_block("os.remove", (str(path), None)) is not None, path
         assert research_files_guard.would_block("open", (str(path), "r", 0)) is None, path
     assert research_files_guard.would_block("os.mkdir", (str(ROOT / "results" / "new"), 0o777, None))
+
+
+def test_a_backend_with_the_prewarm_off_and_no_fixture_is_not_recorded(guard, files):
+    """The handshake and lock tests start the app's own backend with NQT_PREWARM=0 and only ask the proof and health routes."""
+    note_child(["-m", "nq_terminal"], {"NQT_DESKTOP": "1", "NQT_PREWARM": "0"})
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    assert guard.verify().problems == []
+
+
+def test_a_backend_with_the_prewarm_on_is_recorded(guard, files):
+    note_child(["-m", "nq_terminal"], {"NQT_DESKTOP": "1", "NQT_PREWARM": "1"})
+    other_process(append_code(files["log"], TERMINAL_LINE))
+    assert any("terminal line" in p for p in guard.verify().problems)

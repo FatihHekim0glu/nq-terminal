@@ -92,6 +92,7 @@ PACKAGE = BACKEND / "nq_terminal"
 TESTS = BACKEND / "tests"
 THIS_FILE = Path(__file__).resolve()
 WEB_SRC = TERMINAL / "web" / "src"
+RUST_SRC = TERMINAL / "desktop" / "src-tauri" / "src"
 SKIP_DIRS = frozenset({"node_modules", ".venv", "venv", "__pycache__", "dist", ".pytest_cache", ".mypy_cache"})
 PY_SUFFIXES = frozenset({".py"})
 WEB_SUFFIXES = frozenset({".ts", ".tsx", ".js", ".jsx", ".mjs"})
@@ -147,6 +148,8 @@ SAFE_WRITE_KEYWORDS = frozenset({"parents", "exist_ok", "missing_ok", "encoding"
 QA_WRITE_ALLOWED: frozenset[str] = frozenset({
     "qa/crosscheck/p12_expectation.py", "qa/crosscheck/p12_neff.py", "qa/crosscheck/p12_power.py",
     "qa/tests/test_p12_expectation.py", "qa/tests/test_p12_neff.py", "qa/tests/test_p12_power.py",
+    "qa/crosscheck/served.py",  # starts the hidden app's session script; no file writes
+    "qa/tests/test_served.py",  # writes stand-in session scripts under pytest's tmp_path only
 })
 
 BANNED_MODULES = {
@@ -585,6 +588,22 @@ def scan_web_text(text: str, where: str) -> list[Violation]:
             for n, line in enumerate(text.splitlines(), start=1) for m in WEB_ORDER_RE.finditer(line)]
 
 
+def _rust_order_pattern(name: str) -> str:
+    """One order name as a pattern that also catches its Rust spellings: place_order, PlaceOrder, placeorder."""
+    words = [w for part in name.split("_") for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", part)]
+    return "_?".join(re.escape(w) for w in words)
+
+
+# Case-insensitive, underscores optional, no word boundary: fail closed, a false hit costs a rename.
+RUST_ORDER_RE = re.compile("|".join(_rust_order_pattern(n) for n in sorted(ORDER_NAMES, key=len, reverse=True)), re.IGNORECASE)
+
+
+def scan_rust_text(text: str, where: str) -> list[Violation]:
+    """The order-call names as plain text (comments and strings included), for the shell's Rust source (D5.3)."""
+    return [Violation("order_call", where, n, f"names the order call {m.group(0)}")
+            for n, line in enumerate(text.splitlines(), start=1) for m in RUST_ORDER_RE.finditer(line)]
+
+
 def walk_files(base: Path, suffixes: frozenset[str]) -> list[Path]:
     found = []
     for folder, dirs, names in base.resolve().walk():
@@ -1007,4 +1026,74 @@ def test_session_fixture_records_sha256_before_and_after(tmp_path: Path) -> None
 def test_real_web_sources_have_no_order_calls() -> None:
     files = walk_files(WEB_SRC, WEB_SUFFIXES) if WEB_SRC.is_dir() else []
     violations = [v for p in files for v in scan_web_text(p.read_text(encoding="utf-8"), p.name)]
+    assert not violations, "\n".join(str(v) for v in violations)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# The shell's Rust source (D5.3): the order-name scan as text over desktop/src-tauri/src/**/*.rs.
+# ---------------------------------------------------------------------------------------------------------
+RUST_PLANTS = [
+    "client.placeOrder(id, contract, order);",
+    "fn place_order(&self) {}",
+    "let _ = cancel_order(id);",
+    "struct PlaceOrderRequest { id: u32 }",
+    'const NAME: &str = "submit_order";',
+    "// the shell never calls cancelOrder",
+    "self.reqGlobalCancel();",
+    "ib.modify_order(order);",
+    "positions.close_all_positions();",
+    "let f = reqOpenOrdersProtoBuf;",
+]
+RUST_LOOKALIKES = [
+    "let sort_order = 1; // no order path here",
+    "fn border_width() -> u32 { 2 }",
+    "fn reorder_tabs(tabs: &mut Vec<Tab>) {}",
+    "let placeholder = String::new();",
+    "// the cancelled download keeps its partial file",
+    "fn disorder() {}",
+    "let close_window_position = 3;",
+]
+
+
+def scan_rust_tree(root: Path) -> list[Violation]:
+    """Every *.rs file under `root`, scanned as text for the order calls."""
+    return [v for p in sorted(root.rglob("*.rs")) for v in scan_rust_text(p.read_text(encoding="utf-8"), p.relative_to(root).as_posix())]
+
+
+@pytest.mark.parametrize("line", RUST_PLANTS)
+def test_rust_scan_is_born_failing(line: str) -> None:
+    found = scan_rust_text(f"fn main() {{\n    {line}\n}}\n", "desktop/src-tauri/src/example.rs")
+    assert [(v.rule, v.line) for v in found] == [("order_call", 2)], found
+
+
+@pytest.mark.parametrize("name", sorted(ORDER_NAMES))
+def test_rust_scan_flags_every_order_name_in_every_spelling(name: str) -> None:
+    words = [w for part in name.split("_") for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", part)]
+    spellings = {name, "_".join(w.lower() for w in words), "".join(w.title() for w in words)}
+    for spelling in spellings:
+        assert scan_rust_text(f"let x = {spelling};", "x.rs"), spelling
+
+
+@pytest.mark.parametrize("line", RUST_LOOKALIKES)
+def test_rust_scan_allows_look_alikes(line: str) -> None:
+    assert scan_rust_text(line + "\n", "desktop/src-tauri/src/example.rs") == []
+
+
+def test_a_planted_order_name_in_a_rust_file_fails_the_tree_scan(tmp_path: Path) -> None:
+    (tmp_path / "crash").mkdir()
+    (tmp_path / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+    assert scan_rust_tree(tmp_path) == []
+    (tmp_path / "crash" / "planted.rs").write_text("fn f() {\n    submit_order_list(&orders);\n}\n", encoding="utf-8")
+    found = scan_rust_tree(tmp_path)
+    assert [(v.rule, v.where, v.line) for v in found] == [("order_call", "crash/planted.rs", 2)]
+
+
+def test_rust_scan_covers_the_shell_sources() -> None:
+    files = {p.relative_to(RUST_SRC).as_posix() for p in RUST_SRC.rglob("*.rs")}
+    assert {"main.rs", "supervise.rs", "link.rs", "writes.rs"} <= files, "the scan would pass vacuously"
+    assert any("/" in name for name in files), "the nested modules are scanned too"
+
+
+def test_rust_sources_have_no_order_calls() -> None:
+    violations = scan_rust_tree(RUST_SRC)
     assert not violations, "\n".join(str(v) for v in violations)

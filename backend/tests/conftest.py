@@ -15,8 +15,10 @@ layers (details in `research_guard.py`):
 1. Attribution: an in-process audit hook refuses (PermissionError) and records every open for writing,
    rename, replace, remove or truncate of a guarded file from this pytest process, before the OS call.
 2. Content: at session end `oos_openings.json` must be byte-identical; the append-only files must keep
-   their old bytes as a prefix, and no appended line may carry `"caller": "terminal"` or the test marker
-   `nqt-test`; `registry.csv` may be rebuilt only by another process and never with the marker.
+   their old bytes as a prefix, and no appended line may carry the test marker `nqt-test`, nor `"caller": "terminal"`
+   when this session could have read real data (a refused in-process write, or a backend started without the fixture and
+   without NQT_PREWARM=0, see `note_child`); otherwise terminal lines are another checkout's real-data run, noted;
+   `registry.csv` may be rebuilt only by another process and never with the marker.
 
 The sha256 of each file before and after the session is printed in the terminal summary as the record;
 a change there is accepted only when layers 1 and 2 attribute it to another workflow.
@@ -70,7 +72,7 @@ from nq_lab.config import OOS_LOG, RESULTS, ROOT  # noqa: E402
 from nq_lab.oos_gate import OPENINGS  # noqa: E402
 
 from opening_spec import ensure_opening_spec_fixture  # noqa: E402
-from research_guard import APPEND, APPEND_LOG, PRESENCE, REBUILT, STRICT, ResearchGuard  # noqa: E402
+from research_guard import APPEND, APPEND_LOG, PRESENCE, REBUILT, STRICT, ResearchGuard, note_child  # noqa: E402
 
 ensure_opening_spec_fixture()  # before the session guard write-protects the fixtures folder
 
@@ -370,6 +372,7 @@ class Backend:
 def spawn_backend(args: list[str], env: dict[str, str], *, token: str | None = None,
                   nonce: str | None = None) -> Backend:
     """`python -E -s -X utf8 <args>` from terminal/backend, hidden, stdin piped (TOKEN and NONCE written if given)."""
+    note_child(args, env)
     proc = subprocess.Popen([str(PY), *PYTHON_FLAGS, *args], cwd=BACKEND, env=env, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=HIDDEN)
     if token is not None:

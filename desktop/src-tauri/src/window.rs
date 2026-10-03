@@ -460,13 +460,16 @@ unsafe fn webview_hooks(
     environment: &ICoreWebView2Environment,
     app: AppHandle,
 ) -> windows::core::Result<()> {
-    let script_done =
-        AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(|result, _id| {
-            if let Err(e) = result {
-                crate::crash::log("bridge_script_failed", json!({ "error": e.to_string() }));
+    let failing = app.clone();
+    let script_done = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
+        move |result, _id| {
+            if let Some(refusal) = bridge_script_refusal(&result) {
+                crate::crash::log("bridge_script_failed", json!({ "error": refusal }));
+                end_without_bridge(&failing, refusal);
             }
             Ok(())
-        }));
+        },
+    ));
     let opener = app.clone();
     let new_window = NewWindowRequestedEventHandler::create(Box::new(move |core, args| {
         on_new_window(core, args, &opener)
@@ -484,6 +487,27 @@ unsafe fn webview_hooks(
         environment.add_NewBrowserVersionAvailable(&update, &mut token)?;
     }
     Ok(())
+}
+
+/// The refusal text when the engine reports that the bridge script was not registered, or None when it was. The
+/// registration completes asynchronously, after `webview_hooks` has returned, so a failure cannot refuse the setup
+/// any more: the shell ends instead (fail closed), because a page without the bridge would run without the shell's
+/// keys, zoom and download guards.
+fn bridge_script_refusal<T>(result: &windows::core::Result<T>) -> Option<String> {
+    result
+        .as_ref()
+        .err()
+        .map(|e| format!("the page bridge could not be registered: {e}"))
+}
+
+/// Ends the shell after a failed bridge registration, off the UI thread (a dialog must not block the engine's own
+/// callback). Test builds show no dialog and just end.
+fn end_without_bridge(app: &AppHandle, refusal: String) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        dialogs::fatal(&refusal);
+        app.exit(1);
+    });
 }
 
 /// Whether a new-window request is the chart library's attribution link (https://www.tradingview.com/, with or
@@ -655,6 +679,16 @@ pub fn focus_existing(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_bridge_registration_is_a_refusal_and_a_good_one_is_not() {
+        let failed: windows::core::Result<()> = Err(windows::core::Error::from_hresult(
+            windows::core::HRESULT(0x8000_4005_u32 as i32),
+        ));
+        let text = bridge_script_refusal(&failed).expect("a failure is a refusal");
+        assert!(text.contains("bridge"), "{text}");
+        assert_eq!(bridge_script_refusal(&Ok(())), None);
+    }
 
     #[test]
     fn only_the_attribution_address_is_opened() {

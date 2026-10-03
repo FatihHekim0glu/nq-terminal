@@ -1,19 +1,23 @@
-//! The screen-reader announcement for each rebuild stage (WCAG 4.1.3), a part of window_rebuild.rs kept pure so the
-//! hidden-window test can run the very same script.
+//! The screen-reader announcement for each rebuild stage and each stopped reason (WCAG 4.1.3), a part of
+//! window_rebuild.rs and supervise_shell.rs kept pure so the hidden-window tests can run the very same script.
 //!
-//! rebuild.html has no script (the bundled pages run under `script-src 'self'`), and each stage is a fragment-only
-//! navigation, which fires no page load and moves no focus. The shell therefore runs this short script through the
-//! webview's eval, which the page policy does not govern: it sets the document title to the stage heading and focuses
-//! that heading (tabindex -1), so a screen reader announces the stage. It waits, bounded, for the page to be the
-//! rebuild page on the stage's fragment, because the first navigation is a full load that eval can overtake.
+//! rebuild.html and stopped.html have no script (the bundled pages run under `script-src 'self'`), and each stage or
+//! reason is a fragment-only navigation, which fires no page load and moves no focus. The shell therefore runs this
+//! short script through the webview's eval, which the page policy does not govern: it sets the document title to the
+//! section's heading and focuses that heading (tabindex -1), so a screen reader announces it. It waits, bounded, for
+//! the page to be on the fragment, because the first navigation is a full load that eval can overtake.
 
-/// The script for one stage: `fragment` is the section id (`confirm`, `running`, ...), its heading is `<id>-title`.
-/// Anything but ASCII letters is dropped, so the text can never break out of the script's string.
+/// The script for one section: `fragment` is the section id (`confirm`, `exited`, `lock-held`, ...). The rebuild page
+/// names the heading `<id>-title`, the stopped page `<id>-text` (its reason line); the script takes whichever exists.
+/// Anything but ASCII letters and hyphens is dropped, so the text can never break out of the script's string.
 pub fn announce_script(fragment: &str) -> String {
-    let id: String = fragment.chars().filter(char::is_ascii_alphabetic).collect();
+    let id: String = fragment
+        .chars()
+        .filter(|c| c.is_ascii_alphabetic() || *c == '-')
+        .collect();
     format!(
         "(function(f){{var n=0;function go(){{\
-var h=document.getElementById(f+'-title');\
+var h=document.getElementById(f+'-title')||document.getElementById(f+'-text');\
 if(!h||location.hash!=='#'+f||document.readyState==='loading'){{if(++n<50)setTimeout(go,100);return;}}\
 document.title='nq-lab terminal: '+h.textContent;h.setAttribute('tabindex','-1');h.focus();}}go();}})('{id}')"
     )
@@ -33,6 +37,13 @@ mod tests {
             script.contains("++n<50"),
             "the wait must be bounded: {script}"
         );
+    }
+
+    #[test]
+    fn a_hyphenated_reason_keeps_its_hyphen_and_may_name_a_reason_line() {
+        let script = announce_script("lock-held");
+        assert!(script.ends_with("('lock-held')"), "{script}");
+        assert!(script.contains("f+'-text'"), "{script}");
     }
 
     #[test]

@@ -324,8 +324,79 @@ fn measure_build_stays_hidden_through_splash_and_close() {
     }
     let log = shell_log(&result.run);
     check_start_record(&log);
+    check_engine_settings_off(&log);
     let ended = launch_support::stand_in_ended(&result.run.join("lab"), Duration::from_secs(10));
     assert!(ended, "the stand-in backend outlived the shell's close");
+}
+
+/// The release settings as the engine reports them (03 section 13.1): the shell's own `keys_installed` read-back must
+/// show devtools, the browser accelerator keys and the engine's zoom control all off. The start record's `devtools`
+/// field is a compile-time literal, so it proves nothing; this is the one runtime proof on a non-smoke build.
+#[cfg(feature = "measure")]
+fn check_engine_settings_off(log: &[Value]) {
+    let installed = log
+        .iter()
+        .find(|e| e["event"] == "keys_installed")
+        .unwrap_or_else(|| panic!("no keys_installed record: {log:?}"));
+    for field in ["devtools", "accelerator_keys", "zoom_control"] {
+        assert_eq!(
+            installed[field],
+            serde_json::json!(false),
+            "the measure build reads {field} as on (or unread): {installed}"
+        );
+    }
+}
+
+/// Born failing: the check must refuse every way the read-back can go wrong, so it cannot pass by accident.
+#[cfg(feature = "measure")]
+mod engine_settings_check {
+    use super::check_engine_settings_off;
+    use serde_json::{Value, json};
+
+    fn keys(devtools: Value, accelerator_keys: Value, zoom_control: Value) -> Vec<Value> {
+        vec![
+            json!({ "event": "start" }),
+            json!({ "event": "keys_installed", "devtools": devtools, "accelerator_keys": accelerator_keys, "zoom_control": zoom_control }),
+        ]
+    }
+
+    #[test]
+    fn all_three_off_passes() {
+        check_engine_settings_off(&keys(json!(false), json!(false), json!(false)));
+    }
+
+    #[test]
+    #[should_panic(expected = "devtools")]
+    fn devtools_on_fails() {
+        check_engine_settings_off(&keys(json!(true), json!(false), json!(false)));
+    }
+
+    #[test]
+    #[should_panic(expected = "accelerator_keys")]
+    fn accelerator_keys_on_fails() {
+        check_engine_settings_off(&keys(json!(false), json!(true), json!(false)));
+    }
+
+    #[test]
+    #[should_panic(expected = "zoom_control")]
+    fn zoom_control_on_fails() {
+        check_engine_settings_off(&keys(json!(false), json!(false), json!(true)));
+    }
+
+    #[test]
+    #[should_panic(expected = "devtools")]
+    fn an_unread_setting_fails() {
+        check_engine_settings_off(&keys(json!(null), json!(false), json!(false)));
+    }
+
+    #[test]
+    #[should_panic(expected = "no keys_installed")]
+    fn a_missing_record_fails() {
+        check_engine_settings_off(&[
+            json!({ "event": "start" }),
+            json!({ "event": "keys_failed" }),
+        ]);
+    }
 }
 
 fn check_start_record(log: &[Value]) {
