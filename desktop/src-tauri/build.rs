@@ -37,6 +37,9 @@ fn shadow_mingw_default_manifest() -> Result<(), String> {
     std::fs::write(&object, EMPTY_COFF_X64).map_err(|e| format!("{}: {e}", object.display()))?;
     let prefix = format!("{}/", dir.display().to_string().replace('\\', "/"));
     println!("cargo:rustc-link-arg-bins=-B{prefix}");
+    // The integration tests that include shell modules link tauri's menu code, which needs Common Controls 6
+    // (TaskDialogIndirect): they get the same one-manifest link as the bin (see the resource object below).
+    println!("cargo:rustc-link-arg-tests=-B{prefix}");
     Ok(())
 }
 
@@ -85,5 +88,9 @@ fn main() {
     let attributes = tauri_build::Attributes::new().windows_attributes(windows);
     if let Err(e) = tauri_build::try_build(attributes) {
         panic!("tauri-build failed: {e:#}");
+    }
+    if gnu && let Ok(out) = std::env::var("OUT_DIR") {
+        let resource = PathBuf::from(out).join("libresource.a");
+        println!("cargo:rustc-link-arg-tests={}", resource.display());
     }
 }

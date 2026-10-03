@@ -81,7 +81,7 @@ $ScopeRules = @(
     @{ Except = @('link.rs'); Banned = '\bWSA[A-Z]\w*|WinSock' },
     @{ Except = @('reads.rs', 'writes.rs'); Banned = '\bCreateFile(W|A|2|TransactedW)\b' },
     @{ Except = @('reads.rs'); Banned = '\b(ReadFile|FindFirstFile)\w*' },
-    @{ Except = @('writes.rs'); Banned = '\b(WriteFile\w*|DeleteFileW|MoveFile\w*|CopyFile\w*|CreateDirectory\w*|CreateHardLinkW|CreateSymbolicLinkW|RemoveDirectoryW|ReplaceFileW|SetFileAttributesW)\b' },
+    @{ Except = @('writes.rs'); Banned = '\b(WriteFile\w*|DeleteFileW|MoveFile\w*|CopyFile\w*|CreateDirectory\w*|CreateHardLinkW|CreateSymbolicLinkW|RemoveDirectoryW|ReplaceFileW|SetFileAttributesW|SetFileInformationByHandle)\b' },
     @{ Except = @('supervise.rs'); Banned = '\bCreateProcess\w*' },
     @{ Except = @('dialogs.rs'); Banned = 'rfd::' }
 )
@@ -157,6 +157,8 @@ function Test-Scope {
         @{ File = 'writes.rs'; Hits = 1; Text = 'pub fn y() { let _ = ReadFile(h, b, n, None); }' },
         @{ File = 'writes.rs'; Hits = 0; Text = 'pub fn y() { let _ = CreateFileW(p, 0, s, None, d, f, None); let _ = WriteFile(h, b, n, None); let _ = MoveFileExW(a, b, f); }' },
         @{ File = 'window.rs'; Hits = 1; Text = 'pub fn q() { let _ = MoveFileExW(a, b, f); }' },
+        @{ File = 'window.rs'; Hits = 1; Text = 'pub fn q() { let _ = SetFileInformationByHandle(h, c, p, n); }' },
+        @{ File = 'writes.rs'; Hits = 0; Text = 'pub fn y() { let _ = SetFileInformationByHandle(h, c, p, n); }' },
         @{ File = 'link.rs'; Hits = 1; Text = 'pub fn z() { let _ = CopyFileW(a, b, true); }' },
         @{ File = 'window.rs'; Hits = 1; Text = 'pub fn q() { let _ = CreateProcessW(a, c, None, None, false, f, None, d, si, pi); }' },
         @{ File = 'writes.rs'; Hits = 1; Text = 'pub fn y() { let _ = CreateProcessW(a, c, None, None, false, f, None, d, si, pi); }' },

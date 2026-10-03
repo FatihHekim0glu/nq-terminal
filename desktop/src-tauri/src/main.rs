@@ -6,8 +6,8 @@
 //!
 //! 1. `window::scrub_env` first, before any thread exists (edition 2024 makes `remove_var` unsafe);
 //! 2. `window::policy_check`;
-//! 3. `keys::install`, 4. `window::setup`, 5. `supervise::start`, 6. `writes::on_download_starting`,
-//!    7. `crash::install` on the built window;
+//! 3. `keys::install`, 4. `window::setup`, 5. `supervise::start` (with the stale-page hook of stale_page.rs),
+//!    6. `writes::on_download_starting`, 7. `crash::install` on the built window;
 //! 8. `smoke::browser_args`, which can only take effect on the window builder, so it is evaluated just before the
 //!    build;
 //! 9. `smoke::after_build` last.
@@ -24,14 +24,17 @@ compile_error!("smoke and measure are separate builds: enable at most one of the
 
 mod crash;
 mod dialogs;
+mod guard;
 mod keys;
 mod link;
 mod reads;
 mod smoke;
 #[cfg(feature = "smoke")]
 mod smoke_options;
+mod stale_page;
 mod supervise;
 mod window;
+mod window_fit;
 mod writes;
 
 use serde_json::json;
@@ -42,7 +45,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, Wry};
 pub const MAIN_LABEL: &str = "main";
 /// The bundled splash page (assets/), shown until the backend's page is ready.
 pub const SPLASH_PAGE: &str = "splash.html";
-/// Minimum inner size in logical pixels (O12).
+/// Minimum inner size in logical pixels (O12); window_fit.rs lowers it on a display too small for it.
 pub const MIN_WIDTH: f64 = 1024.0;
 pub const MIN_HEIGHT: f64 = 640.0;
 /// A test build: smoke or measure. Native dialogs fail closed and `show()` is never called.
@@ -176,14 +179,16 @@ fn start_record(app: &tauri::App, launch: &Launch) -> serde_json::Value {
 
 fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
     let options = window::resolve(app.handle(), &launch)?;
+    app.manage(options.clone());
     writes::configure(writes::WritePolicy {
         lab: options.lab.clone(),
         config_dir: options.config_dir.clone(),
-        save_dirs: Vec::new(),
+        save_dirs: smoke::save_dirs(&launch),
     })
     .map_err(|e| ShellError::Refused(e.to_string()))?;
     crash::set_log_dir(&options.config_dir);
     crash::log("start", start_record(app, &launch));
+    let fitted = fitted_size(app, &options);
     #[allow(
         clippy::disallowed_methods,
         reason = "the one window build: visible(false), the window is revealed only by window::reveal in the release"
@@ -191,8 +196,8 @@ fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
     let mut builder =
         WebviewWindowBuilder::new(app, MAIN_LABEL, WebviewUrl::App(SPLASH_PAGE.into()))
             .title(&options.title)
-            .inner_size(options.width, options.height)
-            .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
+            .inner_size(fitted.width, fitted.height)
+            .min_inner_size(fitted.min_width, fitted.min_height)
             .decorations(true)
             .visible(false)
             .focused(false)
@@ -204,15 +209,30 @@ fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
         builder = builder.additional_browser_args(&args);
     }
     let main = builder.build()?;
+    window_fit::refit(&main);
     keys::install(&main, &launch)?;
     window::setup(&main, &launch)?;
-    let supervisor = supervise::start(&main, &launch)?;
+    let rebuild_log = options.config_dir.join(crash::LOG_DIR).join("rebuild.log");
+    let stale = options
+        .lab
+        .clone()
+        .map(|lab| stale_page::hook(&main, launch.rebuild_allowed(), lab, rebuild_log));
+    let supervisor = supervise::start(&main, &launch, stale)?;
     writes::on_download_starting(&main, &launch)?;
     crash::install(&main, &launch)?;
     smoke::after_build(&main, &launch)?;
     app.manage(supervisor);
     app.manage(launch);
     Ok(())
+}
+
+/// The window sizes for the display it opens on (window_fit.rs); a test build keeps its exact sizes.
+fn fitted_size(app: &tauri::App, options: &window::WindowOptions) -> window_fit::Fit {
+    let want = (options.width, options.height);
+    if TEST_BUILD {
+        return window_fit::Fit::unclamped(want);
+    }
+    window_fit::initial(app.primary_monitor().ok().flatten().as_ref(), want)
 }
 
 /// A refused setup: the log line, the fatal dialog (fail closed in a test build), and the exit code. It must be
@@ -238,18 +258,42 @@ fn main() {
         }
     };
     let builder = release_plugins(tauri::Builder::default());
-    let run = builder
+    let built = builder
         .setup(move |app| {
             if let Err(e) = setup(app, launch) {
                 std::process::exit(setup_failed(&e));
             }
             Ok(())
         })
-        .run(context());
-    if let Err(e) = run {
-        crash::log("run_failed", json!({ "error": e.to_string() }));
-        dialogs::fatal(&e.to_string());
-        std::process::exit(EXIT_RUN);
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                && window.label() == MAIN_LABEL
+                && shutdown_backend(window.app_handle()).is_err()
+            {
+                api.prevent_close();
+            }
+        })
+        .build(context());
+    match built {
+        Ok(app) => app.run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                let _ = shutdown_backend(app);
+            }
+        }),
+        Err(e) => {
+            crash::log("run_failed", json!({ "error": e.to_string() }));
+            dialogs::fatal(&e.to_string());
+            std::process::exit(EXIT_RUN);
+        }
+    }
+}
+
+/// Ends the backend this shell started (03 section 2.3): asks first when a backtest runs (Err keeps the window), then
+/// closes its stdin, waits up to five seconds and ends the job. An attached backend is never touched.
+fn shutdown_backend(app: &tauri::AppHandle) -> Result<(), ShellError> {
+    match app.try_state::<supervise::shell::Supervisor>() {
+        Some(supervisor) => supervisor.shutdown(app.get_webview_window(MAIN_LABEL).as_ref()),
+        None => Ok(()),
     }
 }
 

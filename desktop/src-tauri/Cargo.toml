@@ -50,8 +50,12 @@ windows = { version = "0.62.2", features = [
   # with OVERLAPPED. Declared now so no stage B slice edits this manifest; tests/windows_features.rs uses both.
   "Win32_System_Pipes",
   "Win32_System_IO",
+  # keys.rs reads the Ctrl state with GetKeyState; window.rs opens the attribution link with ShellExecuteW (release).
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
 ] }
-rfd = { version = "0.17.2", default-features = false }
+# common-controls-v6: rfd draws OkCancelCustom as a task dialog (labels and answers); without it a plain OK/Cancel box.
+rfd = { version = "0.17.2", default-features = false, features = ["common-controls-v6"] }
 hmac = "0.13.0"
 sha2 = "0.11.0"
 rand = "0.10.3"

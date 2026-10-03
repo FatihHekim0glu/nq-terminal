@@ -3,8 +3,8 @@
 //! Tauri 2.12 answers an error returned from the setup hook with `panic!("Failed to setup app")`, not with an error
 //! from `run()`. Under the release's `panic = "abort"` and the windows subsystem that would end the process with no
 //! dialog and no shell log line, so main.rs must handle the refusal inside the hook. This test plants a refusal the
-//! smoke build cannot get past (`--fixture` over an empty lab folder: refused by the stage A supervisor stub, and by
-//! the stage B spawn because the lab has no backend), starts the hidden smoke exe under D:\dev\d4\sr\<run> with no
+//! smoke build cannot get past (`--fixture` over an empty lab folder: window::setup's lab check refuses a folder
+//! with no venv interpreter, research config or backend entry before the supervisor is reached), starts the hidden smoke exe under D:\dev\d4\sr\<run> with no
 //! build tools on PATH, watches for any window or foreground change of the shell, and asserts exit code 1, a
 //! `setup_failed` line in `<config>/logs/shell.log`, the fail-closed fatal dialog and no panic text.
 #![cfg(feature = "smoke")]

@@ -10,8 +10,8 @@
 # no manifest merge warning in any build log; and no target or node_modules folder under desktop\.
 # The measure feature set is linted, tested and pe-info checked like smoke. Its test run (test-measure) launches the
 # hidden measure exe from tests\hidden_window.rs with NQT_MEASURE_DIR naming a run folder under D:\dev (the exe takes
-# no switch; it stays on its splash, so its HOME load is open until stage B spawns the backend), and
-# tests\show_scope.rs scans every feature set statically for a show() outside the release cfg.
+# no switch; its lab comes from the settings file the test plants, and its backend is a stand-in that waits for its
+# stdin, so its HOME load belongs to the measurement run), and tests\show_scope.rs scans every feature set statically for a show() outside the release cfg.
 # -ShowProof also runs the born-failing proof, per feature, that the watch catches a build calling show() (it shows
 # one window for a moment on screen 2 and refuses to run without that monitor; a skip counts as a failure here).
 # Everything runs --locked. Toolchain, caches and output stay under D:\dev; the owner's PATH is not changed.
@@ -80,6 +80,15 @@ function Step-PeInfo {
     if (-not (Test-Path $Exe)) { Add-Result $Name $false "missing $Exe"; return }
     $code = Invoke-Logged -Name $Name -File 'node' -Arguments @((Join-Path $PSScriptRoot 'pe-info.mjs'), $Exe, '--check')
     Add-Result $Name ($code -eq 0) "exit $code for $Exe"
+}
+
+function Step-PeInfoOfBuild {
+    # The debug exe is one path for every feature set, so each check first builds its own set (a no-op when it is
+    # fresh, which still puts that set's exe at the path) and reads the exe straight after.
+    param([string]$Name, [string[]]$Features)
+    $built = Invoke-Logged -Name "$Name-build" -File 'cargo' -Arguments (@('build', '--locked') + $Features)
+    if ($built -ne 0) { Add-Result $Name $false "the build of this feature set failed (exit $built)"; return }
+    Step-PeInfo $Name (Join-Path $TargetDir 'debug\nq-lab-terminal.exe')
 }
 
 function Step-Loader {
@@ -176,11 +185,11 @@ Step-Cargo 'clippy-default' (@('clippy', '--all-targets', '--locked', '--', '-D'
 Step-Cargo 'clippy-smoke' (@('clippy', '--all-targets', '--locked') + $smoke + @('--', '-D', 'warnings'))
 Step-Cargo 'clippy-measure' (@('clippy', '--all-targets', '--locked') + $measure + @('--', '-D', 'warnings'))
 Step-Cargo 'test-default' @('test', '--locked')
-Step-PeInfo 'pe-info-debug' (Join-Path $TargetDir 'debug\nq-lab-terminal.exe')
+Step-PeInfoOfBuild 'pe-info-debug' @()
 Step-Cargo 'test-smoke' (@('test', '--locked') + $smoke)
-Step-PeInfo 'pe-info-smoke-debug' (Join-Path $TargetDir 'debug\nq-lab-terminal.exe')
+Step-PeInfoOfBuild 'pe-info-smoke-debug' $smoke
 Step-Cargo 'test-measure' (@('test', '--locked') + $measure)
-Step-PeInfo 'pe-info-measure-debug' (Join-Path $TargetDir 'debug\nq-lab-terminal.exe')
+Step-PeInfoOfBuild 'pe-info-measure-debug' $measure
 if ($ShowProof) { Step-ShowProof 'smoke'; Step-ShowProof 'measure' }
 Step-Cargo 'deny' @('deny', '--locked', 'check')
 Step-Audit

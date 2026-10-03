@@ -1,7 +1,9 @@
 # The shell has no data path (03 section 6 item 2). These bans hold everywhere in the crate; the only allow sites
-# are the function-level allows in src/link.rs (TCP: get), src/reads.rs (reads: read_capped, read_log_tail) and
-# src/writes.rs (writes: parent_folder, append, write_new, rotate), and the one release-only show() in
-# src/window.rs. Test modules and build.rs carry their own allow with a reason, because they are not part of the
+# are the function-level allows in src/link.rs (TCP: get), src/reads.rs (reads: read_capped, read_lock,
+# read_log_tail), src/writes.rs (writes: make_parents, open, move_file), src/window_folders.rs (ensure_data_dir:
+# the WebView2 data folder, created with its protected DACL before the write module is configured),
+# src/supervise.rs (the one CreateProcessW), src/smoke_screen2.rs (the smoke-only screen 2 placement) and the
+# release-only show() sites in src/window.rs. Test modules and build.rs carry their own allow with a reason, because they are not part of the
 # shipped shell. An allow lifts the whole lint on its function, so desktop/scripts/plant-check.ps1 holds the rest
 # there by scope scan (no process, no show(), no native dialog; no fs in link.rs) and proves each ban fails a
 # planted use, inside the three modules too.
@@ -78,6 +80,7 @@ disallowed-methods = [
   { path = "windows::Win32::Storage::FileSystem::RemoveDirectoryW", reason = "a raw file write; writes go through src/writes.rs" },
   { path = "windows::Win32::Storage::FileSystem::ReplaceFileW", reason = "a raw file write; writes go through src/writes.rs" },
   { path = "windows::Win32::Storage::FileSystem::SetFileAttributesW", reason = "a raw file write; writes go through src/writes.rs" },
+  { path = "windows::Win32::Storage::FileSystem::SetFileInformationByHandle", reason = "deletes or renames by handle; only src/writes.rs may, on a handle it has checked" },
   { path = "windows::Win32::System::Threading::CreateProcessW", reason = "only the Job Object spawn in src/supervise.rs starts a process" },
   { path = "windows::Win32::System::Threading::CreateProcessA", reason = "only the Job Object spawn in src/supervise.rs starts a process" },
   { path = "windows::Win32::System::Threading::CreateProcessAsUserW", reason = "only the Job Object spawn in src/supervise.rs starts a process" },

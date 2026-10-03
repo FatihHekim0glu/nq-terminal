@@ -1,0 +1,202 @@
+//! The global window and foreground watch every hidden-window run uses (04 standing rule 4): EnumWindows over every
+//! process every 100 ms plus GetForegroundWindow, and the judge that decides what fails a run.
+#![allow(
+    dead_code,
+    reason = "each test binary that includes this file uses a part of it"
+)]
+
+use std::collections::HashSet;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
+use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GWL_EXSTYLE, GetClassNameW, GetForegroundWindow, GetLayeredWindowAttributes,
+    GetWindowLongW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+    LAYERED_WINDOW_ATTRIBUTES_FLAGS, WS_EX_LAYERED,
+};
+use windows::core::BOOL;
+
+const SAMPLE: Duration = Duration::from_millis(100);
+pub const TAO_CLASS: &str = "Tao Thread Event Target";
+
+#[derive(Clone, Debug)]
+pub struct Seen {
+    pub pid: u32,
+    pub class: String,
+    pub title: String,
+    pub rect: (i32, i32, i32, i32),
+    pub drawn: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct WatchReport {
+    pub samples: u64,
+    pub max_gap_ms: u128,
+    pub new_visible: Vec<Seen>,
+    pub foreground_changes: Vec<Seen>,
+}
+
+pub unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    // SAFETY: lparam is the address of the Vec that all_windows keeps alive for the whole EnumWindows call.
+    unsafe { &mut *(lparam.0 as *mut Vec<isize>) }.push(hwnd.0 as isize);
+    BOOL(1)
+}
+
+/// Every top-level window of every process.
+pub fn all_windows() -> Vec<isize> {
+    let mut list: Vec<isize> = Vec::new();
+    // SAFETY: the callback only pushes into `list`, which outlives the call.
+    let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut list as *mut _ as isize)) };
+    list
+}
+
+pub fn visible_windows() -> HashSet<isize> {
+    // SAFETY: a plain query on window handles EnumWindows just listed.
+    let visible = |h: &isize| unsafe { IsWindowVisible(HWND(*h as *mut _)) }.as_bool();
+    all_windows().into_iter().filter(visible).collect()
+}
+
+/// A window counts as drawn when it is visible, not cloaked, has an area, and is not a layered window that never
+/// got its attributes (or has alpha 0), which is how tao keeps its event-target window unseen (W0A).
+pub fn describe(handle: isize) -> Seen {
+    let hwnd = HWND(handle as *mut _);
+    // SAFETY: read-only queries on a window handle; a handle that died in between just yields zeros.
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        let mut class = [0u16; 256];
+        let n = GetClassNameW(hwnd, &mut class) as usize;
+        let mut title = [0u16; 256];
+        let m = GetWindowTextW(hwnd, &mut title) as usize;
+        let mut r = RECT::default();
+        let _ = GetWindowRect(hwnd, &mut r);
+        let mut cloaked = 0u32;
+        let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
+        let layered = (GetWindowLongW(hwnd, GWL_EXSTYLE) as u32) & WS_EX_LAYERED.0 != 0;
+        let (mut key, mut alpha, mut flags) =
+            (Default::default(), 0u8, LAYERED_WINDOW_ATTRIBUTES_FLAGS(0));
+        let attrs = layered
+            && GetLayeredWindowAttributes(hwnd, Some(&mut key), Some(&mut alpha), Some(&mut flags))
+                .is_ok();
+        let undrawn_layer = layered && (!attrs || alpha == 0);
+        let area = i64::from((r.right - r.left).max(0)) * i64::from((r.bottom - r.top).max(0));
+        let drawn = IsWindowVisible(hwnd).as_bool() && cloaked == 0 && area > 0 && !undrawn_layer;
+        Seen {
+            pid,
+            class: String::from_utf16_lossy(&class[..n]),
+            title: String::from_utf16_lossy(&title[..m]),
+            rect: (r.left, r.top, r.right, r.bottom),
+            drawn,
+        }
+    }
+}
+
+pub fn foreground() -> isize {
+    // SAFETY: a plain query.
+    unsafe { GetForegroundWindow() }.0 as isize
+}
+
+pub struct Watch {
+    pub stop: Arc<AtomicBool>,
+    pub drawn_seen: Arc<AtomicBool>,
+    pub handle: JoinHandle<WatchReport>,
+}
+
+pub fn start_watch() -> Watch {
+    let stop = Arc::new(AtomicBool::new(false));
+    let drawn_seen = Arc::new(AtomicBool::new(false));
+    let (stop2, drawn2) = (Arc::clone(&stop), Arc::clone(&drawn_seen));
+    let baseline = visible_windows();
+    let first_fg = foreground();
+    let handle = std::thread::spawn(move || {
+        let mut report = WatchReport::default();
+        let (mut seen, mut fg, mut last) = (HashSet::new(), first_fg, Instant::now());
+        while !stop2.load(Ordering::SeqCst) {
+            for h in visible_windows() {
+                if !baseline.contains(&h) && seen.insert(h) {
+                    let w = describe(h);
+                    drawn2.fetch_or(w.drawn, Ordering::SeqCst);
+                    report.new_visible.push(w);
+                }
+            }
+            let now = foreground();
+            if now != fg {
+                report.foreground_changes.push(describe(now));
+                fg = now;
+            }
+            report.samples += 1;
+            report.max_gap_ms = report.max_gap_ms.max(last.elapsed().as_millis());
+            last = Instant::now();
+            std::thread::sleep(SAMPLE);
+        }
+        report
+    });
+    Watch {
+        stop,
+        drawn_seen,
+        handle,
+    }
+}
+
+impl Watch {
+    pub fn finish(self) -> WatchReport {
+        self.stop.store(true, Ordering::SeqCst);
+        self.handle.join().unwrap_or_default()
+    }
+}
+
+/// What fails a run: any drawn new window from any process, any foreground change, and any undrawn new window
+/// that is not tao's event target.
+pub fn failures(report: &WatchReport) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in &report.new_visible {
+        if w.drawn {
+            out.push(format!("drawn window titled {:?}: {w:?}", w.title));
+        } else if w.class != TAO_CLASS {
+            out.push(format!("unexpected undrawn window: {w:?}"));
+        }
+    }
+    for w in &report.foreground_changes {
+        out.push(format!("foreground changed to: {w:?}"));
+    }
+    out
+}
+
+pub fn seen(class: &str, drawn: bool) -> Seen {
+    let (title, rect) = (String::new(), (0, 0, 1, 1));
+    Seen {
+        pid: 1,
+        class: class.into(),
+        title,
+        rect,
+        drawn,
+    }
+}
+
+pub fn report(new_visible: Vec<Seen>, foreground_changes: Vec<Seen>) -> WatchReport {
+    WatchReport {
+        samples: 10,
+        max_gap_ms: 100,
+        new_visible,
+        foreground_changes,
+    }
+}
+
+#[test]
+pub fn watch_judge_catches_planted_windows() {
+    assert!(failures(&report(vec![seen(TAO_CLASS, false)], vec![])).is_empty());
+    for planted in [
+        report(vec![seen("Tauri Window", true)], vec![]),
+        report(vec![seen(TAO_CLASS, true)], vec![]),
+        report(vec![seen("Chrome_WidgetWin_1", false)], vec![]),
+        report(vec![], vec![seen("Tauri Window", false)]),
+    ] {
+        assert!(
+            !failures(&planted).is_empty(),
+            "a planted window passed: {planted:?}"
+        );
+    }
+}
