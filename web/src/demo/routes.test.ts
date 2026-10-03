@@ -47,8 +47,8 @@ function gapped(answer: { status: number; body: unknown }) {
 const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 79 GET paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(79)
+  it('has exactly the 81 paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(81)
     expect(Object.keys(DEMO_ROUTES).sort()).toEqual(CONTRACT_PATHS)
   })
 
@@ -56,7 +56,7 @@ describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(78)
+    expect(Object.keys(incomplete)).toHaveLength(80)
   })
 })
 

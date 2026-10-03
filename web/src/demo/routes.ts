@@ -158,6 +158,10 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/session': () => NOT_IN_DEMO,
   '/api/session/code': () => NOT_IN_DEMO,
   '/api/session/redeem': () => NOT_IN_DEMO,
+
+  // The workspace store (D3.1): the demo has no store to read, so the page keeps its own copy
+  '/api/workspaces': () => NOT_IN_DEMO,
+  '/api/workspaces/{doc}': () => NOT_IN_DEMO,
 }
 
 // ---------------------------------------------------------------- matching a URL to a template

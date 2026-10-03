@@ -75,6 +75,12 @@ export interface RequestRecord {
  */
 export const JOB_WRITES: readonly string[] = ['DELETE /api/jobs/{job_id}', 'POST /api/jobs']
 
+/** The third write (03 10.3, D3.1): the workspace store's versioned PUT. */
+export const WORKSPACE_WRITE = 'PUT /api/workspaces/{doc}'
+
+/** Every write the terminal has: the two JOBS writes and the workspace PUT, sorted. */
+export const ALLOWED_WRITES: readonly string[] = [...JOB_WRITES, WORKSPACE_WRITE].sort()
+
 const JOB_ID_SEGMENT = /^\/api\/jobs\/j_[0-9a-f]{12}$/
 
 /** True for exactly `POST /api/jobs` and `DELETE /api/jobs/<job id>`, on the page's own origin. */

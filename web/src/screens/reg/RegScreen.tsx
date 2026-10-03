@@ -30,7 +30,7 @@ import { REG } from '../../copy/reg'
 import { SPEC } from '../../copy/tiles'
 import MonitorGrid, { type OpenOptions } from '../../grids/MonitorGrid'
 import { gridWidth, useElementWidth } from '../../grids/useElementWidth'
-import { saveText } from '../../chrome/download'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { csvFileName, exportCsv } from '../../chrome/exportCsv'
 import { toggleMark } from '../runs/basket'
 import { regBoardColumns, regRowId } from './regColumns'
@@ -103,8 +103,8 @@ function RegBar({ actions, filter, onFilter, showChecks, onShowChecks, onClear, 
 }
 
 function exportRows(rows: readonly RegRow[]): void {
-  const ok = saveText(REG.export.fileName, toCsv(rows))
-  postMessage(ok ? fillCopy(REG.export.done, { file: REG.export.fileName }) : REG.export.unavailable, ok ? 'info' : 'error')
+  const saved = saveText(REG.export.fileName, toCsv(rows))
+  void sayWhenSaved(saved, { saved: fillCopy(REG.export.done, { file: REG.export.fileName }), unavailable: REG.export.unavailable })
 }
 
 /** `withDsr`: whether this render needs SV3's Deflated Sharpe (needsDeflated: the active view and

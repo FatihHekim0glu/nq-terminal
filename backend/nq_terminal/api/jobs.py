@@ -1,5 +1,6 @@
-"""JOBS endpoints (ARCHITECTURE sections 8 and 9, PRD U3): the backtest queue. The only routes in the terminal that are
-not GET, which is why `app.py` must let exactly `ALLOWED_WRITE_ROUTES` through its GET-only check.
+"""JOBS endpoints (ARCHITECTURE sections 8 and 9, PRD U3): the backtest queue. With `PUT /api/workspaces/{doc}` (the
+workspace store, `api/workspaces.py`, D3.1) the only routes in the terminal that are not GET, which is why `app.py` must
+let exactly `ALLOWED_WRITE_ROUTES` (the two below and that one) through its GET-only check.
 
 - `GET /api/jobs`: every job, newest first, with the queue counts. `GET /api/jobs/{job_id}`: one job.
 - `POST /api/jobs` (201): queue one backtest (`JobSpec`, see `models/jobs.py`). The worker runs `backtests/run_base.py`
@@ -41,7 +42,7 @@ from nq_terminal.services.jobs import (
 )
 from nq_terminal.settings import ALLOWED_HOSTS, DEV_PORT, Settings
 
-ALLOWED_WRITE_ROUTES = ("POST /api/jobs", "DELETE /api/jobs/{job_id}")
+ALLOWED_WRITE_ROUTES = ("POST /api/jobs", "DELETE /api/jobs/{job_id}", "PUT /api/workspaces/{doc}")
 MAX_BODY_BYTES = 8192
 NQT_HEADER = "x-nqt"
 JSON_MEDIA_TYPE = "application/json"

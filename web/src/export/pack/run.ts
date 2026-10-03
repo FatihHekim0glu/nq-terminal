@@ -3,7 +3,7 @@
 // holds (the registered dossier closure, the canvases on screen, the cached health answer the caller passes
 // in): no request of any kind, nothing recomputed. Lazy code: the Workspace's export menu reaches it through
 // a dynamic import, so neither this file nor its copy is part of the first load.
-import { saveText } from '../../chrome/download'
+import { saveText, sayWhenSaved } from '../../chrome/download'
 import { postMessage, type MessageTone } from '../../chrome/MessageLine.store'
 import { DOSSIER } from '../../copy/dossier'
 import { GRAB } from '../../copy/grab'
@@ -60,9 +60,8 @@ export async function packPanel(req: PackRequest): Promise<boolean> {
     if ('message' in job) return say(job.message)
     const html = renderPackHtml(job.dossier, job.figures, readPackPalette(getComputedStyle(document.documentElement)))
     const file = `${job.fileStem}_pack_${stamp(now)}Z.html`
-    if (!saveText(file, html, HTML_TYPE)) return say(GRAB.unavailable, 'error')
-    postMessage(withNote(savedText(file, job.figures.length), job.skipped))
-    return true
+    const words = { saved: withNote(savedText(file, job.figures.length), job.skipped), unavailable: GRAB.unavailable }
+    return await sayWhenSaved(saveText(file, html, HTML_TYPE), words)
   } catch (error) {
     return say(fillCopy(DOSSIER.failed, { detail: reason(error) }), 'error')
   }

@@ -33,8 +33,8 @@ terminal: amber on black, function keys, a command line.
 
 ## Highlights
 
-- **Read only by construction.** All 79 API paths are GET, bar the two writes of the `JOBS` backtest queue (`POST /api/jobs` and
-  `DELETE /api/jobs/{job_id}`), and tests fail on any other method or on a write call in the backend. See the
+- **Read only by construction.** All 81 API paths are GET, bar three writes: the `JOBS` backtest queue (`POST /api/jobs` and
+  `DELETE /api/jobs/{job_id}`) and the workspace store (`PUT /api/workspaces/{doc}`), and tests fail on any other method or on a write call in the backend. See the
   [safety model](#safety-model).
 - **No order path.** The one IB client is read only (an optional paper snapshot on client id 95), and tests fail on an
   IB order call or on any route or component named like an order action.
@@ -446,11 +446,11 @@ flowchart TB
 ```
 
 - **Backend.** FastAPI 0.141.1 on uvicorn 0.54.0 in the nq-lab venv, package `nq_terminal`, JSON through orjson. It
-  binds 127.0.0.1, answers GET only (bar the two JOBS writes), refuses every `/api` request that has no live session
+  binds 127.0.0.1, answers GET only (bar the three writes), refuses every `/api` request that has no live session
   cookie, and serves the built front end and `/api` from one origin.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 79 paths. pytest compares `app.openapi()` with
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 81 paths. pytest compares `app.openapi()` with
   it; `pnpm gen:api` generates the front end's types with openapi-typescript, and `pnpm test` fails first when they
-  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 79 paths with the screens that
+  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 81 paths with the screens that
   read them, and a test keeps that index equal to the contract.
 - **Front end.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1: dockview panels under a command line built on cmdk,
   with the terminal's own key handler, zustand and TanStack Query. Every screen loads lazily, and one GET client

@@ -11,6 +11,8 @@ export const EXPORT = {
   doneOne: 'Saved {n} row as {file}.',
   empty: 'Nothing to export on this screen yet.',
   unavailable: 'This browser cannot save a file here.',
+  cancelled: 'Save cancelled: no file was written.',
+  failed: 'The file could not be saved.',
 } as const
 
 export const RELATED = {

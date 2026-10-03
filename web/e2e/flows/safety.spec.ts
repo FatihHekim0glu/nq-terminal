@@ -6,7 +6,7 @@
 //   ids and schemas (the served OpenAPI document and contract/openapi.json), and on the front end the
 //   API routes it calls, the built chunks it loads (named after their modules), the mnemonics and the
 //   screen and panel names in the page. The matcher's born-failing cases are in scan.spec.ts;
-// - the backend answers every write method with 405 except the two JOBS writes, which refuse a request without the
+// - the backend answers every write method with 405 except the three writes (the two JOBS writes and the workspace PUT), which refuse a request without the
 //   X-NQT header, with another content type or from another origin, and the proof and session routes, which refuse a
 //   write with 403; it refuses a cross-site read with 403 too (these requests come from the test, not the page, which
 //   only ever sends GET on a tour). A write carries the page's origin, as a page would send it; without one the session
@@ -16,7 +16,7 @@ import { expect, test, type Page } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { actionNames, chunkName, JOB_WRITES, openApiNames, ticketControls, writeOperations, type OpenApiDoc } from './scan.ts'
+import { actionNames, ALLOWED_WRITES, chunkName, openApiNames, ticketControls, writeOperations, type OpenApiDoc } from './scan.ts'
 import { OFFLINE } from '../target.ts'
 import { expectCleanFlow, message, openTerminal, runLine, settle, status, watchFlow, type FlowWatch } from './support.ts'
 
@@ -154,18 +154,18 @@ test.describe('safety flows', () => {
     expect(actionNames(named)).toEqual([])
   })
 
-  test('no backend route, operation or schema name matches order|submit|cancel|modify, and every route is GET but the two JOBS writes', async ({ page }) => {
+  test('no backend route, operation or schema name matches order|submit|cancel|modify, and every route is GET but the three writes', async ({ page }) => {
     const served = await apiJson<OpenApiDoc>(page, '/api/openapi.json')
     const contract = JSON.parse(fs.readFileSync(CONTRACT, { encoding: 'utf-8' })) as OpenApiDoc
     expect(Object.keys(served.paths).sort()).toEqual(Object.keys(contract.paths).sort())
     expect(Object.keys(served.paths).length).toBeGreaterThan(20)
-    expect(writeOperations(served).sort()).toEqual(JOB_WRITES)
-    expect(writeOperations(contract).sort()).toEqual(JOB_WRITES)
+    expect(writeOperations(served).sort()).toEqual(ALLOWED_WRITES)
+    expect(writeOperations(contract).sort()).toEqual(ALLOWED_WRITES)
     expect(actionNames(openApiNames(served))).toEqual([])
     expect(actionNames(openApiNames(contract))).toEqual([])
   })
 
-  test('the backend answers every write method with 405 on every route but the two JOBS writes, and refuses a cross-site read', async ({ page, baseURL }) => {
+  test('the backend answers every write method with 405 on every route but the three writes, and refuses a cross-site read', async ({ page, baseURL }) => {
     const served = await apiJson<OpenApiDoc>(page, '/api/openapi.json')
     const origin = new URL(String(baseURL)).origin // a page sends its own origin with a write; the session check passes it on
     const answers: string[] = []
@@ -173,7 +173,7 @@ test.describe('safety flows', () => {
     for (const route of Object.keys(served.paths)) {
       const url = route.replace(/\{[^}]+\}/g, 'x')
       for (const method of WRITE_METHODS) {
-        if (JOB_WRITES.includes(`${method} ${route}`)) continue
+        if (ALLOWED_WRITES.includes(`${method} ${route}`)) continue
         const response = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json', origin } })
         // The proof and the three session routes take no cookie, so a write to them is refused outright (403) instead.
         const expected = SESSION_ROUTES.has(route) ? 403 : 405
@@ -234,5 +234,23 @@ test.describe('safety flows', () => {
     // nothing above reached the queue: the refused request left no job behind
     const list = (await (await page.request.get('/api/jobs')).json()) as { jobs: Array<{ run_id: string }> }
     expect(list.jobs.map((j) => j.run_id)).not.toContain('t_safety_refused')
+  })
+
+  test('the workspace PUT refuses a request without X-NQT, with another content type, without If-Match, from another origin or cross-site, and leaves no document behind', async ({ page, baseURL }) => {
+    test.skip(OFFLINE, 'the demo API has no store: it answers every write with 405')
+    const json = { 'content-type': 'application/json', origin: new URL(String(baseURL)).origin }
+    const marked = { ...json, 'x-nqt': '1' }
+    const put = (headers: Record<string, string>) => page.request.fetch('/api/workspaces/prefs', { method: 'PUT', data: '{"data":{}}', headers })
+    expect((await put(json)).status(), 'no X-NQT header').toBe(403)
+    expect((await put({ ...marked, 'content-type': 'text/plain', 'if-match': '0' })).status(), 'not JSON').toBe(415)
+    expect((await put({ ...marked, origin: 'http://attacker.example', 'if-match': '0' })).status(), 'another origin').toBe(403)
+    expect((await put({ ...marked, 'sec-fetch-site': 'cross-site', 'if-match': '0' })).status(), 'cross-site').toBe(403)
+    expect((await put(marked)).status(), 'no If-Match').toBe(428)
+    for (const method of ['POST', 'DELETE', 'PATCH']) {
+      expect((await page.request.fetch('/api/workspaces/prefs', { method, data: '{}', headers: marked })).status(), `${method} /api/workspaces/prefs`).toBe(405)
+    }
+    // nothing above stored anything: the document is still at version 0
+    const read = (await (await page.request.get('/api/workspaces/prefs')).json()) as { version: number }
+    expect(read.version).toBe(0)
   })
 })

@@ -9,6 +9,7 @@ import {
   FENCE_SECONDS,
   isActionName,
   isJobWrite,
+  ALLOWED_WRITES,
   JOB_WRITES,
   nonGetRequests,
   openApiNames,
@@ -134,6 +135,18 @@ test.describe("the queue's two writes (PRD U3)", () => {
     expect(writeOperations(doc).sort()).toEqual(JOB_WRITES)
     const third: OpenApiDoc = { paths: { ...doc.paths, '/api/ib/snapshot': { get: {}, post: {} } } }
     expect(writeOperations(third).sort()).not.toEqual(JOB_WRITES)
+  })
+
+  test('lists the three writes of an OpenAPI document, and finds a fourth', () => {
+    const doc: OpenApiDoc = {
+      paths: { '/api/jobs': { get: {}, post: {} }, '/api/jobs/{job_id}': { get: {}, delete: {} }, '/api/workspaces/{doc}': { get: {}, put: {} } },
+    }
+    expect(writeOperations(doc).sort()).toEqual(ALLOWED_WRITES)
+    expect(ALLOWED_WRITES).toHaveLength(3)
+    const fourth: OpenApiDoc = { paths: { ...doc.paths, '/api/workspaces': { get: {}, post: {} } } }
+    expect(writeOperations(fourth).sort()).not.toEqual(ALLOWED_WRITES)
+    const widened: OpenApiDoc = { paths: { ...doc.paths, '/api/workspaces/{doc}': { get: {}, put: {}, delete: {} } } }
+    expect(writeOperations(widened).sort()).not.toEqual(ALLOWED_WRITES)
   })
 })
 

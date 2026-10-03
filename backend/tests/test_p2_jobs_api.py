@@ -57,11 +57,11 @@ def count_jobs(client: TestClient) -> int:
     return len(client.get("/api/jobs").json()["jobs"])
 
 
-def test_the_only_non_get_routes_are_the_two_job_writes(tmp_path) -> None:
+def test_the_only_non_get_routes_are_the_two_job_writes_and_the_workspace_put(tmp_path) -> None:
     app = with_jobs(create_app(load_settings({})))
-    assert jobs_api.ALLOWED_WRITE_ROUTES == ("POST /api/jobs", "DELETE /api/jobs/{job_id}")
+    assert jobs_api.ALLOWED_WRITE_ROUTES == ("POST /api/jobs", "DELETE /api/jobs/{job_id}", "PUT /api/workspaces/{doc}")
     assert sorted(non_get_routes(app)) == sorted(jobs_api.ALLOWED_WRITE_ROUTES)
-    # the app registers exactly those two writes; without the allow list the GET-only check refuses it
+    # the app registers exactly those three writes; without the allow list the GET-only check refuses it
     assert sorted(non_get_routes(create_app(load_settings({})))) == sorted(jobs_api.ALLOWED_WRITE_ROUTES)
     with pytest.raises(GetOnlyError):
         assert_get_only(app)

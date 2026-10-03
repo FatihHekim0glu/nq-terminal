@@ -3,6 +3,7 @@
 // anchor) in text and colour; and the ledger row with the copy-only `ledger_append` command exactly as
 // the API gives it. The terminal never runs that command; Copy only puts it on the clipboard.
 import { Fragment } from 'react'
+import { getBridge } from '../../bridge'
 import { postMessage } from '../../chrome/MessageLine.store'
 import { ReadOnlyValue } from '../../chrome/Field'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
@@ -70,13 +71,8 @@ export function RunChecks({ detail }: { readonly detail: RunDetail }) {
 }
 
 function copyCommand(command: string): void {
-  const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
-  if (!clipboard) {
-    postMessage(RUN.ledger.copyFailed, 'error')
-    return
-  }
-  clipboard.writeText(command).then(
-    () => postMessage(RUN.ledger.copied),
+  getBridge().copyText(command).then(
+    (copied) => (copied ? postMessage(RUN.ledger.copied) : postMessage(RUN.ledger.copyFailed, 'error')),
     () => postMessage(RUN.ledger.copyFailed, 'error'),
   )
 }

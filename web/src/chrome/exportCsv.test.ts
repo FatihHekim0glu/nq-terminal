@@ -54,14 +54,14 @@ describe('csvFileName', () => {
 })
 
 describe('exportCsv', () => {
-  it('saves the file and says how many rows it holds', () => {
+  it('saves the file and says how many rows it holds, once the save has ended', async () => {
     Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:x'), revokeObjectURL: vi.fn() })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     expect(exportCsv('runs.csv', 'a\r\n1', 1)).toBe(true)
     expect(click).toHaveBeenCalledTimes(1)
-    expect(useMessage.getState().text).toBe('Saved 1 row as runs.csv.')
+    await vi.waitFor(() => expect(useMessage.getState().text).toBe('Saved 1 row as runs.csv.'))
     exportCsv('runs.csv', 'a\r\n1\r\n2', 2)
-    expect(useMessage.getState().text).toBe('Saved 2 rows as runs.csv.')
+    await vi.waitFor(() => expect(useMessage.getState().text).toBe('Saved 2 rows as runs.csv.'))
   })
 
   it('reports an empty screen and saves nothing', () => {

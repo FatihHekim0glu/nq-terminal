@@ -3,7 +3,8 @@
 // (the panel title, the screen's registered provenance, the cached health answer the caller passes in):
 // no request of any kind, nothing recomputed. Lazy code: the Workspace handle reaches it through a
 // dynamic import, so neither this file nor its copy is part of the first load.
-import { saveBlob } from '../../chrome/download'
+import { getBridge } from '../../bridge'
+import { saveBlob, sayWhenSaved } from '../../chrome/download'
 import { panelElement } from '../../chrome/KeyToolbar.panels'
 import { postMessage, type MessageTone } from '../../chrome/MessageLine.store'
 import { panelSource } from '../../chrome/panelSources'
@@ -50,10 +51,6 @@ function reason(error: unknown): string {
   return text || GRAB.detail.unknown
 }
 
-function canCopyImage(): boolean {
-  return typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard?.write === 'function'
-}
-
 function panelLabel(req: GrabRequest): string {
   return req.number !== null && req.number > 0 && req.code ? fillCopy(PANEL.number, { n: req.number, code: req.code }) : req.code
 }
@@ -88,15 +85,15 @@ function toPng(canvas: { toBlob(callback: BlobCallback, type?: string): void }):
 }
 
 /**
- * Asks the clipboard to take the png now, with a promise of the image: called before anything is awaited, so
- * the browser still counts the user's click (Safari refuses a write made after the gesture). Async so that a
- * constructor that throws becomes a refusal, like a write the browser rejects.
+ * Asks the bridge to put the png on the clipboard now, with a promise of the image: called before anything is
+ * awaited, so the browser still counts the user's click (Safari refuses a write made after the gesture).
+ * Resolves false where the clipboard takes no image; rejects with the browser's own error when it refuses.
  */
-async function copyToClipboard(png: Promise<Blob | null>): Promise<void> {
+async function copyToClipboard(png: Promise<Blob | null>): Promise<boolean> {
   const image = png.then((blob) => blob ?? Promise.reject(new Error(GRAB.detail.noImage)))
   // Its outcome is read through `png` and the write; this keeps it from being reported as unhandled.
   image.catch(() => undefined)
-  return navigator.clipboard.write([new ClipboardItem({ [PNG]: image })])
+  return getBridge().copyImage(image)
 }
 
 /**
@@ -109,7 +106,7 @@ export async function grabPanel(req: GrabRequest): Promise<boolean> {
   if (!panel) return say(GRAB.noPanel)
   const { figures, skipped } = collectFigures(panel)
   if (figures.length === 0) return say(GRAB.noFigures)
-  if (req.target === 'clipboard' && !canCopyImage()) return say(GRAB.clipboardUnavailable)
+  if (req.target === 'clipboard' && !getBridge().canCopyImage()) return say(GRAB.clipboardUnavailable)
   try {
     const now = req.now ?? new Date()
     const title = panel.getAttribute('data-nqt-title') ?? ''
@@ -126,7 +123,7 @@ export async function grabPanel(req: GrabRequest): Promise<boolean> {
     const many = composed.kept > 1
     if (written) {
       try {
-        await written
+        if (!(await written)) return say(GRAB.clipboardUnavailable)
       } catch (error) {
         // The image was made: the browser declined the clipboard (no focus, no permission).
         return say(fillCopy(GRAB.clipboardRefused, { detail: reason(error) }), 'error')
@@ -136,10 +133,8 @@ export async function grabPanel(req: GrabRequest): Promise<boolean> {
       return true
     }
     const file = grabFileName(title || req.code, now)
-    if (!saveBlob(file, blob)) return say(GRAB.unavailable, 'error')
     const done = many ? fillCopy(GRAB.saved, { n: composed.kept, file }) : fillCopy(GRAB.savedOne, { file })
-    postMessage(withNotes(done, skipped, trimmed))
-    return true
+    return await sayWhenSaved(saveBlob(file, blob), { saved: withNotes(done, skipped, trimmed), unavailable: GRAB.unavailable })
   } catch (error) {
     return fail(reason(error))
   }

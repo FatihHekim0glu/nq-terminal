@@ -5,7 +5,7 @@
 // prefixed with an apostrophe, while a signed figure such as `+1.23` or `-0.52%` stays as shown.
 import { fillCopy } from '../copy/workspace'
 import { EXPORT } from '../copy/panelParts'
-import { saveText } from './download'
+import { saveText, sayWhenSaved } from './download'
 import { postMessage } from './MessageLine.store'
 
 export type CsvValue = string | number | boolean | null | undefined
@@ -33,8 +33,9 @@ export function csvFileName(...parts: readonly string[]): string {
 }
 
 /**
- * Saves `csv` (a header plus `rows` lines) and says so on the message line. Returns false, with the
- * reason on the message line, when there is nothing to save or the browser cannot save a file.
+ * Saves `csv` (a header plus `rows` lines) and says how it went on the message line: Saved only once the save
+ * ended saved, Cancelled or Could not save otherwise. Returns false, with the reason on the message line,
+ * when there is nothing to save or the browser cannot save a file; true means the save began.
  */
 export function exportCsv(fileName: string, csv: string, rows: number): boolean {
   if (rows <= 0) {
@@ -42,10 +43,7 @@ export function exportCsv(fileName: string, csv: string, rows: number): boolean 
     return false
   }
   const saved = saveText(fileName, csv)
-  if (!saved) {
-    postMessage(EXPORT.unavailable, 'error')
-    return false
-  }
-  postMessage(fillCopy(rows === 1 ? EXPORT.doneOne : EXPORT.done, { n: rows, file: fileName }))
-  return true
+  const done = fillCopy(rows === 1 ? EXPORT.doneOne : EXPORT.done, { n: rows, file: fileName })
+  void sayWhenSaved(saved, { saved: done, unavailable: EXPORT.unavailable })
+  return saved.started
 }
