@@ -22,6 +22,22 @@ pub const RETRY_PAUSE: Duration = Duration::from_millis(500);
 /// How long a passed proof lets the repeated navigation through.
 pub const APPROVAL_TTL: Duration = Duration::from_secs(10);
 
+/// Shown in the stopped page's status paragraph the moment the Retry link is followed (a polite live region, so it is
+/// announced); the proof can take up to about 16 s and the page must not look dead meanwhile.
+pub const CHECKING: &str = "Checking the backend again.";
+/// Shown in place when every attempt failed again; the page is not reloaded, so the Retry link keeps its focus.
+pub const STILL_UNVERIFIED: &str =
+    "Still not verified. The backend did not answer its identity check in time.";
+
+/// A script that sets the unverified section's status paragraph to `text`, and only on the stopped page.
+pub fn status_script(text: &str) -> String {
+    let text = serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into());
+    format!(
+        "(function(){{var e=document.getElementById('unverified-text');\
+         if(e&&location.pathname.endsWith('stopped.html')){{e.textContent={text};}}}})();"
+    )
+}
+
 /// The shell's own page origin; the stopped page is joined onto it.
 pub const PAGES_ORIGIN: &str = "http://tauri.localhost/";
 

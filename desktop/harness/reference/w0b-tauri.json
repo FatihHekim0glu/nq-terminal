@@ -1,0 +1,68 @@
+{
+  "source": "docs/desktop/spike_electron/results/t2.md (wave W0B, 2 October 2026, main hidden session, 10 accepted Tauri spike runs) and docs/desktop/baseline/backend_ready.md",
+  "shell": "Tauri spike (D:\\dev\\spikes\\tauri-shell, nq-shell.exe) with the fixture backend of the T2 harness",
+  "rule": "04 D5.1: each figure within 10% of the spike median or inside its min to max range",
+  "figures": {
+    "memHomeMB": {
+      "unit": "MB",
+      "n": 10,
+      "median": 164.9,
+      "min": 159.7,
+      "max": 168.4,
+      "what": "whole-tree private working set at HOME, after 2.5 s idle"
+    },
+    "memHeavyMB": {
+      "unit": "MB",
+      "n": 10,
+      "median": 369.5,
+      "min": 363.1,
+      "max": 375.2,
+      "what": "whole-tree private working set after the heavy set"
+    },
+    "homeReadyMs": {
+      "unit": "ms",
+      "n": 10,
+      "median": 834.5,
+      "min": 814,
+      "max": 892,
+      "what": "launch to HOME ready (spawn to the nqt:home-ready mark)"
+    }
+  },
+  "informational": {
+    "backendReadyMs": {
+      "unit": "ms",
+      "n": 3,
+      "median": 1566,
+      "min": 1560,
+      "max": 1595,
+      "what": "real backend alone, process start to first 200 from /api/health; taken before D1 (lazy imports and the result cache), so a later figure is expected to be lower and is reported beside it, not gated"
+    }
+  },
+  "breakdown": {
+    "navStartAfterSpawnMs": {
+      "unit": "ms",
+      "n": 10,
+      "median": 214,
+      "min": 206,
+      "max": 229,
+      "what": "spawn to the start of the HOME document (the spike milestones and the page navigation start)"
+    },
+    "readySinceNavMs": {
+      "unit": "ms",
+      "n": 10,
+      "median": 618.6,
+      "min": 604.7,
+      "max": 662.7,
+      "what": "HOME document start to the nqt:home-ready mark"
+    },
+    "frameMs": {
+      "unit": "ms",
+      "n": 10,
+      "median": 140.2,
+      "min": 136.2,
+      "max": 164.9,
+      "what": "HOME document start to the first HOME frame (nqt:home-frame)"
+    }
+  },
+  "note": "The W0B run was taken before D2. Behind the session token the spike opens the launch page, which redeems a one-time code and leaves for the terminal, so the launch-to-ready figure carries one extra hop (about 25 ms on the run of 3 October). The breakdown shows where a difference sits: before the HOME document starts (process and window), or after (page and data)."
+}

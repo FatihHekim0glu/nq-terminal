@@ -109,6 +109,14 @@
 .menu-dark .menu-item:focus-visible { background: var(--hover-menu); }
 .menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
+/* 1.4.4: .nqt-panel clips, and at 200% engine zoom (a resolution of 2 dppx or more once the OS scale is counted) a 2 x 2
+   panel is about 600 CSS px wide in a 1920 window, which is narrower than the bar's buttons. Zoomed, on a dense display or
+   under 1000px of viewport the bar wraps rather than losing its right-hand buttons. A bar that fits stays on one row, and
+   a plain 100% window keeps its bar exactly as it was (the screenshot baselines). */
+@media (max-width: 1000px), (min-resolution: 1.5dppx) {
+  .fn-bar { flex-wrap: wrap; }
+}
+
 /* Narrow viewports (1.4.10): the bar wraps, and the page indicator and title wrap onto the next row
    instead of ending in an ellipsis. */
 @media (max-width: 700px) {

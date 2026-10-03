@@ -41,6 +41,18 @@
 .PARAMETER SelfTest
   Run only the self-test of the checks, on files in a temporary folder, and the coverage check of the smoke
   spec, and start nothing.
+.PARAMETER Mode
+  Browser (default): the run described above, a headless browser against a second backend and a vite preview. App: the same
+  checks around a run of the hidden smoke build of the Windows app (04 D5.2): the app starts the real backend itself over this
+  lab (no --fixture) with a temporary --state-dir, --webview-data-dir and --config-dir under D:\dev\d5\smoke-app and
+  NQT_JOBS=off, under the global window watch and with a PATH without the build tools; Playwright attaches to its page over the
+  debugging protocol (playwright.desktop.config.ts with NQT_DESKTOP_MODE=real, spec web\e2e\desktop\smoke.app.ts). No vite
+  build, no preview, no ApiPort or WebPort. web\dist must already be built (the smoke build refuses rebuilds). The shell's own
+  log must show a real, own-folders launch (Test-AppLaunchRecord). The performance budgets are not measured in either mode here.
+  App mode refuses to start outside the lab's own terminal folder (a worktree): the backend confines its reads to the real
+  paths under the lab. Browser mode runs in a worktree; the lab is then NQT_REAL_LAB, or nq-lab under the profile folder.
+.PARAMETER SmokeExe
+  App mode: the smoke build (default NQT_SMOKE_EXE, then D:\dev\targets\w5a-app-smoke\release\nq-lab-terminal.exe).
 .PARAMETER SmokeSpec
   The smoke spec the coverage check reads (default web\e2e\perf\smoke.real.ts). Only the check reads it;
   Playwright always runs the spec named in real.config.ts.
@@ -53,18 +65,18 @@ param(
     [int]$WebPort = 4953,
     [string]$Grep = '',
     [switch]$SelfTest,
-    [string]$SmokeSpec = ''
+    [string]$SmokeSpec = '',
+    [ValidateSet('Browser', 'App')]
+    [string]$Mode = 'Browser',
+    [string]$SmokeExe = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Terminal = Split-Path -Parent $PSScriptRoot
-$Root = Split-Path -Parent $Terminal
 $Backend = Join-Path $Terminal 'backend'
 $Web = Join-Path $Terminal 'web'
-$Results = Join-Path $Root 'results'
-$Python = Join-Path $Root '.venv\Scripts\python.exe'
 $ViteScript = Join-Path $Web 'node_modules\vite\bin\vite.js'
 $PlaywrightScript = Join-Path $Web 'node_modules\@playwright\test\cli.js'
 $Loopback = '127.0.0.1'
@@ -78,12 +90,41 @@ $IsEnd = [DateTimeOffset]::new(2022, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $P11Codes = @('VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ')
 $P11FencedPrefixes = @('/api/market/', '/api/seasonality/', '/api/events/', '/api/dq/')
-if ($SmokeSpec -eq '') { $SmokeSpec = Join-Path $Web 'e2e\perf\smoke.real.ts' }
+$AppRoot = 'D:\dev\d5\smoke-app'
+$DefaultSmokeExe = 'D:\dev\targets\w5a-app-smoke\release\nq-lab-terminal.exe'
+if ($SmokeSpec -eq '') { $SmokeSpec = if ($Mode -eq 'App') { Join-Path $Web 'e2e\desktop\smoke.app.ts' } else { Join-Path $Web 'e2e\perf\smoke.real.ts' } }
 
 function Stop-Smoke([string]$Message) {
     [Console]::Error.WriteLine("smoke_real.ps1: $Message")
     exit 1
 }
+
+# A lab holds the venv interpreter and the research package's config (what the shell's own lab check asks first).
+function Test-IsLab([string]$Folder) {
+    return (Test-Path -LiteralPath (Join-Path $Folder '.venv\Scripts\python.exe') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $Folder 'src\nq_lab\config.py') -PathType Leaf)
+}
+
+# The lab whose research files this run guards. The folder above the terminal folder when that is a lab (the terminal is the
+# lab's own); otherwise (a worktree of the terminal outside the lab) the lab named by NQT_REAL_LAB, then nq-lab under the
+# profile folder. Null when there is none: a run with no research files to guard does not start.
+function Resolve-LabRoot([string]$TerminalDir, [string]$NamedLab, [string]$ProfileDir) {
+    $parent = Split-Path -Parent $TerminalDir
+    if (Test-IsLab $parent) { return $parent }
+    if ($NamedLab -ne '') { if (Test-IsLab $NamedLab) { return $NamedLab } else { return $null } }
+    if ($ProfileDir -ne '') {
+        $fallback = Join-Path $ProfileDir 'nq-lab'
+        if (Test-IsLab $fallback) { return $fallback }
+    }
+    return $null
+}
+
+$Root = Resolve-LabRoot $Terminal ([Environment]::GetEnvironmentVariable('NQT_REAL_LAB', 'Process')) ([Environment]::GetFolderPath('UserProfile'))
+if ($null -eq $Root -and -not $SelfTest) { Stop-Smoke 'no nq-lab folder: this terminal is not inside one, NQT_REAL_LAB names none and there is no nq-lab under the profile folder.' }
+if ($null -eq $Root) { $Root = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'nq-lab' }
+$InLab = (Split-Path -Parent $Terminal) -eq $Root
+$Results = Join-Path $Root 'results'
+$Python = Join-Path $Root '.venv\Scripts\python.exe'
 
 # ---------------------------------------------------------------- checks (pure, self-tested)
 
@@ -474,9 +515,152 @@ function Close-Logs {
     $Logs.Clear()
 }
 
+# ---------------------------------------------------------------- app mode (04 D5.2; 03 section 15.1)
+
+# What the shell logged about its own launch (`smoke_options`, one JSON line with every switch): the app mode may only count
+# when the real backend ran (no --fixture, no --attach-url) over this lab, with a state folder, a WebView2 profile and a config
+# folder of its own under the app-mode root. A launch without --state-dir would have used the lab's own terminal\state.
+function Test-AppLaunchRecord([string]$LogText, [string]$ExpectedLab, [string]$Under) {
+    $problems = New-Object System.Collections.Generic.List[string]
+    $line = @($LogText -split "`n" | Where-Object { $_ -match '"event":"smoke_options"' }) | Select-Object -First 1
+    if ($null -eq $line) { return @('the shell log has no smoke_options line: the launch cannot be checked') }
+    try { $options = $line | ConvertFrom-Json } catch { return @('the smoke_options line is not JSON') }
+    if ($options.fixture -ne $false) { $problems.Add('the app was started with --fixture: the real-data smoke needs the real backend') }
+    if ($null -ne $options.attach_url) { $problems.Add('the app was started with --attach-url: there was no backend of its own') }
+    if ("$($options.lab)".TrimEnd('\') -ne $ExpectedLab.TrimEnd('\')) { $problems.Add("the app served another lab: '$($options.lab)', not '$ExpectedLab'") }
+    foreach ($name in @('state_dir', 'webview_data_dir', 'config_dir')) {
+        $value = "$($options.$name)"
+        if ($value -eq '') { $problems.Add("$name was not given: the shell would use a folder of its own, not a temporary one"); continue }
+        if (-not $value.StartsWith($Under.TrimEnd('\') + '\', [System.StringComparison]::OrdinalIgnoreCase)) { $problems.Add("$name is '$value', not under $Under") }
+    }
+    return $problems
+}
+
+function Get-NewestAppRun([datetime]$Since) {
+    $runs = Join-Path $AppRoot 'runs'
+    if (-not (Test-Path -LiteralPath $runs)) { return $null }
+    return Get-ChildItem -LiteralPath $runs -Directory -Filter 'smoke-app-*' |
+        Where-Object { $_.CreationTime -ge $Since } | Sort-Object CreationTime -Descending | Select-Object -First 1
+}
+
+# Starts nothing itself: the project's global set-up (web\e2e\desktop\setup.ts) launches the hidden smoke build with the real
+# backend, under the global window watch, with a PATH without the build tools, and reads DevToolsActivePort; the spec
+# (web\e2e\desktop\smoke.app.ts) drives its page over the debugging protocol. Playwright only attaches; no browser is started.
+function Invoke-AppRun {
+    $exe = $SmokeExe
+    if ($exe -eq '') { $exe = [Environment]::GetEnvironmentVariable('NQT_SMOKE_EXE', 'Process') }
+    if ([string]::IsNullOrEmpty($exe)) { $exe = $DefaultSmokeExe }
+    if (-not (Test-Path -LiteralPath $exe)) { throw "no smoke build at $exe (build one with cargo tauri build --no-bundle --features smoke, target under D:\dev\targets, or name it with -SmokeExe)" }
+    if (-not (Test-Path -LiteralPath (Join-Path $Web 'dist\index.html'))) { throw 'web\dist is missing: build the page first (the smoke build refuses rebuilds)' }
+    New-Item -ItemType Directory -Force -Path $AppRoot | Out-Null
+    $env:NQT_DESKTOP_MODE = 'real'
+    $env:NQT_SMOKE_EXE = $exe
+    $env:NQT_APP_LAB = $Root
+    $env:NQT_APP_RUNS = $AppRoot
+    $env:NQT_JOBS = 'off'
+    foreach ($name in @('NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_PORT', 'NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL')) {
+        [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+    }
+    $testArgs = @($PlaywrightScript, 'test', '-c', 'playwright.desktop.config.ts')
+    if ($Grep -ne '') { $testArgs += @('--grep', $Grep) }
+    Push-Location -LiteralPath $Web
+    try {
+        & $node @testArgs | Out-Host
+        return $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+}
+
+function Invoke-AppSelfTest {
+    $failures = New-Object System.Collections.Generic.List[string]
+    $under = 'D:\dev\d5\smoke-app'
+    $good = '{"event":"smoke_options","fixture":false,"attach_url":null,"lab":"C:\\lab","state_dir":"D:\\dev\\d5\\smoke-app\\runs\\r\\state","webview_data_dir":"D:\\dev\\d5\\smoke-app\\runs\\r\\wv","config_dir":"D:\\dev\\d5\\smoke-app\\runs\\r\\config"}'
+    $cases = @(
+        @{ name = 'a real launch with its own folders passes'; log = $good; fail = $false },
+        @{ name = 'a launch with --fixture fails'; log = $good.Replace('"fixture":false', '"fixture":true'); fail = $true },
+        @{ name = 'a launch with --attach-url fails'; log = $good.Replace('"attach_url":null', '"attach_url":"http://127.0.0.1:9/"'); fail = $true },
+        @{ name = 'another lab fails'; log = $good.Replace('C:\\lab', 'C:\\other'); fail = $true },
+        @{ name = 'no --state-dir (the lab''s own state folder) fails'; log = $good.Replace('"state_dir":"D:\\dev\\d5\\smoke-app\\runs\\r\\state"', '"state_dir":null'); fail = $true },
+        @{ name = 'a WebView2 profile on C: fails'; log = $good.Replace('D:\\dev\\d5\\smoke-app\\runs\\r\\wv', 'C:\\Users\\x\\wv'); fail = $true },
+        @{ name = 'a config folder outside the app-mode root fails'; log = $good.Replace('smoke-app\\runs\\r\\config', 'elsewhere\\config'); fail = $true },
+        @{ name = 'a log with no smoke_options line fails'; log = '{"event":"start"}'; fail = $true }
+    )
+    foreach ($case in $cases) {
+        $problems = @(Test-AppLaunchRecord $case.log 'C:\lab' $under)
+        $failed = $problems.Count -gt 0
+        $mark = if ($failed -eq $case.fail) { 'ok  ' } else { 'FAIL' }
+        Write-Host ("self-test {0} {1}" -f $mark, $case.name)
+        if ($failed -ne $case.fail) { $failures.Add("$($case.name): problems [$($problems -join '; ')]") }
+    }
+    $failures.AddRange([string[]]@(Invoke-LabRootSelfTest))
+    foreach ($case in @(@{ inLab = $true; refused = $false; name = 'app mode in the lab''s own terminal folder is allowed' },
+                        @{ inLab = $false; refused = $true; name = 'app mode in a worktree is refused' })) {
+        $refusal = Get-AppModeRefusal $case.inLab
+        $ok = ($null -ne $refusal) -eq $case.refused
+        Write-Host ("self-test {0} {1}" -f $(if ($ok) { 'ok  ' } else { 'FAIL' }), $case.name)
+        if (-not $ok) { $failures.Add("$($case.name): got '$refusal'") }
+    }
+    return $failures
+}
+
+# The shell's file reads are confined to the lab's real paths: a link to the lab's data or results folder resolves outside a
+# lab of the worktree's own and is refused (nq_terminal.services.files, _confine). A worktree therefore cannot run the real
+# backend over the real files in the app; that run needs the lab's own terminal folder (after the merge).
+function Get-AppModeRefusal([bool]$InLabTerminal) {
+    if ($InLabTerminal) { return $null }
+    return 'app mode needs this terminal to be the nq-lab folder''s own terminal folder: the backend confines its reads to the real paths under the lab, so a worktree (a lab of its own that only links to the real data and results) answers 500 on every registry read. Run it from the lab after the merge, or use the default browser mode here.'
+}
+
+# A fake lab: the interpreter and the research package's config, nothing else.
+function New-FakeLab([string]$Folder) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Folder '.venv\Scripts') | Out-Null
+    New-Item -ItemType File -Force -Path (Join-Path $Folder '.venv\Scripts\python.exe') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $Folder 'src\nq_lab') | Out-Null
+    New-Item -ItemType File -Force -Path (Join-Path $Folder 'src\nq_lab\config.py') | Out-Null
+}
+
+# The lab root follows the folder this script sits in when that is the lab's own terminal folder, and the named or the
+# default real lab when the checkout is a worktree; a checkout with neither has no research files to guard.
+function Invoke-LabRootSelfTest {
+    $failures = New-Object System.Collections.Generic.List[string]
+    $base = Join-Path 'D:\dev\tmp' ("smoke-labroot-" + [guid]::NewGuid().ToString('N'))
+    try {
+        $inTreeLab = Join-Path $base 'inlab'
+        New-FakeLab $inTreeLab
+        New-Item -ItemType Directory -Force -Path (Join-Path $inTreeLab 'terminal') | Out-Null
+        $realLab = Join-Path $base 'real'
+        New-FakeLab $realLab
+        $worktree = Join-Path $base 'wt\terminal'
+        New-Item -ItemType Directory -Force -Path $worktree | Out-Null
+        $cases = @(
+            @{ name = 'the terminal folder of a lab gives that lab'; terminal = (Join-Path $inTreeLab 'terminal'); named = ''; expect = $inTreeLab },
+            @{ name = 'a worktree gives the named real lab'; terminal = $worktree; named = $realLab; expect = $realLab },
+            @{ name = 'a worktree with no named lab and none under the profile gives none'; terminal = $worktree; named = ''; profile = $base; expectNone = $true },
+            @{ name = 'a worktree with a named folder that is no lab gives none'; terminal = $worktree; named = (Join-Path $base 'wt'); expectNone = $true }
+        )
+        foreach ($case in $cases) {
+            $profileDir = if ($case.ContainsKey('profile')) { $case.profile } else { Join-Path $base 'noprofile' }
+            $got = Resolve-LabRoot $case.terminal $case.named $profileDir
+            $ok = if ($case.ContainsKey('expectNone')) { $null -eq $got } else { "$got" -eq $case.expect }
+            Write-Host ("self-test {0} {1}" -f $(if ($ok) { 'ok  ' } else { 'FAIL' }), $case.name)
+            if (-not $ok) { $failures.Add("$($case.name): got '$got'") }
+        }
+        $profileLab = Join-Path $base 'profile'
+        New-FakeLab (Join-Path $profileLab 'nq-lab')
+        $got = Resolve-LabRoot $worktree '' $profileLab
+        $ok = "$got" -eq (Join-Path $profileLab 'nq-lab')
+        Write-Host ("self-test {0} {1}" -f $(if ($ok) { 'ok  ' } else { 'FAIL' }), 'a worktree without a named lab falls back to nq-lab under the profile')
+        if (-not $ok) { $failures.Add("profile fallback: got '$got'") }
+    } finally {
+        if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force }
+    }
+    return $failures
+}
+
 # ---------------------------------------------------------------- run
 
-$selfFailures = @(Invoke-SelfTest)
+$selfFailures = @(Invoke-SelfTest) + @(Invoke-AppSelfTest)
 if ($selfFailures.Count -gt 0) { Stop-Smoke ("the self-test failed: " + ($selfFailures -join ' | ')) }
 if (-not (Test-Path -LiteralPath $SmokeSpec)) { Stop-Smoke "missing: $SmokeSpec" }
 $coverage = @(Test-SmokeCoverage ([System.IO.File]::ReadAllText($SmokeSpec, $Utf8)))
@@ -484,19 +668,29 @@ if ($coverage.Count -gt 0) { Stop-Smoke ("the smoke spec misses Phase 11 coverag
 Write-Output "smoke spec opens $($P11Codes -join ', ') and scans their answers for the fence: $SmokeSpec"
 if ($SelfTest) { Write-Output 'self-test passed: every check fails on broken input and passes on clean input.'; exit 0 }
 
-foreach ($port in @($ApiPort, $WebPort)) {
-    if ($port -eq $UserPort) { Stop-Smoke "port $UserPort is the user's own backend; choose another." }
-    if (Test-PortOpen $port) { Stop-Smoke "port $port on $Loopback is taken; choose another with -ApiPort or -WebPort." }
+if ($Mode -eq 'App') {
+    $refusal = Get-AppModeRefusal $InLab
+    if ($null -ne $refusal) { Stop-Smoke $refusal }
 }
-if ($ApiPort -eq $WebPort) { Stop-Smoke 'ApiPort and WebPort must differ.' }
-foreach ($need in @($Python, $ViteScript, $PlaywrightScript, (Join-Path $Results $LogName))) {
+if ($Mode -eq 'Browser') {
+    foreach ($port in @($ApiPort, $WebPort)) {
+        if ($port -eq $UserPort) { Stop-Smoke "port $UserPort is the user's own backend; choose another." }
+        if (Test-PortOpen $port) { Stop-Smoke "port $port on $Loopback is taken; choose another with -ApiPort or -WebPort." }
+    }
+    if ($ApiPort -eq $WebPort) { Stop-Smoke 'ApiPort and WebPort must differ.' }
+}
+$needs = @($Python, $PlaywrightScript, (Join-Path $Results $LogName))
+if ($Mode -eq 'Browser') { $needs += $ViteScript }
+foreach ($need in $needs) {
     if (-not (Test-Path -LiteralPath $need)) { Stop-Smoke "missing: $need" }
 }
 $node = (Get-Command node -ErrorAction Stop).Source
 
-$Work = Join-Path ([System.IO.Path]::GetTempPath()) ("nqt-smoke-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+$StartedAt = Get-Date
+$WorkBase = if ($Mode -eq 'App') { $AppRoot } else { [System.IO.Path]::GetTempPath() }
+$Work = Join-Path $WorkBase ("nqt-smoke-" + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $Out = Join-Path $Work 'dist'
-New-Item -ItemType Directory -Path $Work | Out-Null
+New-Item -ItemType Directory -Force -Path $Work | Out-Null
 Write-Output "work folder: $Work"
 
 $before = Get-Snapshot $Results
@@ -504,76 +698,81 @@ Write-Output "before: log $($before.log_length) bytes; $(($PinnedFiles | ForEach
 
 $started = New-Object System.Collections.Generic.List[System.Diagnostics.Process]
 $saved = @{}
-foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_JOBS', 'NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN', 'NQT_SMOKE_SESSION_URL')) {
+foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_READONLY', 'NQT_STATE_DIR', 'NQT_JOBS', 'NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL', 'PYTHONUTF8', 'PYTHONIOENCODING', 'NQT_SMOKE_API_ORIGIN', 'NQT_SMOKE_WEB_ORIGIN', 'NQT_SMOKE_SESSION_URL', 'NQT_DESKTOP_MODE', 'NQT_SMOKE_EXE', 'NQT_APP_LAB', 'NQT_APP_RUNS')) {
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $testsExit = -1
 $serverProblems = New-Object System.Collections.Generic.List[string]
 try {
-    Write-Output 'build: vite build into the work folder'
-    $build = Start-Process -FilePath $node -ArgumentList @((Quote $ViteScript), 'build', '--outDir', (Quote $Out), '--emptyOutDir', '--logLevel', 'warn') `
-        -WorkingDirectory $Web -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $Work 'build.out.log') -RedirectStandardError (Join-Path $Work 'build.err.log')
-    if ($build.ExitCode -ne 0) { throw "vite build failed with code $($build.ExitCode); see $Work\build.err.log" }
+    if ($Mode -eq 'App') {
+        Write-Output 'app mode: the hidden smoke build starts the real backend itself; no vite build, no preview'
+        $testsExit = Invoke-AppRun
+    } else {
+        Write-Output 'build: vite build into the work folder'
+        $build = Start-Process -FilePath $node -ArgumentList @((Quote $ViteScript), 'build', '--outDir', (Quote $Out), '--emptyOutDir', '--logLevel', 'warn') `
+            -WorkingDirectory $Web -NoNewWindow -PassThru -Wait -RedirectStandardOutput (Join-Path $Work 'build.out.log') -RedirectStandardError (Join-Path $Work 'build.err.log')
+        if ($build.ExitCode -ne 0) { throw "vite build failed with code $($build.ExitCode); see $Work\build.err.log" }
 
-    [Environment]::SetEnvironmentVariable('NQT_FIXTURE_DIR', $null, 'Process')
-    # A smoke run must never reach the owner's TWS, whatever the shell sets: the IB snapshot stays off.
-    [Environment]::SetEnvironmentVariable('NQT_IB_READONLY', $null, 'Process')
-    # The backend's same-origin check accepts the terminal port, which is the preview in front of it.
-    # The backend keeps its result cache and jobs file in its state folder: a smoke run gets its own, inside the work
-    # folder, so it never writes the owner's terminal\state. The queue is off and the HOME prewarm is off, so the run
-    # reads exactly what the page asks for.
-    $State = Join-Path $Work 'state'
-    New-Item -ItemType Directory -Path $State | Out-Null
-    $env:NQT_STATE_DIR = $State
-    $env:NQT_JOBS = 'off'
-    foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
-    $env:NQT_PORT = "$WebPort"
-    $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"
-    $env:PYTHONUTF8 = '1'
-    $env:PYTHONIOENCODING = 'utf-8'
-    $apiArgs = @('-m', 'uvicorn', 'nq_terminal.app:create_app', '--factory', '--app-dir', $Backend,
-        '--host', $Loopback, '--port', "$ApiPort", '--no-server-header', '--no-proxy-headers')
-    $allowed = Get-AllowedEnvironment
-    $api = Start-LoggedWithEnvironment $Python $apiArgs $Backend (Join-Path $Work 'backend') $allowed
-    $started.Add($api)
-    # Every /api path but the proof route needs a session, so readiness is the proof route.
-    Wait-Until { Test-ProofAnswers $ApiPort } "The backend on ${Loopback}:$ApiPort" $api
-    # The token is in the lock of the backend's own state folder; use it only after the backend proves it holds it.
-    $lock = $null
-    Wait-Until { $script:lock = Read-LockFile $State; $null -ne $script:lock } "The lock of the backend on ${Loopback}:$ApiPort" $api
-    if (-not (Test-Backend $ApiPort $lock.Token $lock.Port)) { throw "the backend on ${Loopback}:$ApiPort did not prove that it holds the token in its lock; not using it." }
-    $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-    $probeCode = Get-LaunchCode $ApiPort $lock.Token
-    if ($null -eq $probeCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code." }
-    $null = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/session/redeem" @{ 'X-NQT-Code' = $probeCode } $session
-    $healthReply = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/health" @{} $session
-    if ($null -eq $healthReply) { throw "the backend on ${Loopback}:$ApiPort refused a session it had just issued." }
-    $health = $healthReply.Content | ConvertFrom-Json
-    if ($health.fixture_mode -ne $false) { throw 'the second backend answers in fixture mode; the smoke run needs the real files.' }
-    Write-Output "backend: ${Loopback}:$ApiPort, real files, fence $($health.fence.is_start) to $($health.fence.is_end), own state folder, jobs off, allow-listed environment"
+        [Environment]::SetEnvironmentVariable('NQT_FIXTURE_DIR', $null, 'Process')
+        # A smoke run must never reach the owner's TWS, whatever the shell sets: the IB snapshot stays off.
+        [Environment]::SetEnvironmentVariable('NQT_IB_READONLY', $null, 'Process')
+        # The backend's same-origin check accepts the terminal port, which is the preview in front of it.
+        # The backend keeps its result cache and jobs file in its state folder: a smoke run gets its own, inside the work
+        # folder, so it never writes the owner's terminal\state. The queue is off and the HOME prewarm is off, so the run
+        # reads exactly what the page asks for.
+        $State = Join-Path $Work 'state'
+        New-Item -ItemType Directory -Path $State | Out-Null
+        $env:NQT_STATE_DIR = $State
+        $env:NQT_JOBS = 'off'
+        foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
+        $env:NQT_PORT = "$WebPort"
+        $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"
+        $env:PYTHONUTF8 = '1'
+        $env:PYTHONIOENCODING = 'utf-8'
+        $apiArgs = @('-m', 'uvicorn', 'nq_terminal.app:create_app', '--factory', '--app-dir', $Backend,
+            '--host', $Loopback, '--port', "$ApiPort", '--no-server-header', '--no-proxy-headers')
+        $allowed = Get-AllowedEnvironment
+        $api = Start-LoggedWithEnvironment $Python $apiArgs $Backend (Join-Path $Work 'backend') $allowed
+        $started.Add($api)
+        # Every /api path but the proof route needs a session, so readiness is the proof route.
+        Wait-Until { Test-ProofAnswers $ApiPort } "The backend on ${Loopback}:$ApiPort" $api
+        # The token is in the lock of the backend's own state folder; use it only after the backend proves it holds it.
+        $lock = $null
+        Wait-Until { $script:lock = Read-LockFile $State; $null -ne $script:lock } "The lock of the backend on ${Loopback}:$ApiPort" $api
+        if (-not (Test-Backend $ApiPort $lock.Token $lock.Port)) { throw "the backend on ${Loopback}:$ApiPort did not prove that it holds the token in its lock; not using it." }
+        $session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $probeCode = Get-LaunchCode $ApiPort $lock.Token
+        if ($null -eq $probeCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code." }
+        $null = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/session/redeem" @{ 'X-NQT-Code' = $probeCode } $session
+        $healthReply = Invoke-LoopGet "http://${Loopback}:$ApiPort/api/health" @{} $session
+        if ($null -eq $healthReply) { throw "the backend on ${Loopback}:$ApiPort refused a session it had just issued." }
+        $health = $healthReply.Content | ConvertFrom-Json
+        if ($health.fixture_mode -ne $false) { throw 'the second backend answers in fixture mode; the smoke run needs the real files.' }
+        Write-Output "backend: ${Loopback}:$ApiPort, real files, fence $($health.fence.is_start) to $($health.fence.is_end), own state folder, jobs off, allow-listed environment"
 
-    $env:NQT_SMOKE_API_ORIGIN = "http://${Loopback}:$ApiPort"
-    $previewArgs = @((Quote $ViteScript), 'preview', '--config', 'e2e/perf/real.preview.config.ts', '--outDir', (Quote $Out),
-        '--port', "$WebPort", '--strictPort')
-    $preview = Start-Logged $node $previewArgs $Web (Join-Path $Work 'preview')
-    $started.Add($preview)
-    Wait-Until { Test-PageAnswers "http://${Loopback}:$WebPort/" } "vite preview on ${Loopback}:$WebPort" $preview
-    Write-Output "preview: http://${Loopback}:$WebPort/ (api proxied to $ApiPort)"
+        $env:NQT_SMOKE_API_ORIGIN = "http://${Loopback}:$ApiPort"
+        $previewArgs = @((Quote $ViteScript), 'preview', '--config', 'e2e/perf/real.preview.config.ts', '--outDir', (Quote $Out),
+            '--port', "$WebPort", '--strictPort')
+        $preview = Start-Logged $node $previewArgs $Web (Join-Path $Work 'preview')
+        $started.Add($preview)
+        Wait-Until { Test-PageAnswers "http://${Loopback}:$WebPort/" } "vite preview on ${Loopback}:$WebPort" $preview
+        Write-Output "preview: http://${Loopback}:$WebPort/ (api proxied to $ApiPort)"
 
-    $env:NQT_SMOKE_WEB_ORIGIN = "http://${Loopback}:$WebPort"
-    # One launch code for the preview origin, made at the last moment (it works once and lives 60 seconds): Playwright's
-    # global set-up opens this address in a headless browser, which redeems it and keeps the cookie.
-    $launchCode = Get-LaunchCode $ApiPort $lock.Token
-    if ($null -eq $launchCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code for the preview." }
-    $env:NQT_SMOKE_SESSION_URL = "http://${Loopback}:$WebPort/session.html#$launchCode"
-    $testArgs = @($PlaywrightScript, 'test', '--config', 'e2e/perf/real.config.ts')
-    if ($Grep -ne '') { $testArgs += @('--grep', $Grep) }
-    Push-Location -LiteralPath $Web
-    try {
-        & $node @testArgs
-        $testsExit = $LASTEXITCODE
-    } finally {
-        Pop-Location
+        $env:NQT_SMOKE_WEB_ORIGIN = "http://${Loopback}:$WebPort"
+        # One launch code for the preview origin, made at the last moment (it works once and lives 60 seconds): Playwright's
+        # global set-up opens this address in a headless browser, which redeems it and keeps the cookie.
+        $launchCode = Get-LaunchCode $ApiPort $lock.Token
+        if ($null -eq $launchCode) { throw "the backend on ${Loopback}:$ApiPort did not issue a launch code for the preview." }
+        $env:NQT_SMOKE_SESSION_URL = "http://${Loopback}:$WebPort/session.html#$launchCode"
+        $testArgs = @($PlaywrightScript, 'test', '--config', 'e2e/perf/real.config.ts')
+        if ($Grep -ne '') { $testArgs += @('--grep', $Grep) }
+        Push-Location -LiteralPath $Web
+        try {
+            & $node @testArgs
+            $testsExit = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
     }
 } catch {
     $serverProblems.Add($_.Exception.Message)
@@ -586,15 +785,29 @@ try {
 $after = Get-Snapshot $Results
 $log = Test-Log $Results $before
 $fileProblems = @(Compare-Files $before $after)
-$problems = @($serverProblems) + @($log.problems) + @($fileProblems)
+$appProblems = @()
+if ($Mode -eq 'App') {
+    # The shell's own log says how the app was launched; a fixture launch, or one without a state folder of its own, does not count.
+    $appRun = Get-NewestAppRun $StartedAt
+    $shellLog = if ($null -ne $appRun) { Join-Path $appRun.FullName 'config\logs\shell.log' } else { '' }
+    if ($shellLog -ne '' -and (Test-Path -LiteralPath $shellLog)) {
+        $appProblems = @(Test-AppLaunchRecord ([System.IO.File]::ReadAllText($shellLog, $Utf8)) $Root $AppRoot)
+    } else {
+        $appProblems = @("the app run left no shell log under $AppRoot (it did not start)")
+    }
+}
+$problems = @($serverProblems) + @($log.problems) + @($fileProblems) + @($appProblems)
 if ($testsExit -ne 0) { $problems += "the Playwright smoke run exited with code $testsExit" }
 
 $bySeries = @($log.entries | Group-Object -Property symbol, timeframe, variant | ForEach-Object { "$($_.Name) x$($_.Count)" })
 $summary = [ordered]@{
     finished_utc = (Get-Date).ToUniversalTime().ToString('o')
+    mode = $Mode
     api_port = $ApiPort
     web_port = $WebPort
     playwright_exit = $testsExit
+    app_launch_checked = ($Mode -eq 'App')
+    app_run = if ($Mode -eq 'App' -and $null -ne $appRun) { $appRun.FullName } else { $null }
     new_log_lines = $log.new_lines
     new_log_lines_all_terminal_in_window = ($log.problems.Count -eq 0)
     new_log_series = $bySeries

@@ -1,0 +1,126 @@
+# desktop/harness: the measurement harness of the Windows shell
+
+The T2 harness of stage 0, moved into the repository and adapted to the real shell (04 D5.1; 03 sections 15.4 and 18; 02 section 4).
+It measures the rows of gate G2, writes one raw record per run, and reports medians with their ceiling verdicts. It is built here
+and measured later, alone, in a quiet window (W5B). Node built-ins only; the window watch and the window helper are two small
+Python scripts run by the lab's own interpreter. Everything it writes goes under `D:\dev\d5\runs`.
+
+## What a number is
+
+Every figure is written with its build, its method, the CPU load of the gate before the run and the provenance stamp (head, sha256
+of `git diff HEAD`, sha256 of the sorted untracked files with their contents). A record is one JSON file (schema `d5-run-1`), and
+`report.mjs` recomputes everything from those files. Medians are of 3 accepted runs. A run whose 60 second CPU average is above 10%
+is rejected and kept; after five rejections in a row a run is taken anyway and labelled PROVISIONAL, and the report keeps provisional
+figures apart from accepted ones.
+
+## Two methods, one set of rows
+
+| Build | How it is read | What it can read |
+|---|---|---|
+| GNU `smoke` build | debugging port 0, the port read from `DevToolsActivePort`, attached over CDP; a page probe is injected before HOME's document exists | every row |
+| `measure` build | no debugging port; the shell's own log (`<config>\logs\shell.log`) timestamps; memory from the performance counters of the whole process tree | backend ready, splash, cold HOME, idle memory |
+
+| Row | Target | Ceiling | Builds |
+|---|---:|---:|---|
+| `backend_ready` | 1,500 ms | 2,500 ms | smoke, measure (spawn to `supervise_checked` in the log) |
+| `splash_painted` | 500 ms | 1,000 ms | smoke (first contentful paint over CDP), measure (`page_finished` of the splash: the load event) |
+| `cold_home` | 3,500 ms | 5,000 ms | smoke (the HOME ready mark), measure (`home_painted`: the shell's own first paint signal, polled every 500 ms) |
+| `warm_home` | 1,000 ms | 1,500 ms | smoke (reload, ready mark since navigation start) |
+| `eq_warm`, `reg_warm` | 1,000 ms | 1,500 ms | smoke, real data only (second run of the line) |
+| `grid_open` | 100 ms | 500 ms | smoke (Fills tab click to the painted 8,411-row grid) |
+| `gip_pan_zoom_p95` | 16.7 ms | 25 ms | smoke (CDP trace, DrawFrame intervals, the worse of zoom and pan, at 20,000 bars) |
+| `keystroke_p95` | 50 ms | 100 ms | smoke (keydown to the second animation frame) |
+| `idle_mem_home` | 400 MB | 500 MB | smoke, measure (private working set of the whole tree) |
+| `soak_mem` | 1.0 GB | 1.5 GB | smoke, the soak runner, every 5 minutes at the shipped caps |
+| `installer_mb` | 15 MB | 30 MB | the installer file |
+
+A row passes only if every build it was measured on is within its ceiling; the smoke and measure medians of backend ready, cold
+HOME and idle memory must also agree within noise (10% of each other, or overlapping ranges).
+
+Notes on what is synthetic. On a fixture backend the 8,411 fills are answered in the page (the same synthetic rows as the browser
+budgets), and the GIP series is the real response tiled out to 20,000 bars with the timestamps running on (`bars.mjs`; the record says
+`barsSynthetic`). The real-data run reads the real run with 8,411 fills and the real day, and rewrites only the bar count.
+
+## Commands
+
+```
+node run.mjs --build smoke|measure|both [--rows all|id,id] [--runs 3] [--warmup 1] [--real-data] [--dry]
+node run.mjs --mode reproduce [--runs 3] [--dry]
+node run.mjs --mode minimise-sim [--hold-seconds 1800]     (30 to 60 minutes for the real reading)
+node run.mjs --mode minimise-real [--hold-seconds 1800]    (screen 2 only, behind the guard)
+node run.mjs --first-launch [--build measure|smoke]        (one command for the owner, after a reboot)
+node run.mjs --mode t8 [--playwright]
+node run.mjs --mode soak [--hours 8] [--real-data]
+node run.mjs --mode installer [--installer FILE]
+node run.mjs --mode selftest [--only spin,screen2,planted,path] [--dry-modes | --dry-only a,b]
+node report.mjs DIR [--min-runs 3] [--json] [--check [--strict]]
+node --test "tests/*.test.mjs"
+```
+
+`--dry` takes one unmeasured run per mode: no gate is enforced, nothing is counted, and the record is `dry`. `--exe`, `--smoke-exe`
+and `--measure-exe` name a build; without them the newest exe of the kind under `D:\dev\targets` is used, and a launch refuses an exe
+that is another build (the smoke exe carries the `--attach-url` switch text, the measure exe `NQT_MEASURE_DIR`).
+
+Measurements run from the main tree only (`--real-data` and every non-dry run refuse to start elsewhere). From a worktree only
+`--dry` runs, on a derived lab (`lab.mjs`): the owner's venv launcher, a copy of the research package sources and junctions to the
+tree under test, never to its `state` folder and never to a data folder.
+
+## Reproduction first
+
+`--mode reproduce` launches the spike shell of stage 0 (`D:\dev\spikes\tauri-shell`) against the fixture backend on port 8800 and reads
+the three figures of the T2 result again: memory at HOME, memory after the heavy set, launch to HOME ready (`reference\w0b-tauri.json`).
+Each must be within 10% of the W0B median or inside its min to max range. The verdict is bound to the digest of the harness code; a
+non-dry measurement needs a verdict that says reproduced, or it must be started with `--allow-unreproduced` and every figure is then
+labelled UNREPRODUCED. Since D2 the backend is behind the session token, so the spike opens a launch page (a one-time code minted from the
+backend's lock) that redeems it and leaves for the terminal: one extra hop that the W0B run did not have. The verdict also carries a
+breakdown (spawn to the HOME document, HOME document to ready, first frame) so a difference can be placed before or after the page starts,
+and the real backend alone is read for reference (`informational`).
+
+## Safety
+
+- Every spawn is hidden (`windowsHide`) with a PATH that has no `D:\dev\mingw` and no `D:\dev\cargo` (`paths.mjs`), no `WEBVIEW2_*`
+  variable (the spike reproduction names its own) and TEMP on D:.
+- The global window and foreground watch (`winwatch.py`: EnumWindows over every process every 100 ms, a WinEvent hook, and
+  GetForegroundWindow) runs around every launch. Any new visible window or any change of foreground window fails the run. The
+  shell's own inert 5 by 5 pixel event window is recorded and ignored.
+- A window may be shown only in the screen-2 mode: the guard (`screen2.mjs`) takes the second monitor's work area and the window's DWM
+  frame, refuses any rectangle that touches the primary monitor, and the watch then expects exactly that one window. SW_SHOWMINNOACTIVE
+  and SW_SHOWNOACTIVATE are the only show commands, and only for a window of the shell's own pid.
+- Teardown asks the window to close (WM_CLOSE) and then ends only processes recorded in this run's own tree with the same pid,
+  creation time and image name. Never `taskkill /T`, never a bare pid.
+- Port 8765 is refused everywhere. Ports used: 8800 and 9352 (the spike reproduction), 8797 (the standalone backend), 4373 (the T8 demo
+  server); every smoke build takes debugging port 0.
+- Python is only the lab's venv interpreter by full path, always with a script path.
+
+## Minimise
+
+`minimise-sim` hides the controller (put_IsVisible false) for the hold, with LIVE open and streaming, then shows it, and the stream must
+read "live, server events" again within 30 s. The page must really report `hidden`, or the driver is named ineffective. Three drivers
+are tried in turn: `controller-file` (a smoke-only hook in the shell that does not exist yet), `wm-size` (a WM_SIZE message; the engine
+does not react to it), and `page-override` (the page's own visibility overridden over CDP, which tests the page's logic and not the
+engine's throttling, and is recorded as `engineLevel: false`). `minimise-real` minimises and restores the shell's real window on
+screen 2; the page stays `visible` while minimised in a smoke build, which is recorded as an observation.
+
+## Files
+
+| Path | Holds |
+|---|---|
+| `run.mjs`, `report.mjs` | the commands and the report with `--check` |
+| `modes\` | `rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest` |
+| `lib\paths.mjs`, `build.mjs`, `lab.mjs`, `shell.mjs`, `launch-run.mjs` | folders and ports, build identity, derived labs, the launch, one launch and its rows |
+| `lib\cdp.mjs`, `page-rows.mjs`, `pagejs.mjs`, `probe.js`, `trace.mjs`, `bars.mjs`, `fills.mjs`, `dockwait.mjs`, `heavy.mjs` | the page-internal rows |
+| `lib\gate.mjs`, `slot.mjs`, `record.mjs`, `rows.mjs`, `stats.mjs`, `provenance.mjs`, `harness.mjs` | gate, slot, records, the G2 table, statistics, the stamp, the reproduction gate |
+| `lib\winwatch.*`, `winctl.*`, `screen2.mjs`, `plantwin.py` | the window watch, the window helper and the screen-2 guard |
+| `lib\mem.*`, `stop.mjs`, `survivors.mjs`, `proc.mjs`, `backend.mjs`, `shelllog.mjs` | memory counters, identity-checked teardown, processes, backends, the shell log (`shelllog.mjs` also reads `keys_installed` back: a measure run whose engine reads devtools, accelerator keys or zoom control as on is marked failed) |
+| `reference\w0b-tauri.json` | the W0B figures the reproduction is judged against |
+| `tests\` | `node --test` unit tests, each guard with a born-failing case |
+
+`pagejs.mjs` and `probe.js` are the page scripts of the T2 harness (the screen wait, the pivot step and the HOME marks), unchanged.
+
+## Known limits
+
+- The harness measures; it does not decide G2. `report.mjs --check` fails when a row, a build's readings or a figure's provenance is missing, and
+  `--strict` also fails on a ceiling or a disagreement between builds.
+- The measure build has no debugging port, so its HOME ready is the shell's `home_painted` (first contentful paint of the backend's page, polled
+  every 500 ms), not the moment the data is in. Its idle memory is read after a settle period.
+- The real-data rows (`eq_warm`, `reg_warm`, the real fills run) and the first-launch reading need the main tree and the owner's lab.

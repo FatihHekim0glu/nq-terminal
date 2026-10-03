@@ -81,3 +81,37 @@ Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove
 | D4 (W4A) | `desktop/src-tauri/tests/setup_refused.rs`, `show_scope.rs`, `windows_features.rs` | 198, 87, 70 | new | a refused setup ends with a logged fatal and exit 1; every `show()` sits under the release cfg; the declared `windows` features compile a real pipe round trip | D4 | the files themselves |
 
 The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock.py`, `desktop/sessions.py`, `desktop/envlist.py`, the workspace models and service, and the others in its stage 1 list) are rows of 03 itself and are not repeated here. Only a module that 03 does not name belongs in this table, for example `services/prewarm.py` and `desktop/fixture_main.py`, which the wave plan adds; the phase that creates them adds their rows.
+
+## Preflight of 3 October 2026 (wave W5A, step 1 of D5)
+
+`gen_03_tables.py` was run on the `desktop/d4` worktree (base commit `76e9cc2`, the W5A tree uncommitted) with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and other rows | 127, 25, 26 and 36 |
+| Unmapped rows | 0 |
+| New backend module in this wave | none; the generator does not scan `desktop/`, `scripts/` or `web/e2e/`, so every file below is a row of this addendum |
+| Other build workflows on this worktree | none; a second workflow builds D3 stage B in the main tree, so Playwright runs wait for each other |
+| Port used by the app-smoke parity run | 8796 (the W0A probe row of the port table, free since W0A); every other port in this wave is port 0 |
+| Rows added to this addendum | the harness, the release scripts, `record_green.ps1`, the desktop Playwright project and the served-JSON comparison, below |
+
+### Rows added by W5A
+
+| Phase | Module | Lines | Fate | Desktop form | Stage | Tests |
+|---|---|---:|---|---|---|---|
+| D5 (W5A) | `desktop/harness/run.mjs`, `report.mjs` | 66, 132 | new | the measurement harness entry (one mode per run, the reproduction gate, the CPU gate, a run folder under `D:\dev\d5\runs`) and the report with its strict `--check` | D5 | `desktop/harness/tests/report.test.mjs`, `gate.test.mjs` |
+| D5 (W5A) | `desktop/harness/modes/` (`rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest`) | 83, 172, 197, 36, 118, 84, 32, 146 | new | the eight modes of the harness; the self-test plants a spin, a window and a MinGW path to prove the guards reject them | D5 | `selftest.mjs` live, plus the unit tests below |
+| D5 (W5A) | `desktop/harness/lib/*.mjs`, `mem.ps1`, `probe.js`, `winctl.py`, `winwatch.py`, `plantwin.py` | 34 files | new | paths, row definitions, statistics, provenance, the gate and slot, the shell and backend launchers, the CDP client, the window watch and screen 2 guard, memory and survivor reads; every spawn hidden, a PATH with no build tools | D5 | `desktop/harness/tests/*.test.mjs` (107 tests) |
+| D5 (W5A) | `desktop/harness/reference/w0b-tauri.json`, `README.md` | 68, 126 | new | the W0B spike figures the reproduction gate compares against; the harness guide | D5 | `report.test.mjs` |
+| D5 (W5A) | `desktop/scripts/advisories.mjs` | 169 | new | the published Tauri advisories newer than `state/desktop/advisories.json` (D5.3, 05 X03) | D5 | `scripts/tests/advisories.test.mjs` |
+| D5 (W5A) | `desktop/scripts/dist-scan.mjs` | 134 | new | no private key, signing key or PRIVATE marker in `web/dist` or a bundle folder (05 X06) | D5 | `scripts/tests/dist-scan.test.mjs` |
+| D5 (W5A) | `desktop/scripts/artefact-check.mjs` | 258 | new | the release folder check: manifest, imports, execution level, updater absent, no lab data, the pinned loader | D5 | `scripts/tests/artefact-check.test.mjs` |
+| D5 (W5A) | `desktop/scripts/build-release.ps1` | 273 | new | the three builds (release, measure, smoke) with `SHA256SUMS`, `PROVENANCE.json` and the config copies | D5 | the artefact check |
+| D5 (W5A) | `desktop/scripts/install-test.ps1` | 511 | new | the silent per-user install and uninstall under `D:\dev\d5\install`, no admin, no window | D5 | `-SelfTest` |
+| D5 (W5A) | `scripts/record_green.ps1` | 243 | new | the four dated, stamped green records; `-Stamp` is the one provenance stamp definition | D5 | `scripts/tests/release_check.tests.ps1` |
+| D5 (W5A) | `scripts/release_check.ps1` | 193 | new | same-day, same-stamp records and an artefact check before a tag is allowed; never creates the tag | D5 | `scripts/tests/release_check.tests.ps1` (266 lines) |
+| D5 (W5A) | `web/playwright.desktop.config.ts` | 46 | new | the desktop Playwright project: attaches over CDP to the hidden smoke build; specs are `*.desktop.ts` so the browser project never matches them | D5 | `web/e2e/desktop/05-selftest.desktop.ts` |
+| D5 (W5A) | `web/e2e/desktop/` (`launch.ts`, `watch.ts`, `watch.ps1`, `quiet.ts`, `fixtures.ts`, `app.ts`, `clipboard.ts`, `browserFixture.ts`, `served-session.ts`, `setup.ts`, `run.ts`, `smoke.app.ts`) | 12 files | new | launch under the launch prelude, the global window and foreground watch, the quiet-machine guard, the derived lab outside the real lab, the app mode of the real-data smoke | D5 | the specs below |
+| D5 (W5A) | `web/e2e/desktop/*.desktop.ts` (`05-selftest`, `10-walk`, `20-stream`, `30-export`, `40-keys`, `50-zoom`, `60-print`, `70-parity`, `90-look`, `99-window-watch`) | 10 specs | new | the walk, stream, export, key, zoom, print, bars-parity and look checks of the app (34 tests); the look compares read-only with `e2e/__screenshots__` | D5 | themselves |
+| D5 (W5A) | `qa/crosscheck/served.py` | 284 | new | the served-JSON comparison: the cached dump bodies against what the hidden app serves; part of G2 beside `crosscheck --strict` | D5 | `qa/tests/test_served.py` |
+| D5 (W5A) | `qa/tests/test_served.py` | 205 | new | 26 tests, with a planted one-byte difference | D5 | itself |

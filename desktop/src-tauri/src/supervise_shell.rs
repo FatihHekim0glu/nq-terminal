@@ -3,6 +3,12 @@
 //! navigation, and the close.
 
 use super::STOP_GRACE_S;
+#[allow(
+    clippy::duplicate_mod,
+    reason = "the pure announce script is shared with the rebuild window and with the hidden-window tests by path"
+)]
+#[path = "window_rebuild_announce.rs"]
+mod announce;
 use super::check::{self, CONFIG_KEY, Expect, Spec};
 use super::retry;
 use super::run::{self, AfterStop, Backend, Shared, Sink, Verdict};
@@ -49,6 +55,22 @@ fn navigate<R: Runtime>(
     page.and_then(|url| window.navigate(url).map_err(|e| e.to_string()))
 }
 
+impl<R: Runtime> WindowSink<R> {
+    /// Sets the stopped page's status paragraph in place (no navigation, so the focus stays on the Retry link).
+    fn status(&self, text: &str) {
+        if let Err(e) = self.window.eval(retry::status_script(text)) {
+            crash::log("supervise_status_failed", json!({ "error": e.to_string() }));
+        }
+    }
+
+    /// Whether the window already shows the stopped page's unverified section.
+    fn shows_unverified(&self) -> bool {
+        self.window
+            .url()
+            .is_ok_and(|u| u.path().ends_with(STOPPED_PAGE) && u.fragment() == Some("unverified"))
+    }
+}
+
 impl<R: Runtime> Sink for WindowSink<R> {
     /// The cookie `nqt_s_<port>` (HttpOnly, SameSite=Strict, Path=/api) goes into the webview, then the page loads.
     fn ready(&self, port: u16, session: &str) {
@@ -69,7 +91,13 @@ impl<R: Runtime> Sink for WindowSink<R> {
 
     fn stopped(&self, code: &str) {
         let page = self.pages.join(&format!("{STOPPED_PAGE}#{code}"));
-        if let Err(e) = navigate(&self.window, page.map_err(|e| e.to_string())) {
+        // A second reason is a fragment-only navigation: no load, no focus move, no new title. Announce it to screen
+        // readers the way the rebuild page does (WCAG 4.1.3).
+        let shown = navigate(&self.window, page.map_err(|e| e.to_string())).and_then(|()| {
+            let script = announce::announce_script(code);
+            self.window.eval(script).map_err(|e| e.to_string())
+        });
+        if let Err(e) = shown {
             crash::log("supervise_stopped_page_failed", json!({ "error": e }));
         }
     }
@@ -80,6 +108,18 @@ impl<R: Runtime> Sink for WindowSink<R> {
             uri.parse::<tauri::Url>().map_err(|e| e.to_string()),
         ) {
             crash::log("supervise_reload_failed", json!({ "error": e }));
+        }
+    }
+
+    fn checking(&self) {
+        self.status(retry::CHECKING);
+    }
+
+    fn still_unverified(&self) {
+        if self.shows_unverified() {
+            self.status(retry::STILL_UNVERIFIED);
+        } else {
+            self.stopped("unverified");
         }
     }
 
@@ -135,6 +175,10 @@ fn install_navigation_check<R: Runtime>(
                     Verdict::Retry(uri) => {
                         let (shared, sink) = (shared.clone(), sink.clone());
                         std::thread::spawn(move || shared.retry_navigation(sink.as_ref(), &uri));
+                    }
+                    Verdict::Gone => {
+                        let sink = sink.clone();
+                        std::thread::spawn(move || sink.stopped("exited"));
                     }
                     Verdict::Allow | Verdict::Cancel => {}
                 }

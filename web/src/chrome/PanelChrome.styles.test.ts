@@ -95,6 +95,16 @@ describe('panel stylesheets', () => {
     expect(rule(functionBarCss, '.fn-btn[aria-disabled="true"]')).toMatch(/color:\s*var\(--fn-off\)/)
   })
 
+  // 1.4.4: at 200% in a 1920 window a 2 x 2 panel is about 600 CSS px wide and .nqt-panel clips (overflow hidden), so a
+  // bar that does not wrap loses its right-hand buttons. Zoomed (resolution 1.5 dppx or more) or under 1000px of viewport
+  // the bar wraps; a plain 100% window keeps its single row, so the screenshot baselines do not move.
+  it('born failing: wraps the function bar when zoomed or narrow so a clipping panel never cuts its buttons off (1.4.4)', () => {
+    const css = functionBarCss.replace(/\/\*[\s\S]*?\*\//g, '')
+    const zoomed = /@media \(max-width: 1000px\), \(min-resolution: 1\.5dppx\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(zoomed).toMatch(/\.fn-bar\s*\{\s*flex-wrap:\s*wrap;/)
+    expect(rule(functionBarCss, '.fn-bar')).not.toMatch(/flex-wrap/)
+  })
+
   // Changed after visual review round 3: every reference ends each red-bar button, and the amber
   // field, with a 2px dark divider, so a lone `96) Actions` still shows its extent at rest.
   it('ends every red-bar button and the amber field with a 2px --fn-div divider', () => {

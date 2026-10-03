@@ -181,15 +181,16 @@ describe('package.json scripts', () => {
     expect(line).toBe(`${scripts['e2e:offline']} --update-snapshots=all`)
   })
 
-  it('test:e2e-types checks the e2e, offline, flows, perf and visual tsconfigs', () => {
+  it('test:e2e-types checks the e2e, offline, flows, perf, visual and desktop tsconfigs', () => {
     expect(scripts['test:e2e-types']).toBe(
-      'tsc -p e2e/tsconfig.json && tsc -p e2e/offline/tsconfig.json && tsc -p e2e/flows/tsconfig.json && tsc -p e2e/perf/tsconfig.json && tsc -p e2e/visual/tsconfig.json',
+      'tsc -p e2e/tsconfig.json && tsc -p e2e/offline/tsconfig.json && tsc -p e2e/flows/tsconfig.json && tsc -p e2e/perf/tsconfig.json && tsc -p e2e/visual/tsconfig.json && tsc -p e2e/desktop/tsconfig.json',
     )
   })
 
   it('leaves the Windows scripts as they were', () => {
     expect(scripts['e2e']).toBe('playwright test --project=chromium')
     expect(scripts['e2e:perf']).toBe('playwright test --project=perf --workers=1')
+    expect(scripts['e2e:desktop']).toBe('playwright test -c playwright.desktop.config.ts')
   })
 })
 

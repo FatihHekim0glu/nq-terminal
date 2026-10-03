@@ -94,6 +94,16 @@ def _targets(event: str, args: tuple) -> list[str | None]:
     return [_norm(args[0])]
 
 
+def note_child(args: Iterable[str], env: dict[str, str]) -> None:
+    """Called for every backend the suite starts: one with neither NQT_FIXTURE_DIR nor an explicit NQT_PREWARM=0 could read
+    the real files (the HOME prewarm reads them on its own; the handshake and lock tests turn it off and ask only the proof,
+    health and session routes)."""
+    if "NQT_FIXTURE_DIR" in env or env.get("NQT_PREWARM") == "0":
+        return
+    for guard in list(_ACTIVE):
+        guard.note_real_data_child(" ".join(str(a) for a in args))
+
+
 def _hook(event: str, args: tuple) -> None:
     if event not in _EVENTS or not _ACTIVE:
         return
@@ -125,6 +135,7 @@ class ResearchGuard:
         self._ids: dict[tuple[int, int], Path] = {}
         self.before: dict[Path, bytes | None] = {}
         self.blocked: list[str] = []
+        self.real_data_children: list[str] = []
 
     def _hit(self, target: str | None) -> str | None:
         if target is None:
@@ -150,6 +161,10 @@ class ResearchGuard:
             self.blocked.append(f"{event} on {hit}")
             raise PermissionError(f"terminal tests may not modify {hit}")
 
+    def note_real_data_child(self, description: str) -> None:
+        """A child process this session started without the fixture data: it could have written the real access log."""
+        self.real_data_children.append(description)
+
     def start(self) -> "ResearchGuard":
         self.before = {p: _read(p) for p in self.policies}
         self._ids = {ident: p for p in self.policies if (ident := _identity(str(p))) is not None}
@@ -164,7 +179,8 @@ class ResearchGuard:
     def verify(self) -> Report:
         report = Report(problems=[f"in-process write refused: {b}" for b in self.blocked])
         for path, kind in self.policies.items():
-            _check_file(path, kind, self.before.get(path), _read(path), bool(self.blocked), report)
+            _check_file(path, kind, self.before.get(path), _read(path), bool(self.blocked), report,
+                        may_have_read_real_data=bool(self.blocked or self.real_data_children))
         return report
 
 
@@ -180,7 +196,7 @@ def _appended_lines(before: bytes, after: bytes) -> Iterable[str]:
 
 
 def _check_file(path: Path, kind: str, before: bytes | None, after: bytes | None,
-                wrote_in_process: bool, report: Report) -> None:
+                wrote_in_process: bool, report: Report, may_have_read_real_data: bool = True) -> None:
     if before == after:
         return
     name = path.name
@@ -196,7 +212,7 @@ def _check_file(path: Path, kind: str, before: bytes | None, after: bytes | None
         report.problems.append(f"{name} disappeared during the session")
         return
     if kind in (APPEND, APPEND_LOG):
-        _check_append(name, kind, before or b"", after, report)
+        _check_append(name, kind, before or b"", after, report, may_have_read_real_data)
         return
     if TEST_MARKER.encode("utf-8") in after:
         report.problems.append(f"{name} was rebuilt with the test marker {TEST_MARKER!r} inside")
@@ -205,15 +221,24 @@ def _check_file(path: Path, kind: str, before: bytes | None, after: bytes | None
                             "so it is attributed to another workflow")
 
 
-def _check_append(name: str, kind: str, before: bytes, after: bytes, report: Report) -> None:
+def _check_append(name: str, kind: str, before: bytes, after: bytes, report: Report,
+                  may_have_read_real_data: bool = True) -> None:
     if not after.startswith(before):
         report.problems.append(f"{name} is append-only but its earlier bytes changed")
         return
     new = [line for line in _appended_lines(before, after) if line.strip()]
+    foreign_terminal = 0
     for line in new:
         if TEST_MARKER in line:
             report.problems.append(f"{name} gained a line with the test marker: {line[:160]}")
         elif kind == APPEND_LOG and _TERMINAL_CALLER.search(line):
-            report.problems.append(f"{name} gained a terminal line during the test session: {line[:160]}")
+            if may_have_read_real_data:
+                report.problems.append(f"{name} gained a terminal line during the test session: {line[:160]}")
+            else:
+                foreign_terminal += 1
+    if foreign_terminal:
+        report.notes.append(f"{name} gained {foreign_terminal} terminal line(s) during the session; this session read no real "
+                            "data (no refused in-process write, every test backend on the fixture), so they are attributed "
+                            "to another workflow")
     if new:
         report.notes.append(f"{name} gained {len(new)} line(s) from another workflow during the session")

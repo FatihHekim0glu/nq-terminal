@@ -288,6 +288,13 @@ pub trait Sink: Send + Sync {
     fn reload(&self, uri: &str) {
         let _ = uri;
     }
+    /// The Retry link was followed: show at once (and announce) that the proof is being tried again.
+    fn checking(&self) {}
+    /// Every retried proof was late again: say so in place when the stopped page is showing (a navigation to the
+    /// address already shown would change and announce nothing); the default shows the stopped page.
+    fn still_unverified(&self) {
+        self.stopped(Mismatch::Unverified(String::new()).code());
+    }
 }
 
 /// What a top-level navigation may do.
@@ -301,6 +308,8 @@ pub enum Verdict {
     /// The proof was only late (or the Retry link was followed): cancelled, the proof retried off the UI thread,
     /// and the window sent on to this address when it passes.
     Retry(String),
+    /// The Retry link was followed with no backend to check: cancelled, and the stopped page's "exited" section shown.
+    Gone,
 }
 
 /// What the loop, the navigation check and the close share.
@@ -381,13 +390,14 @@ impl Shared {
         match (uri, self.current()) {
             (Some(uri), _) => Verdict::Retry(uri.to_string()),
             (None, Some(b)) => Verdict::Retry(format!("{}/", link::origin(b.port()))),
-            (None, None) => Verdict::Cancel,
+            (None, None) => Verdict::Gone,
         }
     }
 
     /// Off the UI thread: the proof again, with a longer budget, a few times; when it passes the window goes on to
     /// `uri` (that one navigation is approved), and when it does not the stopped page says why.
     pub fn retry_navigation(&self, sink: &dyn Sink, uri: &str) {
+        sink.checking();
         let once = || match self.current() {
             Some(b) => {
                 let port = b.port();
@@ -397,11 +407,21 @@ impl Shared {
             None => Err(Mismatch::Proof("the backend has ended".into())),
         };
         let pause = || signalled_within(&[self.stop_event.raw()], retry::RETRY_PAUSE);
-        match retry::retry(retry::RETRY_ATTEMPTS, once, pause) {
-            Ok(()) => sink.reload(uri),
-            Err(_) if self.stopping() => {}
-            Err(m) => sink.stopped(m.code()),
+        let done = retry::retry(retry::RETRY_ATTEMPTS, once, pause);
+        if !self.stopping() {
+            conclude_retry(sink, uri, done, self.current().is_none());
         }
+    }
+}
+
+/// How a retry ends: on to `uri` when the proof passed; the "exited" section when the backend has ended meanwhile;
+/// an announcement in place when it was late every time; the refusal's own section otherwise.
+pub fn conclude_retry(sink: &dyn Sink, uri: &str, done: Result<(), Mismatch>, backend_gone: bool) {
+    match done {
+        Ok(()) => sink.reload(uri),
+        Err(_) if backend_gone => sink.stopped("exited"),
+        Err(Mismatch::Unverified(_)) => sink.still_unverified(),
+        Err(m) => sink.stopped(m.code()),
     }
 }
 
