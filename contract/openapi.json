@@ -25061,6 +25061,16 @@
               }
             },
             "description": "a name outside the seven documents"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the workspace files could not be read"
           }
         },
         "summary": "List Documents",
@@ -25124,6 +25134,16 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the workspace files could not be read"
           }
         },
         "summary": "Read Document",

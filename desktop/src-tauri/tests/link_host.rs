@@ -1,5 +1,5 @@
 //! link.rs (03 section 6 item 2; 04 D4.3; 05 G08): the only TCP user connects to the literal 127.0.0.1 only, never to
-//! the owner's port 8765, sends no header to a listener that fails the ownership check, and computes the backend's
+//! the owner's port 8765 in smoke and measure builds, sends no header to a listener that fails the ownership check, and computes the backend's
 //! MACs exactly as backend desktop/handshake.py does (known answers computed with the nq-lab venv's Python).
 //!
 //! Born failing: before stage B `get` refused every call (NotReady), so the accepted-owner case failed; a `get` that
@@ -59,11 +59,43 @@ fn every_host_but_the_literal_loopback_address_is_refused_before_any_socket() {
 }
 
 #[test]
-fn port_zero_and_the_owner_port_are_refused() {
-    for port in [0, link::OWNER_PORT] {
-        let refused = link::get(&Get::loopback(port, "/", &[], TIMEOUT), &|_| true);
-        assert_eq!(refused.unwrap_err(), LinkError::PortRefused(port));
-    }
+fn port_zero_is_refused_in_every_build() {
+    let refused = link::get(&Get::loopback(0, "/", &[], TIMEOUT), &|_| true);
+    assert_eq!(refused.unwrap_err(), LinkError::PortRefused(0));
+}
+
+/// Smoke and measure builds (the ones that run beside the owner's terminal) never reach 8765.
+#[cfg(any(feature = "smoke", feature = "measure"))]
+#[test]
+fn the_owner_port_is_refused_in_smoke_and_measure_builds() {
+    let refused = link::get(&Get::loopback(link::OWNER_PORT, "/", &[], TIMEOUT), &|_| {
+        true
+    });
+    assert_eq!(
+        refused.unwrap_err(),
+        LinkError::PortRefused(link::OWNER_PORT)
+    );
+}
+
+/// The release shell must be able to attach to the browser door's backend, which keeps 8765 (03 sections 2.1 and
+/// 2.2). The ownership check still runs first: here it refuses every process, so no socket is ever opened and
+/// whatever listens on 8765 is never contacted.
+#[cfg(not(any(feature = "smoke", feature = "measure")))]
+#[test]
+fn the_release_shell_does_not_refuse_the_browser_doors_port_but_still_checks_its_owner() {
+    let result = link::get(
+        &Get::loopback(link::OWNER_PORT, "/api/health", &[], TIMEOUT),
+        &|_| false,
+    );
+    assert_ne!(
+        result.as_ref().err(),
+        Some(&LinkError::PortRefused(link::OWNER_PORT)),
+        "the release shell refused 8765 by number"
+    );
+    assert!(
+        result.is_err(),
+        "nothing may be answered to a refused owner"
+    );
 }
 
 #[test]

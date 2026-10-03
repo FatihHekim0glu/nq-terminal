@@ -64,9 +64,9 @@ const PICK_ATTEMPTS: usize = 5;
 pub const ATTRIBUTION_URL: &str = "https://www.tradingview.com/";
 const ATTRIBUTION_HOST: &str = "www.tradingview.com";
 const ATTRIBUTION_QUERY: &str = "utm_medium=lwc-link&utm_campaign=lwc-chart";
-/// The shell object the page reads (03 section 4.5), frozen and not writable.
+/// The shell object the page reads (03 section 4.5), frozen and not writable. Version 2: the shell reports how each save ended (writes_download.rs).
 pub const SHELL_SCRIPT: &str = "(() => { if (window.top !== window) return; \
-const shell = Object.freeze({ bridgeVersion: 1, platform: 'windows', keys: 'pc' }); \
+const shell = Object.freeze({ bridgeVersion: 2, platform: 'windows', keys: 'pc' }); \
 Object.defineProperty(window, '__NQT_SHELL__', { value: shell, writable: false, configurable: false, enumerable: false }); })();";
 
 /// Everything the window builder needs before the window exists.
@@ -755,7 +755,7 @@ mod tests {
     #[test]
     fn the_shell_script_freezes_the_three_fields() {
         for part in [
-            "bridgeVersion: 1",
+            "bridgeVersion: 2",
             "platform: 'windows'",
             "keys: 'pc'",
             "Object.freeze",

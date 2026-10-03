@@ -25,10 +25,13 @@ use windows::Win32::NetworkManagement::IpHelper::{
 
 /// The only host the shell ever connects to.
 pub const LOOPBACK: Ipv4Addr = Ipv4Addr::LOCALHOST;
-/// The owner's browser backend: the shell never connects to it.
+/// The browser door's fixed port (03 section 2.1): smoke and measure builds never connect to it.
 pub const OWNER_PORT: u16 = 8765;
 /// The largest answer the shell reads; its routes answer a few hundred bytes.
 pub const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+/// The largest `GET /api/jobs` answer the shell reads: the backend keeps 200 records of up to about 40 KB of log tail,
+/// so a long history passes `MAX_RESPONSE_BYTES`; past this the count is unread and the close asks (O11).
+pub const MAX_JOBS_BYTES: usize = 16 * 1024 * 1024;
 /// The two MAC kinds, so a READY answer can never be replayed as a proof answer or the other way round.
 pub const READY_KIND: &str = "ready";
 pub const PROOF_KIND: &str = "proof";
@@ -133,9 +136,20 @@ pub fn check_host(host: &str) -> Result<Ipv4Addr, LinkError> {
     }
 }
 
-/// Accepts any port but 0 and the owner's browser port.
+/// Whether this build refuses the browser door's port 8765 by number. Smoke and measure builds run beside the
+/// owner's terminal and never reach it. The release shell must be able to attach to the backend a browser launcher
+/// started there (03 sections 2.1 and 2.2); it still checks the listener's owner against the lock before any
+/// connect, and the proof after it, so a number refusal adds nothing.
+pub const BAN_OWNER_PORT: bool = cfg!(any(feature = "smoke", feature = "measure"));
+
+/// Port 0 is never valid; the owner's port is refused only where `ban_owner` says so.
+pub const fn port_refused(port: u16, ban_owner: bool) -> bool {
+    port == 0 || (ban_owner && port == OWNER_PORT)
+}
+
+/// Accepts any port but 0 and, in smoke and measure builds, the owner's browser port.
 pub fn check_port(port: u16) -> Result<u16, LinkError> {
-    if port == 0 || port == OWNER_PORT {
+    if port_refused(port, BAN_OWNER_PORT) {
         Err(LinkError::PortRefused(port))
     } else {
         Ok(port)
@@ -316,6 +330,20 @@ fn io_error(e: &std::io::Error) -> LinkError {
     reason = "the one function allowed a TCP connection (03 section 6 item 2), to 127.0.0.1 only"
 )]
 pub fn get(req: &Get<'_>, owner_ok: &dyn Fn(u32) -> bool) -> Result<Response, LinkError> {
+    get_capped(req, owner_ok, MAX_RESPONSE_BYTES)
+}
+
+/// `get` with its own cap on the answer's size, for the one route whose answer grows with a history.
+#[allow(
+    clippy::disallowed_types,
+    clippy::disallowed_methods,
+    reason = "the one function allowed a TCP connection (03 section 6 item 2), to 127.0.0.1 only"
+)]
+pub fn get_capped(
+    req: &Get<'_>,
+    owner_ok: &dyn Fn(u32) -> bool,
+    max_bytes: usize,
+) -> Result<Response, LinkError> {
     let addr = SocketAddrV4::new(check_host(req.host)?, check_port(req.port)?);
     let head = request_head(req)?;
     let deadline = Instant::now() + req.timeout;
@@ -342,7 +370,8 @@ pub fn get(req: &Get<'_>, owner_ok: &dyn Fn(u32) -> bool) -> Result<Response, Li
     stream
         .write_all(head.as_bytes())
         .map_err(|e| io_error(&e))?;
-    let raw = read_until_closed(&mut stream, deadline, |s, d| s.set_read_timeout(Some(d)))?;
+    let set_timeout = |s: &std::net::TcpStream, d| s.set_read_timeout(Some(d));
+    let raw = read_until_closed(&mut stream, deadline, max_bytes, set_timeout)?;
     parse_response(&raw)
 }
 
@@ -350,6 +379,7 @@ pub fn get(req: &Get<'_>, owner_ok: &dyn Fn(u32) -> bool) -> Result<Response, Li
 fn read_until_closed<S: Read>(
     stream: &mut S,
     deadline: Instant,
+    max_bytes: usize,
     set_timeout: impl Fn(&S, Duration) -> std::io::Result<()>,
 ) -> Result<Vec<u8>, LinkError> {
     let mut raw = Vec::new();
@@ -366,7 +396,7 @@ fn read_until_closed<S: Read>(
             return Ok(raw);
         }
         raw.extend_from_slice(&chunk[..n]);
-        if raw.len() > MAX_RESPONSE_BYTES {
+        if raw.len() > max_bytes {
             return Err(LinkError::Protocol("the answer is too large".into()));
         }
     }
@@ -582,9 +612,18 @@ pub fn running_jobs(
     owner_ok: &dyn Fn(u32) -> bool,
     timeout: Duration,
 ) -> Result<u32, LinkError> {
-    Ok(with_session(port, "/api/jobs", session, owner_ok, timeout)?
+    let cookie = format!("{}={session}", cookie_name(port));
+    let headers = [("Cookie", cookie.as_str())];
+    let request = Get::loopback(port, "/api/jobs", &headers, timeout);
+    Ok(get_capped(&request, owner_ok, MAX_JOBS_BYTES)?
         .json::<JobCounts>()?
         .running)
+}
+
+/// Whether the close must ask before it ends the backend (O11): unless the backend was read and said no backtest
+/// runs. A count that could not be read (a 401, a timeout, an answer past the cap) is not "none running".
+pub fn close_needs_confirm(running: &Result<u32, LinkError>) -> bool {
+    !matches!(running, Ok(0))
 }
 
 #[cfg(test)]
@@ -609,9 +648,18 @@ mod tests {
     }
 
     #[test]
-    fn owner_port_and_zero_are_refused() {
-        assert!(check_port(OWNER_PORT).is_err());
-        assert!(check_port(0).is_err());
+    fn zero_is_always_refused_and_the_owner_port_only_where_the_ban_applies() {
+        assert!(port_refused(0, false));
+        assert!(port_refused(0, true));
+        assert!(port_refused(OWNER_PORT, true));
+        assert!(!port_refused(OWNER_PORT, false));
+        assert!(!port_refused(53117, true));
+        assert_eq!(check_port(0), Err(LinkError::PortRefused(0)));
         assert_eq!(check_port(53117), Ok(53117));
+        assert_eq!(
+            check_port(OWNER_PORT).is_err(),
+            BAN_OWNER_PORT,
+            "check_port must follow the build's ban"
+        );
     }
 }

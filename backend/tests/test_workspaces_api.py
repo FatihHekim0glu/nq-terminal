@@ -287,6 +287,12 @@ def test_the_openapi_names_the_two_routes_and_the_error_codes(app):
     assert {"If-Match"} <= {p["name"] for p in paths[f"{PATH}/{{doc}}"]["put"]["parameters"]}
 
 
+def test_the_openapi_names_the_503_of_a_read_the_page_treats_as_the_store_being_unavailable(app):
+    paths = app.openapi()["paths"]
+    for route in (PATH, f"{PATH}/{{doc}}"):
+        assert "503" in paths[route]["get"]["responses"], route
+
+
 def test_every_reference_in_the_openapi_resolves(app):
     schema = app.openapi()
     refs: list[str] = []

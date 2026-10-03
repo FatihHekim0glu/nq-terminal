@@ -4,7 +4,14 @@
 //! `put_Cancel(TRUE)` on a refusal or a cancel. After DownloadCompleted the file is checked again by handle and
 //! deleted if refused. The profile's default download folder is moved under the config folder, so a download that
 //! skipped the handler cannot land in the Downloads folder on C:.
+//!
+//! The page is told how each save ended (bridgeVersion 2, web/src/bridge/browser.ts): one `nqt:save-outcome` event on
+//! its window, `detail: { uri, outcome }`, where `uri` is the download's own address (the object URL of the link the
+//! page clicked) and `outcome` is `saved` (the engine finished and the file passed its check), `cancelled` (no path:
+//! the dialog was cancelled, or a test build had no save folder) or `failed` (the policy refused the path, the write was
+//! interrupted or the saved file failed its check and was deleted). The shell calls the page; the page calls nothing.
 
+use crate::save_outcome::{NO_PATH, outcome_script, refusal_outcome};
 use crate::{Launch, ShellError};
 use serde_json::json;
 use std::cell::{Cell, RefCell};
@@ -22,12 +29,30 @@ use windows::core::{HSTRING, Interface, PWSTR};
 
 const BACKSTOP_DIR: &str = "downloads";
 const FALLBACK_NAME: &str = "download";
-const NO_PATH: &str = "no save path: the dialog was cancelled, or a test build had no save folder";
 
 thread_local! {
     /// Downloads waiting for their decision, kept on the UI thread (COM objects are not Send).
-    static PENDING: RefCell<HashMap<u64, (Args, ICoreWebView2Deferral)>> = RefCell::new(HashMap::new());
+    static PENDING: RefCell<HashMap<u64, Waiting>> = RefCell::new(HashMap::new());
     static NEXT_ID: Cell<u64> = const { Cell::new(1) };
+}
+
+/// A download between its start and the decision: the event arguments, the deferral and the download's address.
+struct Waiting {
+    args: Args,
+    deferral: ICoreWebView2Deferral,
+    uri: String,
+}
+
+/// Tells the main window's page how the save of `uri` ended; logged either way.
+fn report(app: &AppHandle, uri: &str, outcome: &str) {
+    let told = app
+        .get_webview_window(crate::MAIN_LABEL)
+        .map(|window| window.eval(outcome_script(uri, outcome)));
+    let error = told.and_then(Result::err).map(|e| e.to_string());
+    log(
+        "download_outcome",
+        json!({ "uri": uri, "outcome": outcome, "told_error": error }),
+    );
 }
 
 fn log(event: &str, detail: serde_json::Value) {
@@ -100,24 +125,44 @@ unsafe fn install(
 fn starting(args: &Args, dir: Option<PathBuf>, app: &AppHandle) -> windows::core::Result<()> {
     let mut proposed = PWSTR::null();
     // SAFETY: COM calls on the live event arguments on the UI thread; take_pwstr frees the string.
-    let (proposed, deferral) = unsafe {
+    let (proposed, deferral, uri) = unsafe {
         args.ResultFilePath(&mut proposed)?;
-        (take_pwstr(proposed), args.GetDeferral()?)
+        (take_pwstr(proposed), args.GetDeferral()?, uri_of(args))
     };
     let name = Path::new(&proposed)
         .file_name()
         .map_or(FALLBACK_NAME.into(), |n| n.to_string_lossy().into_owned());
     let id = NEXT_ID.with(|n| n.replace(n.get() + 1));
-    PENDING.with(|p| p.borrow_mut().insert(id, (args.clone(), deferral)));
-    log("download_starting", json!({ "id": id, "name": name }));
-    let app = app.clone();
+    let waiting = Waiting {
+        args: args.clone(),
+        deferral,
+        uri: uri.clone(),
+    };
+    PENDING.with(|p| p.borrow_mut().insert(id, waiting));
+    log(
+        "download_starting",
+        json!({ "id": id, "name": name, "uri": uri }),
+    );
+    let (app, app_for_error) = (app.clone(), app.clone());
     let spawned = std::thread::Builder::new()
         .name("download-decision".into())
         .spawn(move || decide(id, &name, dir, &app));
     if let Err(e) = spawned {
-        complete(id, Err(format!("no worker thread: {e}")));
+        complete(id, Err(format!("no worker thread: {e}")), &app_for_error);
     }
     Ok(())
+}
+
+/// The download's own address (for a page's save, the object URL of its link); empty when the engine gives none.
+unsafe fn uri_of(args: &Args) -> String {
+    let mut uri = PWSTR::null();
+    // SAFETY: COM calls on the live event arguments on the UI thread; take_pwstr frees the string.
+    unsafe {
+        match args.DownloadOperation().and_then(|op| op.Uri(&mut uri)) {
+            Ok(()) => take_pwstr(uri),
+            Err(_) => String::new(),
+        }
+    }
 }
 
 /// Off the UI thread: the save path (`--save-dir` or the dialog) and the policy's answer.
@@ -130,21 +175,27 @@ fn decide(id: u64, name: &str, dir: Option<PathBuf>, app: &AppHandle) {
         Some(path) => super::choose(&path).map_err(|e| e.to_string()),
         None => Err(NO_PATH.to_string()),
     };
-    if let Err(e) = app.run_on_main_thread(move || complete(id, decision)) {
+    let on_main = app.clone();
+    if let Err(e) = app.run_on_main_thread(move || complete(id, decision, &on_main)) {
         let detail = json!({ "id": id, "error": e.to_string() });
         log("download_undecided", detail);
     }
 }
 
 /// Back on the UI thread: set the checked path, or cancel; then complete the deferral.
-fn complete(id: u64, decision: Result<PathBuf, String>) {
-    let Some((args, deferral)) = PENDING.with(|p| p.borrow_mut().remove(&id)) else {
+fn complete(id: u64, decision: Result<PathBuf, String>, app: &AppHandle) {
+    let Some(Waiting {
+        args,
+        deferral,
+        uri,
+    }) = PENDING.with(|p| p.borrow_mut().remove(&id))
+    else {
         return;
     };
     // SAFETY: COM calls on the event arguments and deferral kept alive in PENDING, on the UI thread; a path that
     // could not be set is cancelled.
     let (finished, completed) = unsafe {
-        let finished = finish(&args, &decision);
+        let finished = finish(&args, &decision, app, &uri);
         if finished.is_err() {
             let _ = args.SetCancel(true);
         }
@@ -154,12 +205,26 @@ fn complete(id: u64, decision: Result<PathBuf, String>) {
         (Ok(_), Ok(())) => "download_allowed",
         _ => "download_refused",
     };
-    let errors = [finished.err(), completed.err()].map(|e| e.map(|e| e.to_string()));
+    let errors = [
+        finished.as_ref().err().map(ToString::to_string),
+        completed.err().map(|e| e.to_string()),
+    ];
     let detail = json!({ "id": id, "decision": format!("{decision:?}"), "errors": errors });
     log(event, detail);
+    // A save that goes on is reported when the engine finishes it (see `watch`); every other end is known now.
+    match (&decision, &finished) {
+        (Err(reason), _) => report(app, &uri, refusal_outcome(reason)),
+        (Ok(_), Err(_)) => report(app, &uri, "failed"),
+        (Ok(_), Ok(())) => {}
+    }
 }
 
-unsafe fn finish(args: &Args, decision: &Result<PathBuf, String>) -> windows::core::Result<()> {
+unsafe fn finish(
+    args: &Args,
+    decision: &Result<PathBuf, String>,
+    app: &AppHandle,
+    uri: &str,
+) -> windows::core::Result<()> {
     // SAFETY: COM calls on live event arguments on the UI thread.
     unsafe {
         let Ok(path) = decision else {
@@ -168,12 +233,22 @@ unsafe fn finish(args: &Args, decision: &Result<PathBuf, String>) -> windows::co
         };
         args.SetResultFilePath(&HSTRING::from(path.as_os_str()))?;
         args.SetHandled(true)?;
-        watch(&args.DownloadOperation()?, path.clone())
+        watch(
+            &args.DownloadOperation()?,
+            path.clone(),
+            app.clone(),
+            uri.to_owned(),
+        )
     }
 }
 
 /// After the engine finishes: the written file is checked again by handle and deleted if refused.
-unsafe fn watch(op: &Operation, chosen: PathBuf) -> windows::core::Result<()> {
+unsafe fn watch(
+    op: &Operation,
+    chosen: PathBuf,
+    app: AppHandle,
+    uri: String,
+) -> windows::core::Result<()> {
     let handler = StateChangedEventHandler::create(Box::new(move |op, _| {
         let Some(op) = op else { return Ok(()) };
         let (mut state, mut written) = (COREWEBVIEW2_DOWNLOAD_STATE::default(), PWSTR::null());
@@ -192,8 +267,10 @@ unsafe fn watch(op: &Operation, chosen: PathBuf) -> windows::core::Result<()> {
                 "download_deleted"
             };
             log(event, detail);
+            report(&app, &uri, if checked.is_ok() { "saved" } else { "failed" });
         } else if state == INTERRUPTED {
             log("download_interrupted", json!({ "path": written }));
+            report(&app, &uri, "failed");
         }
         Ok(())
     }));

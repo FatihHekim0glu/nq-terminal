@@ -31,6 +31,10 @@
     <p class="shell-status shell-error" id="lock-held-text" role="status">Another backend already holds this lab's lock.</p>
     <p class="shell-note">The app could not verify that backend, so it did not use it. If the browser terminal is running (start.ps1 on port 8765), close it, then open the app again.</p>
   </section>
+  <section class="reason" id="lock-untrusted" aria-labelledby="lock-untrusted-text">
+    <p class="shell-status shell-error" id="lock-untrusted-text" role="status">The lab's lock file was not made by this user.</p>
+    <p class="shell-note">The file terminal\state\backend.lock in the lab folder belongs to another account or can be changed by one, so the backend refused it and the app did not use it. Check who owns the file, delete it if it is stale, then open the app again.</p>
+  </section>
   <section class="reason" id="hmac" aria-labelledby="hmac-text">
     <p class="shell-status shell-error" id="hmac-text" role="status">The backend did not prove that it holds this app's secret.</p>
     <p class="shell-note">Its handshake proof does not match, so the app refused it and sent it nothing.</p>

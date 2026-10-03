@@ -24,10 +24,12 @@ compile_error!("smoke and measure are separate builds: enable at most one of the
 
 mod crash;
 mod dialogs;
+mod flush;
 mod guard;
 mod keys;
 mod link;
 mod reads;
+mod save_outcome;
 mod smoke;
 #[cfg(feature = "smoke")]
 mod smoke_options;
@@ -268,7 +270,7 @@ fn main() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
                 && window.label() == MAIN_LABEL
-                && shutdown_backend(window.app_handle()).is_err()
+                && !close_may_go_on(window.app_handle())
             {
                 api.prevent_close();
             }
@@ -286,6 +288,19 @@ fn main() {
             std::process::exit(EXIT_RUN);
         }
     }
+}
+
+/// A close request of the main window (03 section 2.3): the first one is held while the page's pending changes go to
+/// the store (flush.rs), which closes the window again when it is done; that second request asks about a running
+/// backtest and ends the backend. False keeps the window.
+fn close_may_go_on(app: &tauri::AppHandle) -> bool {
+    if let Some(main) = app.get_webview_window(MAIN_LABEL)
+        && flush::on_close(&main) != flush::OnClose::Proceed
+    {
+        return false;
+    }
+    flush::rearm();
+    shutdown_backend(app).is_ok()
 }
 
 /// Ends the backend this shell started (03 section 2.3): asks first when a backtest runs (Err keeps the window), then

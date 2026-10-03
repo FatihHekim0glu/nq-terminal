@@ -233,8 +233,14 @@ impl Supervisor {
         if let Some(Backend::Spawned(s)) = current.as_deref() {
             let owner_ok = |pid| s.job_pids().contains(&pid);
             let running = link::running_jobs(s.port(), s.session(), &owner_ok, run::LINK_TIMEOUT);
+            if let Err(e) = &running {
+                crash::log(
+                    "supervise_close_count_unread",
+                    json!({ "error": e.to_string() }),
+                );
+            }
             let cancel = crate::dialogs::Confirm::Cancel;
-            if running.unwrap_or(0) > 0
+            if link::close_needs_confirm(&running)
                 && crate::dialogs::confirm_close_running_job(owner) == cancel
             {
                 let kept = "a backtest is running and the close was cancelled";

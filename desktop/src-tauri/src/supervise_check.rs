@@ -274,6 +274,8 @@ pub enum Mismatch {
     Malformed(String),
     /// NQT-ATTACH: another backend holds the lab's lock and could not be attached to.
     LockHeld,
+    /// The backend ended with its untrusted-lock exit code: the lab's lock was not made by this user.
+    LockUntrusted,
     Hmac,
     PidOutsideJob(u32),
     Listener(Option<u32>),
@@ -293,6 +295,7 @@ impl Mismatch {
         match self {
             Self::Malformed(_) => "handshake",
             Self::LockHeld => "lock-held",
+            Self::LockUntrusted => "lock-untrusted",
             Self::Hmac => "hmac",
             Self::PidOutsideJob(_) => "pid",
             Self::Listener(_) => "listener",
@@ -310,6 +313,9 @@ impl Mismatch {
             Self::Malformed(why) => format!("the backend's handshake is not valid: {why}"),
             Self::LockHeld => {
                 "another backend holds the lab's lock and could not be verified".into()
+            }
+            Self::LockUntrusted => {
+                "backend.lock was not made by this user, so the backend refused it and ended".into()
             }
             Self::Hmac => "the handshake proof does not match the token this app sent".into(),
             Self::PidOutsideJob(pid) => {

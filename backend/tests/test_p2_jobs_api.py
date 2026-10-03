@@ -318,3 +318,14 @@ def test_the_schema_has_the_job_models_and_no_order_words() -> None:
 def test_security_headers_ride_on_job_responses(client) -> None:
     response = client.get("/api/jobs")
     assert response.headers["x-frame-options"] == "DENY" and response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_the_listing_gives_the_shell_a_running_integer(client) -> None:
+    """The desktop shell asks `GET /api/jobs` for `running` (link.rs `running_jobs`) before it closes; this route is
+    not in the shell's contract hash, so this pin is what stops the field being renamed or retyped unnoticed."""
+    idle = client.get("/api/jobs").json()
+    assert idle["running"] == 0 and type(idle["running"]) is int
+    first = post(client, spec_dict("t_shell_pin")).json()["id"]
+    assert wait_for(lambda: client.get(f"/api/jobs/{first}").json()["state"] == "running")
+    busy = client.get("/api/jobs").json()
+    assert busy["running"] == 1 and type(busy["running"]) is int

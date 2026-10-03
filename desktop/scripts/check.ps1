@@ -45,6 +45,23 @@ function Set-BuildEnvironment {
     Get-ChildItem env: | Where-Object { $_.Name -like 'WEBVIEW2_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
 }
 
+function Set-SeamRequirement {
+    # The seam tests (tests\int1_seams.rs, and the page-source check of src\save_outcome.rs) run on the lab this tree
+    # sits in and print SKIPPED in any other tree, which cargo reports as passed. In the lab's own tree that skip is a
+    # failure: NQT_REQUIRE_SEAMS=1 makes those tests panic instead. In another tree (a worktree, a clone) the skip
+    # stays, and this run says so, so that a green check there is never read as a proof of the seams.
+    $lab = if ($env:NQT_LAB) { $env:NQT_LAB } else { Join-Path $env:USERPROFILE 'nq-lab' }
+    $theirs = Join-Path $lab 'terminal'
+    $sameTree = (Test-Path $theirs) -and ((Resolve-Path $theirs).Path.TrimEnd([char]92) -ieq $Terminal.TrimEnd([char]92))
+    if ($sameTree) {
+        $env:NQT_REQUIRE_SEAMS = '1'
+    } else {
+        Remove-Item Env:NQT_REQUIRE_SEAMS -ErrorAction SilentlyContinue
+        Write-Host "NOTE  seams  this tree ($Terminal) is not the lab's terminal folder ($theirs): the seam tests SKIP here and prove nothing; run check.ps1 in the lab's own tree"
+    }
+    return $sameTree
+}
+
 function Invoke-Logged {
     # Runs a native command with its output in a log file; returns the exit code.
     param([string]$Name, [string]$File, [string[]]$Arguments, [string]$WorkDir = $Crate)
@@ -175,6 +192,7 @@ function Step-Scope {
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 Set-BuildEnvironment
+Set-SeamRequirement | Out-Null
 $cDrive = [math]::Round((Get-PSDrive C).Free / 1MB)
 Write-Host "check.ps1: crate $Crate, target $TargetDir, logs $LogDir, C: free $cDrive MB"
 

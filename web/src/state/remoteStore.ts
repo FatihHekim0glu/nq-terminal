@@ -35,7 +35,8 @@ export type RemoteStatus = 'idle' | 'ready' | 'off' | 'unavailable'
 
 export const DEBOUNCE_MS = 500
 export const RETRY_MS = 5_000
-const MAX_RETRIES = 6
+/** The delay between sends doubles with each failed one, up to this: an outage is waited out, not hammered. */
+export const RETRY_MAX_MS = 60_000
 /** The bookkeeping key: which keys await sending, and whether this origin's cache was ever made from the store. */
 export const SIDECAR_KEY = 'nqt.remote'
 
@@ -61,6 +62,8 @@ export interface RemoteStore {
   /** Sends what is pending now; `last` is the page's last moment (no waiting, no retry after a clash). */
   flush(last?: boolean): Promise<void>
   status(): RemoteStatus
+  /** How many keys are changed and not yet taken by the store. */
+  pending(): number
   /** Stops the timers (tests, and a page that is going away). */
   dispose(): void
 }
@@ -124,8 +127,12 @@ class RemoteEngine implements RemoteStore {
   private synced = false
   private booting: Promise<RemoteStatus> | null = null
   private flushing: Promise<void> = Promise.resolve()
+  /** The page's last-moment send while it runs: a second ask joins it instead of sending the same version again. */
+  private lastRun: Promise<void> | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private retries = 0
+  /** True while a queued flush runs its step: a boot inside it must not queue another flush behind it (see `boot`). */
+  private stepping = false
 
   private readonly deps: RemoteDeps
 
@@ -151,6 +158,8 @@ class RemoteEngine implements RemoteStore {
   }
 
   status = (): RemoteStatus => this.state
+
+  pending = (): number => this.dirty.size
 
   dispose = (): void => this.clearTimer()
 
@@ -307,9 +316,11 @@ class RemoteEngine implements RemoteStore {
     this.synced = true
     this.adopt(side.dirty)
     this.saveSidecar()
-    this.retries = 0
     this.setStatus('ready')
-    if (this.dirty.size > 0) void this.flush()
+    // The retry budget is not renewed here: reads that work say nothing about writes. A boot inside a flush step is
+    // followed by that step's own send; a flush queued from here would restart at once, kill the retry timer and loop
+    // for as long as the writes keep failing, with no delay.
+    if (this.dirty.size > 0 && !this.stepping) void this.flush()
     return this.state
   }
 
@@ -322,12 +333,13 @@ class RemoteEngine implements RemoteStore {
   }
 
   private scheduleRetry(): void {
-    if (this.retries >= MAX_RETRIES || this.timer !== null) return
+    if (this.timer !== null) return
+    const delay = Math.min(RETRY_MS * 2 ** this.retries, RETRY_MAX_MS)
     this.retries += 1
     this.timer = setTimeout(() => {
       this.timer = null
       void this.flush()
-    }, RETRY_MS)
+    }, delay)
   }
 
   /** Takes the sent values off the pending list (a key changed since stays: its text no longer matches). */
@@ -378,18 +390,40 @@ class RemoteEngine implements RemoteStore {
     else this.retries = 0
   }
 
+  /**
+   * The page's last-moment send. A store that is not ready ('unavailable' after a failed send, 'idle' before the first
+   * read ended) is started first, so a change that could still be taken is not lost to the retry backoff; a start
+   * that fails sends nothing and leaves the retry timer to go on.
+   */
+  private async sendLast(): Promise<void> {
+    if (this.state !== 'ready') {
+      this.stepping = true // the boot must not queue a flush of its own: this send follows it
+      try {
+        if ((await this.start()) !== 'ready') return
+      } finally {
+        this.stepping = false
+      }
+    }
+    if (this.dirty.size === 0) return
+    this.clearTimer()
+    await this.flushAll(true)
+  }
+
   async flush(last = false): Promise<void> {
     if (last) {
-      // Nothing can be sent unless the store is ready: then the retry timer must stay, not be cancelled by a hidden page.
-      if (this.state !== 'ready' || this.dirty.size === 0) return
-      this.clearTimer()
-      await this.flushAll(true)
+      // No store, or nothing to send. The retry timer stays untouched when nothing could be sent: a hidden page must not cancel it.
+      if (this.state === 'off' || this.dirty.size === 0) return
+      this.lastRun ??= this.sendLast().finally(() => {
+        this.lastRun = null
+      })
+      await this.lastRun
       return
     }
     this.clearTimer()
     if (this.state === 'off' || this.dirty.size === 0) return
     this.flushing = this.flushing
       .then(async () => {
+        this.stepping = true
         if (this.state !== 'ready' && (await this.start()) !== 'ready') {
           if (this.state === 'unavailable') this.warnUnsaved()
           return this.scheduleRetry()
@@ -398,6 +432,9 @@ class RemoteEngine implements RemoteStore {
         this.announceRestored()
       })
       .catch(() => this.scheduleRetry())
+      .finally(() => {
+        this.stepping = false
+      })
     await this.flushing
   }
 
@@ -406,6 +443,7 @@ class RemoteEngine implements RemoteStore {
     if (this.state === 'off' || specFor(key) === undefined) return
     this.dirty.set(key, value)
     this.saveSidecar()
+    this.retries = 0
     this.clearTimer()
     this.timer = setTimeout(() => {
       this.timer = null
@@ -435,6 +473,28 @@ export function attachPageEvents(store: RemoteStore, win: PageEventTarget, doc: 
     win.removeEventListener('pagehide', onHide)
     doc.removeEventListener('visibilitychange', onVisibility)
   }
+}
+
+/** The name of the one function the page defines for the shell to call (never the other way round). */
+export const SHELL_SYNC_HOOK = '__NQT_STORE_SYNC__'
+
+/**
+ * Defines the shell's flush hook on `target` (the window): a read-only, hidden function that sends what is pending at once
+ * (the page's last-moment send, which a second call joins; defined once, a second definition is ignored) and answers a JSON text, `{"status":...,"pending":n}`. The
+ * shell runs it in the page before it stops the backend and asks again until nothing is pending (03 section 2.3). It is a
+ * call from the shell into the page: the page itself calls no shell command (scripts/noShellIpc.test.ts).
+ */
+export function attachShellSync(store: RemoteStore, target: object): void {
+  if (Object.getOwnPropertyDescriptor(target, SHELL_SYNC_HOOK) !== undefined) return // defined once: the first store keeps it
+  Object.defineProperty(target, SHELL_SYNC_HOOK, {
+    value: (): string => {
+      void store.flush(true)
+      return JSON.stringify({ status: store.status(), pending: store.pending() })
+    },
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  })
 }
 
 /**
@@ -470,6 +530,7 @@ export function startRemoteStore(options: { readonly waitMs?: number } = {}): Pr
       setWriteObserver(shared.note)
       applyLookOnStoredChange(window)
       attachPageEvents(shared, window, document)
+      attachShellSync(shared, window)
     }
   }
   const store = shared

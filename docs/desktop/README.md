@@ -27,6 +27,9 @@ The plan to turn the nq-lab terminal from a local web app into native apps for W
 | [02_decision.md](02_decision.md) | The decision, "light and fast" in numbers, the stages, the gates G0 to G3, the triggers T1 to T11, and a verdict on every challenge finding. |
 | [03_migration_plan.md](03_migration_plan.md) | How to build it: process model, every route in its desktop form, the gate, saved state, keys, packaging, tests, CI, budgets, rollback, 39 work items and a fate for every module and dependency. |
 | [04_roadmap.md](04_roadmap.md) | The build in phases D0 to D8: slices with file ownership, QA gates, exit numbers, effort, the owner's decisions and actions, and a milestone timeline. |
+| [03_appendix_a_addendum.md](03_appendix_a_addendum.md) | The modules added after Appendix A was written, with the preflight of each phase and each integration wave. |
+| [d0_results.md](d0_results.md) | The Windows part of D0: the WebView2 probes, the T2 comparison (it does not fire, so the shell stays Tauri 2) and the backend ready baseline. |
+| [d4_integration.md](d4_integration.md) | Integration wave INT1: what was wired between the backend and page (D1 to D3) and the Windows shell (D4), and the check counts of the merged tree. |
 | [05_risks_costs.md](05_risks_costs.md) | What can go wrong, as a risk register with an owner for each risk, and what the plan costs in money and in the owner's time, one-off and yearly. |
 
 ## Supporting folders
@@ -34,6 +37,9 @@ The plan to turn the nq-lab terminal from a local web app into native apps for W
 | Folder | What it holds |
 |---|---|
 | [research/](research/) | The seven research lenses listed above. |
+| [baseline/](baseline/), [spike_d0/](spike_d0/), [spike_electron/](spike_electron/) | The D0 static baseline, the WebView2 probes and the Electron harness with its T2 figures. |
+| [stage1/](stage1/) | The stage 1 measurement script, its records and the seam specs (D1 and D3 numbers, the T3 reading). |
+| `../../desktop/` | The Windows shell: the Tauri crate in `src-tauri/`, the check scripts in `scripts/`, and its own README. |
 | `nq-lab/desktop_research/spike_webview2/` | Scripts and raw output of the WebView2 spike. |
 | `nq-lab/desktop_research/spike_rust/` | Scripts, shell and chart source, and raw output of the Rust spike. |
 | `nq-lab/desktop_research/tools/` | Scripts that build the inventory tables and, in `tools/plan/gen_03_tables.py`, the route table and appendices of the migration plan. |
@@ -42,4 +48,4 @@ The last three folders are scripts and raw output, not documents, so they sit ou
 
 ## Status
 
-Decided and planned. Nothing is built yet. The pitch deck is still to come: it is the last step and is not in this folder yet. When it is written it will be listed in the table above, and it must state the memory and size figures plainly (see risk O01 in `05_risks_costs.md`). The first two steps are phase D0 (measure Electron on this PC and run the Mac kit on the owner's Mac) and phase D1 (lazy imports and the result cache, which start once the other build workflow's work is committed). The owner's open decisions are listed in `04_roadmap.md`, section "Owner decisions".
+Phases D0 (Windows part) to D4 are built and merged: the backend speed work and the result cache (D1), one backend per lab with the lock, the challenge-response handshake and the session token (D2), the workspace store and the page bridge (D3), and the Windows shell (D4), whose seams with the backend and the page were wired and tested in integration wave INT1 (`d4_integration.md`). The packaging, the app-level measurements and the hand-over (D5 and D6) are still to come, and macOS is out of scope for now. The pitch deck is still to come: it is the last step and is not in this folder yet. When it is written it will be listed in the table above, and it must state the memory and size figures plainly (see risk O01 in `05_risks_costs.md`). The owner's open decisions are listed in `04_roadmap.md`, section "Owner decisions".

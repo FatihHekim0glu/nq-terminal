@@ -26,9 +26,12 @@ pub use support::{Launch, ShellError, crash, dialogs, guard, reads, window, writ
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::ffi::OsString;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use supervise::check::{self, BACKEND_MODULE, Expect, Failure, Mismatch, Spec};
-use support::{FakeLab, Tracked, fake_lab, records_in, wait_until, watch};
+use supervise::run::{self, AfterStop, Shared, Sink};
+use support::{FakeLab, Recorder, Tracked, fake_lab, records_in, wait_until, watch};
 
 fn spec_for(lab: &FakeLab) -> Spec {
     let state_dir = lab.state.clone();
@@ -293,10 +296,71 @@ fn an_attach_notice_is_refused_as_a_held_lock() {
 }
 
 #[test]
+fn a_backend_that_ends_with_the_untrusted_lock_code_is_refused_at_once() {
+    let lab = fake_lab("lie-untrusted", &json!({ "exit_before_handshake": 4 }));
+    let failure = supervise::spawn(&spec_for(&lab), &expect_for(&lab))
+        .expect_err("an untrusted lock is never attached to");
+    assert_eq!(failure, Failure::Refused(Mismatch::LockUntrusted));
+    assert_eq!(failure.code(), "lock-untrusted");
+    assert!(
+        Mismatch::LockUntrusted.message().contains("backend.lock"),
+        "{}",
+        Mismatch::LockUntrusted.message()
+    );
+}
+
+#[test]
+fn any_other_exit_before_the_handshake_is_still_an_exit() {
+    for code in [1, 2, 3] {
+        let lab = fake_lab("early-exit", &json!({ "exit_before_handshake": code }));
+        let failure = supervise::spawn(&spec_for(&lab), &expect_for(&lab)).expect_err("it ended");
+        assert_eq!(failure, Failure::Exited, "exit code {code}");
+    }
+}
+
+struct Recording(Arc<Recorder>);
+
+impl Sink for Recording {
+    fn ready(&self, port: u16, _session: &str) {
+        self.0.push(format!("ready {port}"));
+    }
+    fn stopped(&self, code: &str) {
+        self.0.push(format!("stopped {code}"));
+    }
+    fn gave_up(&self, log: &Path) -> AfterStop {
+        self.0.push(format!("gave_up {}", log.display()));
+        AfterStop::Quit
+    }
+}
+
+/// An untrusted lock ends the backend with its own exit code before any handshake: the loop spawns once, shows the
+/// page for it, and never restarts or asks Restart or Quit (it used to spawn three times and then ask).
+#[test]
+fn an_untrusted_lock_is_one_spawn_and_its_own_page_never_a_restart() {
+    let watch = watch();
+    let lab = fake_lab("loop-untrusted", &json!({ "exit_before_handshake": 4 }));
+    let shared = Shared::new(spec_for(&lab), expect_for(&lab)).expect("shared");
+    let recorder = Arc::new(Recorder::default());
+    let sink: Arc<dyn Sink> = Arc::new(Recording(recorder.clone()));
+    let looping = std::thread::spawn(move || run::run(shared, sink));
+    wait_until(Duration::from_secs(10), "the loop to end", || {
+        looping.is_finished()
+    });
+    std::thread::sleep(Duration::from_millis(2500));
+    let calls: Vec<String> = recorder.calls().into_iter().map(|(_, c)| c).collect();
+    assert_eq!(calls, ["stopped lock-untrusted"]);
+    let ended = |line: &&String| line.contains("ending before any handshake");
+    let spawns = lab.lines().iter().filter(ended).count();
+    assert_eq!(spawns, 1, "one spawn only");
+    watch.assert_clean();
+}
+
+#[test]
 fn every_refusal_has_its_own_message_and_page_section() {
     let all = [
         Mismatch::Malformed("x".into()),
         Mismatch::LockHeld,
+        Mismatch::LockUntrusted,
         Mismatch::Hmac,
         Mismatch::PidOutsideJob(1),
         Mismatch::Listener(None),

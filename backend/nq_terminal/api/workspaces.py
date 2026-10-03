@@ -161,7 +161,10 @@ def _readable(read: Callable[[], Any]) -> Any:
         raise _refuse(503, "the workspace files could not be read") from exc
 
 
-@router.get("", response_model=WorkspaceIndex)
+_READ_503 = {503: {"model": ErrorDetail, "description": "the workspace files could not be read"}}
+
+
+@router.get("", response_model=WorkspaceIndex, responses=_READ_503)
 def list_documents(request: Request, response: Response) -> WorkspaceIndex:
     """The seven documents with their versions and last write times (a never-written one is version 0)."""
     response.headers["Cache-Control"] = NO_STORE
@@ -170,7 +173,7 @@ def list_documents(request: Request, response: Response) -> WorkspaceIndex:
                                      for s in documents])
 
 
-@router.get("/{doc}", response_model=WorkspaceDocument)
+@router.get("/{doc}", response_model=WorkspaceDocument, responses=_READ_503)
 def read_document(request: Request, response: Response, doc: str) -> WorkspaceDocument:
     """One document, or its default at version 0 when it was never written."""
     known = _known(doc)

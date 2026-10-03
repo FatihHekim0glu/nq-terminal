@@ -6,6 +6,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+# Rust build output: the shell builds into a folder on the D drive, but a stray cargo run must never reach the repository
+target/
 
 # Python caches
 __pycache__/

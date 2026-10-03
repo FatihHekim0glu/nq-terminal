@@ -67,13 +67,13 @@ afterEach(() => {
 })
 
 describe('telling the user the store cannot take a change', () => {
-  it.each([401, 403, 503, 0])('posts one error for twenty failed sends answered %i, then one notice when the store takes the change', async (status) => {
+  it.each([401, 403, 503, 0])('posts one error for two failed sends answered %i (the second after the delay of 5 s), then one notice when the store takes the change', async (status) => {
     const { backend, store, notices } = await startReady()
-    backend.putStatuses = Array.from({ length: 20 }, () => status)
+    backend.putStatuses = Array.from({ length: 2 }, () => status)
     store.note('nqt.theme', 'standard')
     await vi.advanceTimersByTimeAsync(600)
     expect(notices).toEqual([{ text: STORE_NOTICE.unsaved, tone: 'error' }])
-    await vi.advanceTimersByTimeAsync(11_000)
+    await vi.advanceTimersByTimeAsync(15_000)
     expect(store.status()).toBe('ready')
     expect(notices).toEqual([
       { text: STORE_NOTICE.unsaved, tone: 'error' },

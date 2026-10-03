@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { browserBridge } from './browser'
+import { SAVE_OUTCOME_EVENT, SAVE_WAIT_MS, browserBridge } from './browser'
 import { BROWSER_SHELL } from './detect'
 
 const original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL }
@@ -76,6 +76,112 @@ describe('saveFile: the object-URL anchor of today', () => {
     expect(revoke).toHaveBeenCalledWith('blob:x')
   })
 })
+
+describe('saveFile in a shell that reports how each save ended (bridgeVersion 2)', () => {
+  const SHELL_V2 = { bridgeVersion: 2, platform: 'windows', keys: 'pc' } as const
+  const outcomeEvent = (uri: string, outcome: unknown) =>
+    new CustomEvent(SAVE_OUTCOME_EVENT, { detail: { uri, outcome } })
+
+  function clickSpy(url = 'blob:one') {
+    Object.assign(URL, { createObjectURL: vi.fn(() => url), revokeObjectURL: vi.fn() })
+    return vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  }
+
+  it('has started at once, and waits for the shell instead of saying saved at the click', async () => {
+    clickSpy()
+    const result = browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))
+    expect(result.started).toBe(true)
+    let ended: string | null = null
+    void result.then((outcome) => {
+      ended = outcome
+    })
+    await Promise.resolve()
+    expect(ended).toBeNull()
+    window.dispatchEvent(outcomeEvent('blob:one', 'saved'))
+    expect(await result).toBe('saved')
+  })
+
+  it.each(['saved', 'cancelled', 'failed'] as const)('ends as %s when the shell says so for its object URL', async (said) => {
+    clickSpy('blob:two')
+    const result = browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))
+    window.dispatchEvent(outcomeEvent('blob:two', said))
+    expect(await result).toBe(said)
+  })
+
+  it('takes a word that arrives before the click returns (the listener is in place first)', async () => {
+    Object.assign(URL, { createObjectURL: () => 'blob:early', revokeObjectURL: vi.fn() })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      window.dispatchEvent(outcomeEvent('blob:early', 'cancelled'))
+    })
+    expect(await browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))).toBe('cancelled')
+  })
+
+  it('ignores a word for another object URL, a word with an outcome it does not know and a word with no detail', async () => {
+    vi.useFakeTimers()
+    clickSpy('blob:mine')
+    const result = browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))
+    let ended: string | null = null
+    void result.then((outcome) => {
+      ended = outcome
+    })
+    window.dispatchEvent(outcomeEvent('blob:other', 'saved'))
+    window.dispatchEvent(outcomeEvent('blob:mine', 'perhaps'))
+    window.dispatchEvent(new CustomEvent(SAVE_OUTCOME_EVENT))
+    window.dispatchEvent(new CustomEvent(SAVE_OUTCOME_EVENT, { detail: 'blob:mine' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ended).toBeNull()
+    window.dispatchEvent(outcomeEvent('blob:mine', 'saved'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ended).toBe('saved')
+    vi.useRealTimers()
+  })
+
+  it('answers each of two saves in flight with its own word', async () => {
+    const urls = ['blob:a', 'blob:b']
+    Object.assign(URL, { createObjectURL: () => urls.shift(), revokeObjectURL: vi.fn() })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const bridge = browserBridge(SHELL_V2)
+    const first = bridge.saveFile('a.csv', new Blob(['1']))
+    const second = bridge.saveFile('b.csv', new Blob(['2']))
+    window.dispatchEvent(outcomeEvent('blob:b', 'cancelled'))
+    window.dispatchEvent(outcomeEvent('blob:a', 'saved'))
+    expect([await first, await second]).toEqual(['saved', 'cancelled'])
+  })
+
+  it('says failed, and stops listening, when the shell never answers', async () => {
+    vi.useFakeTimers()
+    clickSpy('blob:silent')
+    const remove = vi.spyOn(window, 'removeEventListener')
+    const result = browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))
+    await vi.advanceTimersByTimeAsync(SAVE_WAIT_MS + 1)
+    expect(await result).toBe('failed')
+    expect(remove).toHaveBeenCalledWith(SAVE_OUTCOME_EVENT, expect.any(Function))
+    vi.useRealTimers()
+  })
+
+  it('still says failed, and has not started, where the browser has no object URLs', async () => {
+    Object.assign(URL, { createObjectURL: undefined })
+    const result = browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))
+    expect(result.started).toBe(false)
+    expect(await result).toBe('failed')
+  })
+
+  it('stops listening when the click throws', () => {
+    Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: vi.fn() })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw new Error('no')
+    })
+    const remove = vi.spyOn(window, 'removeEventListener')
+    expect(() => browserBridge(SHELL_V2).saveFile('a.csv', new Blob(['x']))).toThrow('no')
+    expect(remove).toHaveBeenCalledWith(SAVE_OUTCOME_EVENT, expect.any(Function))
+  })
+
+  it('leaves a shell of bridgeVersion 1, which cannot report, saying saved at the click', async () => {
+    clickSpy()
+    expect(await browserBridge({ bridgeVersion: 1, platform: 'windows', keys: 'pc' }).saveFile('a.csv', new Blob(['x']))).toBe('saved')
+  })
+})
+
 
 describe('copyText', () => {
   it('writes the text to the clipboard and says true', async () => {

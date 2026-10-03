@@ -58,6 +58,10 @@ use windows::core::{BOOL, PCWSTR, PWSTR};
 pub const STOP_GRACE_S: u64 = 5;
 /// Cold first start after a reboot included; the budget is 1.5 s with a 2.5 s ceiling (02 T3).
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+/// The backend's exit code for a lock this user did not make (backend/nq_terminal/__main__.py, EXIT_UNTRUSTED_LOCK).
+const EXIT_UNTRUSTED_LOCK: u32 = 4;
+/// How long a backend whose output closed gets to finish ending, so that its exit code can be read.
+const EXIT_CODE_WAIT_MS: u32 = 3000;
 const MAX_HANDSHAKE_LINE: usize = 64 * 1024;
 const READ_CHUNK: usize = 64 * 1024;
 const MAX_JOB_PIDS: usize = 256;
@@ -569,6 +573,20 @@ fn admit(started: &Started, ready: &Ready) -> Result<Owned, Failure> {
         .map_or_else(|| refused(Mismatch::PidOutsideJob(ready.pid)), Ok)
 }
 
+/// What an end before the handshake means: the untrusted-lock exit code is a refusal that no restart can cure, any
+/// other end (or one that has not finished in time) is an exit.
+fn ended_before_handshake(launcher: &Owned) -> Failure {
+    // SAFETY: the launcher's own process handle, open for the life of `Started`.
+    let ended = unsafe { WaitForSingleObject(launcher.raw(), EXIT_CODE_WAIT_MS) } == WAIT_OBJECT_0;
+    let mut code = 0u32;
+    // SAFETY: the process has ended when `ended` holds; the handle is open and `code` is a valid out-pointer.
+    let read = unsafe { GetExitCodeProcess(launcher.raw(), &mut code) };
+    match (ended, read) {
+        (true, Ok(())) if code == EXIT_UNTRUSTED_LOCK => Failure::Refused(Mismatch::LockUntrusted),
+        _ => Failure::Exited,
+    }
+}
+
 fn handshake(
     started: &mut Started,
     spec: &Spec,
@@ -579,13 +597,12 @@ fn handshake(
     let stdout = started.stdout.take().ok_or(Failure::Exited)?;
     start_reader(stdout, spec.log_path(), tx);
     let secrets = format!("TOKEN {token}\nNONCE {nonce}\n");
-    started
-        .stdin
-        .write_all(secrets.as_bytes())
-        .map_err(|_| Failure::Exited)?;
+    if started.stdin.write_all(secrets.as_bytes()).is_err() {
+        return Err(ended_before_handshake(&started.launcher));
+    }
     let line = rx.recv_timeout(HANDSHAKE_TIMEOUT).map_err(|e| match e {
         mpsc::RecvTimeoutError::Timeout => Failure::Timeout,
-        mpsc::RecvTimeoutError::Disconnected => Failure::Exited,
+        mpsc::RecvTimeoutError::Disconnected => ended_before_handshake(&started.launcher),
     })?;
     check::parse_handshake(&line).map_err(Failure::Refused)
 }

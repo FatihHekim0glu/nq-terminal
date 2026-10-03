@@ -65,6 +65,19 @@
 | Other build workflows on this worktree | none; a second workflow builds other waves in the main tree, so this worktree has its own branch and target folder |
 | Port used by the stage A hidden-window check | 8796 (the W0A probe row of the port table); the fixture backend is started and stopped by the test itself |
 | Rows added to this addendum | the shell files below |
+## Preflight of 3 October 2026 (integration INT1, D3 and the D4 shell in one tree)
+
+`gen_03_tables.py` was run on the main tree at the merge commit `8f8fdf6` plus this wave's uncommitted tree, with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and contract rows | 127, 25, 26 and 35 |
+| Unmapped rows | 0 |
+| Conflict markers, `target` and `node_modules` folders under `desktop/`, LF line endings, wave order of this file | checked by `backend/tests/test_desktop_tree.py` |
+| Shell sources and scripts without a row here | none (the same test) |
+| New shell module in this wave | `flush.rs` (row below); the page gains `attachShellSync` in `state/remoteStore.ts`, no new module |
+| Other build workflows on the repository | none besides the shell package build in its own worktree |
+
 ## Rows added by later phases
 
 Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove`), desktop form, stage, tests.
@@ -78,7 +91,7 @@ Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove
 | D2 (W2A) | `backend/nq_terminal/desktop/build_stamp.py` | 81 | new | `dist` current, stale or missing, from `web/dist/build-stamp.json` against the newest source time and the sha256 of `contract/openapi.json` | D2 | `test_build_stamp.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/proof.py` | 33 | new | the challenge-response body: an HMAC over nonce, port and pid keyed by the token, which is never sent | D2 | `test_desktop_proof_challenge.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/fixture_main.py` | 80 | new | the test-only entry that serves the fixture lab through the same lock, stdin channel and handshake | D2 | `test_desktop_fixture_main.py` |
-| D3 (W3B) | `web/src/state/remoteStore.ts` | 426 | new | the page's side of the workspace store: reads and writes the seven documents with If-Match, debounces writes at 500 ms, flushes on pagehide, runs the one-time per-origin import, keeps localStorage as the cache; a 404 or a missing backend leaves plain localStorage; started from `main.tsx` by a dynamic import | D3 | `remoteStore.test.ts`, `remoteStore.pages.test.tsx`, `desktop-seams.spec.ts`, `workspace-import.spec.ts` |
+| D3 (W3B) | `web/src/state/remoteStore.ts` | 527 | new | the page's side of the workspace store: reads and writes the seven documents with If-Match, debounces writes at 500 ms, flushes on pagehide, runs the one-time per-origin import, keeps localStorage as the cache; a 404 or a missing backend leaves plain localStorage; started from `main.tsx` by a dynamic import | D3 | `remoteStore.test.ts`, `remoteStore.pages.test.tsx`, `desktop-seams.spec.ts`, `workspace-import.spec.ts` |
 | D3 (W3B) | `web/src/state/remoteStore.keys.ts` | 237 | new | the ten keys, their seven documents, and the clean and default shape of each | D3 | `remoteStore.keys.test.ts` |
 | D3 (W3B) | `web/src/state/remoteStore.merge.ts` | 233 | new | each document's merge rule on a 412 and the import merge (adds what the store lacks, keeps a differing entry as `<name> (imported)`, safe to repeat) | D3 | `remoteStore.merge.test.ts` |
 | D3 (W3B) | `web/src/state/remoteStore.transport.ts` | 71 | new | the one module under `src/state` that calls fetch or names PUT; the GET-only source scan allows exactly this file and exactly that method | D3 | `remoteStore.transport.test.ts`, `api/client.test.ts` |
@@ -94,5 +107,16 @@ Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove
 | D4 (W4A) | `desktop/scripts/copy-tokens.mjs` | 181 | new | writes `assets/look.css` from `web/src/theme` and checks nine contrast pairs | D4 | `--check` (born failing on a hand edit and on a planted colour) |
 | D4 (W4A) | `desktop/src-tauri/tests/capability_empty.rs`, `identity_split.rs`, `hidden_window.rs` | 186, 310, 919 | new | the empty capability file, the three identities and the hidden-window launch under the global window watch | D4 | the files themselves |
 | D4 (W4A) | `desktop/src-tauri/tests/setup_refused.rs`, `show_scope.rs`, `windows_features.rs` | 198, 87, 70 | new | a refused setup ends with a logged fatal and exit 1; every `show()` sits under the release cfg; the declared `windows` features compile a real pipe round trip | D4 | the files themselves |
+| D4 (W4B) | `desktop/src-tauri/src/window.rs`, `window_folders.rs`, `window_policy.rs`, `window_rebuild.rs`, `window_rebuild_announce.rs`, `window_fit.rs` | 777, 418, 265, 413, 44, 175 | new | the lab picker and settings, the WebView2 data folder with its protected DACL, the policy check over both hives, the stale-page rebuild and its screen-reader announcements, the window fitted to the display; the page bridge object and the new-window rule | D4 | `window_*.rs`, `reading_labels.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/keys.rs` | 265 | new | accelerator keys and zoom keys off in the engine, app zoom on the 25% grid, F5, F12, Ctrl+F, Ctrl+P and Ctrl+R left alone | D4 | `keys_cdp.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/supervise.rs`, `supervise_check.rs`, `supervise_retry.rs`, `supervise_run.rs`, `supervise_shell.rs`, `stale_page.rs` | 702, 538, 114, 491, 347, 48 | new | the shell's one `CreateProcessW` (the venv launcher in a kill-on-close Job Object), the handshake and proof checks with a message page each, attach to a live lock, the exit watch and restarts at 1, 2 and 4 s, the navigation check, the stopped page, the close, and the answer to a stale page build | D4 | `supervise_*.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/link.rs`, `reads.rs` | 617, 453 | new | the only TCP module (127.0.0.1, listener and peer ownership, proof and session calls) and the only read module (lock, settings, log tail, each capped) | D4 | `link_host.rs`, unit tests |
+| D4 (W4B) | `desktop/src-tauri/src/writes.rs`, `writes_download.rs` | 622, 202 | new | the allow-listed, handle-checked write module and the `DownloadStarting` handler with its deferral | D4 | `writes_allow.rs`, `downloads.rs`, `ipc_refusal.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/dialogs.rs`, `guard.rs` | 400, 132 | new | every native dialog (fail closed in test builds) and the carrier that turns a failed `with_webview` install into a refused setup | D4 | `dialogs_*.rs`, `hooks_fail_closed.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/crash.rs`, `crash/diagnostics.rs`, `crash/hung.rs`, `crash/panic_report.rs`, `crash/recovery.rs` | 429, 250, 296, 204, 285 | new | the shell log, the panic report, backend.log rotation, renderer recovery, the hung-page offer and the diagnostics zip | D4 | `crash_*.rs` |
+| D4 (W4B) | `desktop/src-tauri/src/smoke.rs`, `smoke_screen2.rs` | 355, 463 | new | the debugging port with Tauri's default switches, the controller made visible behind the hidden window, the screen 2 placement guard | D4 | `crash_smoke_options.rs`, `screen2_guard.rs`, `smoke_feature_absent.rs` |
+| D4 (W4B) | `desktop/scripts/check.ps1`, `plant-check.ps1`, `pe-info.mjs`, `copy-tokens.mjs` | 209, 266, 169, 181 | new | the stage A scripts, extended by stage B (measure feature set, release-profile smoke exe, manifest scan) | D4 | themselves |
+| D4 (INT1) | `desktop/src-tauri/src/save_outcome.rs` | 81 | new | the script by which the shell tells the page how a save ended (the `nqt:save-outcome` event of bridgeVersion 2) and the word for each refusal; the handler itself stays in `writes_download.rs` | D4 | `save_outcome.rs` unit tests, `int1_seams.rs` |
+| D4 (INT1) | `desktop/src-tauri/src/flush.rs` | 302 | new | before the shell stops the backend it runs the page's flush hook (`__NQT_STORE_SYNC__`, defined by `state/remoteStore.ts`) and waits, up to a budget, until the page reports nothing pending; the page calls no shell command | D4 | `flush.rs` unit tests, `int1_seams.rs` |
 
 The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock.py`, `desktop/sessions.py`, `desktop/envlist.py`, the workspace models and service, and the others in its stage 1 list) are rows of 03 itself and are not repeated here. Only a module that 03 does not name belongs in this table, for example `services/prewarm.py` and `desktop/fixture_main.py`, which the wave plan adds; the phase that creates them adds their rows.

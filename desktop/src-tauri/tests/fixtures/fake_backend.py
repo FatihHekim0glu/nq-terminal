@@ -18,7 +18,7 @@ taking `Authorization: NQT <token>` and `X-NQT-Origin` for the cookie `nqt_s_<po
 `terminal/backend/fake_mode.json` (written by the test) bends it: `lie` (hmac, root, prefix, contract, dist,
 pid_outside, listener), `outside_pid`, `report_port`, `noise_before` and `noise_after` (bytes of stray output around
 the READY line), `late_nqt` (a later fake NQT- line), `grandchild` (a sleeping worker process started with
-multiprocessing, standing in for a JOBS run), `exit_after_ready_s`, `attach_line`, `running_jobs` and `contract`.
+multiprocessing, standing in for a JOBS run), `exit_after_ready_s`, `exit_before_handshake` (an exit code, taken before stdin is read), `attach_line`, `running_jobs` and `contract`.
 
 Started by a test as `python -E -s <this file> --swapped <port>`, it is the G08 impostor: it binds the port of a
 backend that has ended and reports every header it receives, without knowing any token.
@@ -146,7 +146,13 @@ def handler_for(fake: Fake, swapped: bool) -> type:
             elif path == "/api/health":
                 self._json(200, {"ok": True, "pid": fake.pid})
             else:
-                self._json(200, {"jobs": [], "queued": 0, "running": int(fake.mode.get("running_jobs", 0))})
+                self._json(200, self._jobs_body())
+
+        def _jobs_body(self) -> dict:
+            """`/api/jobs`: `jobs_pad` bytes of log tail in one record bulk the answer as a long history would."""
+            pad = int(fake.mode.get("jobs_pad", 0))
+            jobs = [{"id": "j_pad", "state": "done", "log_tail": "x" * pad}] if pad else []
+            return {"jobs": jobs, "queued": 0, "running": int(fake.mode.get("running_jobs", 0))}
 
         def _session(self, swapped: bool) -> None:
             expected = f"NQT {fake.token}" if fake.token else None
@@ -231,6 +237,10 @@ def ready_line(fake: Fake, nonce: str) -> bytes:
 
 def main_desktop() -> int:
     mode = load_mode()
+    if "exit_before_handshake" in mode:  # the real backend's refusal of an untrusted lock: a stderr line, no NQT- line
+        sys.stderr.write("fake backend: ending before any handshake\n")
+        sys.stderr.flush()
+        return int(mode["exit_before_handshake"])
     token, nonce = read_secrets()
     fake = Fake(mode, token)
     if mode.get("attach_line"):

@@ -441,16 +441,64 @@ fn logged(run: &Path, event: &str) -> Option<Value> {
 /// The blob export the bridge's saveFile makes: an object-URL anchor with a download name.
 fn export_js(name: &str, body: &str) -> String {
     format!(
-        "(() => {{ const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([{}], {{ type: 'text/csv' }})); a.download = {}; document.body.append(a); a.click(); return 'clicked' }})()",
+        "(() => {{ window.__saveOutcomes = []; window.addEventListener('nqt:save-outcome', (ev) => window.__saveOutcomes.push(ev.detail)); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([{}], {{ type: 'text/csv' }})); a.download = {}; document.body.append(a); a.click(); return 'clicked' }})()",
         serde_json::to_string(body).expect("body"),
         serde_json::to_string(name).expect("name")
     )
 }
 
-/// What one launch saw.
+/// Waits until the page's own document is committed and loaded. The debugging list names the target by its address
+/// while the initial blank document can still be the one that answers; a click and a listener put there are lost
+/// when the page replaces it (the download then carries a `blob:null` address and the page hears nothing).
+fn wait_page_loaded(port: u16, prefix: &str) {
+    let probe = format!(
+        "(document.readyState === 'complete' && location.href.startsWith({})) ? 'loaded' : 'loading'",
+        serde_json::to_string(prefix).expect("prefix")
+    );
+    let started = Instant::now();
+    while started.elapsed() < WAIT {
+        if eval_in_page(port, prefix, &probe)["value"] == "loaded" {
+            return;
+        }
+        std::thread::sleep(SAMPLE);
+    }
+    panic!("the page did not finish loading within 60 s");
+}
+
+/// What one launch saw: the global watch, the shell log, and the `nqt:save-outcome` events the page received.
 struct Outcome {
     watch: Vec<String>,
     log: Vec<Value>,
+    page: Vec<Value>,
+}
+
+/// The `download_outcome` lines of the shell log (what `report` told the page, and whether the call failed).
+fn outcome_lines(log: &[Value]) -> Vec<&Value> {
+    log.iter()
+        .filter(|v| v["event"] == "download_outcome")
+        .collect()
+}
+
+/// The shell told the page exactly one outcome for the one download, and both views (the log and the page's own
+/// event) agree on it. A refused or failed save must never read `saved`.
+fn assert_told(outcome: &Outcome, want: &str) {
+    let lines = outcome_lines(&outcome.log);
+    assert_eq!(lines.len(), 1, "download_outcome lines: {:?}", outcome.log);
+    assert_eq!(lines[0]["outcome"], want, "logged outcome: {:?}", lines[0]);
+    assert!(
+        lines[0]["told_error"].is_null(),
+        "the page could not be told: {:?}",
+        lines[0]
+    );
+    assert_eq!(outcome.page.len(), 1, "page events: {:?}", outcome.page);
+    assert_eq!(outcome.page[0]["outcome"], want, "page event");
+    assert!(
+        outcome.page[0]["uri"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("blob:")),
+        "the page event carries the download's own address: {:?}",
+        outcome.page[0]
+    );
 }
 
 /// Launches the shell over the page, clicks the export, waits until `done` holds, settles, closes.
@@ -466,6 +514,7 @@ fn run_export(
     let mut shell = launch_shell(&run.root, &run.lab, save_dir);
     let port = devtools_port(&run.root, &mut shell);
     let prefix = format!("http://127.0.0.1:{PAGE_PORT}/");
+    wait_page_loaded(port, &prefix);
     let clicked = eval_in_page(port, &prefix, &export_js(name, body));
     assert_eq!(
         clicked["value"], "clicked",
@@ -476,11 +525,21 @@ fn run_export(
         std::thread::sleep(SAMPLE);
     }
     std::thread::sleep(SETTLE);
+    let events = eval_in_page(
+        port,
+        &prefix,
+        "JSON.stringify(window.__saveOutcomes ?? null)",
+    );
+    let page = events["value"]
+        .as_str()
+        .and_then(|text| serde_json::from_str::<Vec<Value>>(text).ok())
+        .unwrap_or_else(|| panic!("the page's outcome events could not be read: {events}"));
     close_shell(&mut shell);
     drop(shell);
     Outcome {
         watch: watch.finish(),
         log: shell_log(&run.root),
+        page,
     }
 }
 
@@ -521,6 +580,7 @@ fn a_blob_export_lands_only_at_the_save_dir() {
     };
     let outcome = run_export(&run, &saves, name, &body, &done);
     assert_clean(&outcome, &run);
+    assert_told(&outcome, "saved");
     assert_eq!(
         std::fs::read(&target).ok(),
         Some(body.clone().into_bytes()),
@@ -566,6 +626,8 @@ fn assert_refused_export(tag: &str, save_dir: &dyn Fn(&Run) -> PathBuf) {
         "no download_refused line: {:?}",
         outcome.log
     );
+    // The page is told "failed" (never "saved") for a refused path, once, with no error telling it.
+    assert_told(&outcome, "failed");
     assert_eq!(
         files(&save),
         save_before,
