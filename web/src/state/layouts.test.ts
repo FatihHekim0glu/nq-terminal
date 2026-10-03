@@ -119,3 +119,15 @@ describe('user layouts (UI_SPEC section 2: localStorage, default layout when sto
     expect(layoutFor(store.getState(), 'REG')).toBeNull()
   })
 })
+
+describe('copies the workspace store keeps beside a screen (03 section 10.2)', () => {
+  it('loads "<code> (imported)" next to its screen, keeps it when another screen is saved, and refuses any other suffix', () => {
+    const raw = JSON.stringify({ version: 1, layouts: { HOME: dock, 'HOME (imported)': dock, 'HOME (other)': dock, 'bad (imported)': dock } })
+    const { store } = setup(raw)
+    expect(Object.keys(store.getState().layouts)).toEqual(['HOME', 'HOME (imported)'])
+    expect(layoutFor(store.getState(), 'HOME (imported)')).toEqual(dock)
+    expect(store.getState().saveLayout('REG', dock)).toBe(true)
+    expect(Object.keys(store.getState().layouts)).toContain('HOME (imported)')
+    expect(store.getState().saveLayout('HOME (imported)', dock)).toBe(false)
+  })
+})

@@ -132,10 +132,25 @@ function parseRest(tokens: readonly string[], options: ParseOptions, newPanel: b
  * (D14) rather than tokenised like the rest of the grammar. */
 const HL_LINE = /^\s*HL(?:\s+([\s\S]*))?$/i
 
+/** LOAD or FORGET of a copy the workspace store's merge keeps beside a name (03 section 10.2), as the LOAD menu and
+ * the frame strip show it: `MINE (conflict)` or `MINE (imported)`. The brackets are outside the command alphabet, so
+ * the whole line is matched here, and only these two suffixes (COPY_SUFFIXES in state/remoteStore.keys.ts; a test
+ * keeps the two in step). SAVE never takes one: a copy is kept under a name of its own by LOAD, then SAVE NAME. */
+const COPY_LINE = /^\s*(LOAD|FORGET)\s+([A-Z]\w{1,15})\s+\((conflict|imported)\)\s*$/i
+
+function copyAction(input: string): LineResult | null {
+  const found = COPY_LINE.exec(input)
+  if (!found) return null
+  const [, word = '', base = '', suffix = ''] = found
+  return ok({ kind: word.toLowerCase() as 'load' | 'forget', name: `${base.toUpperCase()} (${suffix.toLowerCase()})` })
+}
+
 export function parseLine(input: string, options: ParseOptions): LineResult {
   if (input.length > MAX_LINE) return fail('too-long')
   const hl = HL_LINE.exec(input)
   if (hl) return ok({ kind: 'search', query: (hl[1] ?? '').trim() })
+  const copy = copyAction(input)
+  if (copy) return copy
   const typed = tokenise(input)
   if (!typed.ok) return typed
   const [first = '', ...rest] = typed.value

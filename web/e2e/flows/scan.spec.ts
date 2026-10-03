@@ -18,6 +18,7 @@ import {
   writeOperations,
   type OpenApiDoc,
 } from './scan.ts'
+import { STORE_DOCUMENTS, isStoreWrite } from '../storeWrites.ts'
 
 const ORIGIN = 'http://127.0.0.1:4273'
 
@@ -88,6 +89,26 @@ test.describe('GET-only check', () => {
       'GET http://127.0.0.1:8765/api/runs',
     ])
     expect(nonGetRequests(requests.slice(0, 1), ORIGIN)).toEqual([])
+  })
+})
+
+test.describe("the workspace store's PUT (03 section 10.3)", () => {
+  test('is exactly PUT /api/workspaces/<one of the seven documents> on the page origin', () => {
+    for (const doc of STORE_DOCUMENTS) expect(isStoreWrite('PUT', `${ORIGIN}/api/workspaces/${doc}`, ORIGIN), doc).toBe(true)
+    for (const [method, url] of [
+      ['POST', `${ORIGIN}/api/workspaces/prefs`],
+      ['DELETE', `${ORIGIN}/api/workspaces/prefs`],
+      ['PATCH', `${ORIGIN}/api/workspaces/prefs`],
+      ['GET', `${ORIGIN}/api/workspaces/prefs`],
+      ['PUT', `${ORIGIN}/api/workspaces/orders`],
+      ['PUT', `${ORIGIN}/api/workspaces/prefs/extra`],
+      ['PUT', `${ORIGIN}/api/workspaces`],
+      ['PUT', `${ORIGIN}/api/workspaces/prefs?x=1`],
+      ['PUT', `${ORIGIN}/api/jobs`],
+      ['PUT', 'http://127.0.0.1:8765/api/workspaces/prefs'],
+    ] as const) {
+      expect(isStoreWrite(method, url, ORIGIN), `${method} ${url}`).toBe(false)
+    }
   })
 })
 

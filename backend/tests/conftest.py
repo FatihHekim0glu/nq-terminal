@@ -82,9 +82,12 @@ RESEARCH_FILES = {
 }
 WATCHED_FILES = {ROOT / "live" / "KILL": PRESENCE}  # the live workflow may toggle it; reported as a note
 # No in-process write, remove, rename, mkdir, link or chmod anywhere under these folders.
+# Two state folders: this checkout's, and the shared lab's (nq_lab's ROOT, the owner's live folder), which is a
+# different folder when the tests run from a git worktree.
 REAL_STATE_DIR = BACKEND.parent / "state"
+MAIN_STATE_DIR = ROOT / "terminal" / "state"
 PROTECTED_DIRS = (RESULTS, ROOT / "backtests" / "output", ROOT / "data", ROOT / "live",
-                  BACKEND / "tests" / "fixtures", REAL_STATE_DIR)
+                  BACKEND / "tests" / "fixtures", REAL_STATE_DIR, MAIN_STATE_DIR)
 _NOTES: list[str] = []
 
 

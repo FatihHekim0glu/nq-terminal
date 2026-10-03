@@ -43,8 +43,25 @@ export function createSafeStorage(source: StorageSource = browserLocalStorage): 
   }
 }
 
-/** The shared instance over window.localStorage. */
+/**
+ * The shared instance over window.localStorage, the one the ten store keys are written through. When the workspace
+ * store starts it makes this instance tell it of each write (state/safeStorage.observe.ts), so the shell carries none of that.
+ */
 export const safeLocalStorage: SafeStorage = createSafeStorage()
+
+/** The two calls of the storage-like interface the older modules take (`getItem`, `setItem`), over a safe storage;
+ * `setItem` ignores a refused write: both callers already treat storage as a convenience that may fail. */
+export interface ItemStorage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+
+export function asItemStorage(storage: SafeStorage = safeLocalStorage): ItemStorage {
+  return {
+    getItem: storage.read,
+    setItem: (key, value) => void storage.write(key, value),
+  }
+}
 
 /** Parse and validate a stored JSON value; null when missing, corrupt or not the expected shape. */
 export function readJson<T>(storage: SafeStorage, key: string, isValid: (value: unknown) => value is T): T | null {

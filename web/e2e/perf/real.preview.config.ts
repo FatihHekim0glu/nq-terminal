@@ -16,7 +16,10 @@ export default defineConfig((env) => mergeConfig(base(env), {
   preview: {
     host: '127.0.0.1',
     strictPort: true,
-    proxy: { '/api': origin },
+    // The Host header stays the preview's own (changeOrigin off, unlike the string shorthand): a launch code buys a session bound
+    // to the page's origin, taken from Host when the browser sends no Origin, and the workspace store's PUT is refused (403) when
+    // its Origin is not the session's. Same as e2e/vite.preview.config.ts.
+    proxy: { '/api': { target: origin, changeOrigin: false } },
     headers: { 'content-security-policy': BACKEND_CSP },
   },
 }))

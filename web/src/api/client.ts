@@ -228,6 +228,13 @@ const CLIENT_CHANNELS: ReadonlySet<string> = new Set(['EventSource'])
 const JOBS_CLIENT = '/api/jobsClient.ts'
 const JOBS_WRITE_METHODS = /^(post|delete)$/i
 /**
+ * The second exception to GET only (03 section 10.3): the workspace store transport may send a PUT (write one of the
+ * seven documents with If-Match) and call fetch to do it. This one file only; every other method and request channel
+ * stays flagged there too.
+ */
+const STORE_TRANSPORT = '/state/remoteStore.transport.ts'
+const STORE_WRITE_METHODS = /^put$/i
+/**
  * The session page (session.html) calls fetch once, a GET to /api/session/redeem that trades the one-time code for the
  * cookie (03 4.2). It is the page's entry module only; nothing else under src/session, and no other path, may fetch.
  */
@@ -239,12 +246,15 @@ const SESSION_PAGE = '/session/main.ts'
  */
 export function findWriteRequests(file: string, source: string): string[] {
   const isJobsClient = file.endsWith(JOBS_CLIENT)
+  const isStoreTransport = file.endsWith(STORE_TRANSPORT)
+  const allowed = isJobsClient ? JOBS_WRITE_METHODS : isStoreTransport ? STORE_WRITE_METHODS : null
   const methods = [...source.matchAll(WRITE_METHOD)]
-    .filter((m) => !(isJobsClient && JOBS_WRITE_METHODS.test(m[2] ?? '')))
+    .filter((m) => !allowed?.test(m[2] ?? ''))
     .map((m) => `${file}: write method ${(m[2] ?? '').toUpperCase()}`)
   const isClient = file.endsWith('/api/client.ts')
   const isSessionPage = file.endsWith(SESSION_PAGE)
-  const strayFetch = !isClient && !isJobsClient && !isSessionPage && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
+  const mayFetch = isClient || isJobsClient || isStoreTransport || isSessionPage
+  const strayFetch = !mayFetch && FETCH_CALL.test(source) ? [`${file}: calls fetch directly`] : []
   const channels = OTHER_CHANNELS
     .filter(([pattern, name]) => pattern.test(source) && !(isClient && CLIENT_CHANNELS.has(name)))
     .map(([, name]) => `${file}: uses ${name}`)

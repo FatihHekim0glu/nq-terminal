@@ -47,6 +47,15 @@ export default function HomeOrientation({ storage = safeLocalStorage, demo = pag
     setOpen(false)
   }, [storage])
 
+  // Another window, or the workspace store's first read, recorded the dismissal: close the line here too.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if ((e.key === null || e.key === ORIENTATION_KEY) && !demo && storage.read(ORIENTATION_KEY) === DISMISSED) setOpen(false)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [demo, storage])
+
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e: KeyboardEvent) => {

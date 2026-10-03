@@ -46,6 +46,14 @@ describe('who reads what', () => {
     expect(readers).toEqual(['/src/chrome/copyLink.ts'])
   })
 
+  it('only chrome/deepLink.paste.ts imports copy/linksPasted, so the pasted-link line stays out of the shell', () => {
+    const readers = Object.entries(SOURCES)
+      .filter(([, text]) => /\bfrom\s+['"][^'"]*\blinksPasted['"]/.test(text))
+      .map(([file]) => file)
+      .sort()
+    expect(readers).toEqual(['/src/chrome/deepLink.paste.ts'])
+  })
+
   it('chrome/deepLink.ts (the shell) holds no link builder', () => {
     const shell = SOURCES['/src/chrome/deepLink.ts'] ?? ''
     for (const name of ['hashFor', 'linkFor', 'markdownLink']) expect(shell).not.toContain(name)

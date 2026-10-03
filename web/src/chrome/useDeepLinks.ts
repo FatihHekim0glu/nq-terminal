@@ -13,13 +13,9 @@
 // `LOAD NAME` itself, which is an internal request, not a link. Any #go hash, even a refused one, wins.
 import { useCallback, useEffect, useRef } from 'react'
 import { useCommands } from '../api/queries'
-import { parseLine } from '../commands/line'
-import { describeError } from '../commands/messages'
-import type { CommandIndexData } from '../commands/types'
 import { LINKS } from '../copy/links'
-import { fillCopy } from '../copy/workspace'
 import { requestLine } from './CommandLine.bus'
-import { isLinkAction, linesFromHash, whenWorkspaceReady, type LinkLine } from './deepLink'
+import { linesFromHash, linkVerdict, whenWorkspaceReady, type LinkLine } from './deepLink'
 import { postMessage } from './MessageLine.store'
 
 export interface DeepLinkEnv {
@@ -34,36 +30,10 @@ const workspacesModule = import('../state/workspaces').catch(() => null)
 
 const browserEnv = (): DeepLinkEnv => ({ location: window.location, history: window.history, target: window })
 
-/** What to do with a link: run it, refuse it for good, or hold it until the commands index has loaded. */
-type Verdict =
-  | { readonly kind: 'run' }
-  | { readonly kind: 'refuse'; readonly message: string }
-  | { readonly kind: 'wait'; readonly message: string }
-
 /** A link that waits for the index, and whether the reader has been told so. */
 interface Waiting {
   readonly lines: readonly LinkLine[]
   readonly told: boolean
-}
-
-/**
- * The lines in order. The first one that parses to something a link may not do, or that does not parse,
- * refuses the link. A line that cannot be parsed for want of the index is remembered, not refused: if
- * nothing else refuses the link, it waits.
- */
-function verdict(lines: readonly LinkLine[], index: CommandIndexData | null): Verdict {
-  let unavailable: string | null = null
-  for (const { line } of lines) {
-    const result = parseLine(line, { index, fallbackContext: null })
-    if (result.ok) {
-      if (!isLinkAction(result)) return { kind: 'refuse', message: fillCopy(LINKS.refusedLine, { line }) }
-    } else if (result.error.code !== 'index-unavailable') {
-      return { kind: 'refuse', message: describeError(result.error) }
-    } else {
-      unavailable ??= describeError(result.error)
-    }
-  }
-  return unavailable === null ? { kind: 'run' } : { kind: 'wait', message: unavailable }
 }
 
 /**
@@ -98,7 +68,7 @@ export function useDeepLinks(env?: DeepLinkEnv): void {
     const links = waiting.current
     const kept: Waiting[] = []
     for (const { lines, told } of links) {
-      const outcome = verdict(lines, now.current.index)
+      const outcome = linkVerdict(lines, now.current.index)
       if (outcome.kind === 'refuse') {
         postMessage(outcome.message, 'error')
       } else if (outcome.kind === 'wait') {

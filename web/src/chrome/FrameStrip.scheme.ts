@@ -2,29 +2,23 @@
 // `data-cvd` on the root element (tokens.css holds the values). Kept per viewer in localStorage; every
 // read and write is guarded, so blocked storage leaves the standard scheme and never throws.
 import type { ColourScheme } from './FrameStrip'
+import { safeLocalStorage } from '../state/safeStorage'
 
-const KEY = 'nqt.cvd'
+export const SCHEME_KEY = 'nqt.cvd'
 const SCHEMES: readonly ColourScheme[] = ['standard', 'deut', 'prot']
 
-function isScheme(value: unknown): value is ColourScheme {
+export function isScheme(value: unknown): value is ColourScheme {
   return typeof value === 'string' && (SCHEMES as readonly string[]).includes(value)
 }
 
 export function loadScheme(): ColourScheme {
-  try {
-    const stored = globalThis.localStorage?.getItem(KEY)
-    return isScheme(stored) ? stored : 'standard'
-  } catch {
-    return 'standard'
-  }
+  const stored = safeLocalStorage.read(SCHEME_KEY)
+  return isScheme(stored) ? stored : 'standard'
 }
 
 export function saveScheme(scheme: ColourScheme): void {
-  try {
-    globalThis.localStorage?.setItem(KEY, scheme)
-  } catch {
-    // Blocked storage: the scheme still applies for this page view.
-  }
+  // Blocked storage: the scheme still applies for this page view.
+  safeLocalStorage.write(SCHEME_KEY, scheme)
 }
 
 export function applyScheme(scheme: ColourScheme, root: HTMLElement = document.documentElement): void {

@@ -62,7 +62,8 @@ function isStored(value: unknown): value is StoredLinkGroups {
   return isPlainObject(value) && value.version === STORE_VERSION && isPlainObject(value.contexts)
 }
 
-function loadContexts(storage: SafeStorage): GroupRecord<LinkContext | null> {
+/** Also read by state/remoteStore.ts, which re-reads the key when the workspace store or another window changes it. */
+export function loadContexts(storage: SafeStorage): GroupRecord<LinkContext | null> {
   const stored = readJson(storage, LINK_GROUPS_KEY, isStored)
   if (!stored) return EMPTY_CONTEXTS
   const pick = (group: LinkGroup): LinkContext | null => {

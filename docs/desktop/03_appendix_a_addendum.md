@@ -42,6 +42,17 @@
 | Other build workflows on the repository | none (only the owner's 8765 backend, pid 46084, without `--reload`) |
 | Owner reminder (manager decision 11, 04) | stop the 8765 backend before relying on the lock; the old process holds none, so a second backend would not see it |
 
+## Preflight of 3 October 2026 (wave W3B, stage B of D3)
+
+`gen_03_tables.py` was run on the tree at commit `976a64c` plus this wave's uncommitted tree, with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and contract rows | 127, 25, 26 and 35 |
+| Unmapped rows | 0 |
+| New modules in this wave | the four `web/src/state/remoteStore*.ts` modules (rows below); `chrome/` gains no module (copyLink, deepLink and the command line change in place) |
+| Other build workflows on the repository | none besides the shell build in its own worktree |
+
 ## Rows added by later phases
 
 Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove`), desktop form, stage, tests.
@@ -55,5 +66,9 @@ Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove
 | D2 (W2A) | `backend/nq_terminal/desktop/build_stamp.py` | 81 | new | `dist` current, stale or missing, from `web/dist/build-stamp.json` against the newest source time and the sha256 of `contract/openapi.json` | D2 | `test_build_stamp.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/proof.py` | 33 | new | the challenge-response body: an HMAC over nonce, port and pid keyed by the token, which is never sent | D2 | `test_desktop_proof_challenge.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/fixture_main.py` | 80 | new | the test-only entry that serves the fixture lab through the same lock, stdin channel and handshake | D2 | `test_desktop_fixture_main.py` |
+| D3 (W3B) | `web/src/state/remoteStore.ts` | 426 | new | the page's side of the workspace store: reads and writes the seven documents with If-Match, debounces writes at 500 ms, flushes on pagehide, runs the one-time per-origin import, keeps localStorage as the cache; a 404 or a missing backend leaves plain localStorage; started from `main.tsx` by a dynamic import | D3 | `remoteStore.test.ts`, `remoteStore.pages.test.tsx`, `desktop-seams.spec.ts`, `workspace-import.spec.ts` |
+| D3 (W3B) | `web/src/state/remoteStore.keys.ts` | 237 | new | the ten keys, their seven documents, and the clean and default shape of each | D3 | `remoteStore.keys.test.ts` |
+| D3 (W3B) | `web/src/state/remoteStore.merge.ts` | 233 | new | each document's merge rule on a 412 and the import merge (adds what the store lacks, keeps a differing entry as `<name> (imported)`, safe to repeat) | D3 | `remoteStore.merge.test.ts` |
+| D3 (W3B) | `web/src/state/remoteStore.transport.ts` | 71 | new | the one module under `src/state` that calls fetch or names PUT; the GET-only source scan allows exactly this file and exactly that method | D3 | `remoteStore.transport.test.ts`, `api/client.test.ts` |
 
 The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock.py`, `desktop/sessions.py`, `desktop/envlist.py`, the workspace models and service, and the others in its stage 1 list) are rows of 03 itself and are not repeated here. Only a module that 03 does not name belongs in this table, for example `services/prewarm.py` and `desktop/fixture_main.py`, which the wave plan adds; the phase that creates them adds their rows.

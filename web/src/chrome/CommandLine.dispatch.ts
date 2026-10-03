@@ -152,17 +152,31 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
   }
 }
 
+/** An error that keeps the typed text in the box and says why on the message line. */
+function refuse(p: CommandLineParts, text: string, message: string): void {
+  p.s.edit(text)
+  p.s.setError(message)
+  p.s.setDismissed(true)
+  postMessage(message, 'error')
+}
+
+// A pasted `#go=...` string (Copy link outside the fixed browser door, 03 section 4.6). The link reader is not part of
+// the first paint, so a line that could be a link (it starts with `#`, `go=`, a Markdown bracket or a web address) loads
+// it on demand; any other line never touches it. The reader answers in its own words (readPastedLink).
+const LINK_SHAPED = /^\s*(#|go=|\[|http)/i
+
 /** Parses `text` and carries it out; an error keeps the text and explains it. */
 export function runText(p: CommandLineParts, text: string, newPanel: boolean): void {
+  if (!LINK_SHAPED.test(text)) return runTyped(p, text, newPanel)
+  // The reader (chrome/deepLink.paste.ts) runs a link or refuses it, in the address bar's own words; text it does not
+  // take for a link, or a reader that cannot be loaded, is an ordinary line.
+  const typed = () => runTyped(p, text, newPanel)
+  void import('./deepLink.paste').then((m) => m.runPastedLink(p, text, newPanel, refuse, typed), typed)
+}
+
+function runTyped(p: CommandLineParts, text: string, newPanel: boolean): void {
   const result = parseLine(text, { index: p.options.index, fallbackContext: fallbackOf(p) })
-  if (!result.ok) {
-    p.s.edit(text)
-    const message = describeError(result.error)
-    p.s.setError(message)
-    p.s.setDismissed(true)
-    postMessage(message, 'error')
-    return
-  }
+  if (!result.ok) return refuse(p, text, describeError(result.error))
   const keep = perform(p, result.action, newPanel)
   if (keep !== null) p.s.edit(keep)
 }

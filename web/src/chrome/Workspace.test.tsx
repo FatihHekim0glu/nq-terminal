@@ -4,7 +4,7 @@ import { StrictMode, createRef } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ParsedCommand } from '../commands/parser'
 import { findMnemonic } from '../commands/registry'
-import { LINK_COPY } from '../copy/linkCopy'
+import { LINK_COPY, PORTABLE_LINK_COPY } from '../copy/linkCopy'
 import { PLACEHOLDER } from '../copy/placeholder'
 import { PANEL } from '../copy/workspace'
 import { HELP } from '../copy/help'
@@ -19,6 +19,21 @@ import { toStored } from './WorkspaceStorage'
 import { panelTabStops } from './WorkspaceFocus'
 import { activateNumbered, numberedItems } from './NumberedActions'
 import { BUILT_SCREENS, type ScreenProps, type ScreenRegistry } from './WorkspaceScreens'
+
+// Copy link asks /api/health whether the backend holds the fixed browser port (03 section 4.6). jsdom has no backend, so
+// the test answers that one route; every other path still goes to the real client.
+const health = vi.hoisted(() => ({ portFixed: true }))
+vi.mock('../api/client', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../api/client')>()
+  return {
+    ...original,
+    apiGet: vi.fn(async (path: string, ...rest: unknown[]) =>
+      path === '/api/health'
+        ? { port_fixed: health.portFixed }
+        : (original.apiGet as (...args: unknown[]) => Promise<unknown>)(path, ...rest),
+    ),
+  }
+})
 
 class NoopResizeObserver {
   observe(): void {}
@@ -576,6 +591,7 @@ describe('Workspace links: the ready signal and Copy link in the Options menu', 
     Reflect.deleteProperty(navigator, 'clipboard')
     resetWorkspaceReady()
     resetMessage()
+    health.portFixed = true
   })
 
   const stillWaiting = (promise: Promise<void>): Promise<boolean> =>
@@ -643,6 +659,17 @@ describe('Workspace links: the ready signal and Copy link in the Options menu', 
     expect(writeText.mock.calls[0]?.[0]).toBe(
       `[volmanaged_v0 EQ](${window.location.origin}${window.location.pathname}#go=volmanaged_v0%20EQ)`,
     )
+  })
+
+  it('on a backend without a fixed port, Copy link copies the bare #go= string and the message says so', async () => {
+    health.portFixed = false
+    const writeText = stubClipboard()
+    renderWorkspace()
+    await waitFor(() => expect(panelTitles()).toHaveLength(4))
+    await copyFrom('NQ GP 1d', LINK_COPY.copyLink)
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(writeText.mock.calls[0]?.[0]).toBe('#go=NQ%20GP%201d')
+    await waitFor(() => expect(useMessage.getState().text).toBe(PORTABLE_LINK_COPY.copied.replace('{line}', 'NQ GP 1d')))
   })
 
   it('shows the link itself when the browser has no clipboard', async () => {

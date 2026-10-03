@@ -6,6 +6,8 @@ import { displayLine, isSavableName, parseLine, type LineResult } from './line'
 import { MNEMONICS } from './registry'
 import { sectorWord } from './sectors'
 import { isWorkspaceName } from '../state/workspaces'
+import { COPY_SUFFIXES } from '../state/remoteStore.keys'
+import { workspaceMenu } from '../chrome/WorkspaceMenu'
 import type { CommandIndexData } from './types'
 
 const INDEX: CommandIndexData = {
@@ -237,6 +239,31 @@ describe('workspace words SAVE, LOAD and FORGET (roadmap #14)', () => {
     expect(action(parse('LOAD a-b'))).toEqual({ kind: 'load', name: 'A-B' })
     expect(action(parse('LOAD REG'))).toEqual({ kind: 'load', name: 'REG' })
     expect(action(parse('FORGET reset'))).toEqual({ kind: 'forget', name: 'RESET' })
+  })
+
+  it('LOAD and FORGET take a copy the store keeps beside a name, "<name> (conflict)" or "<name> (imported)", in any case', () => {
+    expect(action(parse('LOAD MINE (conflict)'))).toEqual({ kind: 'load', name: 'MINE (conflict)' })
+    expect(action(parse('  forget  mine   (IMPORTED) '))).toEqual({ kind: 'forget', name: 'MINE (imported)' })
+    expect(action(parseLine('FORGET MY_DESK (Conflict)', { index: null, fallbackContext: null }))).toEqual({ kind: 'forget', name: 'MY_DESK (conflict)' })
+    // The suffixes are the store's own: a test keeps the two in step.
+    for (const suffix of COPY_SUFFIXES) expect(action(parse(`LOAD MINE${suffix}`)), suffix).toEqual({ kind: 'load', name: `MINE${suffix}` })
+  })
+
+  it('a copy is never a SAVE name, and no other bracketed word or extra token is taken', () => {
+    expect(parse('SAVE MINE (conflict)').ok).toBe(false)
+    expect(parse('LOAD MINE (other)').ok).toBe(false)
+    expect(parse('LOAD MINE (conflict) X').ok).toBe(false)
+    expect(parse('LOAD (conflict)').ok).toBe(false)
+    expect(parse('GP MINE (conflict)').ok).toBe(false)
+  })
+
+  it('every row of the LOAD menu runs a line that loads exactly the stored name, copies included', () => {
+    const recipe = { panels: [{ line: 'REG', group: '-', ref: null, direction: 'right' }] } as const
+    const menu = workspaceMenu({ MINE: recipe, 'MINE (conflict)': recipe, 'MINE (imported)': recipe })
+    for (const item of menu.items) {
+      if (item.act.kind !== 'run') throw new Error(item.label)
+      expect(action(parse(item.act.line)), item.label).toEqual({ kind: 'load', name: item.label })
+    }
   })
 
   it("SAVE and FORGET without a name fail with 'missing-name' naming the word", () => {

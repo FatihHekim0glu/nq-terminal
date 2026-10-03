@@ -41,7 +41,7 @@ import { WORKSPACES } from '../copy/workspaces'
 import { WORKSPACE, fillCopy } from '../copy/workspace'
 import { layoutFor as savedLayoutFor, type LayoutsStore } from '../state/layouts'
 import { LINK_GROUPS, isLinkContext, type GroupRecord, type LinkContext, type LinkGroupsStore } from '../state/linkGroups'
-import { MAX_WORKSPACES, isWorkspaceName, type WorkspacesStore } from '../state/workspaces'
+import { MAX_WORKSPACES, isStoredWorkspaceName, isWorkspaceName, workspaceKey, type WorkspacesStore } from '../state/workspaces'
 import { reportOpened } from './CommandLine.bus'
 import { runningPanel } from './NumberedActions'
 import { syncRoving } from './WorkspaceFocus'
@@ -863,7 +863,7 @@ function loadChangedNothing(before: { owner: Owner; signature: string | null; co
 function loadRecipe(st: ControllerState, env: ControllerEnv, name: string, recipe: Recipe, commands: readonly ParsedCommand[]): boolean {
   const api = st.api
   const first = commands[0]
-  const panels = api && first && isWorkspaceName(name) ? layoutFromRecipe(recipe, commands) : null
+  const panels = api && first && isStoredWorkspaceName(name) ? layoutFromRecipe(recipe, commands) : null
   if (!api || !first || !panels) return false
   const currentRecipe = deriveRecipe(st, env)
   const before = {
@@ -927,9 +927,9 @@ function saveWorkspace(st: ControllerState, env: ControllerEnv, text: string): s
 }
 
 function loadWorkspace(st: ControllerState, env: ControllerEnv, text: string, parse: (line: string) => LineResult): string {
-  const name = text.trim().toUpperCase()
+  const name = workspaceKey(text)
   const { list } = env.workspaces.getState()
-  const recipe = isWorkspaceName(name) && Object.hasOwn(list, name) ? list[name] : undefined
+  const recipe = isStoredWorkspaceName(name) && Object.hasOwn(list, name) ? list[name] : undefined
   if (!recipe) return fillCopy(WORKSPACES.missing, { name: name === '' ? text : name })
   // A recipe is untrusted: every line is parsed again, and one that no longer runs refuses the whole load.
   const commands: ParsedCommand[] = []
@@ -945,7 +945,7 @@ function loadWorkspace(st: ControllerState, env: ControllerEnv, text: string, pa
 }
 
 function forgetWorkspace(st: ControllerState, env: ControllerEnv, text: string): string {
-  const name = text.trim().toUpperCase()
+  const name = workspaceKey(text)
   if (!env.workspaces.getState().forget(name)) return fillCopy(WORKSPACES.missing, { name: name === '' ? text : name })
   // The workspace that owned the layout no longer exists: the layout is the shown screen's again. Nothing is
   // saved now (the panels are as they were); the next edit is saved for the screen like any other.

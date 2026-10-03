@@ -48,6 +48,13 @@ const PINNED_SHELL_CEILING = 114_900
  * preload polyfill are out of the shell). The owner's target is 109,900 B at most, which leaves 5 kB under the ceiling
  * above for the next waves. Unlike the ceiling this is a ratchet: to grow the shell past it on purpose, move something else
  * out first, or raise this number in the same change as the feature that needs it, with the reason in the commit.
+ *
+ * Wave W3B (workspace store on the page, D3.3) held this target without raising it: the entry starts the store through a
+ * dynamic import before the first render (the store, its merge rules and its transport are one lazy chunk), and every
+ * storage-event listener that re-reads a key the store may change (theme, colour scheme, tape, link groups, record watch)
+ * lives in that chunk (state/remoteStore.ts applyLookOnStoredChange), not in the shell modules, and so does the shared
+ * storage's write observer (state/safeStorage.observe.ts wraps the shared instance when the store starts). The shell
+ * measures 109,894 B, 6 B under this target: the next change that grows it must move something else out first.
  */
 const SHELL_TARGET_AFTER_DIET_4 = 109_900
 /** The gallery build's shell, which is about 0.9 kB larger (113,738 B measured), plus the same 2 kB. */

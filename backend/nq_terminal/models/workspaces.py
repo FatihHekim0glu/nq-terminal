@@ -8,7 +8,8 @@ backend's own, 05 T12). What `data` holds, per document:
 - `workspaces`: `{"list": {name: recipe}, "last": name | null}`; at most 12 recipes of at most 20,000 characters.
   A name is 2 to 16 of A-Z, 0-9 and `_` starting with a letter (never an order-ticket word), optionally followed by
   ` (conflict)` or ` (imported)`, the copies the page's merge makes.
-- `layouts`: `{screen code: layout object}`; at most 64 layouts of at most 200,000 characters.
+- `layouts`: `{screen code: layout object}`; at most 64 layouts of at most 200,000 characters. A code may carry the
+  same ` (conflict)` or ` (imported)` suffix as a workspace name (03 section 10.4: a differing imported layout is kept).
 - `linkGroups`: `{"contexts": {"A": ctx | null, "B": ..., "C": ...}}`; at most 8,192 characters.
 - `watch`: one object, at most 200,000 characters.
 - `history`: a list of at most 100 lines of 1 to 200 characters.
@@ -50,6 +51,7 @@ BODY_MARGIN = 2_048  # the envelope around `data`, and some whitespace
 WORKSPACE_NAME = re.compile(r"[A-Z][A-Z0-9_]{1,15}(?: \((?:conflict|imported)\))?")
 TICKET_NAME = re.compile(r"(?:^|_)(?:ORDER|SUBMIT|CANCEL|MODIF|TRANSMIT|BUY|SELL)")
 SCREEN_CODE = re.compile(r"[A-Z][A-Z0-9]{1,7}")
+LAYOUT_KEY = re.compile(r"[A-Z][A-Z0-9]{1,7}(?: \((?:conflict|imported)\))?")
 LINE_ALPHABET = re.compile(r"[A-Za-z0-9_. -]+")
 CONTEXT_VALUE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
 CONTEXT_KINDS = ("instrument", "hypothesis", "run", "universe")
@@ -193,7 +195,7 @@ def _clean_layouts(data: Any) -> Any:
     for layout in layouts.values():
         _size(layout, MAX_LAYOUT_CHARS, "a layout")
     for code, layout in layouts.items():
-        if SCREEN_CODE.fullmatch(code) is None or not isinstance(layout, dict):
+        if LAYOUT_KEY.fullmatch(code) is None or not isinstance(layout, dict):
             raise InvalidDocument("a layout is not an object under a screen code")
     return layouts
 

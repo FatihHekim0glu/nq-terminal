@@ -2,6 +2,7 @@
 // examples, the numbered mnemonic index (generated from the command registry, so a new mnemonic shows
 // here without editing this file), the keys, the drawn keyboard, link groups and licences. Every font
 // listed is under an open licence.
+import { PORTABLE_LINK_COPY } from '../../chrome/copyLink'
 import { KeyboardDrawing, KeyTable } from '../../chrome/HelpScreen.keymap'
 import { KeyText } from '../../chrome/MessageLine'
 import { ROVING_ATTR } from '../../chrome/WorkspaceFocus'
@@ -97,6 +98,9 @@ export default function HelpIndex({ mnemonics, built }: HelpIndexProps) {
       <KeyboardDrawing />
       <h4 data-section="links">{HELP.linkHeading}</h4>
       <p>{HELP.linkText}</p>
+      <h4>{PORTABLE_LINK_COPY.helpHeading}</h4>
+      <p>{PORTABLE_LINK_COPY.helpFixed}</p>
+      <p>{PORTABLE_LINK_COPY.helpPortable}</p>
       <h4 data-section="licences">{HELP.licencesHeading}</h4>
       <Licences />
     </>

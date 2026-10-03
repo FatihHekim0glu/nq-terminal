@@ -1,7 +1,8 @@
 // Performance budgets (TASKS 8.3), each measured with a CDP trace against the fixture-mode backend of
 // playwright.config.ts (the real-data run is smoke.real.ts, started by terminal/scripts/smoke_real.ps1):
 // - HOME first render under 1.5 s: from navigation start to the four panels showing their data, painted,
-//   in a fresh browser context each time (empty cache); the median of three loads is held to the budget.
+//   in a fresh browser context each time (empty cache), with the workspace store started as production starts it (e2e/perf/storeOn.ts:
+//   the store chunk, its reads and up to 1.5 s of waiting come before the first render); the median of three loads is held to the budget.
 //   The budgets run alone on a freshly started backend (`pnpm e2e:perf`), so HOME's API reads are made once,
 //   unmeasured, before the loads: a running terminal's backend is warm, and the fixture double builds each
 //   series' synthetic bars on first use (seconds in all); before improvement run 3 the other specs ran first and

@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { onLineRequest } from '../../chrome/CommandLine.bus'
+import { PORTABLE_LINK_COPY } from '../../chrome/copyLink'
 import { NumberingContext, type NumberedItem } from '../../chrome/PanelChrome.numbers'
 import { PanelActionsContext, type PanelActions } from '../../chrome/PanelChrome.actions'
 import { MNEMONICS } from '../../commands/registry'
@@ -62,6 +63,23 @@ describe('HELP index (spec 7.12): the page the HELP command opens', () => {
     expect(screen.getByRole('img', { name: HELP.keyboardLabel })).toBeTruthy()
     expect(screen.getByRole('list', { name: HELP.licencesHeading }).textContent).toContain('PT Mono')
     expect(screen.getByText(HELP.intro)).toBeTruthy()
+  })
+
+  it('explains the portable link form after the link groups: the fixed address, the #go= string, and the limits of a paste', () => {
+    renderHelp()
+    const heading = screen.getByRole('heading', { name: PORTABLE_LINK_COPY.helpHeading })
+    expect(heading.tagName).toBe('H4')
+    const groups = screen.getByRole('heading', { name: HELP.linkHeading })
+    expect(groups.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText(PORTABLE_LINK_COPY.helpFixed)).toBeTruthy()
+    const portable = screen.getByText(PORTABLE_LINK_COPY.helpPortable)
+    expect(portable.textContent).toContain('#go=')
+    expect(portable.textContent).toContain('at most 8 lines')
+    expect(portable.textContent).toContain('screens, contexts and help only')
+  })
+
+  it('the portable-link help is in UK English with no em or en dashes', () => {
+    for (const text of Object.values(PORTABLE_LINK_COPY)) expect(text).not.toMatch(/[\u2013\u2014]/)
   })
 
   it('marks built screens and names the phase of the others', () => {

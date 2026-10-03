@@ -105,6 +105,15 @@ def test_layouts_are_keyed_by_screen_code_and_each_layout_is_capped():
             ws.clean("layouts", bad)
 
 
+def test_a_layout_copy_is_kept_under_its_screen_code_with_the_conflict_or_imported_suffix():
+    ok = {"HOME": {"a": 1}, "HOME (imported)": {"a": 2}, "GP (conflict)": {}}
+    assert ws.clean("layouts", ok) == ok
+    for bad in ({"HOME (other)": {}}, {"HOME (imported) (imported)": {}}, {"home (imported)": {}},
+                {" (imported)": {}}, {"HOME(imported)": {}}, {"HOME (imported) ": {}}, {"X (imported)": {}}):
+        with pytest.raises(ws.InvalidDocument):
+            ws.clean("layouts", bad)
+
+
 def test_more_than_64_layouts_are_over_the_cap():
     with pytest.raises(ws.TooLarge):
         ws.clean("layouts", {f"S{n:03d}": {} for n in range(65)})

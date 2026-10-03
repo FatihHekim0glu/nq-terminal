@@ -24,7 +24,7 @@ test-results/
 blob-report/
 
 # The JOBS queue state file (ARCHITECTURE section 8)
-state/
+/state/
 
 # Local environment and logs
 .env

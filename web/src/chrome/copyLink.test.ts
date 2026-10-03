@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LINK_COPY } from '../copy/linkCopy'
+import { apiGet } from '../api/client'
+import { fillCopy } from '../copy/workspace'
+import { LINK_COPY, PORTABLE_LINK_COPY } from '../copy/linkCopy'
 import { copyLinkEntries, copyPanelLink, hashFor, linkFor, markdownLink } from './copyLink'
 import { linesFromHash } from './deepLink'
 import { resetMessage, useMessage } from './MessageLine.store'
 
+// Copy link asks /api/health whether the port is fixed (03 4.6). Most of this file is about the browser door on the fixed
+// port, so the health read answers port_fixed true unless a test says otherwise.
+vi.mock('../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api/client')>()), apiGet: vi.fn() }))
+const health = vi.mocked(apiGet)
+const answerHealth = (port_fixed: unknown) => health.mockResolvedValue({ port_fixed } as never)
+
 const WHERE = { origin: 'http://127.0.0.1:5184', pathname: '/' }
 const URL_OF_GP = 'http://127.0.0.1:5184/#go=NQ%20GP%201d'
 
-beforeEach(resetMessage)
+beforeEach(() => {
+  resetMessage()
+  health.mockReset()
+  answerHealth(true)
+})
 afterEach(() => {
   Reflect.deleteProperty(navigator, 'clipboard')
   resetMessage()
@@ -109,6 +121,9 @@ describe('copyPanelLink', () => {
     const writeText = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)))
     const done = copyPanelLink('NQ GP 1d', 'url', WHERE, { writeText })
     expect(message().text).toBe('')
+    // The health read comes first (03 4.6), so the write starts a moment later.
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    expect(message().text).toBe('')
     finish()
     await done
     expect(message().text).toBe('Link to NQ GP 1d copied.')
@@ -143,5 +158,89 @@ describe('copyLinkEntries', () => {
     copyLinkEntries('REG')[0]?.onSelect()
     await vi.waitFor(() => expect(message().tone).toBe('error'))
     expect(message().text).toContain('#go=REG')
+  })
+})
+
+describe('where the port is not fixed (the app, or a browser on the app random port)', () => {
+  const BARE = '#go=NQ%20GP%201d'
+  const notFixed = () => answerHealth(false)
+
+  it('asks /api/health for port_fixed', async () => {
+    await copyPanelLink('NQ GP 1d', 'url', WHERE, { writeText: vi.fn(async () => {}) })
+    expect(health).toHaveBeenCalledExactlyOnceWith('/api/health')
+  })
+
+  it('copies the bare #go= string, never the address, and the message line says so', async () => {
+    notFixed()
+    const writeText = vi.fn(async () => {})
+    await copyPanelLink('NQ GP 1d', 'url', WHERE, { writeText })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(BARE)
+    expect(message().text).toBe(fillCopy(PORTABLE_LINK_COPY.copied, { line: 'NQ GP 1d' }))
+    expect(message().text).toContain('#go=')
+    expect(message().text).not.toBe('Link to NQ GP 1d copied.')
+    expect(message().tone).toBe('info')
+  })
+
+  it('the bare string carries no origin, path, search or old hash', async () => {
+    notFixed()
+    const writeText = vi.fn(async () => {})
+    const where = { origin: 'http://127.0.0.1:51234', pathname: '/terminal/', search: '?a=1', hash: '#go=OLD' }
+    await copyPanelLink('REG', 'url', where, { writeText })
+    expect(writeText).toHaveBeenCalledWith('#go=REG')
+  })
+
+  it('a Markdown copy points at the bare string', async () => {
+    notFixed()
+    const writeText = vi.fn(async () => {})
+    await copyPanelLink('NQ GP 1d', 'markdown', WHERE, { writeText })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(`[NQ GP 1d](${BARE})`)
+    expect(message().text).toBe(fillCopy(PORTABLE_LINK_COPY.copied, { line: 'NQ GP 1d' }))
+  })
+
+  it.each([
+    ['the health read fails', () => health.mockRejectedValue(new Error('offline'))],
+    ['port_fixed is missing', () => answerHealth(undefined)],
+    ['port_fixed is the string true', () => answerHealth('true')],
+    ['port_fixed is 1', () => answerHealth(1)],
+    ['the health body is null', () => health.mockResolvedValue(null as never)],
+  ])('copies the bare string when %s (a bare string works anywhere, a wrong address does not)', async (_name, arrange) => {
+    arrange()
+    const writeText = vi.fn(async () => {})
+    await copyPanelLink('NQ GP 1d', 'url', WHERE, { writeText })
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(BARE)
+  })
+
+  it('shows the bare string to copy by hand when the clipboard refuses', async () => {
+    notFixed()
+    const writeText = vi.fn(async () => {
+      throw new DOMException('denied', 'NotAllowedError')
+    })
+    await copyPanelLink('NQ GP 1d', 'url', WHERE, { writeText })
+    expect(message().text).toBe(`The browser refused the clipboard. The link is ${BARE}`)
+    expect(message().tone).toBe('error')
+  })
+
+  it('a string it copies is a link the reader accepts: the same line comes back', async () => {
+    notFixed()
+    const writeText = vi.fn(async (_text: string) => {})
+    await copyPanelLink('volmanaged_v0 RET', 'url', WHERE, { writeText })
+    expect(linesFromHash(writeText.mock.calls[0]?.[0] ?? '')?.map((l) => l.line)).toEqual(['volmanaged_v0 RET'])
+  })
+
+  it('the Options rows copy the bare string too', async () => {
+    notFixed()
+    const writeText = vi.fn(async () => {})
+    stubClipboard(writeText)
+    const [url, markdown] = copyLinkEntries('REG')
+    url?.onSelect()
+    markdown?.onSelect()
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(2))
+    expect(writeText.mock.calls).toEqual([['#go=REG'], ['[REG](#go=REG)']])
+  })
+
+  it('the portable copy uses UK spelling and no em or en dashes', () => {
+    for (const text of Object.values(PORTABLE_LINK_COPY)) {
+      expect(text).not.toMatch(/[\u2013\u2014]/)
+    }
   })
 })

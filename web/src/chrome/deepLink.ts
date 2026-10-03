@@ -6,11 +6,17 @@
 //     refuses the whole link;
 //   - LINK_ACTIONS is the allowlist of what a line may do once parsed (see useDeepLinks): a link opens
 //     screens, contexts and help, and can never reset, undo, export, grab or save anything.
+// A link can also be pasted into the command line (deepLink.paste.ts, loaded on demand): it goes through the same
+// reader and the same verdict as the address bar (linkVerdict), so the limits are one set.
 // This file also holds the workspace-ready signal: a link waits for the workspace before it runs. It is
 // the reading half only, and part of the first-paint shell; the writing half (building a link for the
 // Copy link rows) sits in copyLink.ts, which loads with the Workspace.
-import type { LineResult } from '../commands/line'
+import { parseLine, type LineResult } from '../commands/line'
+import { describeError } from '../commands/messages'
 import { MAX_LINE } from '../commands/parser'
+import type { CommandIndexData } from '../commands/types'
+import { LINKS } from '../copy/links'
+import { fillCopy } from '../copy/workspace'
 
 export const LINK_KEY = 'go'
 export const MAX_LINK_LINES = 8
@@ -53,6 +59,32 @@ export function linesFromHash(hash: string): readonly LinkLine[] | null {
     lines.push({ line, newPanel: lines.length > 0 })
   }
   return lines
+}
+
+/** What to do with a link: run it, refuse it for good, or hold it until the commands index has loaded. */
+export type LinkVerdict =
+  | { readonly kind: 'run' }
+  | { readonly kind: 'refuse'; readonly message: string }
+  | { readonly kind: 'wait'; readonly message: string }
+
+/**
+ * The lines in order. The first one that parses to something a link may not do, or that does not parse,
+ * refuses the link. A line that cannot be parsed for want of the index is remembered, not refused: if
+ * nothing else refuses the link, it waits. Shared by the address bar (useDeepLinks) and the command line.
+ */
+export function linkVerdict(lines: readonly LinkLine[], index: CommandIndexData | null): LinkVerdict {
+  let unavailable: string | null = null
+  for (const { line } of lines) {
+    const result = parseLine(line, { index, fallbackContext: null })
+    if (result.ok) {
+      if (!isLinkAction(result)) return { kind: 'refuse', message: fillCopy(LINKS.refusedLine, { line }) }
+    } else if (result.error.code !== 'index-unavailable') {
+      return { kind: 'refuse', message: describeError(result.error) }
+    } else {
+      unavailable ??= describeError(result.error)
+    }
+  }
+  return unavailable === null ? { kind: 'run' } : { kind: 'wait', message: unavailable }
 }
 
 /** True only for a line that parsed and whose action a link may run. */

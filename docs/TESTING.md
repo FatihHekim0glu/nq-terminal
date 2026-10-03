@@ -44,6 +44,28 @@ does the same from its own backend's lock. The offline projects need no token.
 - **LIVE cone toggle.** `e2e/flows/lv6.spec.ts` opens LIVE against the fixture backend (a two session paper book: the backtest-start cone is drawn, the live-start cone is refused in words), drives the Backtest start / Live start toggle with the arrow keys, Space and Enter, and runs axe at both viewport sizes and in both looks (standard and amber classic), with card screenshots under a black mask colour.
 - **Baselines.** The 26 baselines of `p2.spec.ts` were taken on one Windows machine on 2026-10-01, with the JOBS table and log (a shared queue with server times) masked. The older baselines of the screens that P2 changes on purpose (RR and RR-run with the trend regime card, RET, EQ-run and EXPO with their new cards, LIVE with the IB panel, ROLL 2) Market) were not rewritten: renew them with `--update-snapshots` on the machine that owns them. Screenshot baselines are tied to a machine's text rendering: on a machine whose rendering differs, the same specs fail at the commit before P2 as well, so compare a run with the commit before it, or point `snapshotPathTemplate` at an empty folder and run with `--update-snapshots=all` so that every other assertion of a spec runs to its end.
 
+## The workspace store and the desktop seams
+
+The page keeps its saved state in the backend's workspace store (`web/src/state/remoteStore*.ts`, started from `web/src/main.tsx`).
+Its unit tests are in `web/src/state/remoteStore*.test.ts(x)` and `web/src/demo/store.test.ts` (merge rules, the 500 ms debounce,
+the pagehide flush, the per-origin import, the 404 fallback and the demo), and the backend's in `backend/tests/test_workspaces_*.py`.
+
+Two Playwright specs prove it end to end, each against a fixture backend and a page server of its own, with its own temporary
+state folder (nothing touches `terminal/state` or port 8765):
+
+- `e2e/workspace-import.spec.ts`: ten keys seeded on a stand-in origin are imported once into six documents, `meta.imports`
+  lists the origin, a reload repeats nothing, a load on another port with empty storage adopts the stored look and writes no
+  file, and a backend that answers 404 leaves the page working from its cache.
+- `e2e/desktop-seams.spec.ts`: a saved workspace loads after the backend is restarted on a new port with the same state
+  folder; a launch code opens the terminal once and a reused code is refused; export and GRAB go through the shell bridge.
+
+The shared Playwright run does not start the store: the gallery build leaves it off unless a spec sets `window.__NQT_STORE__`
+before the page loads (`src/main.tsx`), because the run's tests share one fixture backend and a store shared by every browser
+context would carry one test's layouts, theme and saved workspaces into the next. The two specs above set it, and so
+do the HOME budget loads of `pnpm e2e:perf` (`e2e/perf/storeOn.ts`), so that figure includes the store step. In the
+production build the store always starts. The stage 1 figures are taken by `docs/desktop/stage1/measure_stage1.mjs` and
+recorded in `docs/desktop/stage1/stage1_numbers.md`.
+
 ## The offline Playwright suite
 
 `e2e:offline` runs the Windows specs against a Node-side copy of the demo API, so a Mac or Linux box with no Python and

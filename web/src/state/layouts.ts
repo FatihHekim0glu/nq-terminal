@@ -26,6 +26,9 @@ export function isScreenCode(value: unknown): value is string {
   return typeof value === 'string' && SCREEN_CODE.test(value)
 }
 
+/** The suffix of a copy the workspace store's merge kept beside a screen code: a code is stored with or without it. */
+const COPY_SUFFIX = / \((?:conflict|imported)\)$/
+
 /** A detached copy of the layout as JSON, or null when it is not a plain object, too big or not encodable. */
 function toStoredCopy(layout: unknown): SerialisedLayout | null {
   if (!isPlainObject(layout)) return null
@@ -51,7 +54,7 @@ function loadLayouts(storage: SafeStorage): Record<string, SerialisedLayout> {
   const stored = readJson(storage, LAYOUTS_KEY, isStored)
   if (!stored) return {}
   const entries = Object.entries(stored.layouts).flatMap(([screen, layout]) => {
-    const copy = isScreenCode(screen) ? toStoredCopy(layout) : null
+    const copy = isScreenCode(screen.replace(COPY_SUFFIX, '')) ? toStoredCopy(layout) : null
     return copy ? [[screen, copy] as const] : []
   })
   return Object.fromEntries(entries)

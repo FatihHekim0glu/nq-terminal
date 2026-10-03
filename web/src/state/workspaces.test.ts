@@ -467,3 +467,27 @@ describe('two windows', () => {
     expect(b.getState().save('EXTRA', HOME)).toBe(false)
   })
 })
+
+describe('copies the workspace store keeps beside a name (03 section 10.2)', () => {
+  const copies = JSON.stringify({ version: 1, list: { MINE: HOME, 'MINE (conflict)': HOME, 'MINE (imported)': HOME, 'MINE (other)': HOME, 'bad (imported)': HOME }, last: 'MINE (imported)' })
+
+  it('loads "<name> (conflict)" and "<name> (imported)" entries, and no other suffix, and keeps one as the last workspace', () => {
+    const { store } = setup(copies)
+    expect(Object.keys(store.getState().list)).toEqual(['MINE', 'MINE (conflict)', 'MINE (imported)'])
+    expect(store.getState().last).toBe('MINE (imported)')
+  })
+
+  it('still refuses to save under such a name: the page never makes one', () => {
+    const { store } = setup()
+    expect(store.getState().save('MINE (imported)', HOME)).toBe(false)
+    expect(isWorkspaceName('MINE (conflict)')).toBe(false)
+  })
+
+  it('keeps the copies when it saves another workspace, and forgets one by its full name', () => {
+    const { store } = setup(copies)
+    expect(store.getState().save('OTHER', HOME)).toBe(true)
+    expect(Object.keys(store.getState().list)).toContain('MINE (conflict)')
+    expect(store.getState().forget('MINE (conflict)')).toBe(true)
+    expect(Object.keys(store.getState().list)).not.toContain('MINE (conflict)')
+  })
+})

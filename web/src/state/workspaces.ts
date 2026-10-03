@@ -1,7 +1,8 @@
 // Named workspaces (roadmap #14): SAVE NAME keeps the panels on screen as a recipe, a sequence of command
 // lines with the link group and the split each panel sits in; LOAD NAME rebuilds them by running the lines
 // again. Stored under 'nqt.workspaces' as { version, list, last }, at most 12 workspaces and 20,000
-// characters of JSON per recipe.
+// characters of JSON per recipe. The key is a cache of the workspace store's `workspaces` document
+// (state/remoteStore.ts), which may also hold "<name> (conflict)" and "<name> (imported)" copies.
 // A stored recipe is untrusted input, so it is rebuilt field by field on the way in (cleanRecipe) and its
 // lines are parsed again by the command parser before anything runs; a storage failure or a tampered value
 // means "no workspaces", never an error on screen. This file is part of the first-paint shell: it imports
@@ -64,6 +65,24 @@ const RECIPE_GROUPS: readonly string[] = ['-', ...LINK_GROUPS]
 export function isWorkspaceName(value: unknown): value is string {
   if (typeof value !== 'string' || !NAME.test(value) || TICKET_NAME.test(value)) return false
   return !findMnemonic(value) && !Object.hasOwn(CHROME_WORDS, value) && sectorWord(value) === null && !COMMAND_WORDS.includes(value)
+}
+
+/** The suffixes of the copies the workspace store's merge keeps beside a name (03 section 10.2): LOAD and FORGET take
+ * them (commands/line.ts), SAVE never makes one. */
+const COPY_SUFFIX = / \((?:conflict|imported)\)$/
+
+/** A name as stored: a workspace name, or one followed by the suffix of a copy the store's merge made. */
+export function isStoredWorkspaceName(value: unknown): value is string {
+  return typeof value === 'string' && isWorkspaceName(value.replace(COPY_SUFFIX, ''))
+}
+
+const TYPED_COPY_SUFFIX = / \((?:conflict|imported)\)$/i
+
+/** A typed name as the store keys it: trimmed, in capitals, and a copy's suffix in the merge's own lower case. */
+export function workspaceKey(text: string): string {
+  const trimmed = text.trim()
+  const suffix = TYPED_COPY_SUFFIX.exec(trimmed)
+  return suffix ? `${trimmed.slice(0, suffix.index).toUpperCase()}${suffix[0].toLowerCase()}` : trimmed.toUpperCase()
 }
 
 function cleanPanel(raw: unknown, index: number): RecipePanel | null {
@@ -153,7 +172,7 @@ function loadSnapshot(storage: SafeStorage): Snapshot {
   const stored = readJson(storage, WORKSPACES_KEY, isStored)
   if (!stored) return { list: {}, last: null }
   const entries = Object.entries(stored.list).flatMap(([name, raw]) => {
-    const recipe = isWorkspaceName(name) ? cleanRecipe(raw) : null
+    const recipe = isStoredWorkspaceName(name) ? cleanRecipe(raw) : null
     return recipe ? [[name, recipe] as const] : []
   })
   const list = Object.fromEntries(entries.slice(0, MAX_WORKSPACES))

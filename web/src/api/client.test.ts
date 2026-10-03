@@ -226,6 +226,32 @@ describe('GET only (PRD G6, DL5)', () => {
     expect(findWriteRequests('/src/api/jobsClient.ts', snippet)).toEqual([expect.stringMatching(pattern)])
   })
 
+  it('lets the workspace store transport send a PUT with fetch, and nothing else', () => {
+    expect(findWriteRequests('/src/state/remoteStore.transport.ts', "method: 'PUT'; fetch(u, init)")).toEqual([])
+    expect(findWriteRequests('/src/state/remoteStore.transport.ts', 'globalThis.fetch(u, init)')).toEqual([])
+  })
+
+  it.each([
+    ["const m = 'POST'", /POST/],
+    ["const m = 'DELETE'", /DELETE/],
+    ["const m = 'patch'", /PATCH/],
+    ['navigator.sendBeacon(u, body)', /sendBeacon/],
+    ['const x = new XMLHttpRequest()', /XMLHttpRequest/],
+    ["const r = new Request('/api/workspaces/prefs')", /Request/],
+    ['const s = new EventSource(u)', /EventSource/],
+    ["const w = new WebSocket('ws://x')", /WebSocket/],
+  ])('born failing: still flags %s in the store transport', (snippet, pattern) => {
+    expect(findWriteRequests('/src/state/remoteStore.transport.ts', snippet)).toEqual([expect.stringMatching(pattern)])
+  })
+
+  it('born failing: the store transport allowance covers that one file only', () => {
+    const body = "x = 'PUT'; fetch(u)"
+    expect(findWriteRequests('/src/state/remoteStore.ts', body)).toHaveLength(2)
+    expect(findWriteRequests('/src/state/remoteStore.transport2.ts', body)).toHaveLength(2)
+    expect(findWriteRequests('/src/screens/x/remoteStore.transport.ts', body)).toHaveLength(2)
+    expect(findWriteRequests('/src/api/jobsClient.ts', body)).toEqual([expect.stringMatching(/PUT/)])
+  })
+
   it('lets the session page call fetch to redeem its one-time code, and nothing else', () => {
     expect(findWriteRequests('/src/session/main.ts', 'request: (path, init) => fetch(path, init)')).toEqual([])
     expect(findWriteRequests('/src/session/main.ts', "const m = 'POST'")).toEqual([expect.stringMatching(/POST/)])

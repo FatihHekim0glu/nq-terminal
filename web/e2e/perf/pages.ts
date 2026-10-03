@@ -2,7 +2,9 @@
 // writes performance.mark() calls into the page, so a CDP trace (browser.startTracing) holds the times;
 // trace.ts reads them back. Shared by budgets.spec.ts (fixture backend) and smoke.real.ts (real files).
 import { expect, type Browser, type BrowserContext, type Locator, type Page, type Request, type Response, type TestInfo } from '@playwright/test'
+import { isStoreWrite } from '../storeWrites.ts'
 import { recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
+import { startStoreInContext } from './storeOn.ts'
 import { frameStats, judgeFrames, longTasks, markSpanMs, markStartMs, markTs, parseTrace, rendererOf, TRACE_CATEGORIES, type FrameStats } from './trace.ts'
 
 export const FENCE_S = Date.UTC(2022, 0, 1) / 1000
@@ -39,9 +41,12 @@ export function watch(page: Page): Watch {
   return w
 }
 
-/** Every request a same-origin GET; nothing else may leave the page. */
+/** Every request a same-origin GET, or the workspace store's own PUT (03 section 10.3); nothing else may leave the page. */
 export function offOriginOrNotGet(w: Watch, origin: string): string[] {
-  return w.requests.filter((r) => r.method() !== 'GET' || new URL(r.url()).origin !== origin).map((r) => `${r.method()} ${r.url()}`)
+  return w.requests
+    .filter((r) => !isStoreWrite(r.method(), r.url(), origin))
+    .filter((r) => r.method() !== 'GET' || new URL(r.url()).origin !== origin)
+    .map((r) => `${r.method()} ${r.url()}`)
 }
 
 export const commandLine = (page: Page): Locator => page.getByRole('combobox', { name: 'Command line' })
@@ -173,6 +178,8 @@ export async function measureHome(browser: Browser, info: TestInfo, label: strin
   const context = await freshContext(browser, info)
   try {
     await installHomeProbe(context)
+    // Production starts the workspace store before it boots; the gallery build starts it only on request (src/main.tsx).
+    await startStoreInContext(context)
     const page = await context.newPage()
     await startTrace(browser, page)
     let events: ReturnType<typeof parseTrace>

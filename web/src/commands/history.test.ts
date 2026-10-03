@@ -108,3 +108,17 @@ describe('history storage (per-viewer convenience; failures are ignored)', () =>
     vi.unstubAllGlobals()
   })
 })
+
+describe('the default storage is the shared one, the workspace store\'s observer sees the lines', () => {
+  it('tells the observer the history key and its JSON text on a save without an explicit storage', async () => {
+    const { setWriteObserver } = await import('../state/safeStorage.observe')
+    const told: Array<[string, string | null]> = []
+    setWriteObserver((key, value) => told.push([key, value]))
+    try {
+      saveHistory(record(EMPTY_HISTORY, 'REG'))
+    } finally {
+      setWriteObserver(null)
+    }
+    expect(told).toEqual([['nqt.cmd.history', '["REG"]']])
+  })
+})

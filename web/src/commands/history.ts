@@ -1,5 +1,7 @@
 // Command history: newest last, walked with Up and Down from an empty line (UI_SPEC section 5).
-// Pure and immutable; storage is a per-viewer convenience whose failures are ignored.
+// Pure and immutable; storage is a per-viewer convenience whose failures are ignored. The default storage is the
+// shared one, so the workspace store sees the line list (state/remoteStore.ts, key nqt.cmd.history).
+import { asItemStorage } from '../state/safeStorage'
 import { MAX_LINE } from './parser'
 
 export const HISTORY_LIMIT = 100
@@ -46,15 +48,7 @@ export function newer(state: HistoryState): HistoryStep | null {
   return { state: { entries: state.entries, cursor }, line: state.entries[cursor] ?? '' }
 }
 
-function browserStorage(): HistoryStorage | null {
-  try {
-    return globalThis.localStorage ?? null
-  } catch {
-    return null
-  }
-}
-
-export function loadHistory(storage: HistoryStorage | null = browserStorage()): HistoryState {
+export function loadHistory(storage: HistoryStorage | null = asItemStorage()): HistoryState {
   try {
     const raw = storage?.getItem(STORAGE_KEY)
     const parsed: unknown = raw ? JSON.parse(raw) : null
@@ -66,7 +60,7 @@ export function loadHistory(storage: HistoryStorage | null = browserStorage()): 
   }
 }
 
-export function saveHistory(state: HistoryState, storage: HistoryStorage | null = browserStorage()): void {
+export function saveHistory(state: HistoryState, storage: HistoryStorage | null = asItemStorage()): void {
   try {
     storage?.setItem(STORAGE_KEY, JSON.stringify(state.entries))
   } catch {

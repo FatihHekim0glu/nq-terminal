@@ -33,7 +33,8 @@ WINDOW = (pd.Timestamp("2019-05-06", tz="UTC"), pd.Timestamp("2019-05-08", tz="U
 SERIES = ("NQ.V.0", "1m", "vendor")
 BACKEND = Path(__file__).resolve().parents[1]
 TESTS = BACKEND / "tests"
-REAL_STATE = ROOT / "terminal" / "state"
+MAIN_STATE = ROOT / "terminal" / "state"  # the shared lab's folder: a worktree on the shared venv still resolves here
+CHECKOUT_STATE = BACKEND.parent / "state"  # this checkout's own folder
 
 
 @pytest.fixture
@@ -431,25 +432,34 @@ from pathlib import Path
 
 from nq_terminal.settings import load_settings
 
-REAL_STATE = Path({real!r})
+MAIN_STATE = Path({main!r})
+CHECKOUT_STATE = Path({checkout!r})
 
 
 def test_planted_write_through_the_settings():
     target = load_settings().state_dir / "nqt-planted.txt"
     target.write_text("planted", encoding="utf-8")
-    assert not target.resolve().is_relative_to(REAL_STATE.resolve())
+    assert not target.resolve().is_relative_to(MAIN_STATE.resolve())
+    assert not target.resolve().is_relative_to(CHECKOUT_STATE.resolve())
 
 
-def test_planted_write_into_the_real_state_folder():
-    (REAL_STATE / "nqt-planted.txt").write_text("planted", encoding="utf-8")
+def test_planted_write_into_the_main_state_folder():
+    (MAIN_STATE / "nqt-planted.txt").write_text("planted", encoding="utf-8")
+
+
+def test_planted_write_into_the_checkout_state_folder():
+    (CHECKOUT_STATE / "nqt-planted.txt").write_text("planted", encoding="utf-8")
 '''
 
 
 def test_a_planted_test_cannot_write_the_real_state_folder(tmp_path: Path):
     """A pytest session with this conftest: a write through the settings lands in a temporary folder, and a write
-    aimed at terminal/state is refused by the session guard (born failing before conftest redirected and guarded)."""
+    aimed at either terminal/state (the shared lab's and this checkout's, which differ in a git worktree) is refused
+    by the session guard. Born failing: the guard covered only this checkout's folder, so in a worktree the planted
+    write into the main lab's folder succeeded and left nqt-planted.txt there."""
     planted = tmp_path / "test_planted_state.py"
-    planted.write_text(textwrap.dedent(PLANTED.format(real=str(REAL_STATE))), encoding="utf-8")
+    planted.write_text(textwrap.dedent(PLANTED.format(main=str(MAIN_STATE), checkout=str(CHECKOUT_STATE))),
+                       encoding="utf-8")
     env = {k: v for k, v in os.environ.items() if k not in ("NQT_STATE_DIR", "PYTEST_ADDOPTS")}
     env["PYTHONPATH"] = os.pathsep.join([str(TESTS), str(BACKEND)])
     command = [sys.executable, "-m", "pytest", "-p", "conftest", "-p", "no:cacheprovider", "-p", "no:warnings",
@@ -457,10 +467,18 @@ def test_a_planted_test_cannot_write_the_real_state_folder(tmp_path: Path):
     done = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, encoding="utf-8",
                           timeout=300, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     output = done.stdout + done.stderr
-    assert done.returncode != 0, output
-    assert "1 failed" in output and "1 passed" in output, output
-    assert "test_planted_write_into_the_real_state_folder" in output and "may not modify" in output, output
-    assert not (REAL_STATE / "nqt-planted.txt").exists()
+    try:
+        assert done.returncode != 0, output
+        assert "2 failed" in output and "1 passed" in output, output
+        assert "test_planted_write_into_the_main_state_folder" in output, output
+        assert "test_planted_write_into_the_checkout_state_folder" in output, output
+        assert output.count("may not modify") >= 2, output
+        assert not (MAIN_STATE / "nqt-planted.txt").exists()
+        assert not (CHECKOUT_STATE / "nqt-planted.txt").exists()
+    finally:  # a guard that failed must not leave the stray file behind to break the next state check
+        for stray in (MAIN_STATE / "nqt-planted.txt", CHECKOUT_STATE / "nqt-planted.txt"):
+            if stray.exists():  # only then: the session guard also refuses a remove it sees in a protected folder
+                stray.unlink()
 
 
 # ---------------------------------------------------------------- nested cached calls
