@@ -1,0 +1,9 @@
+# Cargo settings for the shell crate.
+#
+# Static-link flags: none. The W0A probes (docs/desktop/spike_d0/windows/results.md, P5) found that the GNU target
+# already links libgcc statically, so a release exe imports no MinGW runtime DLL (libgcc_s_seh-1, libwinpthread-1,
+# libstdc++-6) without any flag. The one manifest fix lives in build.rs. WebView2Loader.dll stays a dynamic import on
+# the GNU host (only the MSVC target links the static loader), and the artefact check allows exactly that file.
+#
+# The target folder is never set here: every build sets CARGO_TARGET_DIR under D:\dev\targets, so no target folder
+# is ever written under desktop/ (04 standing rule 5).

@@ -292,7 +292,7 @@ Stage A (one slice), then stage B (four slices), then stage C (one integration s
 - IPC refusal: every command refused, the count printed by the test.
 - Deny-list tests pass on every case of D4.4 (the symlink case passed, or skipped with its recorded reason); a file scan of the lab after the launch check finds 0 new files under `results/`, `data/`, `live/` or `backtests/output/`.
 - The noisy-child test and the swapped-backend test green.
-- First readings, hidden window, median of 5: splash painted within 1,000 ms (target 500 ms); exe size recorded.
+- First readings, hidden window, median of 5: splash load event within 1,000 ms (target 500 ms); exe size recorded. The measure build never shows its window, so a painted frame is not observed here: painted deferred to W5B, which measures first paint on screen 2 and keeps this load-event figure as a separate row.
 - C: check passed on every build run of the phase (standing rule 5).
 - The browser terminal is unaffected: its automated checks green.
 

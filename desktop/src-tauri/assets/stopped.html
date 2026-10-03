@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>nq-lab terminal: stopped</title>
+<link rel="stylesheet" href="look.css">
+<link rel="stylesheet" href="stopped.css">
+</head>
+<body>
+<main class="shell-page" aria-labelledby="stopped-title">
+  <h1 id="stopped-title">The lab terminal has stopped</h1>
+  <section class="reason" id="renderer" aria-labelledby="renderer-text">
+    <p class="shell-status shell-error" id="renderer-text" role="status">The page engine stopped.</p>
+    <p class="shell-note">The app reloaded the page once and it failed again, so it stopped there. The backend is not affected. Close the app and open it again.</p>
+  </section>
+  <section class="reason" id="exited" aria-labelledby="exited-text">
+    <p class="shell-status" id="exited-text" role="status">The backend stopped.</p>
+    <p class="shell-note">The app starts it again on its own. After three stops within a minute it asks whether to restart or quit. The backend's log is terminal\state\logs\backend.log in the lab folder.</p>
+  </section>
+  <section class="reason" id="spawn" aria-labelledby="spawn-text">
+    <p class="shell-status shell-error" id="spawn-text" role="status">The app could not start the backend.</p>
+    <p class="shell-note">Check that the lab folder holds .venv\Scripts\python.exe and that terminal\state can be written to.</p>
+  </section>
+  <section class="reason" id="handshake" aria-labelledby="handshake-text">
+    <p class="shell-status shell-error" id="handshake-text" role="status">The backend's first message was not a valid handshake.</p>
+    <p class="shell-note">The app did not connect to it. The backend's log may say why.</p>
+  </section>
+  <section class="reason" id="lock-held" aria-labelledby="lock-held-text">
+    <p class="shell-status shell-error" id="lock-held-text" role="status">Another backend already holds this lab's lock.</p>
+    <p class="shell-note">The app could not verify that backend, so it did not use it. If the browser terminal is running (start.ps1 on port 8765), close it, then open the app again.</p>
+  </section>
+  <section class="reason" id="hmac" aria-labelledby="hmac-text">
+    <p class="shell-status shell-error" id="hmac-text" role="status">The backend did not prove that it holds this app's secret.</p>
+    <p class="shell-note">Its handshake proof does not match, so the app refused it and sent it nothing.</p>
+  </section>
+  <section class="reason" id="pid" aria-labelledby="pid-text">
+    <p class="shell-status shell-error" id="pid-text" role="status">The backend named a process this app did not start.</p>
+    <p class="shell-note">The app accepts only the interpreter it started itself, so it refused this backend.</p>
+  </section>
+  <section class="reason" id="listener" aria-labelledby="listener-text">
+    <p class="shell-status shell-error" id="listener-text" role="status">The backend's port belongs to another process.</p>
+    <p class="shell-note">A process this app did not start listens on that port, so the app refused to send it anything.</p>
+  </section>
+  <section class="reason" id="root" aria-labelledby="root-text">
+    <p class="shell-status shell-error" id="root-text" role="status">The backend serves a different lab folder.</p>
+    <p class="shell-note">It is not the lab this app was set up with. Check the lab folder in the app's settings.</p>
+  </section>
+  <section class="reason" id="prefix" aria-labelledby="prefix-text">
+    <p class="shell-status shell-error" id="prefix-text" role="status">The backend runs from a different Python environment.</p>
+    <p class="shell-note">It does not run from the lab's own .venv folder, so the app refused it.</p>
+  </section>
+  <section class="reason" id="contract" aria-labelledby="contract-text">
+    <p class="shell-status shell-error" id="contract-text" role="status">The lab checkout and the app are out of step.</p>
+    <p class="shell-note">The backend speaks a contract version this app does not accept. Update whichever side is older: run git pull in the lab, or install the newer app.</p>
+  </section>
+  <section class="reason" id="dist" aria-labelledby="dist-text">
+    <p class="shell-status shell-error" id="dist-text" role="status">The terminal's page build is out of date or missing.</p>
+    <p class="shell-note">Rebuild it in the lab folder with <code>pnpm --dir terminal\web install --frozen-lockfile</code> and then <code>pnpm --dir terminal\web build</code>, then open the app again.</p>
+  </section>
+  <section class="reason" id="swapped" aria-labelledby="swapped-text">
+    <p class="shell-status shell-error" id="swapped-text" role="status">The backend behind this window failed its identity check.</p>
+    <p class="shell-note">It is not the backend the app started or attached to, so the app refused it and sent it nothing.</p>
+  </section>
+  <section class="reason" id="unverified" aria-labelledby="unverified-text">
+    <p class="shell-status shell-error" id="unverified-text" role="status">The backend did not answer its identity check in time.</p>
+    <p class="shell-note">It may only be busy. The app tried the check again and did not send it anything. <a href="retry-backend">Retry</a> to check it once more.</p>
+  </section>
+</main>
+</body>
+</html>

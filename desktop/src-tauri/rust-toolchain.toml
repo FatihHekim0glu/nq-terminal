@@ -1,0 +1,5 @@
+# The shell's toolchain, pinned (02 C3-13). On this PC it resolves under RUSTUP_HOME=D:\dev\rustup, GNU host.
+[toolchain]
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

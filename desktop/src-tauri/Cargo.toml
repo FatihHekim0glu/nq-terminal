@@ -1,0 +1,71 @@
+[package]
+name = "nq-lab-terminal"
+version = "0.1.0"
+description = "Windows shell of the nq-lab terminal: one framed window over the lab's own backend"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+license = "UNLICENSED"
+default-run = "nq-lab-terminal"
+
+[[bin]]
+name = "nq-lab-terminal"
+path = "src/main.rs"
+
+[features]
+# The release build registers the single-instance and window-state plugins. Smoke and measure builds are made
+# with --no-default-features, so neither plugin is even compiled in (and main.rs never registers them under
+# either feature, whatever the default set).
+default = ["shell-plugins"]
+shell-plugins = ["dep:tauri-plugin-single-instance", "dep:tauri-plugin-window-state"]
+# Test build: the frozen SmokeOptions switches, the debugging port and the fixture switch (03 section 15.4).
+smoke = []
+# The release code with show() never called, for budgets measured on a hidden window (04 D4).
+measure = []
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+# 2.12.x keeps the 2.11.6 floor for the 2026 IPC fixes (03 section 13.1).
+tauri = { version = "2.12.1", features = [] }
+tauri-plugin-single-instance = { version = "2.4", optional = true }
+tauri-plugin-window-state = { version = "2.4", optional = true }
+webview2-com = "0.39.1"
+windows = { version = "0.62.2", features = [
+  "Win32_Foundation",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Dwm",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Registry",
+  "Win32_System_Console",
+  # The spawn and handshake path (03 sections 2.3 and 2.4): CreatePipe, and ReadFile/WriteFile/PeekNamedPipe
+  # with OVERLAPPED. Declared now so no stage B slice edits this manifest; tests/windows_features.rs uses both.
+  "Win32_System_Pipes",
+  "Win32_System_IO",
+  # keys.rs reads the Ctrl state with GetKeyState; window.rs opens the attribution link with ShellExecuteW (release).
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+] }
+# common-controls-v6: rfd draws OkCancelCustom as a task dialog (labels and answers); without it a plain OK/Cancel box.
+rfd = { version = "0.17.2", default-features = false, features = ["common-controls-v6"] }
+hmac = "0.13.0"
+sha2 = "0.11.0"
+rand = "0.10.3"
+zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

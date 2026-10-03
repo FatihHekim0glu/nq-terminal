@@ -39,3 +39,6 @@ docs/TASKS.md
 # Hash-pinned spec whose text names a local file outside this repository; the tests copy it
 # verbatim from the nq-lab project (backend/tests/opening_spec.py)
 backend/tests/fixtures/experiments/rebal_v1_confirm.json
+
+# Written by tauri-build into the shell crate on every build (capabilities schema the tests read)
+desktop/src-tauri/gen/

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>nq-lab terminal: page rebuild</title>
+<link rel="stylesheet" href="look.css">
+<style>
+.rebuild-step { display: none; }
+.rebuild-step:target { display: block; }
+main:not(:has(.rebuild-step:target)) #confirm { display: block; }
+.rebuild-command {
+  margin: 8px 0 12px;
+  padding: 8px 12px;
+  background: var(--chrome);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-mono);
+  white-space: pre;
+}
+</style>
+</head>
+<body>
+<main class="shell-page">
+  <section id="confirm" class="rebuild-step" aria-labelledby="confirm-title">
+    <h1 id="confirm-title">The terminal page needs a rebuild</h1>
+    <p class="shell-status" role="status" aria-live="polite">Waiting for your answer in the dialog</p>
+    <p class="shell-note">The page in your lab is older than its sources, or missing. If you choose Rebuild, the app runs
+      these two commands in the terminal\web folder of your lab (they run the page's package install scripts):</p>
+    <p class="rebuild-command">pnpm install --frozen-lockfile
+pnpm build</p>
+  </section>
+  <section id="running" class="rebuild-step" aria-labelledby="running-title">
+    <h1 id="running-title">Rebuilding the page</h1>
+    <p class="shell-status" role="status" aria-live="polite">Running pnpm install, then pnpm build</p>
+    <p class="shell-note">This can take a few minutes. The terminal opens here when the page is ready.</p>
+  </section>
+  <section id="done" class="rebuild-step" aria-labelledby="done-title">
+    <h1 id="done-title">Page rebuilt</h1>
+    <p class="shell-status" role="status" aria-live="polite">Opening the terminal</p>
+  </section>
+  <section id="needed" class="rebuild-step" aria-labelledby="needed-title">
+    <h1 id="needed-title">Rebuild needed</h1>
+    <p class="shell-status" role="status" aria-live="polite">The terminal page is out of date or missing</p>
+    <p class="shell-note">The app did not rebuild it. Run these two commands in the terminal\web folder of your lab,
+      then start the app again. Node 24 or newer and pnpm 11 must be on PATH.</p>
+    <p class="rebuild-command">pnpm install --frozen-lockfile
+pnpm build</p>
+  </section>
+  <section id="failed" class="rebuild-step" aria-labelledby="failed-title">
+    <h1 id="failed-title" class="shell-error">The rebuild failed</h1>
+    <p class="shell-status" role="status" aria-live="polite">pnpm stopped with an error</p>
+    <p class="shell-note">Run these two commands yourself in the terminal\web folder of your lab to see the error, then
+      start the app again:</p>
+    <p class="rebuild-command">pnpm install --frozen-lockfile
+pnpm build</p>
+  </section>
+</main>
+</body>
+</html>

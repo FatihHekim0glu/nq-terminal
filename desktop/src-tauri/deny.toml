@@ -1,0 +1,72 @@
+# cargo-deny configuration for the shell (03 section 6 item 2; 04 D4.1). Run by desktop/scripts/check.ps1 as
+# `cargo deny --locked check`. Banning by name does not stop a renamed crate, and this file does not claim it does:
+# lockfile changes are reviewed by hand (02 section 7.2).
+
+[graph]
+# The shell ships for Windows only; the Mac build gets its own graph when stage 3 starts.
+targets = ["x86_64-pc-windows-gnu", "x86_64-pc-windows-msvc"]
+all-features = false
+no-default-features = false
+
+[advisories]
+# Every advisory that matches a locked crate fails the check, unmaintained ones included.
+unmaintained = "all"
+yanked = "deny"
+ignore = []
+
+[licenses]
+# Permissive licences only. An unlisted licence fails the check and needs a reviewed entry here.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "Zlib",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# The shell crate itself is not published.
+ignore = true
+
+[bans]
+# Two majors of one crate (the windows crates above all) are normal in a Tauri graph and are not a risk here.
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = false
+deny = [
+  # No data path in the shell: nothing that reads parquet or columnar data (03 section 6).
+  { name = "parquet", reason = "the shell has no data path" },
+  { name = "arrow", reason = "the shell has no data path" },
+  { name = "arrow-array", reason = "the shell has no data path" },
+  { name = "arrow-buffer", reason = "the shell has no data path" },
+  { name = "arrow-data", reason = "the shell has no data path" },
+  { name = "arrow-ipc", reason = "the shell has no data path" },
+  { name = "arrow-schema", reason = "the shell has no data path" },
+  { name = "arrow2", reason = "the shell has no data path" },
+  { name = "polars", reason = "the shell has no data path" },
+  { name = "polars-core", reason = "the shell has no data path" },
+  { name = "polars-io", reason = "the shell has no data path" },
+  { name = "polars-arrow", reason = "the shell has no data path" },
+  { name = "duckdb", reason = "the shell has no data path" },
+  { name = "libduckdb-sys", reason = "the shell has no data path" },
+  { name = "datafusion", reason = "the shell has no data path" },
+  { name = "datafusion-common", reason = "the shell has no data path" },
+  # No broker connection of any kind in the shell.
+  { name = "ibapi", reason = "the shell never talks to a broker" },
+  { name = "ib-tws-api", reason = "the shell never talks to a broker" },
+  { name = "ibkr", reason = "the shell never talks to a broker" },
+  { name = "twsapi", reason = "the shell never talks to a broker" },
+  { name = "ib_async", reason = "the shell never talks to a broker" },
+  # No automatic updater (03 section 14; 02 C3-2).
+  { name = "tauri-plugin-updater", reason = "no automatic updater" },
+]
+
+[sources]
+# crates.io only: no git dependency and no other registry.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

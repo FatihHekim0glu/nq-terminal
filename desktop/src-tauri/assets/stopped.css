@@ -1,0 +1,17 @@
+/* The stopped page: one section per reason, chosen by the address fragment (stopped.html#<reason>). The page has no
+   script (the CSP allows none inline, and the shell's pages need none); with no fragment, or an unknown one, the
+   plain "stopped" section shows. Colours and type come from look.css. */
+
+.reason {
+  display: none;
+}
+
+.reason:target,
+main:not(:has(.reason:target)) #exited {
+  display: block;
+}
+
+.shell-note code {
+  font-family: var(--font-mono);
+  color: var(--data);
+}
