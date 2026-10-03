@@ -48,3 +48,10 @@ test('the README names the three workflow files as open items and the -Web group
   assert.match(readme, /check\.ps1 -Web/)
   assert.doesNotMatch(readme, /w4a-check/)
 })
+
+test('every pnpm step runs from the web folder (from the terminal folder this pnpm refuses the workspace file)', () => {
+  const step = /function Step-Pnpm[\s\S]*?\n}\n/.exec(check)?.[0] ?? ''
+  assert.ok(step.includes("'pnpm'"), 'Step-Pnpm calls pnpm')
+  assert.match(step, /-WorkDir \$web\b/)
+  assert.doesNotMatch(step, /-WorkDir \$Terminal/)
+})

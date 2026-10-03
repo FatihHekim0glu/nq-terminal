@@ -30,7 +30,8 @@
   Inputs outside the tree stamp (the record's "inputs" block, and "started_utc"): crosscheck records the smoke exe
   (path, sha256), the sha256 of web\dist (sorted names plus file hashes) and of the QA dump folder (with its newest
   write time); smoke-app records the smoke exe and web\dist. The exe is -SmokeExe, else NQT_SMOKE_EXE, else the default
-  smoke target. A run whose inputs changed while it ran gets no record. `-Inputs` prints them as JSON.
+  smoke target, and the check is launched with NQT_SMOKE_EXE set to that same exe (the caller's value is put back
+  afterwards), so the exe a record names is the exe that ran. A run whose inputs changed while it ran gets no record. `-Inputs` prints them as JSON.
   Python is only ever started by full path with -m. Nothing is written outside the records folder.
 .PARAMETER Check
   backend, crosscheck, smoke or smoke-app.
@@ -40,7 +41,8 @@
   Where records go (default terminal\state\release).
 .PARAMETER Lab
   The nq-lab folder (default: the parent of terminal when it holds a .venv, else $env:NQT_LAB, else the owner's
-  C:\Users\<user>\nq-lab).
+  C:\Users\<user>\nq-lab). Any lab other than the parent of terminal is a self-test hook (see -Exe): it needs an
+  explicit -RecordsDir and the record carries self_test = true.
 .PARAMETER TreeRoot
   Self-test hook: stamp this git tree instead of terminal (scripts/tests/release_check.tests.ps1).
 .PARAMETER Exe
@@ -192,6 +194,17 @@ function Invoke-Check {
     param([hashtable]$Command)
     $env:PYTHONPATH = Join-Path $Terminal 'backend'
     $env:UV_CACHE_DIR = 'D:\dev\uv-cache'
+    # The exe the record names is the exe the check launches: export the resolved path for the child processes
+    # (smoke_real.ps1 -Mode App and web\e2e\desktop\launch.ts read NQT_SMOKE_EXE), and put the caller's value back after.
+    # An absent default build is not exported, so the launcher's own fallback still applies (and the record says none).
+    $smokeBefore = [Environment]::GetEnvironmentVariable('NQT_SMOKE_EXE', 'Process')
+    $smokePath = Resolve-SmokeExePath
+    if ($SmokeExe -or (Test-Path -LiteralPath $smokePath -PathType Leaf)) { $env:NQT_SMOKE_EXE = $smokePath }
+    try { return (Invoke-CheckSteps $Command) } finally { [Environment]::SetEnvironmentVariable('NQT_SMOKE_EXE', $smokeBefore, 'Process') }
+}
+
+function Invoke-CheckSteps {
+    param([hashtable]$Command)
     $lines = New-Object System.Collections.Generic.List[string]
     $step = $Command
     $code = 0
@@ -238,12 +251,18 @@ function Get-TreeHash {
     return [ordered]@{ sha256 = $hex; count = $names.Count; newest_mtime_utc = $newest.ToUniversalTime().ToString('o') }
 }
 
-function Get-SmokeExeInfo {
-    # The smoke build the checks launch: -SmokeExe, else NQT_SMOKE_EXE, else the default target (the order smoke_real.ps1
-    # and the Playwright desktop project use). Its path and sha256, or $null when there is none.
+function Resolve-SmokeExePath {
+    # The one resolution of the smoke build: -SmokeExe, else NQT_SMOKE_EXE, else the default target (the order smoke_real.ps1
+    # and the Playwright desktop project use). The record and the launched check both take this path.
     $path = $SmokeExe
     if (-not $path) { $path = [Environment]::GetEnvironmentVariable('NQT_SMOKE_EXE', 'Process') }
     if (-not $path) { $path = 'D:\dev\targets\w5a-app-smoke\release\nq-lab-terminal.exe' }
+    return $path
+}
+
+function Get-SmokeExeInfo {
+    # The smoke build the checks launch, its path and sha256, or $null when there is none.
+    $path = Resolve-SmokeExePath
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return $null }
     return [ordered]@{ path = $path; sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant() }
 }
@@ -293,14 +312,17 @@ if ($Inputs) {
 }
 if (-not $Check) { Write-Error 'give -Check backend|crosscheck|smoke|smoke-app, or -Stamp or -Inputs'; exit 2 }
 
-$selfTest = [bool]($Exe -or $TreeRoot)
+$labDir = Resolve-Lab $Lab
+# Any lab other than the parent of terminal runs another venv's python (a stub, an older checkout): a hook as well.
+$ownLab = (Split-Path $Terminal -Parent).TrimEnd('\')
+$otherLab = -not ([System.IO.Path]::GetFullPath($labDir).TrimEnd('\') -ieq $ownLab)
+$selfTest = [bool]($Exe -or $TreeRoot -or $otherLab)
 if ($selfTest -and -not $RecordsDir) {
     # A self-test hook must never write where release_check.ps1 reads its records.
-    Write-Host 'record_green: -Exe and -TreeRoot are self-test hooks and need an explicit -RecordsDir; nothing was run or written.'
+    Write-Host 'record_green: -Exe, -TreeRoot and a lab other than the parent of terminal (-Lab, NQT_LAB) are self-test hooks and need an explicit -RecordsDir; nothing was run or written.'
     exit 2
 }
 if (-not $RecordsDir) { $RecordsDir = Join-Path $Terminal 'state\release' }
-$labDir = Resolve-Lab $Lab
 $canonical = Get-CheckCommand $Check $labDir
 $command = if ($Exe) { @{ exe = $Exe; args = $ExeArgs; cwd = $Terminal } } else { $canonical }
 # The record always names the check's own command (what a real run executes), never the hook program.

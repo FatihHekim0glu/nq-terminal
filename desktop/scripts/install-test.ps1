@@ -22,7 +22,11 @@
        one the release folder's payload holds (when it is there); no lab-data path (artefact-check.mjs --tree); no
        desktop shortcut and no start menu shortcut; the HKCU uninstall entry exists with the folder as
        InstallLocation and no HKLM entry; the app is not running (no process runs from the folder). The folder's ACL
-       is recorded.
+       is asserted: the script creates the run folder first with inheritance removed and full control for the current
+       user, SYSTEM and Administrators only (the layout of the default %LOCALAPPDATA% target, not D:\dev's inherited
+       Authenticated Users: Modify), and after the install neither the folder nor the exe, WebView2Loader.dll or
+       uninstall.exe may carry an Allow rule that lets Everyone, Users or Authenticated Users write, delete or change
+       permissions (matched by SID). The parent folder's ACL is recorded in the report as the contrast.
     5. The silent uninstall runs (it copies itself to TEMP and returns early, so the script waits for its process and
        the folder to go): no file is left, the HKCU uninstall entry is gone, no shortcut is left. The silent
        uninstaller leaves HKCU\Software\<manufacturer>\<product> (the install folder, kept for the next install); the
@@ -262,13 +266,65 @@ function Get-ProcessesFrom {
     return @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })
 }
 
+function Get-BroadWriters {
+    # Allow rules that let Everyone, Users or Authenticated Users (by SID, so a localised name cannot hide one) change or
+    # replace what is in the folder: WriteData/CreateFiles, AppendData, DeleteSubdirectoriesAndFiles, Delete,
+    # ChangePermissions or TakeOwnership. A pure function over the rules, so it can be tested.
+    param($Rules)
+    $broadSids = @('S-1-1-0', 'S-1-5-11', 'S-1-5-32-545')
+    $writeMask = 2 -bor 4 -bor 64 -bor 65536 -bor 262144 -bor 524288
+    return @($Rules | Where-Object { $_.type -eq 'Allow' -and ($broadSids -contains $_.sid) -and (($_.mask -band $writeMask) -ne 0) })
+}
+
 function Get-AclReport {
     param([string]$Folder)
     $acl = Get-Acl -LiteralPath $Folder
-    $rules = @($acl.Access | ForEach-Object { [ordered]@{ identity = "$($_.IdentityReference)"; rights = "$($_.FileSystemRights)"; type = "$($_.AccessControlType)"; inherited = $_.IsInherited } })
-    $broad = @($rules | Where-Object { $_.type -eq 'Allow' -and $_.identity -match 'Everyone|BUILTIN\\Users|Authenticated Users' -and $_.rights -match 'Write|Modify|FullControl' })
+    $rules = @($acl.Access | ForEach-Object {
+        $sid = ''
+        try { $sid = $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } catch { $sid = '' }
+        [ordered]@{ identity = "$($_.IdentityReference)"; sid = $sid; rights = "$($_.FileSystemRights)"; mask = [int]$_.FileSystemRights; type = "$($_.AccessControlType)"; inherited = $_.IsInherited } })
+    $broad = Get-BroadWriters $rules
     return [ordered]@{ owner = "$($acl.Owner)"; sddl = $acl.Sddl; protected = $acl.AreAccessRulesProtected; rules = $rules
         writable_by_broad_groups = @($broad | ForEach-Object { "$($_.identity): $($_.rights)" }) }
+}
+
+function Protect-InstallFolder {
+    # Creates the run folder the way the default per-user target looks (%LOCALAPPDATA%\<product>): inheritance removed,
+    # full control for the current user, SYSTEM and Administrators only. The installer then creates the files inside
+    # it and they inherit that. Without this the folder inherits whatever its parent grants (on D:\dev, Authenticated
+    # Users: Modify), which is not the layout a per-user install has.
+    param([string]$Folder)
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+    $dir = Get-Item -LiteralPath $Folder
+    $acl = $dir.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access)
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRule($rule) }
+    $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+    $admins = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')
+    foreach ($sid in @($user, $system, $admins)) {
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+    }
+    $dir.SetAccessControl($acl)
+}
+
+function Test-InstallAcl {
+    # The install folder and the files an attacker would replace must not be writable by any broad group. The ACL is
+    # recorded in the report too.
+    param([string]$Target, $Script)
+    $names = @('', "$($Script.MainBinary).exe", 'WebView2Loader.dll', 'uninstall.exe')
+    $bad = @()
+    $folderReport = $null
+    foreach ($name in $names) {
+        $path = if ($name -eq '') { $Target } else { Join-Path $Target $name }
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $r = Get-AclReport $path
+        if ($name -eq '') { $folderReport = $r }
+        foreach ($w in $r.writable_by_broad_groups) { $bad += "$(if ($name -eq '') { '<folder>' } else { $name }): $w" }
+    }
+    $protectedNote = if ($null -ne $folderReport) { "owner $($folderReport.owner); inheritance removed: $($folderReport.protected)" } else { 'folder missing' }
+    Add-Result 'install folder and binaries not writable by Everyone, Users or Authenticated Users' (($null -ne $folderReport) -and $bad.Count -eq 0) "$protectedNote; broad write: $($bad -join ' || ')"
+    return $folderReport
 }
 
 # ---- the window watch ------------------------------------------------------------------------------------------------------
@@ -427,7 +483,10 @@ function Invoke-InstallTest {
     $shortcuts = Get-ShortcutNames $facts
     $tracked = New-Object 'System.Collections.Generic.List[int]'
     $appSeen = New-Object 'System.Collections.Generic.List[string]'
-    $report = [ordered]@{ installer = $InstallerPath; target = $target }
+    $parent = Split-Path $target -Parent
+    $parentAcl = if (Test-Path -LiteralPath $parent) { Get-AclReport $parent } else { $null }
+    $report = [ordered]@{ installer = $InstallerPath; target = $target; parent_acl = $parentAcl }
+    Protect-InstallFolder $target
 
     [NqtWindowWatch]::Start()
     $install = Invoke-Install $InstallerPath $target $tracked $appSeen
@@ -437,8 +496,7 @@ function Invoke-InstallTest {
         Test-InstallRegistry $facts $target $true
         Test-NoShortcuts $facts $shortcuts 'after install'
         Add-Result 'app not started' (@($appSeen).Count -eq 0 -and @(Get-ProcessesFrom $target).Count -eq 0) "seen: $($appSeen -join ', ')"
-        $report['acl'] = Get-AclReport $target
-        Write-Host "ACL: owner $($report['acl'].owner); protected $($report['acl'].protected); broad write: $($report['acl'].writable_by_broad_groups -join ', ')"
+        $report['acl'] = Test-InstallAcl $target $facts
         $uninstall = Invoke-Uninstall $target $tracked $appSeen
         Add-Result 'silent uninstall' $uninstall.ok $uninstall.detail
         $left = @(if (Test-Path -LiteralPath $target) { Get-ChildItem -LiteralPath $target -Recurse -Force -File })
@@ -461,6 +519,46 @@ function Expect {
     Add-Result "self-test $Name" $Condition ''
 }
 
+function New-AclRule {
+    param([string]$Identity, [string]$Sid, [int]$Mask, [string]$Type = 'Allow')
+    return [ordered]@{ identity = $Identity; sid = $Sid; rights = "$Mask"; mask = $Mask; type = $Type; inherited = $true }
+}
+
+function Test-AclSelfTest {
+    # Born-failing checks of the ACL assertion: the rule sets and a real scratch folder, never an install.
+    $modify = 197055; $readExec = 131241; $full = 2032127
+    $everyone = New-AclRule 'Everyone' 'S-1-1-0' $modify
+    $authUsers = New-AclRule 'NT AUTHORITY\Authenticated Users' 'S-1-5-11' $modify
+    $localised = New-AclRule 'NT-AUTORITAET\Authentifizierte Benutzer' 'S-1-5-11' $modify
+    $users = New-AclRule 'BUILTIN\Users' 'S-1-5-32-545' $full
+    $usersRead = New-AclRule 'BUILTIN\Users' 'S-1-5-32-545' $readExec
+    $usersDeny = New-AclRule 'BUILTIN\Users' 'S-1-5-32-545' $modify 'Deny'
+    $system = New-AclRule 'NT AUTHORITY\SYSTEM' 'S-1-5-18' $full
+    $owner = New-AclRule 'PC\owner' 'S-1-5-21-1-2-3-1001' $full
+    Expect 'Authenticated Users with Modify is a broad writer (born failing)' (@(Get-BroadWriters @($system, $authUsers)).Count -eq 1)
+    Expect 'Everyone with Modify is a broad writer (born failing)' (@(Get-BroadWriters @($everyone)).Count -eq 1)
+    Expect 'Users with FullControl is a broad writer (born failing)' (@(Get-BroadWriters @($users)).Count -eq 1)
+    Expect 'a broad group is found by its SID when its name is localised (born failing)' (@(Get-BroadWriters @($localised)).Count -eq 1)
+    Expect 'read and execute for Users is not a writer' (@(Get-BroadWriters @($usersRead, $system, $owner)).Count -eq 0)
+    Expect 'a Deny rule is not a writer' (@(Get-BroadWriters @($usersDeny)).Count -eq 0)
+    Expect 'SYSTEM and the owner with FullControl are not broad writers' (@(Get-BroadWriters @($system, $owner)).Count -eq 0)
+    $folder = Join-Path $ScratchTemp ('acl-self-test-' + [guid]::NewGuid().ToString('N'))
+    try {
+        Protect-InstallFolder $folder
+        $report = Get-AclReport $folder
+        Expect 'a protected folder has inheritance removed and no broad writer' ($report.protected -and @($report.writable_by_broad_groups).Count -eq 0)
+        Expect 'a protected folder keeps the current user able to write' (@($report.rules | Where-Object { $_.type -eq 'Allow' -and ($_.mask -band 2) -ne 0 -and $_.identity -eq [Security.Principal.WindowsIdentity]::GetCurrent().Name }).Count -gt 0)
+        $dir = Get-Item -LiteralPath $folder
+        $acl = $dir.GetAccessControl([System.Security.AccessControl.AccessControlSections]::Access)
+        $sid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-11')
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'Modify', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+        $dir.SetAccessControl($acl)
+        Expect 'a real folder granted to Authenticated Users is reported (born failing)' (@((Get-AclReport $folder).writable_by_broad_groups).Count -eq 1)
+    } finally {
+        if (Test-Path -LiteralPath $folder) { Remove-Item -LiteralPath $folder -Recurse -Force }
+    }
+}
+
 function Invoke-SelfTest {
     $good = "!define PRODUCTNAME `"p`"`n!define MANUFACTURER `"m`"`n!define MAINBINARYNAME `"b`"`n!define INSTALLMODE `"currentUser`"`n" + '${GetOptions} $CMDLINE "/NS" $N' + "`n" + '${GetOptions} $CMDLINE "/R" $R0'
     Expect 'a script with /NS and /R and currentUser passes' ((Get-ScriptProblems (Read-InstallerScript $good)).Count -eq 0)
@@ -475,6 +573,7 @@ function Invoke-SelfTest {
     Expect 'an unchanged or null foreground is not a change' (-not [NqtWindowWatch]::ForegroundChanged(5, 5) -and -not [NqtWindowWatch]::ForegroundChanged(5, 0))
     $found = Get-WatchFindings @('window|1|99|D:\dev\d5\install\x\a.exe|c|t|0,0,1,1', 'window|2|98|C:\Other\b.exe|c|t|0,0,1,1') 'D:\dev\d5\install\x' @()
     Expect 'a window of the install folder is ours and another program is foreign' (@($found.ours).Count -eq 1 -and @($found.foreign).Count -eq 1)
+    Test-AclSelfTest
     [NqtWindowWatch]::Start()
     Start-Sleep -Milliseconds 1200
     $events = [NqtWindowWatch]::Stop()

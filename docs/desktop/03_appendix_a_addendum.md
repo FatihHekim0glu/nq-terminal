@@ -139,18 +139,33 @@ The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock
 | Phase | Module | Lines | Fate | Desktop form | Stage | Tests |
 |---|---|---:|---|---|---|---|
 | D5 (W5A) | `desktop/harness/run.mjs`, `report.mjs` | 66, 132 | new | the measurement harness entry (one mode per run, the reproduction gate, the CPU gate, a run folder under `D:\dev\d5\runs`) and the report with its strict `--check` | D5 | `desktop/harness/tests/report.test.mjs`, `gate.test.mjs` |
-| D5 (W5A) | `desktop/harness/modes/` (`rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest`) | 83, 172, 197, 36, 118, 84, 32, 146 | new | the eight modes of the harness; the self-test plants a spin, a window and a MinGW path to prove the guards reject them | D5 | `selftest.mjs` live, plus the unit tests below |
-| D5 (W5A) | `desktop/harness/lib/*.mjs`, `mem.ps1`, `probe.js`, `winctl.py`, `winwatch.py`, `plantwin.py` | 34 files | new | paths, row definitions, statistics, provenance, the gate and slot, the shell and backend launchers, the CDP client, the window watch and screen 2 guard, memory and survivor reads; every spawn hidden, a PATH with no build tools | D5 | `desktop/harness/tests/*.test.mjs` (107 tests) |
+| D5 (W5A) | `desktop/harness/modes/` (`rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest`) | 83, 172, 197, 36, 123, 84, 32, 146 | new | the eight modes of the harness; the self-test plants a spin, a window and a MinGW path to prove the guards reject them | D5 | `selftest.mjs` live, plus the unit tests below |
+| D5 (W5A) | `desktop/harness/lib/*.mjs`, `mem.ps1`, `probe.js`, `winctl.py`, `winwatch.py`, `plantwin.py` | 34 files | new | paths, row definitions, statistics, provenance, the gate and slot, the shell and backend launchers, the CDP client, the window watch and screen 2 guard, memory and survivor reads; every spawn hidden, a PATH with no build tools | D5 | `desktop/harness/tests/*.test.mjs` (110 tests) |
 | D5 (W5A) | `desktop/harness/reference/w0b-tauri.json`, `README.md` | 68, 126 | new | the W0B spike figures the reproduction gate compares against; the harness guide | D5 | `report.test.mjs` |
 | D5 (W5A) | `desktop/scripts/advisories.mjs` | 169 | new | the published Tauri advisories newer than `state/desktop/advisories.json` (D5.3, 05 X03) | D5 | `scripts/tests/advisories.test.mjs` |
 | D5 (W5A) | `desktop/scripts/dist-scan.mjs` | 134 | new | no private key, signing key or PRIVATE marker in `web/dist` or a bundle folder (05 X06) | D5 | `scripts/tests/dist-scan.test.mjs` |
-| D5 (W5A) | `desktop/scripts/artefact-check.mjs` | 258 | new | the release folder check: manifest, imports, execution level, updater absent, no lab data, the pinned loader | D5 | `scripts/tests/artefact-check.test.mjs` |
-| D5 (W5A) | `desktop/scripts/build-release.ps1` | 273 | new | the three builds (release, measure, smoke) with `SHA256SUMS`, `PROVENANCE.json` and the config copies | D5 | the artefact check |
-| D5 (W5A) | `desktop/scripts/install-test.ps1` | 511 | new | the silent per-user install and uninstall under `D:\dev\d5\install`, no admin, no window | D5 | `-SelfTest` |
-| D5 (W5A) | `scripts/record_green.ps1` | 243 | new | the four dated, stamped green records; `-Stamp` is the one provenance stamp definition | D5 | `scripts/tests/release_check.tests.ps1` |
-| D5 (W5A) | `scripts/release_check.ps1` | 193 | new | same-day, same-stamp records and an artefact check before a tag is allowed; never creates the tag | D5 | `scripts/tests/release_check.tests.ps1` (266 lines) |
-| D5 (W5A) | `web/playwright.desktop.config.ts` | 46 | new | the desktop Playwright project: attaches over CDP to the hidden smoke build; specs are `*.desktop.ts` so the browser project never matches them | D5 | `web/e2e/desktop/05-selftest.desktop.ts` |
+| D5 (W5A) | `desktop/scripts/artefact-check.mjs` | 295 | new | the release folder check: manifest, imports, execution level, updater absent, no lab data, the pinned loader | D5 | `scripts/tests/artefact-check.test.mjs` |
+| D5 (W5A) | `desktop/scripts/build-release.ps1` | 307 | new | the three builds (release, measure, smoke) with `SHA256SUMS`, `PROVENANCE.json` and the config copies | D5 | the artefact check |
+| D5 (W5A) | `desktop/scripts/install-test.ps1` | 610 | new | the silent per-user install and uninstall under `D:\dev\d5\install`, no admin, no window | D5 | `-SelfTest` |
+| D5 (W5A) | `scripts/record_green.ps1` | 352 | new | the four dated, stamped green records; `-Stamp` is the one provenance stamp definition | D5 | `scripts/tests/release_check.tests.ps1` |
+| D5 (W5A) | `scripts/release_check.ps1` | 311 | new | same-day, same-stamp records and an artefact check before a tag is allowed; never creates the tag | D5 | `scripts/tests/release_check.tests.ps1` (505 lines) |
+| D5 (W5A) | `web/playwright.desktop.config.ts` | 51 | new | the desktop Playwright project: attaches over CDP to the hidden smoke build; specs are `*.desktop.ts` so the browser project never matches them | D5 | `web/e2e/desktop/05-selftest.desktop.ts` |
 | D5 (W5A) | `web/e2e/desktop/` (`launch.ts`, `watch.ts`, `watch.ps1`, `quiet.ts`, `fixtures.ts`, `app.ts`, `clipboard.ts`, `browserFixture.ts`, `served-session.ts`, `setup.ts`, `run.ts`, `smoke.app.ts`) | 12 files | new | launch under the launch prelude, the global window and foreground watch, the quiet-machine guard, the derived lab outside the real lab, the app mode of the real-data smoke | D5 | the specs below |
 | D5 (W5A) | `web/e2e/desktop/*.desktop.ts` (`05-selftest`, `10-walk`, `20-stream`, `30-export`, `40-keys`, `50-zoom`, `60-print`, `70-parity`, `90-look`, `99-window-watch`) | 10 specs | new | the walk, stream, export, key, zoom, print, bars-parity and look checks of the app (34 tests); the look compares read-only with `e2e/__screenshots__` | D5 | themselves |
-| D5 (W5A) | `qa/crosscheck/served.py` | 284 | new | the served-JSON comparison: the cached dump bodies against what the hidden app serves; part of G2 beside `crosscheck --strict` | D5 | `qa/tests/test_served.py` |
-| D5 (W5A) | `qa/tests/test_served.py` | 205 | new | 26 tests, with a planted one-byte difference | D5 | itself |
+| D5 (W5A) | `qa/crosscheck/served.py` | 306 | new | the served-JSON comparison: the cached dump bodies against what the hidden app serves; part of G2 beside `crosscheck --strict` | D5 | `qa/tests/test_served.py` |
+| D5 (W5A) | `qa/tests/test_served.py` | 273 | new | 34 tests, with a planted one-byte difference | D5 | itself |
+| D5 (W5A) | `desktop/scripts/webview2-bootstrapper.ps1` | 45 | new | the check of the WebView2 bootstrapper that the installer embeds: the path from the generated installer script and a valid Authenticode signature by Microsoft Corporation, recorded in `PROVENANCE.json` by `build-release.ps1` | D5 | `scripts/tests/webview2-bootstrapper.test.mjs`, `artefact-check.test.mjs` |
+| D5 (W5A) | `desktop/scripts/tests/webview2-bootstrapper.test.mjs` | 80 | new | tests of the bootstrapper check (an unsigned file, a missing file, another publisher, the path read from the installer define, no define, the cached file signed by Microsoft) | D5 | itself |
+| D5 (W5A) | `desktop/scripts/tests/check-script.test.mjs` | 57 | new | tests of the scope claims of `check.ps1`: neutral default folders, the web group, the offline step waiting for other Playwright runs, the header, the open items named in `desktop/README.md` | D5 | itself |
+
+## Preflight of 3 October 2026 (integration INT2, D5 step 1 merged into the main tree)
+
+`gen_03_tables.py` was run on the main tree at the merge commit `ed9a40c` (the D5 step 1 branch merged on the INT1 result `cc62248`) plus this wave's uncommitted tree, with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and other rows | 127, 25, 26 and 36 |
+| Unmapped rows | 0 |
+| Conflict markers, `target` and `node_modules` folders under `desktop/`, LF line endings, wave order of this file | checked by `backend/tests/test_desktop_tree.py` |
+| New modules in this wave | none; the two README conflicts of the merge were resolved by keeping the newer status of the main tree and bringing in the D5 step 1 text |
+| Other build workflows on the repository | none besides the owner's 8765 backend (pid 46084, without `--reload`) |

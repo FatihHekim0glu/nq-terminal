@@ -55,10 +55,13 @@ function Get-TreeStamp {
 function Get-CanonicalCommand {
     # The command text record_green.ps1 writes for a real run of each check (paths vary, the shape does not).
     param([string]$Check)
-    $smoke = 'powershell -NoProfile -ExecutionPolicy Bypass -File D:\lab\terminal\scripts\smoke_real.ps1'
+    # release_check.ps1 compares the text exactly, so the paths are the real terminal and its parent (the lab).
+    $terminal = Split-Path $Scripts -Parent
+    $lab = Split-Path $terminal -Parent
+    $smoke = "powershell -NoProfile -ExecutionPolicy Bypass -File $terminal\scripts\smoke_real.ps1"
     switch ($Check) {
-        'backend' { return 'D:\lab\.venv\Scripts\python.exe -m pytest -p no:warnings -o addopts= -q D:\lab\terminal\backend\tests' }
-        'crosscheck' { return 'uv run --project D:\lab\terminal\qa python -m crosscheck --strict ; then uv run --project D:\lab\terminal\qa python -m crosscheck.served' }
+        'backend' { return "$lab\.venv\Scripts\python.exe -m pytest -p no:warnings -o addopts= -q $terminal\backend\tests" }
+        'crosscheck' { return "uv run --project $terminal\qa python -m crosscheck --strict ; then uv run --project $terminal\qa python -m crosscheck.served" }
         'smoke' { return $smoke }
         'smoke-app' { return "$smoke -Mode App" }
     }
@@ -237,6 +240,27 @@ if (-not $untouched) {
 }
 Check 'a self-test hook with the default records folder is refused and writes nothing (born failing)' (($refusedCode -eq 2) -and $untouched)
 
+# -Lab changes which program runs, so it is a self-test hook too: a stub at <lab>\.venv\Scripts\python.exe must leave a
+# self_test record (which release_check.ps1 refuses), and without an explicit -RecordsDir it must be refused outright.
+$stubLab = Join-Path $Scratch 'stub-lab'
+New-Item -ItemType Directory -Force -Path (Join-Path $stubLab '.venv\Scripts') | Out-Null
+Add-Type -TypeDefinition 'public static class StubPython { public static int Main() { return 0; } }' -OutputAssembly (Join-Path $stubLab '.venv\Scripts\python.exe') -OutputType ConsoleApplication   # a do-nothing exe that exits 0
+$labRecords = Join-Path $Scratch 'rg-lab-records'
+$null = & $Record -Check backend -Lab $stubLab -RecordsDir $labRecords *>&1
+$labFile = Join-Path $labRecords ((Get-Date).ToString('yyyy-MM-dd') + '_backend.json')
+$labRec = if (Test-Path -LiteralPath $labFile) { Get-Content -Raw $labFile | ConvertFrom-Json } else { $null }
+Check 'a record made with -Lab pointing at a stub is marked self_test (born failing)' (($null -ne $labRec) -and ($labRec.self_test -eq $true))
+
+$labBefore = if (Test-Path -LiteralPath $realFile) { [System.IO.File]::ReadAllBytes($realFile) } else { $null }
+$null = & $Record -Check backend -Lab $stubLab *>&1
+$labRefusedCode = $LASTEXITCODE
+$labAfter = if (Test-Path -LiteralPath $realFile) { [System.IO.File]::ReadAllBytes($realFile) } else { $null }
+$labUntouched = ($null -eq $labBefore -and $null -eq $labAfter) -or ($null -ne $labBefore -and $null -ne $labAfter -and [System.Linq.Enumerable]::SequenceEqual([byte[]]$labBefore, [byte[]]$labAfter))
+if (-not $labUntouched) {
+    if ($null -eq $labBefore) { Remove-Item -LiteralPath $realFile -Force } else { [System.IO.File]::WriteAllBytes($realFile, [byte[]]$labBefore) }
+}
+Check '-Lab with the default records folder is refused and writes nothing (born failing)' (($labRefusedCode -eq 2) -and $labUntouched)
+
 # ---- release_check.ps1 -----------------------------------------------------------------------------------------------
 
 $case = New-Case 'ok'
@@ -326,6 +350,17 @@ Write-RecordFile $case.records $Today 'smoke' $case.stamp $Pc 0 'cmd.exe /c exit
 $r = Invoke-ReleaseCheck $case.args
 Check 'a record whose command is not the check''s own is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'command'))
 
+$case = New-Case 'other-lab-command'
+$otherLabCommand = (Get-CanonicalCommand 'backend').Replace((Split-Path (Split-Path $Scripts -Parent) -Parent) + '\.venv', 'D:\elsewhere\.venv')
+Write-RecordFile $case.records $Today 'backend' $case.stamp $Pc 0 $otherLabCommand
+$r = Invoke-ReleaseCheck $case.args
+Check 'a backend record that names another lab''s python is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'not the command of the backend check'))
+
+$case = New-Case 'other-terminal-command'
+Write-RecordFile $case.records $Today 'backend' $case.stamp $Pc 0 ((Get-CanonicalCommand 'backend').Replace('\backend\tests', '\x\backend\tests'))
+$r = Invoke-ReleaseCheck $case.args
+Check 'a backend record that names another test folder is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'not the command of the backend check'))
+
 $case = New-Case 'no-command'
 $bare = [ordered]@{ check = 'backend'; date = $Today; pc = $Pc; exit_code = 0; counts = @{}; stamp = $case.stamp }
 [System.IO.File]::WriteAllText((Join-Path $case.records "${Today}_backend.json"), ($bare | ConvertTo-Json -Depth 6), $Utf8)
@@ -399,6 +434,24 @@ Check 'a passing crosscheck record carries the inputs and the start of the run (
 Remove-Item -LiteralPath $inRecords -Recurse -Force -ErrorAction SilentlyContinue
 $null = & $Record -Check crosscheck -TreeRoot $inTree -RecordsDir $inRecords -Exe $shell -ExeArgs @('-NoProfile', '-Command', "Set-Content -Path '$distCopy\assets\app.js' -Value changed; exit 0") @hooks *>&1
 Check 'a check that changes web\dist while it runs writes no record (born failing)' (($LASTEXITCODE -eq 1) -and -not (Test-Path $inFile))
+
+# The exe a record names must be the exe the check launches: -SmokeExe is exported to the check as NQT_SMOKE_EXE (the
+# variable smoke_real.ps1 -Mode App and the desktop Playwright project read), over an NQT_SMOKE_EXE already set.
+$otherExe = Join-Path $Scratch 'other-smoke.exe'
+[System.IO.File]::WriteAllText($otherExe, 'another build', $Utf8)
+$probe = Join-Path $Scratch 'launched-exe.txt'
+$probeRecords = Join-Path $Scratch 'probe-records'
+$envBefore = $env:NQT_SMOKE_EXE
+$env:NQT_SMOKE_EXE = $otherExe
+$null = & $Record -Check crosscheck -TreeRoot $inTree -RecordsDir $probeRecords -Exe $shell -ExeArgs @('-NoProfile', '-Command', "[System.IO.File]::WriteAllText('$probe', [string]`$env:NQT_SMOKE_EXE); exit 0") @hooks *>&1
+$envAfter = $env:NQT_SMOKE_EXE
+$env:NQT_SMOKE_EXE = $envBefore
+$launched = if (Test-Path -LiteralPath $probe) { [System.IO.File]::ReadAllText($probe) } else { '' }
+$probeFile = Join-Path $probeRecords ((Get-Date).ToString('yyyy-MM-dd') + '_crosscheck.json')
+$probeRec = if (Test-Path -LiteralPath $probeFile) { Get-Content -Raw $probeFile | ConvertFrom-Json } else { $null }
+Check '-SmokeExe is the exe the check launches, not a different NQT_SMOKE_EXE (born failing)' ($launched -eq $SmokeExeFile)
+Check 'the record names the exe that was launched' (($null -ne $probeRec) -and ($probeRec.inputs.smoke_exe.path -eq $launched))
+Check 'record_green leaves the caller''s NQT_SMOKE_EXE as it found it' ($envAfter -eq $otherExe)
 
 $case = New-Case 'no-inputs'
 Write-InputRecord $case.records $Today 'crosscheck' $case.stamp

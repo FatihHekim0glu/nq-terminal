@@ -59,11 +59,14 @@ $Terminal = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Failures = New-Object System.Collections.Generic.List[string]
 $RequiredChecks = @('backend', 'crosscheck', 'smoke')
 # The command text record_green.ps1 writes for each check (04 D5.4: the record must come from the check's own command).
+# Compared for exact equality: the lab is the parent of this terminal and the paths are this terminal's own.
+$LabRoot = (Split-Path $Terminal -Parent)
+$SmokeCommand = "powershell -NoProfile -ExecutionPolicy Bypass -File $Terminal\scripts\smoke_real.ps1"
 $CanonicalCommands = @{
-    'backend' = '^.+\\\.venv\\Scripts\\python\.exe -m pytest -p no:warnings -o addopts= -q .+\\backend\\tests$'
-    'crosscheck' = '^uv run --project .+\\qa python -m crosscheck --strict ; then uv run --project .+\\qa python -m crosscheck\.served$'
-    'smoke' = '^powershell -NoProfile -ExecutionPolicy Bypass -File .+\\scripts\\smoke_real\.ps1$'
-    'smoke-app' = '^powershell -NoProfile -ExecutionPolicy Bypass -File .+\\scripts\\smoke_real\.ps1 -Mode App$'
+    'backend' = "$LabRoot\.venv\Scripts\python.exe -m pytest -p no:warnings -o addopts= -q $Terminal\backend\tests"
+    'crosscheck' = "uv run --project $Terminal\qa python -m crosscheck --strict ; then uv run --project $Terminal\qa python -m crosscheck.served"
+    'smoke' = $SmokeCommand
+    'smoke-app' = "$SmokeCommand -Mode App"
 }
 
 function Add-Check {
@@ -117,7 +120,7 @@ function Get-ProvenanceProblems {
     $out = @()
     if ((Get-Prop $Record 'self_test') -ne $false) { $out += 'the record does not say self_test = false (a self-test record or one written by hand)' }
     $command = Get-Prop $Record 'command'
-    if ($command -isnot [string] -or $command -notmatch $CanonicalCommands[$Name]) { $out += "the record's command is not the command of the $Name check ('$command')" }
+    if ($command -isnot [string] -or $command -ine $CanonicalCommands[$Name]) { $out += "the record's command is not the command of the $Name check ('$command')" }
     return ,@($out)
 }
 

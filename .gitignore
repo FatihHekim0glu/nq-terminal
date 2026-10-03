@@ -44,3 +44,7 @@ backend/tests/fixtures/experiments/rebal_v1_confirm.json
 
 # Written by tauri-build into the shell crate on every build (capabilities schema the tests read)
 desktop/src-tauri/gen/
+
+# A harness run folder or an installer must never reach the repository (both are made on the D drive)
+desktop/harness/runs/
+*-setup.exe

@@ -79,10 +79,15 @@ async function stopDemoServer(server) {
   return stopOwned(server.child, tree, { names: new Set(['node.exe']) })
 }
 
+/** The Playwright command and its working folder: pnpm must run from the web folder, which this pnpm requires for its workspace file. */
+export function playwrightSpawn(args) {
+  return { cmd: args.opt('playwright-cmd', 'corepack pnpm e2e:desktop'), cwd: path.join(TERMINAL, 'web') }
+}
+
 function runPlaywright(args, env) {
-  const cmd = args.opt('playwright-cmd', 'corepack pnpm --dir web e2e:desktop')
+  const { cmd, cwd } = playwrightSpawn(args)
   return new Promise((res) => {
-    const c = spawn(cmd, [], { cwd: TERMINAL, windowsHide: true, env: launchEnv(process.env, env), stdio: ['ignore', 'pipe', 'pipe'], shell: true })
+    const c = spawn(cmd, [], { cwd, windowsHide: true, env: launchEnv(process.env, env), stdio: ['ignore', 'pipe', 'pipe'], shell: true })
     let out = ''
     c.stdout.on('data', (d) => { out += d }); c.stderr.on('data', (d) => { out += d })
     c.once('exit', (code) => res({ code, tail: out.slice(-2000) }))

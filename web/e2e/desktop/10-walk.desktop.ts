@@ -30,6 +30,8 @@ const WALK: readonly Stop[] = [
 const FRAME_WINDOW_MS = 1000
 /** A visible page runs near the display rate (about 240 frames a second was measured); a hidden, throttled one stops. */
 const MIN_FRAMES = 20
+/** The page debounces its store writes by 500 ms; wait for them to land before the next HOME is opened. */
+const STORE_SETTLE_MS = 1500
 
 test.describe('the app walk', () => {
   test('the page is visible behind the hidden window: frames run and timers tick', async ({ page }) => {
@@ -49,6 +51,22 @@ test.describe('the app walk', () => {
     await openHome(page)
     await expect(page.getByRole('contentinfo')).toContainText('KILL off')
     expectClean(w, run.origin)
+  })
+
+  test('a panel an earlier spec left in the workspace store does not reach the next HOME', async ({ page }) => {
+    // The app keeps the workspace in its state folder (D3): the HELP index panel opened here (F1 twice from a panel, as
+    // 40-keys does) would come back on every later HOME.
+    await openHome(page, { dismissed: true })
+    await page.keyboard.press('Control+k')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('F1')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('F1')
+    await page.keyboard.press('F1')
+    await expect(page.locator('[data-nqt-title="HELP"]')).toHaveCount(1)
+    await page.waitForTimeout(STORE_SETTLE_MS)
+    await openHome(page) // fails unless the store was put back: it waits for exactly the four panels
+    await expect(page.locator('[data-nqt-title="HELP"]')).toHaveCount(0)
   })
 
   test('LEDG, OOS, NQ GP 1d, volmanaged_v0 EQ, LIVE, 27F MON, REG and HOME again open from the command line', async ({ page, run }) => {

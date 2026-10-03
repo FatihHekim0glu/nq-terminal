@@ -49,6 +49,18 @@ def test_gitignore_keeps_generated_and_target_folders_out() -> None:
     assert "desktop/src-tauri/gen/" in lines
     assert "target/" in lines, "a Rust target folder must never reach the repository, wherever it is made"
     assert "node_modules/" in lines
+    # The records of the release scripts (state/release) and the advisory last-seen date (state/desktop) sit in the
+    # git-ignored state folder; a harness run folder or an installer that strays into the repository stays out too.
+    assert "/state/" in lines
+    assert "desktop/harness/runs/" in lines
+    assert "*-setup.exe" in lines
+
+
+def test_harness_and_release_output_roots_are_on_the_d_drive() -> None:
+    paths = (DESKTOP / "harness" / "lib" / "paths.mjs").read_text(encoding="utf-8")
+    roots = re.findall(r"export const (?:RUNS|TARGETS|RELEASE|TMP)_(?:ROOT|DIR) = '([^']+)'", paths)
+    assert len(roots) == 4, roots
+    assert all(re.match(r"d:\\+dev\\+", r, flags=re.IGNORECASE) for r in roots), roots  # the source spells each \ twice
 
 
 def test_no_target_or_node_modules_folder_under_desktop() -> None:
@@ -84,7 +96,13 @@ def test_added_module_table_is_in_phase_order_and_keeps_every_wave() -> None:
 
 def test_every_shell_source_file_and_script_has_a_row() -> None:
     text = _addendum()
-    files = [*sorted((DESKTOP / "src-tauri" / "src").rglob("*.rs")), *sorted((DESKTOP / "scripts").iterdir())]
+    # Every shell source, every script and every script test (a folder is not a row: its files are), and the harness
+    # entry files; the harness folders are rows of their own as globs (`lib/`, `modes/`, `tests/`).
+    scripts = [p for p in sorted((DESKTOP / "scripts").rglob("*")) if p.is_file() and not SKIP_PARTS.intersection(p.parts)]
+    harness = [p for p in sorted((DESKTOP / "harness").glob("*")) if p.is_file() and p.suffix == ".mjs"]
+    files = [*sorted((DESKTOP / "src-tauri" / "src").rglob("*.rs")), *scripts, *harness]
     assert len(files) > 25
     missing = [p.name for p in files if f"{p.name}`" not in text]  # named in a row, bare or as a path
     assert missing == []
+    for folder in ("lib", "modes", "tests"):
+        assert f"desktop/harness/{folder}/" in text, f"no row names the harness folder {folder}/"

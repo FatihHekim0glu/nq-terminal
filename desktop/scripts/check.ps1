@@ -353,7 +353,7 @@ function Step-Pnpm {
     param([string]$Name, [string]$Script)
     $web = Join-Path $Terminal 'web'
     if (-not (Test-Path (Join-Path $web 'node_modules'))) { Add-Result $Name $false "no web\node_modules (make a junction to the lab's, never install here)"; return }
-    $code = Invoke-Logged -Name $Name -File 'corepack' -WorkDir $Terminal -Arguments @('pnpm', '--dir', $web, $Script)
+    $code = Invoke-Logged -Name $Name -File 'corepack' -WorkDir $web -Arguments @('pnpm', '--dir', $web, $Script)
     $tail = (Get-Content (Join-Path $LogDir "$Name.log") -Tail 1 -ErrorAction SilentlyContinue) -join ''
     Add-Result $Name ($code -eq 0) "exit $code, pnpm $Script, $tail"
 }

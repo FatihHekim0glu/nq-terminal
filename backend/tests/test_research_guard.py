@@ -297,6 +297,21 @@ def test_session_guard_covers_the_research_folders(research_files_guard):
     assert research_files_guard.would_block("os.mkdir", (str(ROOT / "results" / "new"), 0o777, None))
 
 
+def test_session_guard_covers_both_state_folders(research_files_guard):
+    """The checkout's terminal/state and the shared lab's (ROOT/terminal/state, the owner's live folder, which is a
+    different folder in a worktree): an older conftest let a test leave nqt-planted.txt in the shared one."""
+    from conftest import MAIN_STATE_DIR, REAL_STATE_DIR
+    from nq_lab.config import ROOT
+
+    assert MAIN_STATE_DIR == ROOT / "terminal" / "state"
+    for folder in (MAIN_STATE_DIR, REAL_STATE_DIR):
+        for path in (folder / "nqt-planted.txt", folder / "release" / "x.json", folder / "workspaces" / "w.json"):
+            assert research_files_guard.would_block("open", (str(path), "w", 0)) is not None, path
+            assert research_files_guard.would_block("os.remove", (str(path), None)) is not None, path
+            assert research_files_guard.would_block("open", (str(path), "r", 0)) is None, path
+        assert research_files_guard.would_block("os.mkdir", (str(folder / "cache"), 0o777, None))
+
+
 def test_a_backend_with_the_prewarm_off_and_no_fixture_is_not_recorded(guard, files):
     """The handshake and lock tests start the app's own backend with NQT_PREWARM=0 and only ask the proof and health routes."""
     note_child(["-m", "nq_terminal"], {"NQT_DESKTOP": "1", "NQT_PREWARM": "0"})
