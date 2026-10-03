@@ -40,6 +40,10 @@ The plan to turn the nq-lab terminal from a local web app into native apps for W
 | [research/](research/) | The seven research lenses listed above. |
 | [baseline/](baseline/), [spike_d0/](spike_d0/), [spike_electron/](spike_electron/) | The D0 static baseline, the WebView2 probes and the Electron harness with its T2 figures. |
 | [stage1/](stage1/) | The stage 1 measurement script, its records and the seam specs (D1 and D3 numbers, the T3 reading). |
+| [handover_windows.md](handover_windows.md) | The Windows hand-over (D6): what was built; install, run, update and roll back; both doors at once; the permission (ACL) runbook; the release procedure; troubleshooting; and the list of owner checks. A draft until W6 fills its placeholders. |
+| [smartscreen.md](smartscreen.md) | What SmartScreen and Smart App Control do with the unsigned installer, how to verify it, how to proceed safely, the first-run record and the signing options. |
+| [owner_decisions_windows.md](owner_decisions_windows.md) | The register of the owner decisions for the Windows app: those delegated on 3 October 2026 with the standard each follows, the plan's fourteen, what is still open, the accepted departures from 03 and what is deferred. |
+| [checks/](checks/README.md) | One dated template for each owner-run check (custom install folder, reboot first launch, visible run, real keyboard, zoom, NVDA, Narrator, JOBS backtest, SmartScreen, soak, pending measurements, weekly parity) and the four-week dual-run kit. |
 | `../../desktop/` | The Windows shell: the Tauri crate in `src-tauri/`, the check scripts in `scripts/`, and its own README. |
 | `nq-lab/desktop_research/spike_webview2/` | Scripts and raw output of the WebView2 spike. |
 | `nq-lab/desktop_research/spike_rust/` | Scripts, shell and chart source, and raw output of the Rust spike. |

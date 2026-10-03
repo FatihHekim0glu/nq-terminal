@@ -106,3 +106,16 @@ def test_every_shell_source_file_and_script_has_a_row() -> None:
     assert missing == []
     for folder in ("lib", "modes", "tests"):
         assert f"desktop/harness/{folder}/" in text, f"no row names the harness folder {folder}/"
+
+
+def test_check_templates_do_not_demand_the_whole_evidence_check_of_a_single_purpose_folder() -> None:
+    """`report.mjs DIR --check` fails unless both builds carry every row (a one-purpose folder never does), so a
+    template must read the folder with the plain table or --json and must not make that check a pass rule."""
+    offenders = []
+    for path in sorted((TERMINAL / "docs" / "desktop" / "checks").glob("*.md")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if "report.mjs" in line and "--check" in line:
+                offenders.append(f"{path.name}:{number} runs report.mjs with --check")
+            if "report's `--check` passes" in line:
+                offenders.append(f"{path.name}:{number} makes report.mjs --check a pass rule")
+    assert not offenders, offenders
