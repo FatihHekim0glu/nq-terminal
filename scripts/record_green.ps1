@@ -135,6 +135,18 @@ function Resolve-Lab {
     return (Join-Path $env:USERPROFILE 'nq-lab')
 }
 
+function Test-XdistImportable {
+    # True when the venv's python can import pytest-xdist (the backend check then runs in parallel).
+    param([string]$Python)
+    if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) { return $false }
+    $before = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $Python -c 'import xdist' *> $null
+        return ($LASTEXITCODE -eq 0)
+    } catch { return $false } finally { $ErrorActionPreference = $before }
+}
+
 function Get-CheckCommand {
     # The program, its arguments and its working folder for one named check.
     param([string]$Name, [string]$LabDir)
@@ -142,7 +154,12 @@ function Get-CheckCommand {
     $smoke = Join-Path $Terminal 'scripts\smoke_real.ps1'
     $ps = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $smoke)
     switch ($Name) {
-        'backend' { return @{ exe = $python; args = @('-m', 'pytest', '-p', 'no:warnings', '-o', 'addopts=', '-q', (Join-Path $Terminal 'backend\tests')); cwd = $LabDir } }
+        'backend' {
+            # Parallel (-n 16, one worker per test file) only when this venv imports xdist; else the serial command.
+            $pytestArgs = @('-m', 'pytest', '-p', 'no:warnings', '-o', 'addopts=', '-q')
+            if (Test-XdistImportable $python) { $pytestArgs += @('-n', '16', '--dist', 'loadfile') }
+            return @{ exe = $python; args = ($pytestArgs + @((Join-Path $Terminal 'backend\tests'))); cwd = $LabDir }
+        }
         'crosscheck' {
             # G2 needs both: the strict comparison of the dumps, then the served JSON of the hidden app (neither passes alone).
             $uv = @('run', '--project', (Join-Path $Terminal 'qa'), 'python', '-m')
@@ -325,8 +342,9 @@ if ($selfTest -and -not $RecordsDir) {
 if (-not $RecordsDir) { $RecordsDir = Join-Path $Terminal 'state\release' }
 $canonical = Get-CheckCommand $Check $labDir
 $command = if ($Exe) { @{ exe = $Exe; args = $ExeArgs; cwd = $Terminal } } else { $canonical }
-# The record always names the check's own command (what a real run executes), never the hook program.
+# The record always names the check's own command (the serial form for backend, whatever workers ran), never the hook program.
 $commandText = Format-CommandText $canonical
+if ($Check -eq 'backend') { $commandText = $commandText -replace ' -n 16 --dist loadfile', '' }
 Write-Host "record_green: $Check in $($command.cwd): $(Format-CommandText $command)"
 
 $before = Get-ProvenanceStamp $StampRoot

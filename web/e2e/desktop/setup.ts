@@ -4,15 +4,15 @@
 // backend over the lab NQT_APP_LAB names, no --fixture), reads DevToolsActivePort and hands what the specs need to them in a run file
 // (NQT_DESKTOP_RUN_FILE). With NQT_DESKTOP_ATTACH_CDP and NQT_DESKTOP_ATTACH_URL set (the harness's t8 mode, e2e/desktop/attach.ts)
 // it launches nothing and attaches to the shell the harness started. The function it returns is the tear-down: it ends the process tree this set-up started (and only
-// that), stops the watch, writes the run record and fails the run when the watch saw a window or a foreground change or
-// when a backend outlived the shell.
+// that), stops the watch, writes the run record and fails the run when the watch saw a window or a foreground change of this
+// run's app tree (other programs' are notes in the record) or when a backend outlived the shell.
 import fs from 'node:fs'
 import path from 'node:path'
 import { attachTarget, type AttachTarget } from './attach.ts'
 import { findSmokeExe, launchApp, newRunDir, resolveLab } from './launch.ts'
 import { waitForQuietMachine, type RunLock } from './quiet.ts'
 import { RUN_FILE_ENV, type RunInfo } from './run.ts'
-import { judge, startWatch } from './watch.ts'
+import { assess, startWatch } from './watch.ts'
 
 const WINDOW_SIZE = '1920x1080'
 
@@ -85,9 +85,9 @@ async function desktopSetup(lock: RunLock): Promise<() => Promise<void>> {
   async function tearDown(): Promise<void> {
     const stopped = await launched.stop()
     const report = await watch.finish()
-    const failures = judge(report.events, launched.pid)
+    const { failures, notes } = assess(report.events, launched.pid)
     if (!stopped.backendGone) failures.push(`the backend (pid ${stopped.backendPid}) outlived the shell's tree`)
-    fs.writeFileSync(path.join(runDir, 'record.json'), JSON.stringify({ ...info, stopped, watch: { samples: report.samples, maxGapMs: report.maxGapMs, failures } }, null, 2))
+    fs.writeFileSync(path.join(runDir, 'record.json'), JSON.stringify({ ...info, stopped, watch: { samples: report.samples, maxGapMs: report.maxGapMs, failures, notes } }, null, 2))
     if (failures.length > 0) throw new Error(`the desktop run left a mark on the machine:\n${failures.join('\n')}`)
   }
 }

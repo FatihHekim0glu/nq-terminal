@@ -107,7 +107,7 @@ export function dryVerdict(name, out) {
   const real = name === 'minimise-real'
   const extra = real ? { allowed: watch?.allowed?.length ?? 0, guardAfter: r.guardAfter?.ok, foregroundUnchanged: r.foreground?.unchanged } : {}
   const modeOk = name.startsWith('minimise') ? r.passed === true : true
-  return { ok: status === 'dry' && windowsOk && modeOk && (!real || (r.guardAfter?.ok === true && r.foreground?.unchanged === true)), detail: { status, newWindows: watch?.newWindows?.length, foregroundChanges: watch?.foregroundChanges?.length, problems: r.problems, fatal: r.fatal?.slice(0, 200), rows: r.rows, ...extra } }
+  return { ok: status === 'dry' && windowsOk && modeOk && (!real || (r.guardAfter?.ok === true && r.foreground?.unchanged === true)), detail: { status, newWindows: watch?.newWindows?.length, foregroundChanges: watch?.foregroundChanges?.length, notes: watch?.notes?.length, problems: r.problems, fatal: r.fatal?.slice(0, 200), rows: r.rows, ...extra } }
 }
 
 async function dry(name, outDir, provenance) {

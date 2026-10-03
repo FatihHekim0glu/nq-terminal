@@ -4,12 +4,13 @@
 // set-up), reads the session cookie the shell put into the page over the debugging protocol (no browser is launched and no
 // Playwright is involved) and prints one JSON line, `{"origin": "...", "cookie": "NAME=VALUE"}`. Then it waits: when its
 // standard input closes it ends the app's process tree, stops the watch and prints `{"watch": [<failures>]}`; the exit code is 1
-// when the watch saw a window or a foreground change, or a backend outlived the shell. It prints nothing else on standard
+// when the watch saw a window or a foreground change of the app's tree, or a backend outlived the shell (other programs' windows
+// and foreground changes are notes in the run's record.json). It prints nothing else on standard
 // output. The cookie belongs to a throwaway fixture backend in a run folder under D:/dev/d5/app.
 import fs from 'node:fs'
 import path from 'node:path'
 import { findSmokeExe, launchApp, listTargets, newRunDir, resolveLab } from './launch.ts'
-import { judge, startWatch } from './watch.ts'
+import { assess, startWatch } from './watch.ts'
 
 const SESSION_COOKIE_PREFIX = 'nqt_s_'
 const CDP_TIMEOUT_MS = 30_000
@@ -57,9 +58,10 @@ try {
   } finally {
     const stopped = await app.stop()
     const report = await watch.finish()
-    failures = judge(report.events, app.pid)
+    const verdict = assess(report.events, app.pid)
+    failures = verdict.failures
     if (!stopped.backendGone) failures.push(`the backend (pid ${stopped.backendPid}) outlived the shell's tree`)
-    fs.writeFileSync(path.join(runDir, 'record.json'), JSON.stringify({ origin: app.origin, stopped, watch: { samples: report.samples, failures } }, null, 2))
+    fs.writeFileSync(path.join(runDir, 'record.json'), JSON.stringify({ origin: app.origin, stopped, watch: { samples: report.samples, failures, notes: verdict.notes } }, null, 2))
   }
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)

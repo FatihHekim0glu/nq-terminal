@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { BUSY, foreignRuns, LOCK_NAME, ownTree, tryAcquireRunLock, type ProcRow } from './quiet.ts'
 import { expect, test } from './fixtures.ts'
-import { judge, TAO_CLASS, type WatchEvent } from './watch.ts'
+import { assess, judge, TAO_CLASS, type WatchEvent } from './watch.ts'
 
 const window_ = (over: Partial<WatchEvent>): WatchEvent => ({ event: 'new', pid: 4242, process: 'planted', class: 'Planted', title: '', rect: [0, 0, 100, 100], drawn: true, ...over })
 
@@ -27,7 +27,39 @@ test.describe('the project guards fail on planted trouble', () => {
   test('the window judge names whose tree a window came from', () => {
     const ours = window_({ chain: [{ pid: 4242, name: 'msedgewebview2.exe', commandLine: '' }, { pid: 77, name: 'nq-lab-terminal.exe', commandLine: '' }] })
     expect(judge([ours], 77)[0]).toContain("this run's app tree")
-    expect(judge([ours], 99)[0]).toContain('NOT this run')
+    expect(assess([ours], 99).notes[0]).toContain('NOT this run')
+  })
+
+  test("the window judge fails only on this run's app tree and keeps other programs' events as notes", () => {
+    const app = { pid: 77, name: 'nq-lab-terminal.exe', commandLine: '' }
+    const webview = { pid: 4242, name: 'msedgewebview2.exe', commandLine: '' }
+    const chrome = { pid: 900, name: 'chrome.exe', commandLine: '' }
+    const explorer = { pid: 1, name: 'explorer.exe', commandLine: '' }
+    const foreignWindow = window_({ pid: 900, process: 'chrome', class: 'Chrome_WidgetWin_1', chain: [chrome, explorer] })
+    const foreignFocus = window_({ event: 'foreground', pid: 900, process: 'chrome', drawn: true, chain: [chrome, explorer] })
+    const foreignUndrawn = window_({ pid: 900, class: 'Chrome_WidgetWin_0', drawn: false, chain: [chrome, explorer] })
+    // Another program's drawn window, focus change and undrawn window: notes, never failures.
+    for (const planted of [foreignWindow, foreignFocus, foreignUndrawn]) {
+      expect(judge([planted], 77), JSON.stringify(planted)).toEqual([])
+      expect(assess([planted], 77).notes, JSON.stringify(planted)).toHaveLength(1)
+    }
+    // A drawn window and a focus change from the app or its WebView2 children still fail.
+    for (const planted of [
+      window_({ chain: [webview, app, explorer] }),
+      window_({ pid: 77, chain: [app, explorer] }),
+      window_({ event: 'foreground', drawn: true, chain: [webview, app, explorer] }),
+      window_({ class: 'Chrome_WidgetWin_0', drawn: false, chain: [webview, app] }),
+    ]) {
+      expect(judge([planted], 77), JSON.stringify(planted)).toHaveLength(1)
+      expect(assess([planted], 77).notes, JSON.stringify(planted)).toEqual([])
+    }
+    // Fail closed: an event whose owner was not traced (no chain, an empty chain) fails, and so does every event when the run's app is unknown.
+    for (const planted of [window_({}), window_({ chain: [] }), window_({ event: 'foreground', pid: 0, process: 'Idle', drawn: false })]) {
+      expect(judge([planted], 77), JSON.stringify(planted)).toHaveLength(1)
+    }
+    expect(judge([foreignWindow, foreignFocus])).toHaveLength(2)
+    // Tao's unseen event window stays neither a failure nor a note.
+    expect(assess([window_({ class: TAO_CLASS, drawn: false, chain: [app] })], 77)).toEqual({ failures: [], notes: [] })
   })
 
   test('the quiet-machine guard sees another Playwright or vitest run', () => {

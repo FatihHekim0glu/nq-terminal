@@ -2,9 +2,12 @@
 // that decides what fails a run. watch.ps1 does the looking (EnumWindows over every process and GetForegroundWindow every
 // 100 ms); this file starts it with no window of its own, keeps its lines and judges them.
 //
-// A run fails on: any new window that is drawn (visible, not cloaked, with an area, not an unseen layered window), any new
-// window that is not drawn and is not tao's event target (the shell's own message window), and any change of the
-// foreground window. The same rules as the shell's own hidden-window tests (desktop/src-tauri/tests/hidden_support/watch.rs).
+// The watch sees every process; the judge fails a run only on this run's app tree (owner decision, 3 October 2026: other
+// programs' windows must not fail our checks). A run fails on a new window that is drawn (visible, not cloaked, with an
+// area, not an unseen layered window), a new window that is not drawn and is not tao's event target (the shell's own message
+// window), or a change of the foreground window, when the event's process is the app this run started or under it (its
+// WebView2 children). The same events from any other process are notes in the report. An event whose owner could not be
+// traced fails (fail closed), and so does every event when the run names no app.
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -32,7 +35,7 @@ export interface WatchEvent {
   readonly drawn?: boolean
   readonly samples?: number
   readonly maxGapMs?: number
-  /** The owner and its ancestors, nearest first, looked up when the line arrived (a process that was gone has none). */
+  /** The owner and its ancestors, nearest first, looked up when the line arrived (a process that was gone has none, and its event fails). */
   chain?: ProcessLink[]
 }
 
@@ -67,27 +70,50 @@ export interface WatchReport {
   readonly maxGapMs: number
 }
 
+/** Another program's event: the run's app is known, the event's owner was traced, and its ancestry does not hold that app. */
+const foreign = (e: WatchEvent, rootPid?: number): boolean =>
+  rootPid !== undefined && e.chain !== undefined && e.chain.length > 0 && !ownedBy(e, rootPid)
+
 const describe = (e: WatchEvent, rootPid?: number): string => {
-  const owner = rootPid === undefined || e.chain === undefined ? '' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ancestry ${e.chain.map((l) => `${l.name}:${l.pid}`).join(' < ') || 'gone'}]`
+  const traced = e.chain !== undefined && e.chain.length > 0
+  const owner = rootPid === undefined ? '' : !traced ? ' [owner not traced]' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ancestry ${(e.chain ?? []).map((l) => `${l.name}:${l.pid}`).join(' < ')}]`
   return `${e.process ?? '?'} (pid ${e.pid ?? '?'}) class ${JSON.stringify(e.class ?? '')} title ${JSON.stringify(e.title ?? '')} rect ${JSON.stringify(e.rect ?? [])}${owner}`
 }
 
-/**
- * What fails a run, one line each: a drawn new window, an undrawn one that is not tao's, a foreground change. The rule is
- * global (a window of any process counts); `rootPid`, the app this run started, only labels whose tree a window came from.
- */
-export function judge(events: readonly WatchEvent[], rootPid?: number): string[] {
-  const failures: string[] = []
-  for (const e of events) {
-    if (e.event === 'new') {
-      if (e.drawn === true) failures.push(`a window was drawn: ${describe(e, rootPid)}`)
-      else if (e.class !== TAO_CLASS) failures.push(`an unexpected undrawn window appeared: ${describe(e, rootPid)}`)
-    } else if (e.event === 'foreground') {
-      failures.push(`the foreground window changed to: ${describe(e, rootPid)}`)
-    }
+/** The finding an event stands for (a drawn new window, an undrawn one that is not tao's, a foreground change), or null. */
+function finding(e: WatchEvent, rootPid?: number): string | null {
+  if (e.event === 'new') {
+    if (e.drawn === true) return `a window was drawn: ${describe(e, rootPid)}`
+    if (e.class !== TAO_CLASS) return `an unexpected undrawn window appeared: ${describe(e, rootPid)}`
+    return null
   }
-  return failures
+  if (e.event === 'foreground') return `the foreground window changed to: ${describe(e, rootPid)}`
+  return null
 }
+
+/** The judge's verdict: failures fail the run; notes are other programs' windows and foreground changes, kept for the report. */
+export interface Verdict {
+  readonly failures: string[]
+  readonly notes: string[]
+}
+
+/**
+ * Sorts the findings, one line each. `rootPid` is the app this run started: a finding whose process is that app or under it
+ * fails, one traced to any other process is a note, and one with no traced owner, or any finding when `rootPid` is not
+ * given, fails.
+ */
+export function assess(events: readonly WatchEvent[], rootPid?: number): Verdict {
+  const failures: string[] = []
+  const notes: string[] = []
+  for (const e of events) {
+    const line = finding(e, rootPid)
+    if (line !== null) (foreign(e, rootPid) ? notes : failures).push(line)
+  }
+  return { failures, notes }
+}
+
+/** What fails a run (see `assess`). */
+export const judge = (events: readonly WatchEvent[], rootPid?: number): string[] => assess(events, rootPid).failures
 
 /** A watch in progress. */
 export interface Watch {

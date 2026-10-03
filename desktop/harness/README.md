@@ -85,8 +85,11 @@ and the real backend alone is read for reference (`informational`).
 - Every spawn is hidden (`windowsHide`) with a PATH that has no `D:\dev\mingw` and no `D:\dev\cargo` (`paths.mjs`), no `WEBVIEW2_*`
   variable (the spike reproduction names its own) and TEMP on D:.
 - The global window and foreground watch (`winwatch.py`: EnumWindows over every process every 100 ms, a WinEvent hook, and
-  GetForegroundWindow) runs around every launch. Any new visible window or any change of foreground window fails the run. The
-  shell's own inert 5 by 5 pixel event window is recorded and ignored.
+  GetForegroundWindow) runs around every launch, and records each event's owner process and its ancestry. A new visible window
+  or a change of foreground window fails the run when its process is the launched shell or under it (its WebView2 children);
+  other programs' windows and foreground changes are kept as `notes` in the record (owner decision, 3 October 2026). An event
+  whose owner was not traced fails, and so does every event of a watch that names no launched shell. The shell's own inert
+  5 by 5 pixel event window is recorded and ignored.
 - A window may be shown only in the screen-2 mode: the guard (`screen2.mjs`) takes the second monitor's work area and the window's DWM
   frame, refuses any rectangle that touches the primary monitor, and the watch then expects exactly that one window. SW_SHOWMINNOACTIVE
   and SW_SHOWNOACTIVATE are the only show commands, and only for a window of the shell's own pid.

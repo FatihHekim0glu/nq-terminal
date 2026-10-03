@@ -261,6 +261,35 @@ if (-not $labUntouched) {
 }
 Check '-Lab with the default records folder is refused and writes nothing (born failing)' (($labRefusedCode -eq 2) -and $labUntouched)
 
+# The backend check runs pytest in parallel (-n 16 --dist loadfile) only when the venv can import xdist, and falls
+# back to the serial command otherwise. Two stub pythons log their arguments; the stub without xdist fails the probe
+# (-c "import xdist"). The record keeps naming the serial canonical command in both cases (release_check compares it).
+function New-ArgLogLab {
+    param([string]$Name, [bool]$HasXdist)
+    $lab = Join-Path $Scratch $Name
+    New-Item -ItemType Directory -Force -Path (Join-Path $lab '.venv\Scripts') | Out-Null
+    $failProbe = if ($HasXdist) { 'false' } else { 'true' }
+    $source = 'public static class ArgLogPython { public static int Main(string[] a) { if (a.Length > 0 && a[0] == "-c") return ' + $failProbe + ' ? 1 : 0; System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "args.log"), string.Join(" ", a) + "\n"); return 0; } }'
+    Add-Type -TypeDefinition $source -OutputAssembly (Join-Path $lab '.venv\Scripts\python.exe') -OutputType ConsoleApplication
+    return $lab
+}
+foreach ($variant in @(@{ name = 'xdist'; has = $true }, @{ name = 'serial'; has = $false })) {
+    $argLab = New-ArgLogLab ("arglog-" + $variant.name) $variant.has
+    $argRecords = Join-Path $Scratch ("rg-arglog-" + $variant.name)
+    $null = & $Record -Check backend -Lab $argLab -RecordsDir $argRecords *>&1
+    $logFile = Join-Path $argLab '.venv\Scripts\args.log'
+    $logged = if (Test-Path -LiteralPath $logFile) { (Get-Content -Raw -LiteralPath $logFile) } else { '' }
+    $tests = '-q ' + (Join-Path (Split-Path $Scripts -Parent) 'backend\tests')
+    $recFile = Join-Path $argRecords ((Get-Date).ToString('yyyy-MM-dd') + '_backend.json')
+    $recText = if (Test-Path -LiteralPath $recFile) { Get-Content -Raw -LiteralPath $recFile } else { '' }
+    if ($variant.has) {
+        Check 'the backend check adds -n 16 --dist loadfile when the venv imports xdist (born failing)' (($logged -match '-o addopts= -q -n 16 --dist loadfile ') -and ($logged -match [regex]::Escape('backend\tests')))
+        Check 'the xdist run records the serial canonical command' (($recText -match [regex]::Escape('-o addopts= -q ')) -and ($recText -notmatch '--dist'))
+    } else {
+        Check 'the backend check falls back to the serial command without xdist (born failing)' (($logged -match [regex]::Escape('-o addopts= ' + $tests)) -and ($logged -notmatch '-n 16') -and ($logged -notmatch '--dist'))
+    }
+}
+
 # ---- release_check.ps1 -----------------------------------------------------------------------------------------------
 
 $case = New-Case 'ok'

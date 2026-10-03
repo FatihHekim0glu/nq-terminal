@@ -8,7 +8,7 @@ import { startWatch, stopWatch } from './winwatch.mjs'
 export async function watchedRun(runFn, watchFile, allowFor = () => undefined) {
   const w = await startWatch(watchFile)
   let result
-  try { result = await runFn() } finally { result = { ...(result ?? {}), watch: await stopWatch(w, { allow: allowFor(result) }) } }
+  try { result = await runFn() } finally { result = { ...(result ?? {}), watch: await stopWatch(w, { allow: allowFor(result), rootPid: result?.rootPid ?? null }) } }
   return result
 }
 
