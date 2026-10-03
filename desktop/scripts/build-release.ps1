@@ -17,6 +17,7 @@
 #   <product> measure_<version>_x64-setup.exe  the measure installer
 #   payload\release|measure|smoke\             the exe each build produced, with WebView2Loader.dll
 #   nsis\release|measure\installer.nsi         the generated installer script (install-test.ps1 reads it)
+#   nsis\release|measure\hooks.nsh              the installer hooks it includes (artefact-check.mjs reads them)
 #   config\tauri*.conf.json                    the configuration files the builds used (artefact-check.mjs reads them)
 #   SHA256SUMS                                 sha256 of every file above, sha256sum style
 #   PROVENANCE.json                            version, HEAD, sha256 of `git diff HEAD`, sha256 of the untracked
@@ -162,6 +163,8 @@ function Copy-Payload {
     $nsiDest = Join-Path $OutDir "nsis\$Name"
     New-Item -ItemType Directory -Force -Path $nsiDest | Out-Null
     Copy-Item -LiteralPath (Join-Path $release 'nsis\x64\installer.nsi') -Destination $nsiDest
+    # The installer hooks the script includes, kept beside it so the artefact check reads the file that was compiled in.
+    Copy-Item -LiteralPath (Join-Path $Crate 'windows\nsis\hooks.nsh') -Destination $nsiDest
     $script:Installers[$Name] = $installers[0].Name
 }
 

@@ -3,7 +3,7 @@
 // frame it leaves; no fade and no shadow. Keyboard focus shows it at once, beside the control.
 // WCAG 1.4.13: Escape dismisses it without moving focus, the pointer may move onto it, and it stays
 // until the pointer or focus leaves.
-import { cloneElement, useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactElement } from 'react'
+import { cloneElement, useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type PointerEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import './Tooltip.css'
 
@@ -11,6 +11,7 @@ export const TOOLTIP_DELAY_MS = 500
 const POINTER_DX = 12
 const POINTER_DY = 20
 const FOCUS_GAP = 4
+const EDGE_GAP = 4
 
 interface TriggerProps {
   readonly 'aria-describedby'?: string
@@ -29,6 +30,8 @@ export interface TooltipProps {
 interface Place {
   readonly left: number
   readonly top: number
+  // Where the tip's bottom edge goes if it must flip above its anchor (the control's top or the pointer).
+  readonly flipBottom: number
 }
 
 function contains(el: Element | null, target: EventTarget | null): boolean {
@@ -64,6 +67,17 @@ export default function Tooltip({ text, children }: TooltipProps) {
     return () => document.removeEventListener('keydown', onKeyDown, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place])
+  // Keep the tip inside the viewport (WCAG 1.4.10 reflow at 200% zoom puts the last title-bar control a
+  // few pixels from the right edge): measured after mount, before paint, so it never shows clipped.
+  useLayoutEffect(() => {
+    const tip = tipRef.current
+    if (!place || !tip) return
+    // At the unclamped left a fixed box shrinks to the room beside it, so measure its natural width at the edge.
+    tip.style.left = `${EDGE_GAP}px`
+    const { width, height } = tip.getBoundingClientRect()
+    tip.style.left = `${Math.max(EDGE_GAP, Math.min(place.left, window.innerWidth - width - EDGE_GAP))}px`
+    if (place.top + height > window.innerHeight - EDGE_GAP) tip.style.top = `${Math.max(EDGE_GAP, place.flipBottom - height)}px`
+  }, [place])
   const own = children.props
 
   const trigger = cloneElement(children, {
@@ -72,7 +86,7 @@ export default function Tooltip({ text, children }: TooltipProps) {
       own.onPointerMove?.(e)
       if (place) return
       clear()
-      const at = { left: e.clientX + POINTER_DX, top: e.clientY + POINTER_DY }
+      const at = { left: e.clientX + POINTER_DX, top: e.clientY + POINTER_DY, flipBottom: e.clientY - FOCUS_GAP }
       timer.current = setTimeout(() => setPlace(at), TOOLTIP_DELAY_MS)
     },
     onPointerLeave: (e: PointerEvent<HTMLElement>) => {
@@ -84,7 +98,7 @@ export default function Tooltip({ text, children }: TooltipProps) {
       own.onFocus?.(e)
       const rect = e.currentTarget.getBoundingClientRect()
       clear()
-      setPlace({ left: rect.left, top: rect.bottom + FOCUS_GAP })
+      setPlace({ left: rect.left, top: rect.bottom + FOCUS_GAP, flipBottom: rect.top - FOCUS_GAP })
     },
     onBlur: (e: FocusEvent<HTMLElement>) => {
       own.onBlur?.(e)

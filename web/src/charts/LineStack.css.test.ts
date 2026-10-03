@@ -44,6 +44,24 @@ describe('LineStack.css', () => {
     expect(code).toMatch(/@container\s*\(max-height:\s*120px\)\s*\{\s*\.linestack-legend\s*\{[^}]*grid-auto-flow:\s*column/)
   })
 
+  it('lets a legend name wrap only in a maximised panel, so a shared pane keeps its legend short and the curve clear (look spec 6.1)', () => {
+    // A shared pane (the DES chart at 1366x768) is as narrow as a maximised panel's pane at 200% zoom. A legend that wraps there
+    // grows past the share of the plot the y range keeps clear of it, and covers the curve's high and its last-value tag.
+    const header = '@container style(--panel-maximised: 1)'
+    const start = code.indexOf(header)
+    expect(start).toBeGreaterThanOrEqual(0)
+    let depth = 0
+    let end = code.indexOf('{', start)
+    for (; end < code.length; end += 1) {
+      if (code[end] === '{') depth += 1
+      if (code[end] === '}') depth -= 1
+      if (depth === 0) break
+    }
+    const block = code.slice(start, end + 1)
+    expect(block).toMatch(/@container\s*\(max-width:\s*\d+px\)\s*\{[^@]*\.chart-legend-name\s*\{[^}]*white-space:\s*normal/)
+    expect(code.replace(block, '')).not.toMatch(/white-space:\s*normal/)
+  })
+
   it("replaces uPlot's dashed grey cursor with solid 1px lines in the crosshair token (look spec 9.2)", () => {
     expect(code).toMatch(/\.u-cursor-x\s*\{[^}]*border-right:\s*1px solid var\(--crosshair\)/)
     expect(code).toMatch(/\.u-cursor-y\s*\{[^}]*border-bottom:\s*1px solid var\(--crosshair\)/)

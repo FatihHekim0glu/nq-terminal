@@ -5,11 +5,14 @@
 //
 // On HOME, the command line, the REG grid and a chart with its ChartA11y table: nothing scrolls the page sideways, every
 // control the 100% page has is still there and reachable (on screen and not cut off by a clipping box), no text is cut off,
-// and the chart's table shows whole.
+// and the chart's table shows whole. In the two smallest windows of the contract (1366x768, 1024x640) every HOME panel, maximised,
+// keeps every control reachable with nothing overlapping and nothing but a data table scrolling sideways; the browser survey of
+// every panel of every screen in those two windows is e2e/reflow-200.spec.ts, and both judge with e2e/reflow.ts.
 import type { Browser, Page } from '@playwright/test'
 import { showEveryTable } from '../visual/screens.ts'
 import { HOME_READY } from '../perf/pages.ts'
 import { attach, expect, test, VIEWPORT } from './fixtures.ts'
+import { controlsIn, cutOffIn, missingFrom, overlapsIn, sidewaysIn } from '../reflow.ts'
 import { commandLine, open, openHome } from './app.ts'
 import { launchApp, newRunDir, type AppHandle } from './launch.ts'
 import type { RunInfo } from './run.ts'
@@ -27,59 +30,7 @@ async function visitPanels(page: Page): Promise<void> {
   await page.evaluate(() => window.scrollTo(0, 0))
 }
 
-const ALL_CONTROLS = 'button, [role="button"], [role="tab"], [role="combobox"], [role="menuitem"], a[href], input, select, textarea'
 const BAR_CONTROLS = '.fn-bar button, .fn-bar [role="button"], .fn-bar input'
-
-/**
- * What the controls under `scope` are, for comparing the 100% page with the 200% one: role or tag, and the accessible name or
- * text, of those that can be reached: a size, inside the viewport sideways, and the middle of the control inside every ancestor
- * that clips (overflow hidden or clip; a scroller is reachable by scrolling, and a fixed or absolute control is only clipped by
- * the boxes that contain it). (No eval: the page's CSP forbids it, so the logic is written out where it runs.)
- */
-async function controlsIn(page: Page, scope: string, controlSelector: string = ALL_CONTROLS): Promise<string[]> {
-  return page.evaluate(([selector, controlsSelector]) => {
-    const root = document.querySelector(selector)
-    if (root === null) return []
-    const clippedByAncestor = (el: Element, midX: number, midY: number): boolean => {
-      let child: Element = el
-      let skipStatic = false
-      for (let box = el.parentElement; box !== null; child = box, box = box.parentElement) {
-        const childPosition = getComputedStyle(child).position
-        if (childPosition === 'fixed') return false
-        if (childPosition === 'absolute') skipStatic = true
-        const cs = getComputedStyle(box)
-        if (skipStatic && cs.position === 'static') continue
-        skipStatic = false
-        const clips = ['hidden', 'clip'].includes(cs.overflowX) || ['hidden', 'clip'].includes(cs.overflowY)
-        if (!clips) continue
-        const r = box.getBoundingClientRect()
-        if (midX < r.left - 1 || midX > r.right + 1 || midY < r.top - 1 || midY > r.bottom + 1) return true
-      }
-      return false
-    }
-    const shown = (el: Element): boolean => {
-      const r = el.getBoundingClientRect()
-      const cs = getComputedStyle(el)
-      if (cs.visibility === 'hidden' || cs.display === 'none' || r.width <= 0 || r.height <= 0) return false
-      const midX = r.left + r.width / 2
-      if (midX < 0 || midX > window.innerWidth) return false
-      return !clippedByAncestor(el, midX, r.top + r.height / 2)
-    }
-    const name = (el: Element): string => (el.getAttribute('aria-label') ?? el.getAttribute('title') ?? el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60)
-    return Array.from(root.querySelectorAll(controlsSelector)).filter(shown).map((el) => `${el.getAttribute('role') ?? el.tagName.toLowerCase()}: ${name(el)}`).sort()
-  }, [scope, controlSelector] as const)
-}
-
-/** What `want` has that `got` lacks, counting repeats (four panels each have a bar button of the same name). */
-function missingFrom(want: readonly string[], got: readonly string[]): string[] {
-  const left = [...got]
-  return want.filter((c) => {
-    const at = left.indexOf(c)
-    if (at < 0) return true
-    left.splice(at, 1)
-    return false
-  })
-}
 
 /** The red function bars' controls on the page, after every panel has been visited. */
 async function barControls(page: Page): Promise<string[]> {
@@ -95,20 +46,8 @@ async function controls(page: Page): Promise<string[]> {
 /** The controls of one panel (by its command line) that have a size. */
 const panelControls = (page: Page, title: string): Promise<string[]> => controlsIn(page, `[data-nqt-title="${title}"]`)
 
-/** Text that a clipping box cuts off (overflow hidden or clip with more content than room), outside any scroller. */
-async function cutOffText(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const out: string[] = []
-    for (const el of Array.from(document.body.querySelectorAll('*'))) {
-      const cs = getComputedStyle(el)
-      const clips = cs.overflowX === 'hidden' || cs.overflowX === 'clip'
-      const text = (el.textContent ?? '').trim()
-      if (!clips || text === '' || cs.display === 'none' || cs.visibility === 'hidden') continue
-      if (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1 && el.children.length === 0) out.push(`${el.tagName.toLowerCase()}.${String(el.className).slice(0, 40)}: ${text.slice(0, 50)}`)
-    }
-    return out
-  })
-}
+/** Text that a clipping box or an ellipsis cuts off (the shared detector of e2e/reflow.ts), outside any scroller and any data table. */
+const cutOffText = (page: Page): Promise<string[]> => cutOffIn(page, 'body')
 
 interface LayoutFacts {
   readonly width: number
@@ -254,7 +193,9 @@ test.describe('200% zoom', () => {
     // Zoomed, the red bars wrap (FunctionBar.css, min-resolution), which the plain 100% page at the same width does not do, so the
     // zoomed page may cut off less chrome than the narrow one, never more.
     expect(zoomedFacts.clippedChrome.length, 'cut-off chrome: engine zoom against the same width at 100%').toBeLessThanOrEqual(narrowFacts.clippedChrome.length)
-    expect(zoomedFacts.cutText, 'cut-off text: engine zoom against the same width at 100%').toEqual(narrowFacts.cutText)
+    // The same holds for cut-off text (the narrow page's red bar is one nowrap row and cuts a title bar that the zoomed bars wrap),
+    // so what the zoomed page cuts off must be among what the narrow page cuts off, and the status segments that both cut by design stay.
+    expect(missingFrom(zoomedFacts.cutText, narrowFacts.cutText), 'cut-off text of the zoomed page that the same width at 100% does not cut off').toEqual([])
     // Absolute, not relative to the narrow layout: no panel chrome is cut off (the red bars wrap up to 1000 px of viewport,
     // FunctionBar.css), and every function bar control of the 100% page is still reachable in the 2 x 2 grid at 200%.
     expect(zoomedFacts.clippedChrome, 'panel chrome that is cut off at 200%').toEqual([])
@@ -269,10 +210,8 @@ test.describe('200% zoom', () => {
     const at100 = await controls(main)
     await openHome(page)
     // In the 2 x 2 grid at 200% a panel is short and some of its chart's own controls have no size (the same in plain Chromium at
-    // this width, asserted in the test above); maximising the panel gives them room. FINDING, measured with --size 1366x768: the
-    // app's own chrome takes 194 of the 480 CSS px, a maximised GP then has a body of 149 px and its range, timeframe and variant
-    // controls stay at no size, so at 200% in a window that small the GP controls are lost. This test uses the 1920x1080 window; the
-    // small windows (1366x768, 1024x640) are the expected-failure tests at the end of this file.
+    // this width, asserted in the test above); maximising the panel gives them room. This test uses the 1920x1080 window; the
+    // small windows (1366x768, 1024x640) are the tests at the end of this file.
     const zoomedControls = await controls(page)
     const collapsed = at100.filter((c) => !zoomedControls.includes(c))
     test.info().annotations.push({ type: 'collapsed-in-grid', description: collapsed.length + ' controls have no size in the panels of the 2 x 2 grid and show when their panel is maximised: ' + collapsed.join(' | ') })
@@ -322,25 +261,37 @@ test.describe('200% zoom', () => {
 
 /**
  * Windows smaller than the 1920x1080 one above, still in contract (03 section 12: no control lost at 200% in a window of down to
- * 1,024x640; WCAG 1.4.4). Each is an app of its own at 200%. KNOWN FAILURE until the maximised panel's chrome budget in web/src is
- * fixed: the app's chrome takes 194 of the 480 CSS px of a 1366x768 window at 200%, a maximised GP is left a body of 149 px, and
- * its range, timeframe and variant controls keep no size (the MON and REG function bars overflow there as well). The tests are
- * marked test.fail(): they pass while the controls are lost, and turn red the day the layout is fixed, which is the signal to drop
- * the marker. The launch is in beforeAll, so an app that does not start fails the run instead of passing as an expected failure.
+ * 1,024x640; WCAG 1.4.4, 1.4.10). Each is an app of its own at 200%. A maximised panel shows all of its controls there: the
+ * stylesheets that fold a parameter row or the criteria away in a short panel leave a maximised one alone (PanelChrome.css marks
+ * it), the stacked layout of a narrow window gives it the viewport (Workspace.css), the chart keeps a floor that leaves its panes
+ * readable and the panel body scrolls what is left. Until the decision of 3 October 2026 this was an expected failure (a maximised
+ * GP left a body too short for its controls, 194 CSS px of chrome above it). The launch is in beforeAll, so an app that does not
+ * start fails the run. The browser survey of every panel is e2e/reflow-200.spec.ts; this holds the four HOME panels in the real
+ * engine's zoom.
  */
 const SMALL_WINDOWS = ['1366x768', '1024x640'] as const
 const MAXIMISED_POLL_MS = 4_000
 
-/** The controls of the panel that have no size with the panel maximised, after a short wait (a panel may mount them on arrival). */
-async function lostWhenMaximised(zoomed: Page, title: string, want: readonly string[]): Promise<string[]> {
+interface MaximisedFacts {
+  /** Controls the panel has at 100% in the roomy window that have no size, or are cut off or off screen, with it maximised. */
+  readonly lost: string[]
+  /** Pairs of controls or lines of text that overlap. */
+  readonly overlapping: string[]
+  /** What makes the page or the panel body scroll sideways, a data table apart. */
+  readonly sideways: string[]
+}
+
+/** What is lost, overlapping or running sideways with the panel maximised, after a short wait (a panel may mount controls on arrival). */
+async function factsWhenMaximised(zoomed: Page, title: string, want: readonly string[]): Promise<MaximisedFacts> {
   const toggle = zoomed.locator(`[data-nqt-title="${title}"]`).getByRole('button', { name: 'Maximise panel' })
   await toggle.scrollIntoViewIfNeeded()
   await toggle.click()
   try {
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
     let lost = want.slice()
-    await expect.poll(async () => { const got = await panelControls(zoomed, title); lost = want.filter((c) => !got.includes(c)); return lost.length }, { timeout: MAXIMISED_POLL_MS }).toBe(0).catch(() => undefined)
-    return lost
+    await expect.poll(async () => { lost = missingFrom(want, await panelControls(zoomed, title)); return lost.length }, { timeout: MAXIMISED_POLL_MS }).toBe(0).catch(() => undefined)
+    const scope = `[data-nqt-title="${title}"]`
+    return { lost, overlapping: await overlapsIn(zoomed, scope), sideways: await sidewaysIn(zoomed, scope) }
   } finally {
     await toggle.click()
     await expect(toggle).toHaveAttribute('aria-pressed', 'false')
@@ -367,16 +318,18 @@ for (const size of SMALL_WINDOWS) {
       expect(stopped?.backendGone, 'the small window backend is gone').toBe(true)
     })
 
-    test(`no control collapses to no size when its panel is maximised (${size})`, async ({ page: main }) => {
-      test.fail(true, `known: at 200% in a ${size} window the maximised panel's chrome leaves a GP body too short for its controls`)
+    test(`every HOME panel, maximised, keeps every control reachable, nothing overlaps and nothing scrolls sideways (${size})`, async ({ page: main }) => {
       await openHome(main)
-      const lostByPanel: Record<string, string[]> = {}
       const wantByPanel: Record<string, string[]> = {}
       for (const [title] of HOME_READY) wantByPanel[title] = await panelControls(main, title)
       await openHome(smallPage)
-      for (const [title] of HOME_READY) lostByPanel[title] = await lostWhenMaximised(smallPage, title, wantByPanel[title] ?? [])
-      const lost = Object.fromEntries(Object.entries(lostByPanel).filter(([, controlList]) => controlList.length > 0))
-      expect(lost, `controls with no size at 200% in ${size} with the panel maximised, by panel`).toEqual({})
+      const inner = await smallPage.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight, ratio: window.devicePixelRatio }))
+      test.info().annotations.push({ type: 'window', description: `${size} window at 200%: ${JSON.stringify(inner)} CSS px` })
+      const factsByPanel: Record<string, MaximisedFacts> = {}
+      for (const [title] of HOME_READY) factsByPanel[title] = await factsWhenMaximised(smallPage, title, wantByPanel[title] ?? [])
+      const clean: MaximisedFacts = { lost: [], overlapping: [], sideways: [] }
+      const broken = Object.fromEntries(Object.entries(factsByPanel).filter(([, facts]) => JSON.stringify(facts) !== JSON.stringify(clean)))
+      expect(broken, `controls lost, overlaps and sideways scrolling at 200% in ${size} with the panel maximised, by panel`).toEqual({})
     })
   })
 }

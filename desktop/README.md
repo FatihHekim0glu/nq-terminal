@@ -14,6 +14,7 @@ The shell is a Tauri 2.12 app in `src-tauri/`. It opens one framed window over t
 | `src-tauri/tauri.conf.json` | the release identity `dev.nqlab.terminal`, product name `nq-lab terminal` |
 | `src-tauri/tauri.smoke.conf.json`, `tauri.measure.conf.json` | the test identities, `dev.nqlab.terminal.smoke` and `dev.nqlab.terminal.measure` |
 | `src-tauri/capabilities/main.json` | the main window's capability: no permission at all |
+| `src-tauri/windows/nsis/hooks.nsh` | the installer hooks (`bundle.windows.nsis.installerHooks`): refuse unsafe install folders, create the chosen folder with a protected DACL for the user, SYSTEM and Administrators in the same call (no inherited window), refuse an existing folder that holds anything but product files, read the folder and its entries back, default to `%LOCALAPPDATA%\Programs` (CWE-427, CWE-732) |
 | `src-tauri/assets/` | the shell's own pages: `splash.html` and the generated `look.css` |
 | `src-tauri/clippy.toml`, `deny.toml` | the static bans and the supply-chain rules |
 | `src-tauri/src/` | `main.rs` and one module per concern (below) |

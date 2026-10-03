@@ -66,3 +66,25 @@ describe('REG verdict cells (U02)', () => {
     expect(REG_COMPACT_COLUMNS.find((c) => c.id === 'holm')?.width).toBe(58)
   })
 })
+
+describe('REG compact note tells the truth about the hidden columns (WCAG 1.4.4 reflow at 200%)', () => {
+  const kept = new Set(REG_COMPACT_COLUMNS.map((c) => c.id))
+  const hidden = REG_COLUMNS.filter((c) => !kept.has(c.id))
+
+  it('names every column the narrow board drops, including DSR, and nothing it keeps', () => {
+    const note = REG.compactNote.toLowerCase()
+    const labelOf: Record<string, string> = { round: 'round', controlP: 'control p', bonferroni: 'bonferroni', dsr: 'dsr', sha: 'spec sha' }
+    expect(hidden.map((c) => c.id).sort()).toEqual(Object.keys(labelOf).sort())
+    for (const c of hidden) expect(note).toContain(labelOf[c.id]!)
+  })
+
+  it('does not promise that maximising shows them: at 200% zoom a maximised panel is still too narrow', () => {
+    expect(REG.compactNote).not.toMatch(/maximise the panel to see them/)
+    expect(REG.compactNote).toMatch(/200%/)
+  })
+
+  it('points to the two places the hidden values are always reachable: 98) Export and DES', () => {
+    expect(REG.compactNote).toContain('98) Export saves every column')
+    expect(REG.compactNote).toMatch(/DES/)
+  })
+})

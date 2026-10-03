@@ -16,6 +16,13 @@
   overflow: hidden;
 }
 
+/* A maximised panel is the one place the person has asked for all of a panel: the stylesheets that fold a parameter row, the
+   criteria or a rail away when a panel body is short (the 2x2 HOME, the stacked layout of a 200% window) leave a maximised
+   panel alone (WCAG 1.4.4, 1.4.10). It is marked by its own pressed maximise toggle, with no script: the shell chunk has no byte to
+   spare for an attribute. A fold rule is written inside `@container not style(--panel-maximised: 1)`; the label below is the
+   toggle's copy (PANEL.maximise), pinned by PanelChrome.maximised.css.test.ts. */
+.nqt-panel:has(> .ptitle [aria-label="Maximise panel"][aria-pressed="true"]) { --panel-maximised: 1; }
+
 /* The focused panel: a 1px command-blue line, standing in for the OS window accent border. It is an
    overlay above the red bar, the header and the body, which would paint over an outline on the panel
    itself, and above the related-menu dim (z-index 25), so it stays bright; it takes no pointer events. */

@@ -35,9 +35,23 @@
        install and the uninstall: any new visible top-level window anywhere, or a change of foreground window, fails
        the run, with the window's process and title in the report. -AllowForeign downgrades those that belong to
        another program (not the installer, its folders or children) to warnings.
+    7. Custom install folders (installer hooks, windows\nsis\hooks.nsh; CWE-427 and CWE-732), after the default layout:
+       a folder under <CustomRoot>\<run>-custom whose parent grants Users Modify and Everyone write, NOT pre-protected,
+       must end with exactly the current user, SYSTEM and Administrators as Allow rules, inheritance removed and no
+       inherited rule, and no broad writer on the exe, the loader or the uninstaller. A lab stand-in beside it and a file
+       the user adds inside it must survive the uninstall (only what the installer wrote is removed).
+    8. Refusals, each expecting exit code 3, no registry entry and nothing written where the target points: a drive root
+       (a SUBST drive onto a scratch folder, in three spellings), a network (UNC) path, a junction, and folders under
+       Program Files and Windows (not run when elevated). An installer without the guard fails these: NSIS silently
+       falls back to the default folder for a /D= it rejects, which this script then removes (nothing existed there).
+  The file is above the 800-line soft ceiling on purpose: one script owns one runnable scenario list and its self-test.
   Writes <InstallRoot>\<Run>.report.json and exits 0 only when every assertion holds.
 .PARAMETER Installer
   The NSIS installer (a wildcard that matches one file is fine).
+.PARAMETER DefaultFolder
+  Also installs once with no /D= into the bundler's default, which the hooks move to %LOCALAPPDATA%\Programs\<product>, checks
+  the folder is protected, uninstalls and removes what is left. It writes about 3 MB under the user's profile on C: for a few
+  seconds, so it is a switch of its own; it refuses to run when the product is already installed there.
 .PARAMETER SelfTest
   Born-failing checks of the guards (the script reader, the target refusals, the window diff) and a short live run of
   the watcher; installs nothing.
@@ -47,7 +61,9 @@ param(
     [string]$Installer = '',
     [string]$InstallRoot = 'D:\dev\d5\install',
     [string]$Run = '',
+    [string]$CustomRoot = 'D:\dev\tmp\dec1-apps',
     [switch]$AllowForeign,
+    [switch]$DefaultFolder,
     [switch]$SelfTest
 )
 
@@ -58,6 +74,7 @@ $ScratchTemp = 'D:\dev\tmp\install-test'
 $AllowedRoot = 'D:\dev\'
 $InstallTimeoutSec = 180
 $BundleMarkerBytes = 8
+$RefusedExitCode = 3
 $UninstallTimeoutSec = 120
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $Results = New-Object System.Collections.Generic.List[object]
@@ -380,9 +397,11 @@ function Wait-Silently {
 }
 
 function Invoke-Install {
-    param([string]$InstallerPath, [string]$Target, [System.Collections.Generic.List[int]]$Tracked, $AppSeen)
+    # $NoFolder: no /D= at all, so the installer takes its own default ($Target is then only where windows are expected).
+    param([string]$InstallerPath, [string]$Target, [System.Collections.Generic.List[int]]$Tracked, $AppSeen, [switch]$NoFolder)
     $start = Get-Date
-    try { $proc = Start-HiddenProcess $InstallerPath "/S /NS /D=$Target" } catch {
+    $arguments = if ($NoFolder) { '/S /NS' } else { "/S /NS /D=$Target" }
+    try { $proc = Start-HiddenProcess $InstallerPath $arguments } catch {
         $code = if ($_.Exception.InnerException) { $_.Exception.InnerException.NativeErrorCode } else { 0 }
         return @{ ok = $false; detail = "the installer could not start without elevation or failed to start: $($_.Exception.Message) (native error $code)"; seconds = 0 }
     }
@@ -509,7 +528,227 @@ function Invoke-InstallTest {
     $events = [NqtWindowWatch]::Stop()
     Test-WatchResult $events 'install and uninstall' $target $tracked.ToArray()
     $report['window_events'] = $events
+    if ($install.ok) {
+        $extra = Invoke-CustomFolderTests $InstallerPath $facts $elevated
+        $report['custom_folder'] = $extra.custom
+        $report['custom_window_events'] = $extra.window_events
+    }
     $script:Report = $report
+}
+
+# ---- custom install folders (DEC1: the protected install folder, CWE-427 and CWE-732) ---------------------------------------
+
+function Get-PrincipalProblems {
+    # A protected install folder holds exactly the user, SYSTEM and Administrators as Allow rules, inheritance removed and
+    # no inherited rule. A pure function over the report of Get-AclReport and the user's SID, so it can be tested.
+    param($Report, [string]$UserSid)
+    $out = @()
+    if (-not $Report.protected) { $out += 'the folder still inherits from its parent' }
+    $inherited = @($Report.rules | Where-Object { $_.inherited })
+    if ($inherited.Count -gt 0) { $out += "inherited rules: $(@($inherited | ForEach-Object { $_.identity }) -join ', ')" }
+    $expected = @(@($UserSid, 'S-1-5-18', 'S-1-5-32-544') | Sort-Object -Unique)
+    $actual = @(@($Report.rules | ForEach-Object { $_.sid }) | Sort-Object -Unique)
+    if (($actual -join ',') -ne ($expected -join ',')) { $out += "principals are [$($actual -join ', ')], expected [$($expected -join ', ')]" }
+    if (@($Report.rules | Where-Object { $_.type -ne 'Allow' }).Count -gt 0) { $out += 'a rule that is not Allow' }
+    return ,@($out)
+}
+
+function New-PlantedParent {
+    # A folder whose rules hand Users Modify and Everyone write to everything created in it: the hostile parent a custom
+    # install folder such as D:\Apps may sit under.
+    param([string]$Folder)
+    New-Item -ItemType Directory -Force -Path $Folder | Out-Null
+    & (Join-Path $env:SystemRoot 'System32\icacls.exe') $Folder /grant '*S-1-5-32-545:(OI)(CI)M' '*S-1-1-0:(OI)(CI)W' /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "could not plant permissions on $Folder" }
+}
+
+function Get-TreeDigest {
+    # One digest over the relative paths and contents of a folder: any added, changed or removed file changes it.
+    param([string]$Folder)
+    $lines = Get-ChildItem -LiteralPath $Folder -Recurse -Force -File | Sort-Object FullName | ForEach-Object {
+        "$($_.FullName.Substring($Folder.Length)):$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)" }
+    return (-join ($lines | ForEach-Object { $_ + "`n" }))
+}
+
+function New-LabSentinel {
+    # A stand-in for the lab beside the install folder, with the paths the real one has: the uninstaller must never touch it.
+    param([string]$Folder)
+    foreach ($relative in 'results\ledger.csv', 'data\raw\NQ.V.0\1m\is_2010.parquet', 'terminal\state\workspace.json', 'live\volmanaged_paper.py') {
+        $file = Join-Path $Folder $relative
+        New-Item -ItemType Directory -Force -Path (Split-Path $file -Parent) | Out-Null
+        [System.IO.File]::WriteAllText($file, "stand-in for $relative`n", $Utf8)
+    }
+}
+
+function Get-FreeDriveLetter {
+    foreach ($letter in 'YXWVUTSRQPONM'.ToCharArray()) { if (-not (Test-Path -LiteralPath "${letter}:\")) { return [string]$letter } }
+    throw 'no free drive letter for a SUBST drive'
+}
+
+function Clear-ProductKeys {
+    # What a refused install must not leave; returns the keys it had to remove (a failure of the run).
+    param($Facts)
+    $left = @(Get-ProductKeys $Facts | Where-Object { Test-Path -LiteralPath $_ })
+    foreach ($key in $left) { Remove-Item -LiteralPath $key -Recurse -Force }
+    return ,@($left)
+}
+
+function Invoke-Refusal {
+    # A silent install into a target the hooks must refuse: exit code $RefusedExitCode, no registry entry, nothing written
+    # where the target points ($WrittenCheck returns what was written there, "" when nothing was).
+    param([string]$InstallerPath, $Facts, [string]$Name, [string]$Target, [scriptblock]$WrittenCheck, [System.Collections.Generic.List[int]]$Tracked, $AppSeen)
+    $start = Get-Date
+    try { $proc = Start-HiddenProcess $InstallerPath "/S /NS /D=$Target" } catch { Add-Result "refused: $Name" $false "the installer did not start: $($_.Exception.Message)"; return }
+    $done = Wait-Silently $proc 60 $ScratchTemp $Tracked $AppSeen
+    $code = if ($done) { $proc.ExitCode } else { -1 }
+    $written = "$(& $WrittenCheck)"
+    # NSIS answers a /D= folder it does not accept (a network path) by falling back to the default folder, so an installer
+    # without the guard installs there instead of refusing. Nothing existed there before this run, so it is ours to remove.
+    foreach ($default in (Get-DefaultFolders $Facts)) {
+        if (Test-Path -LiteralPath $default) {
+            $written = "$written; the default folder $default (the installer fell back to it)".TrimStart('; ')
+            Remove-Item -LiteralPath $default -Recurse -Force
+        }
+    }
+    $leftKeys = Clear-ProductKeys $Facts
+    $ok = $done -and ($code -eq $RefusedExitCode) -and ($written -eq '') -and ($leftKeys.Count -eq 0)
+    Add-Result "refused: $Name" $ok "exit code $code (expected $RefusedExitCode), $([math]::Round(((Get-Date) - $start).TotalSeconds, 1)) s, written: [$written], registry left: [$($leftKeys -join ', ')]"
+}
+
+function Get-DefaultFolders {
+    # The bundler's per-user default and the folder the hooks move it to (%LOCALAPPDATA%\Programs\<product>).
+    param($Facts)
+    return @((Join-Path $env:LOCALAPPDATA $Facts.Product), (Join-Path (Join-Path $env:LOCALAPPDATA 'Programs') $Facts.Product))
+}
+
+function Invoke-RefusalTests {
+    param([string]$InstallerPath, $Facts, [bool]$Elevated, [System.Collections.Generic.List[int]]$Tracked, $AppSeen)
+    $taken = @(Get-DefaultFolders $Facts | Where-Object { Test-Path -LiteralPath $_ })
+    if ($taken.Count -gt 0) { Add-Result 'refusals: the default install folders are free' $false "$($taken -join ', ') exists, so a fallback to it could not be told from an existing install: not run"; return }
+    $root = Join-Path $CustomRoot "$Run-refusals"
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    $fakeRoot = Join-Path $root 'fake-root'
+    $uncScratch = Join-Path $root 'unc-target'
+    $planted = Join-Path $root 'links'
+    $link = Join-Path $planted 'link'
+    foreach ($dir in $fakeRoot, $uncScratch) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    New-PlantedParent $planted
+    $letter = Get-FreeDriveLetter
+    & (Join-Path $env:SystemRoot 'System32\subst.exe') "${letter}:" $fakeRoot
+    if ($LASTEXITCODE -ne 0) { Add-Result 'refusals: SUBST drive' $false "subst ${letter}: failed"; return }
+    try {
+        $listing = { @(Get-ChildItem -LiteralPath $fakeRoot -Force -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }) -join ', ' }
+        foreach ($form in "${letter}:\", "${letter}:", "${letter}:/") {
+            Invoke-Refusal $InstallerPath $Facts "drive root $form" $form $listing $Tracked $AppSeen
+        }
+        $unc = "\\localhost\$($uncScratch.Substring(0, 1))`$($uncScratch.Substring(2))\inner"
+        Invoke-Refusal $InstallerPath $Facts 'network (UNC) path' $unc { @(Get-ChildItem -LiteralPath $uncScratch -Force | ForEach-Object { $_.Name }) -join ', ' } $Tracked $AppSeen
+        $real = Join-Path $planted 'real'
+        New-Item -ItemType Directory -Force -Path $real | Out-Null
+        New-Item -ItemType Junction -Path $link -Target $real | Out-Null
+        Invoke-Refusal $InstallerPath $Facts 'junction' $link { @(Get-ChildItem -LiteralPath $real -Force | ForEach-Object { $_.Name }) -join ', ' } $Tracked $AppSeen
+        if ($Elevated) {
+            Add-Result 'refused: Program Files and Windows' $false 'this process is elevated, so a failed guard could write there: not run'
+        } else {
+            foreach ($system in @($env:ProgramFiles, $env:SystemRoot)) {
+                $folder = Join-Path $system 'nqt-dec1-refusal-test'
+                $written = { if (Test-Path -LiteralPath $folder) { $folder } else { '' } }.GetNewClosure()
+                Invoke-Refusal $InstallerPath $Facts "under $system" $folder $written $Tracked $AppSeen
+            }
+        }
+    } finally {
+        & (Join-Path $env:SystemRoot 'System32\subst.exe') "${letter}:" /D | Out-Null
+        if ((Test-Path -LiteralPath $link) -and ((Get-Item -LiteralPath $link -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { (Get-Item -LiteralPath $link -Force).Delete() }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-CustomFolderTest {
+    # An install into a folder that is NOT pre-protected and sits under a parent that grants Users Modify and Everyone
+    # write: the hooks must end with exactly the user, SYSTEM and Administrators and nothing inherited; the uninstaller
+    # must remove only what the installer wrote and leave the lab and a file the user added.
+    param([string]$InstallerPath, $Facts, [System.Collections.Generic.List[int]]$Tracked, $AppSeen)
+    $parent = Join-Path $CustomRoot "$Run-custom"
+    $target = Join-Path $parent 'app dir'
+    $lab = Join-Path $CustomRoot "$Run-lab"
+    $existing = @(Get-ProductKeys $Facts | Where-Object { Test-Path -LiteralPath $_ })
+    $refusals = Get-TargetProblems $target $existing
+    Add-Result 'custom folder: target and registry refusals' ($refusals.Count -eq 0) "$target; $($refusals -join '; ')"
+    if ($refusals.Count -gt 0) { return $null }
+    New-PlantedParent $parent
+    New-LabSentinel $lab
+    $labBefore = Get-TreeDigest $lab
+    $planted = Get-AclReport $parent
+    Add-Result 'custom folder: the parent grants Users Modify and Everyone write' (@(Get-BroadWriters $planted.rules).Count -ge 2) "parent rules: $(@($planted.rules | ForEach-Object { "$($_.identity):$($_.rights)" }) -join ' || ')"
+    $shortcuts = Get-ShortcutNames $Facts
+    $install = Invoke-Install $InstallerPath $target $Tracked $AppSeen
+    Add-Result 'custom folder: silent install' $install.ok $install.detail
+    $report = [ordered]@{ target = $target; parent_acl = $planted }
+    if ($install.ok) {
+        Test-InstalledFolder $target $Facts $InstallerPath
+        Test-InstallRegistry $Facts $target $true
+        Test-NoShortcuts $Facts $shortcuts 'custom folder, after install'
+        $report['acl'] = Test-InstallAcl $target $Facts
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $problems = Get-PrincipalProblems (Get-AclReport $target) $user
+        Add-Result 'custom folder holds exactly the user, SYSTEM and Administrators, nothing inherited' ($problems.Count -eq 0) ($problems -join '; ')
+        foreach ($name in "$($Facts.MainBinary).exe", 'WebView2Loader.dll', 'uninstall.exe') {
+            $file = Join-Path $target $name
+            $fileProblems = @(Get-BroadWriters (Get-AclReport $file).rules)
+            Add-Result "custom folder: $name has no broad writer" ($fileProblems.Count -eq 0) "$(@($fileProblems | ForEach-Object { $_.identity }) -join ', ')"
+        }
+        $note = Join-Path $target 'notes-from-the-user.txt'
+        [System.IO.File]::WriteAllText($note, "not written by the installer`n", $Utf8)
+        $uninstall = Invoke-Uninstall $target $Tracked $AppSeen
+        Add-Result 'custom folder: silent uninstall' $uninstall.ok $uninstall.detail
+        $left = @(if (Test-Path -LiteralPath $target) { Get-ChildItem -LiteralPath $target -Force -File | ForEach-Object { $_.Name } })
+        Add-Result 'uninstall removes only what the installer wrote' ((($left -join ',') -eq 'notes-from-the-user.txt')) "left: $($left -join ', ')"
+        Add-Result 'uninstall leaves the lab untouched' ((Get-TreeDigest $lab) -eq $labBefore) $lab
+        Test-InstallRegistry $Facts $target $false
+        Test-NoShortcuts $Facts $shortcuts 'custom folder, after uninstall'
+        Remove-LeftoverManufacturerKey $Facts
+    }
+    foreach ($path in $parent, $lab) { if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -Force } }
+    return $report
+}
+
+function Invoke-DefaultFolderTest {
+    # An install with no /D=: the hooks move the bundler default under %LOCALAPPDATA%\Programs, the folder ends protected, the
+    # uninstaller removes what the installer wrote. Opt-in (-DefaultFolder): it writes about 3 MB under the profile on C:.
+    param([string]$InstallerPath, $Facts, [System.Collections.Generic.List[int]]$Tracked, $AppSeen)
+    $old, $programs = Get-DefaultFolders $Facts
+    $existing = @(Get-ProductKeys $Facts | Where-Object { Test-Path -LiteralPath $_ })
+    $taken = @(@($old, $programs) | Where-Object { Test-Path -LiteralPath $_ })
+    if ($taken.Count -gt 0 -or $existing.Count -gt 0) { Add-Result 'default folder: nothing installed there yet' $false "$($taken -join ', ') $($existing -join ', ') exists: not run"; return }
+    $install = Invoke-Install $InstallerPath $programs $Tracked $AppSeen -NoFolder
+    Add-Result 'default folder: silent install with no /D=' $install.ok $install.detail
+    $exe = "$($Facts.MainBinary).exe"
+    Add-Result 'default folder: installed under %LOCALAPPDATA%\Programs\<product>' (Test-Path -LiteralPath (Join-Path $programs $exe)) $programs
+    Add-Result 'default folder: nothing under the bundler default %LOCALAPPDATA%\<product>' (-not (Test-Path -LiteralPath $old)) $old
+    if (Test-Path -LiteralPath $programs) {
+        $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        $problems = Get-PrincipalProblems (Get-AclReport $programs) $user
+        Add-Result 'default folder holds exactly the user, SYSTEM and Administrators, nothing inherited' ($problems.Count -eq 0) ($problems -join '; ')
+        $uninstall = Invoke-Uninstall $programs $Tracked $AppSeen
+        Add-Result 'default folder: silent uninstall' $uninstall.ok $uninstall.detail
+        Remove-LeftoverManufacturerKey $Facts
+        # The uninstaller keeps its own folder when anything else is in it; here nothing is, so what is left is ours to clear.
+        if (Test-Path -LiteralPath $programs) { Remove-Item -LiteralPath $programs -Recurse -Force }
+    }
+    Clear-ProductKeys $Facts | Out-Null
+}
+
+function Invoke-CustomFolderTests {
+    param([string]$InstallerPath, $Facts, [bool]$Elevated)
+    $tracked = New-Object 'System.Collections.Generic.List[int]'
+    $appSeen = New-Object 'System.Collections.Generic.List[string]'
+    [NqtWindowWatch]::Start()
+    $report = Invoke-CustomFolderTest $InstallerPath $Facts $tracked $appSeen
+    if ($DefaultFolder) { Invoke-DefaultFolderTest $InstallerPath $Facts $tracked $appSeen }
+    Invoke-RefusalTests $InstallerPath $Facts $Elevated $tracked $appSeen
+    $events = [NqtWindowWatch]::Stop()
+    Test-WatchResult $events 'custom folder and refusals' $CustomRoot $tracked.ToArray()
+    return @{ custom = $report; window_events = $events }
 }
 
 # ---- self-test -------------------------------------------------------------------------------------------------------------
@@ -559,6 +798,51 @@ function Test-AclSelfTest {
     }
 }
 
+function Test-CustomFolderSelfTest {
+    # Born-failing checks of the custom-folder assertions: rule sets, a planted parent on disk, a digest and a SUBST drive;
+    # never an install.
+    $user = 'S-1-5-21-1-2-3-1001'
+    $mask = 2032127
+    $good = @((New-AclRule 'PC\owner' $user $mask), (New-AclRule 'NT AUTHORITY\SYSTEM' 'S-1-5-18' $mask), (New-AclRule 'BUILTIN\Administrators' 'S-1-5-32-544' $mask))
+    foreach ($rule in $good) { $rule['inherited'] = $false }
+    $exact = [ordered]@{ protected = $true; rules = $good }
+    Expect 'exactly the user, SYSTEM and Administrators, protected and not inherited, has no problem' ((Get-PrincipalProblems $exact $user).Count -eq 0)
+    Expect 'a folder that still inherits is reported (born failing)' ((Get-PrincipalProblems ([ordered]@{ protected = $false; rules = $good }) $user).Count -gt 0)
+    $inheritedUsers = @($good) + @((New-AclRule 'BUILTIN\Users' 'S-1-5-32-545' 197055))
+    Expect 'an inherited Users Modify rule is reported (born failing)' ((Get-PrincipalProblems ([ordered]@{ protected = $true; rules = $inheritedUsers }) $user).Count -gt 0)
+    $explicitEveryone = New-AclRule 'Everyone' 'S-1-1-0' 131072; $explicitEveryone['inherited'] = $false
+    Expect 'an explicit extra principal is reported (born failing)' ((Get-PrincipalProblems ([ordered]@{ protected = $true; rules = @($good) + @($explicitEveryone) }) $user).Count -gt 0)
+    Expect 'a missing Administrators rule is reported (born failing)' ((Get-PrincipalProblems ([ordered]@{ protected = $true; rules = @($good[0], $good[1]) }) $user).Count -gt 0)
+    $deny = New-AclRule 'PC\owner' $user $mask 'Deny'; $deny['inherited'] = $false
+    Expect 'a Deny rule is reported (born failing)' ((Get-PrincipalProblems ([ordered]@{ protected = $true; rules = @($good) + @($deny) }) $user).Count -gt 0)
+    $root = Join-Path $ScratchTemp ('custom-self-test-' + [guid]::NewGuid().ToString('N'))
+    try {
+        $parent = Join-Path $root 'parent'
+        New-PlantedParent $parent
+        $child = Join-Path $parent 'child'
+        New-Item -ItemType Directory -Path $child | Out-Null
+        $childRules = (Get-AclReport $child).rules
+        Expect 'a folder created under the planted parent inherits Users Modify and Everyone write (the plant works)' (@(Get-BroadWriters $childRules | Where-Object { $_.inherited }).Count -ge 2)
+        Expect 'that inherited child is reported by the principal check (born failing)' ((Get-PrincipalProblems (Get-AclReport $child) ([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value)).Count -gt 0)
+        $lab = Join-Path $root 'lab'
+        New-LabSentinel $lab
+        $before = Get-TreeDigest $lab
+        Expect 'the digest of an untouched lab is stable' ($before -eq (Get-TreeDigest $lab))
+        [System.IO.File]::AppendAllText((Join-Path $lab 'results\ledger.csv'), 'one more line')
+        Expect 'a changed lab file changes the digest (born failing)' ($before -ne (Get-TreeDigest $lab))
+        Remove-Item -LiteralPath (Join-Path $lab 'live') -Recurse -Force
+        Expect 'a removed lab folder changes the digest (born failing)' ($before -ne (Get-TreeDigest $lab))
+        $letter = Get-FreeDriveLetter
+        & (Join-Path $env:SystemRoot 'System32\subst.exe') "${letter}:" $root
+        try { Expect 'a SUBST drive root exists while mapped' (Test-Path -LiteralPath "${letter}:\") }
+        finally { & (Join-Path $env:SystemRoot 'System32\subst.exe') "${letter}:" /D | Out-Null }
+        Expect 'a SUBST drive root is gone once removed' (-not (Test-Path -LiteralPath "${letter}:\"))
+    } finally {
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    }
+    Expect 'the refusal exit code is 3, not a success or a plain failure' ($RefusedExitCode -eq 3)
+}
+
 function Invoke-SelfTest {
     $good = "!define PRODUCTNAME `"p`"`n!define MANUFACTURER `"m`"`n!define MAINBINARYNAME `"b`"`n!define INSTALLMODE `"currentUser`"`n" + '${GetOptions} $CMDLINE "/NS" $N' + "`n" + '${GetOptions} $CMDLINE "/R" $R0'
     Expect 'a script with /NS and /R and currentUser passes' ((Get-ScriptProblems (Read-InstallerScript $good)).Count -eq 0)
@@ -574,6 +858,7 @@ function Invoke-SelfTest {
     $found = Get-WatchFindings @('window|1|99|D:\dev\d5\install\x\a.exe|c|t|0,0,1,1', 'window|2|98|C:\Other\b.exe|c|t|0,0,1,1') 'D:\dev\d5\install\x' @()
     Expect 'a window of the install folder is ours and another program is foreign' (@($found.ours).Count -eq 1 -and @($found.foreign).Count -eq 1)
     Test-AclSelfTest
+    Test-CustomFolderSelfTest
     [NqtWindowWatch]::Start()
     Start-Sleep -Milliseconds 1200
     $events = [NqtWindowWatch]::Stop()

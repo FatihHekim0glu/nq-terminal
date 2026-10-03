@@ -70,6 +70,8 @@
 }
 
 /* ---------- dropdown menus ---------- */
+/* .nqt-panel clips, so DropdownMenu (FunctionBar.menu.fit.ts) writes a max-height that ends at the panel bottom, a max-width
+   and a sideways shift as inline style: the rows scroll inside the menu, and a menu wider than the panel wraps its rows. */
 .menu {
   position: absolute;
   top: 100%;
@@ -77,6 +79,9 @@
   display: flex;
   flex-direction: column;
   min-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px 0;
   border: 1px solid var(--bg);
   border-radius: 0;
@@ -108,6 +113,7 @@
 .menu-dark .menu-item:hover,
 .menu-dark .menu-item:focus-visible { background: var(--hover-menu); }
 .menu-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.menu[data-wrap="true"] .menu-item { white-space: normal; }
 
 /* 1.4.4: .nqt-panel clips, and at 200% engine zoom (a resolution of 2 dppx or more once the OS scale is counted) a 2 x 2
    panel is about 600 CSS px wide in a 1920 window, which is narrower than the bar's buttons. Zoomed, on a dense display or

@@ -179,7 +179,9 @@
 .des-robustness > .des-note { padding: 0; }
 .des-robustness-sections {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(560px, 1fr));
+  /* min(560px, 100%): a window narrower than one card's 560px gets one card as wide as itself, not a column that makes the
+     panel scroll sideways (WCAG 1.4.10). */
+  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
   gap: 8px;
   align-items: start;
 }

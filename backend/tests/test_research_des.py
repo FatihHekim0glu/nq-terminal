@@ -58,10 +58,15 @@ def test_the_c3_card_shows_its_own_block_and_no_parent_pass_checks(cards):
 
 
 def test_every_registered_card_has_headline_unit_and_t(cards):
-    """A newly registered row fails here until it has a shape; a screen with no t statistic (a bootstrap gate)
-    declares that in its shape, and the card's t label says why the value is empty."""
+    """Every row with a Shape shows its headline, unit and t; a screen with no t statistic (a bootstrap gate) declares
+    that in its shape, and the card's t label says why the value is empty. A row the lab registered after this release
+    (no Shape yet) is a plain card: named, with no figures, never an error."""
     for card in cards.values():
         if not card.registered:
+            continue
+        if card.name not in des_shapes.SHAPES:
+            assert card.t_stat is None and card.t_label is None, card.name
+            assert card.headline_value is None or math.isfinite(card.headline_value), card.name
             continue
         hint = f"{card.name}: add a Shape for it to SHAPES in nq_terminal/des_shapes.py"
         assert card.name in des_shapes.SHAPES, hint

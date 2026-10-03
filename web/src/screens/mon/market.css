@@ -21,7 +21,10 @@
 /* Only a HOME-sized panel (body about 408px at 1920x1080, 250px at 1366x768) folds the parameter row
    away; a full-screen MON (556px at 1366x768) keeps its controls (look spec 2.4). */
 @container mkt (max-height: 480px) {
-  .mon-params { display: none; }
+  /* Not for a maximised panel: it keeps every control at 200% in a small window (WCAG 1.4.4, 1.4.10). */
+  @container not style(--panel-maximised: 1) {
+    .mon-params { display: none; }
+  }
 }
 
 /* The grid: all 27 rows and their sector rows at full height; the panel body scrolls it (MonitorGrid

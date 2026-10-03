@@ -261,7 +261,21 @@ def _dominant(rows: Sequence[dict]) -> str | None:
             "dominates V")
 
 
-def deflated_view(trials: Sequence[deflated.Trial]) -> DeflatedView:
+UNLEARNED_NOTE = ("; {names}: {count} registered {rows} the terminal has not learned yet (no series source), "
+                  "so {pronoun} named here and not counted in N until a release learns {object}")
+
+
+def unlearned_note(unlearned: Sequence[str]) -> str:
+    """The clause the N note gains for registered rows without a series source; empty when every row is learned."""
+    if not unlearned:
+        return ""
+    one = len(unlearned) == 1
+    return UNLEARNED_NOTE.format(names=", ".join(unlearned), count=len(unlearned), rows="row" if one else "rows",
+                                 pronoun="it is" if one else "they are", object="its series" if one else "their series")
+
+
+def deflated_view(trials: Sequence[deflated.Trial], unlearned: Sequence[str] = ()) -> DeflatedView:
+    """SV3 over the learned trials; `unlearned` (registered rows without a series source) are named in the N note."""
     found = deflated.registry_dsr(trials)
     rows = [DeflatedRow(name=row["name"], kind=row["kind"], periods=row["periods"], n=row["n"], sr=num(row["sr"]),
                         sr_session=num(row["sr_session"]), annual_sharpe=num(row["annual_sharpe"]),
@@ -279,6 +293,6 @@ def deflated_view(trials: Sequence[deflated.Trial]) -> DeflatedView:
                                                           sr0_session=num(loo["sr0_session"]),
                                                           sr0_annual=num(loo["sr0_annual"]),
                                                           n_trials=loo["n_trials"]),
-                        n_note=found["n_note"], euler_gamma=found["euler_gamma"],
+                        n_note=found["n_note"] + unlearned_note(unlearned), euler_gamma=found["euler_gamma"],
                         dominant=_dominant(found["rows"]), rows=rows,
                         effective_n=effective_n_view(trials, found))

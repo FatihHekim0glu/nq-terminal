@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from nq_lab.config import ROOT
 from nq_terminal.analytics import deflated, neff, series
 from nq_terminal.app import create_app
+from nq_terminal.constants import SERIES_SOURCES
 from nq_terminal.services.research import ResearchService
 from nq_terminal.settings import load_settings
 
@@ -41,7 +42,8 @@ def body() -> dict:
 @pytest.fixture(scope="module")
 def trials() -> list[deflated.Trial]:
     research = ResearchService(ROOT)
-    return [deflated.Trial(row.name, s.kind, s.periods, s.r) for row in research.registry_rows() if row.registered
+    learned = [row for row in research.registry_rows() if row.registered and row.name in SERIES_SOURCES]
+    return [deflated.Trial(row.name, s.kind, s.periods, s.r) for row in learned
             for s in [series.hypothesis_series(research, row.name, deflated.COST)]]
 
 

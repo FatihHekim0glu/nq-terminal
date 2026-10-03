@@ -29,7 +29,11 @@ from test_result_cache_routes import LOCAL, LOOPBACK, Lab
 from conftest import api_client
 
 WAIT_S = 20.0
-TASK_NAMES = ["deflated", "ledger", "two_day", "universe", "gp_bars", "eq_bootstrap"]
+# What HOME asks for first, in the order it needs it; then the entries HOME never asks for (the deflated Sharpe, EQ's
+# bootstrap), which a first launch must not compute while HOME is loading (02 section 4.1 item 3: the first launch).
+HOME_FIRST = ["ledger", "runs", "two_day", "universe", "gp_bars"]
+AFTER_HOME = ["deflated", "eq_bootstrap"]
+TASK_NAMES = HOME_FIRST + AFTER_HOME
 
 
 @pytest.fixture(autouse=True)
@@ -89,14 +93,18 @@ def wait_for(predicate, timeout: float = WAIT_S) -> bool:
 
 def test_the_task_list_is_the_home_layout_in_order_and_builds_without_any_read():
     state = SimpleNamespace()  # no settings, no services: building the list must touch none of them
-    tasks = home_prewarm.home_tasks(state)
+    tasks = home_prewarm.home_tasks(state) + home_prewarm.later_tasks(state)
     assert [t.__name__ for t in tasks] == TASK_NAMES
     assert all(callable(t) for t in tasks)
 
 
-def test_the_disk_eligible_entries_run_first_and_alone_before_any_price_task():
+def test_born_failing_the_ledger_runs_first_and_nothing_home_never_asks_for_runs_before_home_is_served():
+    """A first launch has no ledger on disk: the ledger (HOME's REG) starts first, and the deflated Sharpe (1.2 s cold,
+    asked for by no HOME panel) and EQ's bootstrap (HOME's EQ panel asks for /panel) wait until every HOME task ran."""
     names = [t.__name__ for t in home_prewarm.home_tasks(SimpleNamespace())]
-    assert names[:2] == ["deflated", "ledger"] and names[2:] == ["two_day", "universe", "gp_bars", "eq_bootstrap"]
+    later = [t.__name__ for t in home_prewarm.later_tasks(SimpleNamespace())]
+    assert names[0] == "ledger"
+    assert names == HOME_FIRST and later == AFTER_HOME, "what HOME never asks for waits for a quiet process"
 
 
 # ---------------------------------------------------------------- when it starts
@@ -116,14 +124,15 @@ def test_it_starts_for_either_switch_with_the_task_list_and_the_ready_check(monk
     monkeypatch.setenv(switch, "1")
     seen = {}
 
-    def fake_start(tasks, enabled=None, *, ready=None, **kwargs):
-        seen.update(tasks=list(tasks), ready=ready)
+    def fake_start(tasks, enabled=None, *, ready=None, later=(), **kwargs):
+        seen.update(tasks=list(tasks), ready=ready, later=list(later), options=kwargs)
         return "thread"
 
     monkeypatch.setattr(home_prewarm, "start_prewarm", fake_start)
     ready = lambda: True  # noqa: E731
     assert home_prewarm.start_home_prewarm(app_stub(fixture_mode=False, ready=ready)) == "thread"
-    assert [t.__name__ for t in seen["tasks"]] == TASK_NAMES and seen["ready"] is ready
+    assert [t.__name__ for t in seen["tasks"]] == HOME_FIRST and seen["ready"] is ready
+    assert [t.__name__ for t in seen["later"]] == AFTER_HOME and seen["options"] == {}, "the process CPU probe decides"
 
 
 def test_born_failing_fixture_mode_never_prewarms_even_in_desktop_mode(monkeypatch):
@@ -287,7 +296,9 @@ def test_the_whole_list_runs_with_terminal_lines_only_and_the_page_then_reads_no
     escaped: list[BaseException] = []
     monkeypatch.setattr(threading, "excepthook", lambda args: escaped.append(args.exc_value))
     lab = Lab(tmp_path, "full").build()
-    thread = prewarm.start_prewarm(home_prewarm.home_tasks(lab.app.state), True)
+    state = lab.app.state
+    thread = prewarm.start_prewarm(home_prewarm.home_tasks(state), True, later=home_prewarm.later_tasks(state),
+                                   quiet=lambda: True)
     assert thread is not None
     thread.join(WAIT_S * 3)
     assert not thread.is_alive() and escaped == []

@@ -13,7 +13,9 @@ Reading
   error, mtime and size validation) with one parser per section, so a summary does not sanitise 8,588 fills:
   `head` (everything except `trades`, `fills` and `strategy_log`, plus counts and the log metadata), `trades`,
   `fills` and `strategy_log`. Values are sanitised (NaN to None, ns ints to ISO plus epoch seconds, Decimal
-  strings kept plus a float) and frozen; responses get thawed copies.
+  strings kept plus a float) and frozen; responses get thawed copies. The equity curve reads its own projection
+  of `trades` or `strategy_log.snapshots` (`curve:trades`, `curve:snapshots`: only the fields it reads), so the
+  ledger's anchor pairs and an equity line never sanitise a whole log.
 
 Badges (ARCHITECTURE 3.1): probe when `data.lookahead_probe` exists or the name holds `_probe_`; anchor for
 `_regress_` and `_haltfix_`; ledgered by joining `results/ledger.csv`; unusable when `balance_check.ok` is not
@@ -69,6 +71,8 @@ from nq_terminal.services.files import (
     thaw,
 )
 from nq_terminal.services.research import ResearchService, service_for_root
+from nq_terminal.services.run_curves import CURVE_PARSERS, CURVE_SNAPSHOTS, CURVE_TRADES
+from nq_terminal.services.run_curves import kept_from
 
 RESCAN_S = 5.0
 CACHE_BYTES = 1024**3
@@ -310,10 +314,19 @@ class RunIndex:
         with self._lock:
             now = self._clock()
             if self._scanned_at is None or now - self._scanned_at >= self._rescan_s:
-                self._entries = MappingProxyType(scan_output(self.output))
-                self._scanned_at = now
-                self.scans += 1
+                self._scan_locked(now)
             return self._entries
+
+    def rescan(self) -> Mapping[str, RunEntry]:
+        """Scan now, whatever the interval: a body the result cache keeps must be built from the folders as they are."""
+        with self._lock:
+            self._scan_locked(self._clock())
+            return self._entries
+
+    def _scan_locked(self, now: float) -> None:
+        self._entries = MappingProxyType(scan_output(self.output))
+        self._scanned_at = now
+        self.scans += 1
 
     def get(self, run_id: Any) -> RunEntry:
         if not isinstance(run_id, str) or not RUN_ID_RE.fullmatch(run_id):
@@ -327,13 +340,6 @@ class RunIndex:
 # ---------------------------------------------------------------- section parsers
 
 
-def _load_object(raw: bytes) -> dict[str, Any]:
-    doc = json.loads(raw.decode("utf-8"))
-    if not isinstance(doc, dict):
-        raise ValueError("result.json is not a JSON object")
-    return doc
-
-
 def _log_meta(log: Mapping[str, Any]) -> tuple[dict[str, int], dict[str, Any]]:
     sections = {k: len(v) for k, v in log.items() if k in LOG_SECTIONS and isinstance(v, list)}
     meta = {k: v for k, v in log.items() if k not in LOG_SECTIONS}
@@ -342,24 +348,30 @@ def _log_meta(log: Mapping[str, Any]) -> tuple[dict[str, int], dict[str, Any]]:
 
 def parse_head(raw: bytes) -> Any:
     """Everything but the large arrays, plus their counts and the strategy log's metadata."""
-    doc = _load_object(raw)
+    return freeze(sanitise(kept_from(raw, _head_of)))
+
+
+def _head_of(doc: dict[str, Any]) -> dict[str, Any]:
     head = {k: v for k, v in doc.items() if k not in LARGE_KEYS}
     log = doc.get("strategy_log") if isinstance(doc.get("strategy_log"), dict) else {}
     sections, meta = _log_meta(log)
     head[META] = {"kind": run_kind(doc), "trades": len(doc.get("trades") or []),
                   "fills": len(doc.get("fills") or []), "log_sections": sections, "log_meta": meta,
                   "has_snapshots": "snapshots" in log}
-    return freeze(sanitise(head))
+    return head
 
 
 def _section_parser(key: str) -> Callable[[bytes], Any]:
     def parse(raw: bytes) -> Any:
-        return freeze(sanitise(_load_object(raw).get(key)))
+        return freeze(sanitise(kept_from(raw, lambda doc: doc.get(key))))
 
     return parse
 
 
 SECTION_PARSERS = {key: _section_parser(key) for key in LARGE_KEYS}
+
+_PARSERS: Mapping[str, Callable[[bytes], Any]] = MappingProxyType(
+    {"head": parse_head, **SECTION_PARSERS, **CURVE_PARSERS})
 
 
 # ---------------------------------------------------------------- ledger file
@@ -432,7 +444,7 @@ class RunService:
     # ----- reading
 
     def _read(self, entry: RunEntry, section: str) -> Any:
-        parser = parse_head if section == "head" else SECTION_PARSERS[section]
+        parser = _PARSERS[section]
         try:
             return self.cache.get(entry.result, parser, kind=f"runs:{section}")
         except (FileDecodeError, FileAccessError, OSError) as exc:
@@ -544,11 +556,10 @@ class RunService:
         check, cfg = _mapping(head.get("balance_check")), _mapping(head.get("config"))
         starting = _num(check.get("starting_usd")) or _num(_mapping(head.get("venue")).get("starting_balance_usd"))
         if head[META]["has_snapshots"]:
-            log = _mapping(self._read(entry, "strategy_log"))
-            curve = snapshot_curve(log.get("snapshots") or ())
+            curve = snapshot_curve(self._read(entry, CURVE_SNAPSHOTS) or ())
             return curve, {"starting": starting, "n_sessions": len(curve.t), "sessions_match": None}
         closes = session_closes(cfg.get("start"), cfg.get("end"))
-        curve = realised_curve(self._read(entry, "trades") or (), closes, starting or 0.0)
+        curve = realised_curve(self._read(entry, CURVE_TRADES) or (), closes, starting or 0.0)
         expected = _int(_mapping(head.get("data")).get("sessions"))
         match = None if expected is None or not closes else len(curve.t) == expected
         return curve, {"starting": starting, "n_sessions": len(curve.t), "sessions_match": match}

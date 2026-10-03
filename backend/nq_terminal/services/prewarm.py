@@ -18,6 +18,11 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
 - `ready` (optional) is polled until it returns true before the first task, so the prewarm starts after the port is
   bound (the lifespan hook runs before the listening socket exists). A check that never turns true, or that raises,
   delays the start by at most `ready_timeout` seconds and the tasks then run anyway.
+- `later` (optional) are tasks the first screen never asks for. They run after `tasks`, once the process has been quiet
+  for `quiet_windows` readings in a row (`quiet`, by default `process_quiet_probe`: the whole process used at most a
+  quarter of one core over a half-second window), or after `quiet_timeout` seconds, whichever comes first. On a first
+  launch (02 section 4.1 item 3, decided: the cold-HOME cap holds on the first launch) they would otherwise take the
+  interpreter from HOME's own requests while HOME loads; like requestIdleCallback in a page, they wait for idle time.
 """
 from __future__ import annotations
 
@@ -36,6 +41,10 @@ THREAD_NAME = "nqt-prewarm"
 PORT_BOUND_KEY = "port_bound"  # app.state attribute: a zero-argument callable, true once the socket is bound
 READY_TIMEOUT_S = 15.0
 READY_POLL_S = 0.05
+QUIET_WINDOW_S = 0.5  # one reading of the process CPU
+QUIET_CPU_SHARE = 0.25  # of one core: a process serving HOME's requests runs near one core (the interpreter lock)
+QUIET_WINDOWS = 2  # quiet readings in a row before the later tasks start
+QUIET_TIMEOUT_S = 20.0  # the later tasks start by then even if the process never goes quiet
 
 Task = Callable[[], object]
 
@@ -49,9 +58,32 @@ def prewarm_enabled(environ: Mapping[str, str] | None = None) -> bool:
     return env.get(ENV_DESKTOP) == SWITCH_ON or env.get(ENV_PREWARM) == SWITCH_ON
 
 
+def process_quiet_probe(window: float = QUIET_WINDOW_S, share: float = QUIET_CPU_SHARE, *,
+                        cpu: Callable[[], float] = time.process_time, clock: Callable[[], float] = time.monotonic,
+                        sleep: Callable[[float], None] = time.sleep) -> Callable[[], bool]:
+    """A check that sleeps one `window` and answers whether the whole process (every thread) used at most `share` of
+    one core meanwhile. The prewarm thread sleeps through it, so only the app's own work counts."""
+    def process_quiet() -> bool:
+        cpu_before, wall_before = cpu(), clock()
+        sleep(window)
+        return cpu() - cpu_before <= share * (clock() - wall_before)
+
+    return process_quiet
+
+
+class Idle:
+    """When the later tasks may start: `windows` quiet readings in a row, or `timeout` seconds."""
+
+    def __init__(self, quiet: Callable[[], bool], windows: int = QUIET_WINDOWS, timeout: float = QUIET_TIMEOUT_S):
+        self.quiet, self.windows, self.timeout = quiet, max(1, int(windows)), timeout
+
+
 def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: Callable[[], bool] | None = None,
-                  ready_timeout: float = READY_TIMEOUT_S) -> threading.Thread | None:
-    """Run `tasks` once, in order, on a daemon thread; return the thread, or None when nothing was started.
+                  ready_timeout: float = READY_TIMEOUT_S, later: Iterable[Task] = (),
+                  quiet: Callable[[], bool] | None = None, quiet_windows: int = QUIET_WINDOWS,
+                  quiet_timeout: float = QUIET_TIMEOUT_S) -> threading.Thread | None:
+    """Run `tasks` once, in order, on a daemon thread, then `later` once the process is quiet; return the thread, or
+    None when nothing was started.
 
     `enabled` None reads the environment (`prewarm_enabled`); False starts nothing and does not use up the
     once-per-process start. Never raises."""
@@ -59,16 +91,18 @@ def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: 
     try:
         if not (prewarm_enabled() if enabled is None else bool(enabled)):
             return None
-        snapshot = tuple(tasks)
+        snapshot, deferred = tuple(tasks), tuple(later)
+        idle = Idle(quiet if quiet is not None else process_quiet_probe(), quiet_windows, quiet_timeout)
     except Exception:  # noqa: BLE001 - a prewarm problem must never reach the app
         LOG.exception("the prewarm could not read its tasks and did not start")
         return None
-    if not snapshot:
+    if not snapshot and not deferred:
         return None
     with _lock:
         if _started:
             return None
-        thread = threading.Thread(target=_run, args=(snapshot, ready, ready_timeout), name=THREAD_NAME, daemon=True)
+        thread = threading.Thread(target=_run, args=(snapshot, ready, ready_timeout, deferred, idle),
+                                  name=THREAD_NAME, daemon=True)
         try:
             thread.start()
         except RuntimeError:
@@ -78,13 +112,33 @@ def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: 
     return thread
 
 
-def _run(tasks: tuple[Task, ...], ready: Callable[[], bool] | None, ready_timeout: float) -> None:
+def _run(tasks: tuple[Task, ...], ready: Callable[[], bool] | None, ready_timeout: float,
+         later: tuple[Task, ...] = (), idle: Idle | None = None) -> None:
     _wait_until_ready(ready, ready_timeout)
     began = time.monotonic()
-    done = 0
-    for task in tasks:
-        done += _run_task(task)
+    done = sum(_run_task(task) for task in tasks)
     LOG.info("prewarm finished: %d of %d tasks ok in %.2f s", done, len(tasks), time.monotonic() - began)
+    if not later:
+        return
+    _wait_until_quiet(idle if idle is not None else Idle(process_quiet_probe()))
+    began = time.monotonic()
+    done = sum(_run_task(task) for task in later)
+    LOG.info("prewarm later tasks finished: %d of %d ok in %.2f s", done, len(later), time.monotonic() - began)
+
+
+def _wait_until_quiet(idle: Idle) -> None:
+    """Returns after `idle.windows` quiet readings in a row, after `idle.timeout` seconds, or at once on a broken check."""
+    deadline = time.monotonic() + idle.timeout
+    in_a_row = 0
+    while in_a_row < idle.windows:
+        if time.monotonic() >= deadline:
+            LOG.info("the process never went quiet within %.1f s; the later prewarm tasks start anyway", idle.timeout)
+            return
+        try:
+            in_a_row = in_a_row + 1 if idle.quiet() else 0
+        except Exception:  # noqa: BLE001 - a broken check is logged and the later tasks go ahead
+            LOG.exception("the prewarm quiet check failed; the later tasks start now")
+            return
 
 
 def _run_task(task: Task) -> int:

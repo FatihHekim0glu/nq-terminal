@@ -77,6 +77,15 @@ describe('PanelChrome title bar (look spec 4.3)', () => {
     expect(onToggleMaximise).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the markup the stylesheets mark a maximised panel by: the pressed toggle, labelled by its copy, in the title bar that is a child of the panel', () => {
+    const { container } = renderPanel({ onToggleMaximise: vi.fn(), maximised: true })
+    const toggle = container.querySelector(`.nqt-panel > .ptitle [aria-label="${PANEL.maximise}"][aria-pressed="true"]`)
+    expect(toggle?.tagName).toBe('BUTTON')
+    cleanup()
+    const plain = renderPanel({ onToggleMaximise: vi.fn(), maximised: false })
+    expect(plain.container.querySelector(`.nqt-panel > .ptitle [aria-label="${PANEL.maximise}"][aria-pressed="true"]`)).toBeNull()
+  })
+
   it('opens the Options menu with related functions, back, forward and maximise', () => {
     const onRelated = vi.fn()
     const onBack = vi.fn()

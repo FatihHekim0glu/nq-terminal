@@ -53,6 +53,18 @@
 
 .linestack-legend .chart-legend-name { white-space: nowrap; }
 
+/* In a narrow pane of a maximised panel (a maximised panel at 200% zoom is 512 to 960 CSS px wide, its pane less) the legend
+   stays inside the pane and a long name (a series named after a run id) wraps rather than running past the pane's edge, where
+   the pane clips it (WCAG 1.4.10). Only in a maximised panel (PanelChrome.css marks it): a shared pane can be as narrow (the
+   DES chart at 1366x768), and a legend wrapped over its short plot grows past the share the y range keeps clear of it and
+   covers the curve's high and its last-value tag (look spec 6.1). A wider pane keeps the legend as it was. */
+@container style(--panel-maximised: 1) {
+  @container (max-width: 520px) {
+    .linestack-legend { max-width: calc(100% - 16px); }
+    .linestack-legend .chart-legend-name { white-space: normal; overflow-wrap: anywhere; }
+  }
+}
+
 /* A shorter pane still (the HOME grid at 1366x768, the CORR pair pane) sets its legend on one line,
    series side by side, so a two-series legend neither runs past the pane's foot into the splitter nor
    takes so much height that the range cannot keep the curve's high clear of it. */

@@ -41,6 +41,37 @@ export function commandsSeparate(scripts: Readonly<Record<string, string>>): boo
   return /--project[ =]chromium\b/.test(main) && !/perf/.test(main) && /--project[ =]perf\b/.test(perf) && /--workers[ =]1\b/.test(perf)
 }
 
+type Server = { name?: string; command?: string; env?: Record<string, string | undefined> }
+
+/**
+ * Whether every screenshot of the main run reads the checked-in fixture tree: the backend is the fixture app with
+ * NQT_FIXTURE_DIR at backend/tests/fixtures, so a row the research lab adds to its live registry never reaches a baseline.
+ */
+export function screenshotsReadPinnedData(servers: readonly Server[]): boolean {
+  const backends = servers.filter((s) => /\buvicorn\b/.test(s.command ?? ''))
+  if (backends.length !== 1) return false
+  const [backend] = backends
+  const dir = (backend!.env?.NQT_FIXTURE_DIR ?? '').replace(/\\/g, '/')
+  return /fixture_app:app/.test(backend!.command ?? '') && /\/terminal\/backend\/tests\/fixtures$/.test(dir)
+}
+
+describe('Playwright data', () => {
+  const servers = (Array.isArray(config.webServer) ? config.webServer : [config.webServer]) as Server[]
+
+  it('serves every screenshot of the main run from the checked-in fixture tree, never the live research registry', () => {
+    expect(screenshotsReadPinnedData(servers)).toBe(true)
+  })
+
+  it('born failing: a backend over the live lab, or one with no fixture folder, is caught', () => {
+    const fixture = { command: 'python -m uvicorn fixture_app:app --port 8795', env: { NQT_FIXTURE_DIR: 'C:/x/nq-lab/terminal/backend/tests/fixtures' } }
+    expect(screenshotsReadPinnedData([fixture])).toBe(true)
+    expect(screenshotsReadPinnedData([{ ...fixture, env: {} }])).toBe(false)
+    expect(screenshotsReadPinnedData([{ ...fixture, env: { NQT_FIXTURE_DIR: 'C:/x/nq-lab' } }])).toBe(false)
+    expect(screenshotsReadPinnedData([{ ...fixture, command: 'python -m uvicorn nq_terminal.app:app --port 8795' }])).toBe(false)
+    expect(screenshotsReadPinnedData([])).toBe(false)
+  })
+})
+
 describe('Playwright projects', () => {
   it('gives the performance budgets their own project, which waits on no other', () => {
     expect(budgetsIsolated(config.projects ?? [])).toBe(true)

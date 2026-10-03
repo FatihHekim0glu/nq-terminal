@@ -1,4 +1,5 @@
-"""The result cache on the eight slow routes (04 D1.3; 03 item 1.2b and section 5): cached bodies equal fresh ones.
+"""The result cache on the eight slow routes (04 D1.3; 03 item 1.2b and section 5) and, since DEC1, the run index
+(02 section 4.1 item 3: HOME asks for it on every launch): cached bodies equal fresh ones.
 
 Each route answers in fixture mode (the fixture folder, the fake catalogue, synthetic bars through the real gate with a
 temporary log). For every route: the body served through the cache, on a miss and on a hit, equals the body computed
@@ -122,7 +123,10 @@ CASES: dict[str, dict[str, Any]] = {
     "seasonality": {"url": "/api/seasonality/instrument/NQ", "route": rc.ROUTE_SEASONALITY, "files": [],
                     "series": ("NQ.V.0", "1d", "vendor")},
     "spa": {"url": "/api/analytics/spa", "route": rc.ROUTE_SPA, "files": ["results/registry.csv"], "series": None},
+    "runs": {"url": "/api/runs", "route": rc.ROUTE_RUNS,
+             "files": ["backtests/output/nt_za_v0_fixture_a/result.json", "results/ledger.csv"], "series": None},
 }
+SLOW_ROUTES = 8  # 03 item 1.2b's eight; the run index is the ninth cached route (DEC1)
 
 
 @pytest.fixture()
@@ -296,6 +300,7 @@ def _callable_cases() -> list[tuple[str, Callable[..., bytes], dict[str, Any]]]:
         ("seasonality", seasonality.cached_instrument_seasonality,
          {"root": "NQ", "variant": None, "start_year": 2010, "end_year": 2021}),
         ("spa", spa.cached_spa, {}),
+        ("runs", runs.cached_runs, {}),
     ]
 
 
@@ -318,7 +323,7 @@ def test_the_prewarm_callable_for_two_day_defaults_to_every_symbol_like_the_rout
 
 
 def test_the_eight_routes_use_only_keys_named_in_cached_routes(lab):
-    assert rc.CACHED_ROUTES == {spec["route"] for spec in CASES.values()} and len(rc.CACHED_ROUTES) == 8
+    assert rc.CACHED_ROUTES == {spec["route"] for spec in CASES.values()} and len(rc.CACHED_ROUTES) == SLOW_ROUTES + 1
     for case in CASES.values():
         assert case["route"] in rc.CACHED_ROUTES
 
@@ -383,7 +388,7 @@ def test_the_live_modules_never_name_the_cache(lab):
         names |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
         names |= {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
         assert not (names & CACHE_NAMES), name
-    assert NEVER_CACHED_STREAM in lab.app.openapi()["paths"] and len(CACHED_CALLABLES) == 8
+    assert NEVER_CACHED_STREAM in lab.app.openapi()["paths"] and len(CACHED_CALLABLES) == SLOW_ROUTES + 1
 
 
 def test_the_cached_routes_and_the_never_cached_lists_do_not_overlap():

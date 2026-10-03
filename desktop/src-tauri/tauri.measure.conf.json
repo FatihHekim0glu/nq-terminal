@@ -26,6 +26,7 @@
       },
       "nsis": {
         "installMode": "currentUser",
+        "installerHooks": "windows/nsis/hooks.nsh",
         "displayLanguageSelector": false
       }
     }

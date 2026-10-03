@@ -256,13 +256,15 @@ def test_series_sources_name_real_columns_and_no_price_column():
             assert source.void_column in header, name
 
 
-def test_every_registered_row_has_a_series_source(real):
-    """A newly registered row fails here until it has a series: the message says what to add."""
-    registered = {c.name for c in real.cards() if c.registered}
-    lacking = sorted(registered - set(constants.SERIES_SOURCES))
-    assert not lacking, (f"registered rows without a series source: {', '.join(lacking)}; add a SeriesSource for "
-                         "each to SERIES_SOURCES in nq_terminal/constants.py (its CSV under results/screens, the time "
-                         "column and the value column per cost)")
+def test_a_registered_row_without_a_series_source_is_a_plain_card(real):
+    """A row the lab registered after this release has no SeriesSource yet: its card has no series kind and no costs,
+    and asking for its series is an unknown name (a 404), never a server error and never a failing test."""
+    for card in real.cards():
+        if not card.registered or card.name in constants.SERIES_SOURCES:
+            continue
+        assert card.series_kind is None and card.series_costs == [], card.name
+        with pytest.raises(UnknownNameError):
+            real.series(card.name, 1)
 
 
 def test_volmanaged_series_at_each_cost(real):

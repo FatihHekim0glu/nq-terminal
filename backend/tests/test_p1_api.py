@@ -219,20 +219,23 @@ def test_a_one_contract_series_has_no_cagr_interval(real_api):
 
 
 def _trials(research: ResearchService) -> list[deflated.Trial]:
+    """The registered rows the terminal has learned (a SeriesSource each), as trials."""
     out = []
     for row in research.registry_rows():
-        if row.registered:
+        if row.registered and row.name in constants.SERIES_SOURCES:
             s = series.hypothesis_series(research, row.name, 1)
             out.append(deflated.Trial(row.name, s.kind, s.periods, s.r))
     return out
 
 
-def test_deflated_covers_every_registered_trial(real_api, research):
+def test_deflated_covers_every_learned_registered_trial_and_names_the_rest(real_api, research):
     body = get(real_api, "/api/analytics/deflated")
     trials = _trials(research)
     want = deflated.registry_dsr(trials)
     registered = [r.name for r in research.registry_rows() if r.registered]
-    assert body["n_trials"] == len(registered) == len(trials) and [r["name"] for r in body["rows"]] == registered
+    learned = [name for name in registered if name in constants.SERIES_SOURCES]
+    assert body["n_trials"] == len(learned) == len(trials) and [r["name"] for r in body["rows"]] == learned
+    assert all(name in body["n_note"] for name in registered if name not in learned)
     assert close(body["variance"], want["variance"]) and close(body["sr0_session"], want["sr0_session"])
     for got, expected in zip(body["rows"], want["rows"]):
         assert close(got["dsr"], expected["dsr"])

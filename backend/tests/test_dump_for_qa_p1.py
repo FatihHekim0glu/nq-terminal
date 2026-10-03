@@ -245,10 +245,12 @@ def neff_values(view) -> dict:
 
 
 def deflated_doc() -> dict:
+    """The trials are the learned registered rows (a SeriesSource each), as GET /api/analytics/deflated takes them; a row
+    the lab registered after this release is named in the view, not a trial."""
     research = _research()
     trials = []
     for row in research.registry_rows():
-        if row.registered:
+        if row.registered and row.name in constants.SERIES_SOURCES:
             s = series.hypothesis_series(research, row.name, deflated.COST)
             trials.append(deflated.Trial(row.name, s.kind, s.periods, s.r))
     found = deflated.registry_dsr(trials)
@@ -264,13 +266,13 @@ def deflated_doc() -> dict:
             "loo_variance": {found["leave_one_out"]["name"]: found["leave_one_out"]["variance"]},
             "loo_sr0_session": {found["leave_one_out"]["name"]: found["leave_one_out"]["sr0_session"]},
             "paper_sr0": round(paper_sr0, 4), "paper_dsr": round(paper_dsr, 4), **neff_values(served)}
-    registered = sum(1 for row in research.registry_rows() if row.registered)
+    registered = sum(1 for row in research.registry_rows() if row.registered and row.name in constants.SERIES_SOURCES)
     inputs = {"trials": [{"name": t.name, "periods": t.periods, "r": t.r.tolist(),
                           "dates": [d.strftime("%Y-%m-%d") for d in t.r.index]} for t in trials],
               "paper": {"n_trials": 100, "variance": 1 / (2 * 250), "t": 1250, "skew": -3.0, "kurt": 10.0,
                         "sr": 2.5 / math.sqrt(250)}}
     stored = {"paper_sr0": 0.1132, "paper_dsr": 0.9004, "n_trials": float(registered)}
-    return _bundle("deflated", "deflated_registry", "every registered row of results/registry.csv at 1 tick",
+    return _bundle("deflated", "deflated_registry", "every learned registered row of results/registry.csv at 1 tick",
                    inputs, {"ours": ours, "stored": stored})
 
 

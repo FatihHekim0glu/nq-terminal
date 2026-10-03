@@ -2,7 +2,8 @@
 // Opens under its button, left-aligned (or right-aligned on the title bar); rows one grid row high,
 // no separators, check marks or icons; the active row takes the hover fill. Arrow keys move, Enter or
 // Space runs, Escape closes and hands focus back to the button, Tab or a click elsewhere closes.
-import { useEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type RefObject } from 'react'
+import { applyMenuFit } from './FunctionBar.menu.fit'
 
 export interface MenuEntry {
   readonly label: string
@@ -54,6 +55,15 @@ function useOutsidePress(menu: RefObject<HTMLElement | null>, trigger: RefObject
 export default function DropdownMenu(props: DropdownMenuProps) {
   const { id, label, entries, tone, align = 'left', trigger, onClose } = props
   const ref = useRef<HTMLDivElement>(null)
+  // Held to the panel's box before the first row takes focus, so focusing it never scrolls the clipped panel; refitted when the window resizes.
+  useLayoutEffect(() => {
+    const fit = () => {
+      if (ref.current) applyMenuFit(ref.current, align)
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [align, entries.length])
   useEffect(() => {
     items(ref.current)[0]?.focus()
   }, [])

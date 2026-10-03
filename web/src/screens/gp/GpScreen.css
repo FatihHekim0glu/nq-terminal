@@ -78,6 +78,13 @@
 }
 .gp-footer { overflow-wrap: anywhere; }
 
+/* A maximised GP: the body scrolls what its rows need, so the chart gets a floor that keeps its three panes readable (the
+   160px of the base rule counts the Table row and the date strip, which leaves a plot of about 100px: a 19px volume pane
+   whose legend and the attribution logo run into each other; WCAG 1.4.4, 1.4.10). */
+@container style(--panel-maximised: 1) {
+  .gp-screen > .gp-chart { min-height: 240px; }
+}
+
 /* The instrument DES price card (look spec 7.3): a fixed-height daily chart inside the card. */
 .gp-mini {
   position: relative;
@@ -94,12 +101,17 @@
    U22: at 200% zoom the container can be shorter still (960x540 CSS px); the chart keeps its 160px
    floor (CandleChart's price, volume and RV22 panes need that much to stay readable, WCAG 1.4.4)
    rather than the 0 this rule zeroed it to, and the panel body (already `overflow: auto`) scrolls for
-   whatever that floor then pushes past the fold. */
+   whatever that floor then pushes past the fold.
+   Only for a panel that shares the workspace: a maximised GP keeps its parameter and range rows, so every
+   control stays reachable at 200% in a 1366x768 or 1024x640 window (WCAG 1.4.4, 1.4.10; PanelChrome.css
+   marks the maximised panel), and the body scrolls what the rows, the chart's floor and the footer need. */
 @container gp (max-height: 300px) {
-  .gp-screen > .param-row,
-  .gp-screen > .gp-rangerow,
-  .gp-screen > .gp-sessions,
-  .gp-screen > .gp-field-msg { display: none; }
-  .gp-screen > * { flex-shrink: 0; }
-  .gp-screen > .gp-chart { flex: 0 0 auto; height: 100cqh; min-height: 160px; }
+  @container not style(--panel-maximised: 1) {
+    .gp-screen > .param-row,
+    .gp-screen > .gp-rangerow,
+    .gp-screen > .gp-sessions,
+    .gp-screen > .gp-field-msg { display: none; }
+    .gp-screen > * { flex-shrink: 0; }
+    .gp-screen > .gp-chart { flex: 0 0 auto; height: 100cqh; min-height: 160px; }
+  }
 }

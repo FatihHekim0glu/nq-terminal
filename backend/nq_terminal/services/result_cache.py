@@ -85,8 +85,10 @@ ROUTE_RUN_BOOTSTRAP = "/api/analytics/run/{run_id}/bootstrap"
 ROUTE_DEFLATED = "/api/analytics/deflated"
 ROUTE_SEASONALITY = "/api/seasonality/instrument/{root}"
 ROUTE_SPA = "/api/analytics/spa"
+ROUTE_RUNS = "/api/runs"  # the run index: on the persist list since D1, cached since DEC1 (HOME asks for it every launch)
 CACHED_ROUTES: frozenset[str] = frozenset({ROUTE_COMPARE, ROUTE_LEDGER, ROUTE_TWO_DAY, ROUTE_HYPOTHESIS_BOOTSTRAP,
-                                           ROUTE_RUN_BOOTSTRAP, ROUTE_DEFLATED, ROUTE_SEASONALITY, ROUTE_SPA})
+                                           ROUTE_RUN_BOOTSTRAP, ROUTE_DEFLATED, ROUTE_SEASONALITY, ROUTE_SPA,
+                                           ROUTE_RUNS})
 STATE_KEY = "result_cache"  # the attribute of `app.state` that holds the app's cache
 JSON_MEDIA_TYPE = "application/json"
 GATE_PREFIX = "gate:"

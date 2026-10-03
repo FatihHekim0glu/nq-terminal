@@ -5,6 +5,10 @@
 //   node measure_stage1.mjs [--dry] [--only ready,home,routes,screens] [--out DIR] [--port 8797] [--runs 3]
 //                           [--screen-runs 5] [--screen-modes browser,desktop] [--gate-seconds 60] [--limit-pct 10]
 //                           [--max-rejects 2] [--libs DIR] [--tmp DIR] [--quiet-window (the owner named this window)]
+//                           [--home fresh,disk]
+//
+// First-launch mode: `--only home --home fresh` takes the cold HOME on an empty state folder alone (the launch T3 is
+// read on, 02 section 4.1 item 3); `--home disk` takes the usual launch alone (a state folder an earlier launch filled).
 //
 // Each group runs behind the window watch (any new visible window or change of foreground fails it), each run behind the
 // CPU gate (a reading over the limit rejects the attempt and the record is kept; after --max-rejects readings the run is
@@ -38,7 +42,13 @@ const READY_CEILING_MS = 2500 // T3, 02 section 9
 const READY_TARGET_MS = 1500
 const HOME_TARGET_MS = 4500 // 02 section 4.1
 const HOME_CAP_MS = 6000 // 02 section 4.1: the cold-HOME ceiling is never above this
-const HOME_READING_RATIFIED = false // the usual-launch reading of 02 section 4.1 item 3 is unratified: set true only on the owner's word
+// 02 section 4.1 item 3, decided (DEC1, 3 October 2026, the decision the owner delegated): the cold-HOME cap holds on every
+// launch, and the launch it is read on is the worst one, the very first launch after an install with an empty state folder.
+const HOME_READING = 'first-launch'
+const HOME_READING_RATIFIED = true
+const HOME_USUAL_MEDIAN_W3B_MS = 3757 // the usual launch median recorded at W3B: the DEC1 exit criterion is not slower than this, so it is the no-regression line
+const HOME_USUAL_CEILING_W3B_MS = 4508 // the noise allowance (3,757 ms x 1.2), reported beside the verdict and never the gate
+const HOME_MODES = ['fresh', 'disk']
 const ROUTE_TARGET_MS = 100
 const ROUTE_CEILING_MS = 300
 const SCREEN_TARGET_MS = 1000
@@ -109,6 +119,7 @@ export function readConfig(argv) {
     dry: argv.includes('--dry'), port: Number(opt('port', 8797)), out: opt('out', 'D:/dev/spikes/w3b/stage1'), tmp: opt('tmp', 'D:/dev/tmp'),
     libs: opt('libs', 'D:/dev/spikes/t2/lib'), runs: Number(opt('runs', 3)), screenRuns: Number(opt('screen-runs', 5)), gateSeconds: Number(opt('gate-seconds', 60)),
     limitPct: Number(opt('limit-pct', 10)), maxRejects: Number(opt('max-rejects', 2)), only: list('only', GROUPS.join(',')), screenModes: list('screen-modes', 'browser,desktop'), quietWindow: argv.includes('--quiet-window'),
+    homeModes: list('home', HOME_MODES.join(',')),
   }
   const problems = []
   if (!Number.isInteger(config.port) || config.port < 1024 || config.port > 65535 || config.port === REAL_PORT) problems.push(`--port must be a spare port from 1024 to 65535, not ${REAL_PORT}`)
@@ -116,6 +127,7 @@ export function readConfig(argv) {
   for (const name of ['runs', 'screenRuns', 'maxRejects']) if (!Number.isInteger(config[name]) || config[name] < 1) problems.push(`--${name} must be a whole number of at least 1`)
   if (!(config.gateSeconds >= 0)) problems.push('--gate-seconds must be 0 or more')
   if (config.only.some((group) => !GROUPS.includes(group)) || config.screenModes.some((mode) => !['browser', 'desktop'].includes(mode))) problems.push('--only or --screen-modes names something unknown')
+  if (config.homeModes.length === 0 || config.homeModes.some((mode) => !HOME_MODES.includes(mode))) problems.push(`--home takes ${HOME_MODES.join(' and or ')}`)
   if (problems.length > 0) throw new Error(problems.join('; '))
   return config
 }
@@ -392,11 +404,15 @@ async function homeRun(browser, stateDir, label) {
   const page = await context.newPage() // the window exists before the backend does, as the shell's splash does
   const finished = []
   const errors = []
+  let clockEpochMs = null // the wall clock when the launch clock started, so each request is placed on the launch's own time line
   page.on('pageerror', (error) => errors.push(String(error)))
   page.on('requestfinished', (request) => {
     const url = new URL(request.url())
-    if (url.pathname.startsWith('/api/')) finished.push({ path: `${url.pathname}${url.search}`.slice(0, 100), endMs: Math.round(request.timing().responseEnd) })
+    if (!url.pathname.startsWith('/api/')) return
+    const timing = request.timing()
+    finished.push({ path: `${url.pathname}${url.search}`.slice(0, 100), endMs: Math.round(timing.responseEnd), ...requestOnClock(timing, clockEpochMs) })
   })
+  clockEpochMs = Date.now()
   const started = performance.now()
   let proc = null
   try {
@@ -409,7 +425,8 @@ async function homeRun(browser, stateDir, label) {
     const done = performance.now()
     return {
       headline: { ms: Math.round(done - started) }, backendReadyMs: Math.round(afterBackend - started), sessionMs: Math.round(afterSession - afterBackend), pageMs: Math.round(done - afterSession),
-      dist: proc.handshake.dist, slowestApi: finished.sort((a, b) => b.endMs - a.endMs).slice(0, 6), pageErrors: errors, stateFilesAfter: listFiles(stateDir),
+      dist: proc.handshake.dist, slowestApi: [...finished].sort((a, b) => b.endMs - a.endMs).slice(0, 6), pageErrors: errors, stateFilesAfter: listFiles(stateDir),
+      apiTimeline: [...finished].sort((a, b) => (a.startOnClockMs ?? 0) - (b.startOnClockMs ?? 0)), // diagnosis only: the headline is unchanged
     }
   } finally {
     await context.close()
@@ -417,14 +434,30 @@ async function homeRun(browser, stateDir, label) {
   }
 }
 
+/** Where a request sat on the launch's clock: Playwright's `startTime` is wall-clock milliseconds, its other fields are relative to it. */
+export function requestOnClock(timing, clockEpochMs) {
+  if (clockEpochMs === null || !(timing?.startTime > 0)) return {}
+  const startOnClockMs = Math.round(timing.startTime - clockEpochMs)
+  return { startOnClockMs, endOnClockMs: timing.responseEnd >= 0 ? Math.round(startOnClockMs + timing.responseEnd) : null }
+}
+
+async function homeFresh(browser) {
+  return runSeries('home-fresh', CFG.runs, (slot) => homeRun(browser, makeTemp(`home-fresh-${slot}`), `home-fresh-${pad(slot)}`))
+}
+
+async function homeDisk(browser) {
+  const diskState = makeTemp('home-disk')
+  const prime = await homeRun(browser, diskState, 'home-disk-prime') // not counted: it fills the state folder as a first use does
+  saveJson('home-disk-prime.json', { schema: 'stage1-1', series: 'home-disk-prime', note: 'not counted: fills the state folder the counted launches then find', ...prime })
+  return { disk: await runSeries('home-disk', CFG.runs, () => homeRun(browser, diskState, 'home-disk')), primeMs: prime.headline.ms }
+}
+
 async function groupHome(chromium) {
   const browser = await chromium.launch({ headless: true })
   try {
-    const fresh = await runSeries('home-fresh', CFG.runs, (slot) => homeRun(browser, makeTemp(`home-fresh-${slot}`), `home-fresh-${pad(slot)}`))
-    const diskState = makeTemp('home-disk')
-    const prime = await homeRun(browser, diskState, 'home-disk-prime') // not counted: it fills the state folder as a first use does
-    saveJson('home-disk-prime.json', { schema: 'stage1-1', series: 'home-disk-prime', note: 'not counted: fills the state folder the counted launches then find', ...prime })
-    return { fresh, disk: await runSeries('home-disk', CFG.runs, () => homeRun(browser, diskState, 'home-disk')), primeMs: prime.headline.ms }
+    const fresh = CFG.homeModes.includes('fresh') ? await homeFresh(browser) : undefined
+    const usual = CFG.homeModes.includes('disk') ? await homeDisk(browser) : {}
+    return { ...(fresh ? { fresh } : {}), ...usual }
   } finally {
     await browser.close()
   }
@@ -614,12 +647,17 @@ function labelledSeries(results) {
   return GROUPS.flatMap((group) => walk(results[group]))
 }
 
+const over = (value, limit) => (value === null ? null : value > limit)
+const anyTrue = (...flags) => (flags.every((flag) => flag === null) ? null : flags.some((flag) => flag === true))
+
 /**
- * T3 (02 section 9): backend ready above 2.5 s, or cold HOME above its ceiling (never above 6 s), on the median.
- * 02 section 4.1 item 3 says "median of 3 cold launches" and does not say which launch: this reading is the usual launch
- * (a state folder an earlier launch filled), a PROVISIONAL manager decision 3 default until the owner ratifies it. The
- * verdict stays provisional while the reading is unratified, while no owner-named quiet window was used, and while any
- * series of the run is not ACCEPTED. The first-launch figure is carried beside it, with what the verdict would be under it.
+ * T3 (02 section 9): backend ready above 2.5 s, or cold HOME above its cap of 6 s, on the median.
+ * 02 section 4.1 item 3, decided (DEC1): the cap holds on every launch and is read on the worst one, the very first launch
+ * after an install (an empty state folder, `home-fresh`). The cold-HOME ceiling is that median plus 20%, never above 6 s.
+ * The usual launch (a state folder an earlier launch filled, `home-disk`) is gated too: above the cap T3 fires, and above
+ * the ceiling W3B recorded for it (4,508 ms) it is a regression. A run without the first-launch series cannot clear T3
+ * (`fires` stays null unless backend ready alone fires it). The verdict is provisional while no owner-named quiet window
+ * was used or any series of the run is not ACCEPTED.
  */
 export function t3Verdict(results, options = {}) {
   const { readingRatified = HOME_READING_RATIFIED, quietWindow = false } = options
@@ -627,21 +665,21 @@ export function t3Verdict(results, options = {}) {
   const homeDisk = results.home?.disk?.medianMs ?? null
   const homeFresh = results.home?.fresh?.medianMs ?? null
   const readyOver = ready.length ? Math.max(...ready) > READY_CEILING_MS : null
-  const homeOver = homeDisk === null ? null : homeDisk > HOME_CAP_MS
-  const freshOver = homeFresh === null ? null : homeFresh > HOME_CAP_MS
-  const fires = readyOver === null && homeOver === null ? null : readyOver === true || homeOver === true
-  const firesFresh = readyOver === null && freshOver === null ? null : readyOver === true || freshOver === true
+  const freshOver = over(homeFresh, HOME_CAP_MS)
+  const diskOver = over(homeDisk, HOME_CAP_MS)
+  const fires = readyOver === true || freshOver === true || diskOver === true ? true : readyOver === null || freshOver === null ? null : false
   const provisionalReasons = [
-    ...(readingRatified ? [] : ['the usual-launch reading of the cold-HOME rule is a manager decision 3 default, not ratified by the owner']),
+    ...(readingRatified ? [] : ['the cold-HOME reading is not ratified']),
     ...(quietWindow ? [] : ['no owner-named quiet window was used']),
     ...(labelledSeries(results).some((entry) => entry.label !== 'ACCEPTED') ? ['a series of the run is PROVISIONAL'] : []),
   ]
   return {
-    readyMedianMs: ready.length ? Math.max(...ready) : null, readyOverCeiling: readyOver, homeDiskMedianMs: homeDisk, homeCeilingFromDiskMs: homeCeilingMs(homeDisk),
-    homeCeilingFromFreshMs: homeCeilingMs(homeFresh), homeOverCap: homeOver, fires,
-    homeReading: 'usual-launch', homeReadingRatified: readingRatified, homeFreshMedianMs: homeFresh, firstLaunchOverCap: freshOver, firesUnderFirstLaunchReading: firesFresh,
+    readyMedianMs: ready.length ? Math.max(...ready) : null, readyOverCeiling: readyOver, homeReading: HOME_READING, homeReadingRatified: readingRatified,
+    homeFreshMedianMs: homeFresh, homeCeilingFromFreshMs: homeCeilingMs(homeFresh), firstLaunchOverCap: freshOver, firstLaunchWithinTarget: over(homeFresh, HOME_TARGET_MS) === null ? null : !over(homeFresh, HOME_TARGET_MS),
+    homeDiskMedianMs: homeDisk, homeCeilingFromDiskMs: homeCeilingMs(homeDisk), usualLaunchOverCap: diskOver, usualLaunchRegressed: over(homeDisk, HOME_USUAL_MEDIAN_W3B_MS), usualLaunchNoiseCeilingMs: HOME_USUAL_CEILING_W3B_MS, usualLaunchOverNoiseCeiling: over(homeDisk, HOME_USUAL_CEILING_W3B_MS),
+    homeOverCap: anyTrue(freshOver, diskOver), fires,
     provisional: provisionalReasons.length > 0, provisionalReasons,
-    note: 'the cold-HOME ceiling comes from the usual launch (a state folder an earlier launch filled), median plus 20%, never above 6 s; a first launch on a fresh state folder is reported beside it, not gated, and its figure stays on the W5B owner list',
+    note: 'the cold-HOME cap is read on the first launch (an empty state folder, the worst case), median plus 20% never above 6 s; the usual launch is gated by the same cap and checked against its W3B ceiling of 4,508 ms',
   }
 }
 
@@ -650,7 +688,8 @@ function markdown(results, verdict) {
   const series = (name, entry, target) => row(name, entry.valuesMs.join(', '), entry.medianMs, target, entry.label)
   const lines = ['| Measurement | Runs (ms) | Median (ms) | Target (ms) | Label |', '| --- | --- | --- | --- | --- |']
   if (results.ready) lines.push(series('Backend ready, browser mode', results.ready.browser, READY_TARGET_MS), series('Backend ready, desktop mode', results.ready.desktop, READY_TARGET_MS))
-  if (results.home) lines.push(series('Cold HOME, usual launch', results.home.disk, HOME_TARGET_MS), series('Cold HOME, first launch', results.home.fresh, HOME_TARGET_MS))
+  if (results.home?.fresh) lines.push(series('Cold HOME, first launch (gated: T3 reading)', results.home.fresh, HOME_TARGET_MS))
+  if (results.home?.disk) lines.push(series('Cold HOME, usual launch', results.home.disk, HOME_TARGET_MS))
   for (const mode of results.routes ? ['browser', 'desktop'] : []) lines.push(row(`Eight routes, worst repeat, ${mode} caps`, results.routes[mode].valuesMs.join(', '), results.routes[mode].medianMs, ROUTE_TARGET_MS, results.routes[mode].label))
   for (const [mode, entry] of Object.entries(results.screens ?? {})) {
     for (const [line, figures] of Object.entries(entry.records?.[0]?.screens ?? {})) {
@@ -658,7 +697,7 @@ function markdown(results, verdict) {
       lines.push(row(`${line}, warm, new panel (render only, not judged), ${mode} caps`, figures.warmNewPanelMs.join(', '), figures.medianNewPanelMs, 'n/a', entry.label))
     }
   }
-  return `${lines.join('\n')}\n\nT3 fires: ${verdict.fires}; cold-HOME ceiling from the usual launch: ${verdict.homeCeilingFromDiskMs} ms; provisional: ${verdict.provisional}${verdict.provisionalReasons.length ? ` (${verdict.provisionalReasons.join('; ')})` : ''}; first launch ${verdict.homeFreshMedianMs} ms (not gated; T3 would fire under that reading: ${verdict.firesUnderFirstLaunchReading})\n`
+  return `${lines.join('\n')}\n\nT3 fires: ${verdict.fires}; cold-HOME ceiling from the first launch: ${verdict.homeCeilingFromFreshMs} ms (first launch ${verdict.homeFreshMedianMs} ms, cap ${HOME_CAP_MS} ms, target ${HOME_TARGET_MS} ms); usual launch ${verdict.homeDiskMedianMs} ms (slower than its W3B median of ${HOME_USUAL_MEDIAN_W3B_MS} ms: ${verdict.usualLaunchRegressed}; noise ceiling ${HOME_USUAL_CEILING_W3B_MS} ms exceeded: ${verdict.usualLaunchOverNoiseCeiling}); provisional: ${verdict.provisional}${verdict.provisionalReasons.length ? ` (${verdict.provisionalReasons.join('; ')})` : ''}\n`
 }
 
 const refused = (fn) => { try { fn(); return false } catch { return true } }
@@ -674,11 +713,24 @@ export function selfChecks() {
   const payload = { port: 8797, pid: 4242, proof: mac(token, 'ready', nonce, 8797, 4242) }
   const before = '{"caller":"terminal","end":"2021-12-31 00:00:00+00:00"}\n'
   const grew = (line) => gateLogGrewCleanly(before, `${before}${line}\n`).clean
+  const withHome = (fresh, disk) => ({ ...T3_SAMPLE, home: { fresh: { medianMs: fresh, label: 'ACCEPTED' }, disk: { medianMs: disk, label: 'ACCEPTED' } } })
+  const quiet = { quietWindow: true }
   return [
-    ['an unratified cold-HOME reading keeps T3 provisional even when every series is accepted', t3Verdict(T3_SAMPLE).provisional === true && t3Verdict(T3_SAMPLE).fires === false],
-    ['born failing: a ratified reading in a quiet window with accepted series is not provisional', t3Verdict(T3_SAMPLE, { readingRatified: true, quietWindow: true }).provisional === false],
-    ['born failing: a provisional series of any group makes T3 provisional', t3Verdict({ ...T3_SAMPLE, routes: { desktop: { medianMs: 12, label: 'PROVISIONAL' } } }, { readingRatified: true, quietWindow: true }).provisional === true],
-    ['the first-launch figure is carried and the other reading is shown', t3Verdict(T3_SAMPLE).homeFreshMedianMs === 6341 && t3Verdict(T3_SAMPLE).firesUnderFirstLaunchReading === true],
+    ['the cold-HOME reading is the first launch, ratified', HOME_READING === 'first-launch' && HOME_READING_RATIFIED === true && t3Verdict(T3_SAMPLE).homeReading === 'first-launch'],
+    ['born failing: a first launch over the 6 s cap fires T3 although the usual launch is under it (the W3B figures)', t3Verdict(T3_SAMPLE, quiet).fires === true && t3Verdict(T3_SAMPLE, quiet).firstLaunchOverCap === true],
+    ['a first launch and a usual launch under the cap do not fire T3, and the ceiling is the first launch plus 20%', t3Verdict(withHome(4400, 3600), quiet).fires === false && t3Verdict(withHome(4400, 3600), quiet).homeCeilingFromFreshMs === 5280],
+    ['born failing: a usual launch over the cap fires T3 even when the first launch is under it', t3Verdict(withHome(5000, 6100), quiet).fires === true],
+    ['born failing: a usual launch slower than its W3B median of 3,757 ms is a regression, whatever the 4,508 ms noise ceiling says', t3Verdict(withHome(5000, 4000), quiet).usualLaunchRegressed === true && t3Verdict(withHome(5000, 4000), quiet).usualLaunchOverNoiseCeiling === false && t3Verdict(withHome(5000, 3700), quiet).usualLaunchRegressed === false && t3Verdict(withHome(5000, 4600), quiet).usualLaunchOverNoiseCeiling === true],
+    ['born failing: a run without the first-launch series cannot clear T3', t3Verdict({ ...T3_SAMPLE, home: { disk: { medianMs: 3000, label: 'ACCEPTED' } } }, quiet).fires === null],
+    ['the first-launch target of 4.5 s is reported', t3Verdict(withHome(4400, 3600)).firstLaunchWithinTarget === true && t3Verdict(withHome(4600, 3600)).firstLaunchWithinTarget === false],
+    ['a ratified reading in a quiet window with accepted series is not provisional', t3Verdict(withHome(4400, 3600), quiet).provisional === false],
+    ['born failing: an unratified reading keeps T3 provisional', t3Verdict(withHome(4400, 3600), { ...quiet, readingRatified: false }).provisional === true],
+    ['born failing: no named quiet window keeps T3 provisional', t3Verdict(withHome(4400, 3600)).provisional === true],
+    ['born failing: a provisional series of any group makes T3 provisional', t3Verdict({ ...withHome(4400, 3600), routes: { desktop: { medianMs: 12, label: 'PROVISIONAL' } } }, quiet).provisional === true],
+    ['a request is placed on the launch clock', requestOnClock({ startTime: 1_000_250.4, responseEnd: 99.6 }, 1_000_000).startOnClockMs === 250 && requestOnClock({ startTime: 1_000_250.4, responseEnd: 99.6 }, 1_000_000).endOnClockMs === 350],
+    ['born failing: a request without a start time is not placed', Object.keys(requestOnClock({ startTime: -1, responseEnd: 5 }, 1_000_000)).length === 0],
+    ['--home takes fresh and disk alone or together', readConfig(['--home', 'fresh']).homeModes.join() === 'fresh' && readConfig([]).homeModes.join() === 'fresh,disk'],
+    ['born failing: an unknown --home mode is refused', refused(() => readConfig(['--home', 'warm']))],
     ['median of three', median([3, 1, 2]) === 2], ['cold-HOME ceiling is the median plus 20%', homeCeilingMs(4000) === 4800], ['cold-HOME ceiling is never above 6 s', homeCeilingMs(5500) === HOME_CAP_MS],
     ['a READY proof verifies', readyProofHolds(payload, token, nonce)], ['born failing: a READY proof for another nonce is refused', !readyProofHolds(payload, token, 'ee'.repeat(32))],
     ['born failing: a READY proof with a changed pid is refused', !readyProofHolds({ ...payload, pid: 4243 }, token, nonce)],
@@ -763,7 +815,7 @@ async function dryRun() {
   const record = {
     schema: 'stage1-dry-1', startedAtIso: iso(), config: CFG, files, exists, portFree: !(await proofAnswers(CFG.port)), checks, cpuTwoSeconds: gate, machine: machineFacts(), provenance: provenance(),
     watch: { clean: watched.clean, newWindows: watched.newWindows.length, foregroundChanges: watched.foregroundChanges.length },
-    plan: { ready: ['browser mode', 'desktop mode'], home: ['fresh state folder', 'filled state folder'], routes: ['browser caps', 'desktop caps'], screens: CFG.screenModes, runs: CFG.runs, screenRuns: CFG.screenRuns },
+    plan: { ready: ['browser mode', 'desktop mode'], home: CFG.homeModes.map((mode) => (mode === 'fresh' ? 'first launch, empty state folder' : 'usual launch, filled state folder')), routes: ['browser caps', 'desktop caps'], screens: CFG.screenModes, runs: CFG.runs, screenRuns: CFG.screenRuns },
   }
   saveJson('dry-run.json', record)
   const failed = checks.filter((check) => !check.pass).map((check) => check.name)

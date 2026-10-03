@@ -4,9 +4,11 @@ The service is built once per app on first use from `app.state.settings` (the da
 folder in fixture mode) and kept on `app.state.run_service`. Every `run_id` is looked up in the index built
 from disk, so an unknown or crafted id is a 404 before any file is opened.
 
-Result cache (D1.3). `/api/runs/compare` and `/api/ledger` answer from `services/result_cache.py` through
-`cached_compare` and `cached_ledger`, which the HOME prewarm calls too, so a route and the prewarm share their keys.
-The ledger also pins the run index (the folder of runs and each run folder), since it joins its rows to those folders.
+Result cache (D1.3). `/api/runs/compare`, `/api/ledger` and, since DEC1, `/api/runs` (the run index HOME asks for on
+every launch) answer from `services/result_cache.py` through `cached_compare`, `cached_ledger` and `cached_runs`, which
+the HOME prewarm calls too, so a route and the prewarm share their keys. The ledger and the index also pin the run
+index (the folder of runs and each run folder), and build from a fresh scan of it, never from a listing up to
+`RESCAN_S` old that the entry would then keep.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ from typing import Annotated, Any, Iterator, Mapping
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from pydantic import TypeAdapter
 
 from nq_terminal.api.data import get_result_cache, json_response
 from nq_terminal.models.common import DEFAULT_LIMIT, MAX_LIMIT, Page, error_responses
@@ -97,10 +100,26 @@ def _parse_ids(ids: str) -> list[str]:
     return parsed
 
 
+_SUMMARIES = TypeAdapter(list[RunSummary])
+
+
+def cached_runs(state: Any, query: Mapping[str, Any] | None = None) -> bytes:
+    """The serialised /api/runs body through the result cache (disk too: it reads no prices); the route and the
+    prewarm both call it."""
+    service = run_service_for(state)
+
+    def compute() -> bytes:
+        with _http_errors():
+            _record_run_index(service)
+            return _SUMMARIES.dump_json(service.summaries(), by_alias=True)
+
+    return get_result_cache(state).get(result_cache.ROUTE_RUNS, {}, compute, price_free=True)
+
+
 @router.get("/runs", response_model=list[RunSummary])
-def list_runs(service: Service) -> list[RunSummary]:
+def list_runs(request: Request) -> Response:
     """Every run in backtests/output with its badges (probe, anchor, ledgered, balance, MTM, coverage)."""
-    return service.summaries()
+    return json_response(cached_runs(request.app.state))
 
 
 def cached_compare(state: Any, query: Mapping[str, Any]) -> bytes:
@@ -176,9 +195,21 @@ def run_sidecar(service: Service, run_id: str, name: str) -> Any:
 
 def _record_run_index(service: RunService) -> None:
     """Pin the folder listing of the run index: the ledger joins its rows to the run folders, so a folder (or a
-    sidecar) that appears must end the entry. Each folder is recorded with its mtime and a digest of its entries."""
-    result_cache.record_input(service.index.output)
-    for entry in service.index.entries().values():
+    sidecar) that appears must end the entry. Each folder is recorded with its mtime and a digest of its entries.
+
+    The listing is recorded first and the index then rescanned, so the body is built from folders at least as new as
+    the recorded listing: a folder that appears in between ends the entry at the next request instead of being missed.
+
+    Every subfolder is recorded, not only the indexed ones: a folder without a result.json (a run whose result failed
+    to serialise leaves one empty) is skipped by the scan, and a rerun that writes result.json into it changes no
+    other recorded input, so its listing is pinned too."""
+    output = service.index.output
+    result_cache.record_input(output)
+    if output.is_dir():
+        for folder in output.iterdir():
+            if folder.is_dir():
+                result_cache.record_input(folder)
+    for entry in service.index.rescan().values():
         result_cache.record_input(entry.folder)
 
 

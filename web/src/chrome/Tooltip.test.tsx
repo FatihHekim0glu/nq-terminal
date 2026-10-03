@@ -109,3 +109,53 @@ describe('Tooltip (look spec 4.5, WCAG 1.4.13)', () => {
     expect(onClick).toHaveBeenCalled()
   })
 })
+
+describe('Tooltip keeps inside the viewport (born failing)', () => {
+  const TIP_W = 90
+  const TIP_H = 20
+  function stubRects(button: { left: number; top: number; bottom: number }) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute('role') === 'tooltip') {
+        const left = parseFloat(this.style.left)
+        const top = parseFloat(this.style.top)
+        return { left, top, right: left + TIP_W, bottom: top + TIP_H, width: TIP_W, height: TIP_H, x: left, y: top, toJSON: () => ({}) }
+      }
+      return { left: button.left, top: button.top, right: button.left + 24, bottom: button.bottom, width: 24, height: button.bottom - button.top, x: button.left, y: button.top, toJSON: () => ({}) }
+    })
+  }
+  beforeEach(() => {
+    vi.stubGlobal('innerWidth', 512)
+    vi.stubGlobal('innerHeight', 320)
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('clamps a keyboard-focus tip that would pass the right edge', () => {
+    stubRects({ left: 488, top: 10, bottom: 34 })
+    renderTip()
+    fireEvent.focus(screen.getByRole('button'))
+    const tip = screen.getByRole('tooltip')
+    expect(parseFloat(tip.style.left) + TIP_W).toBeLessThanOrEqual(512 - 4)
+    expect(parseFloat(tip.style.left)).toBeGreaterThanOrEqual(4)
+  })
+
+  it('clamps a hover tip that would pass the right edge', () => {
+    stubRects({ left: 488, top: 10, bottom: 34 })
+    renderTip()
+    fireEvent.pointerMove(screen.getByRole('button'), { clientX: 500, clientY: 20 })
+    act(() => vi.advanceTimersByTime(TOOLTIP_DELAY_MS))
+    const tip = screen.getByRole('tooltip')
+    expect(parseFloat(tip.style.left) + TIP_W).toBeLessThanOrEqual(512 - 4)
+  })
+
+  it('flips above the control when the tip would pass the bottom edge', () => {
+    stubRects({ left: 100, top: 290, bottom: 314 })
+    renderTip()
+    fireEvent.focus(screen.getByRole('button'))
+    const tip = screen.getByRole('tooltip')
+    expect(parseFloat(tip.style.top) + TIP_H).toBeLessThanOrEqual(290)
+    expect(parseFloat(tip.style.top)).toBeGreaterThanOrEqual(0)
+  })
+})

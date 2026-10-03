@@ -359,3 +359,106 @@ def test_a_ready_check_that_raises_is_logged_and_the_warm_up_goes_ahead(caplog, 
     calls: list[str] = []
     run_to_end([lambda: calls.append("ran")], ready=broken, ready_timeout=0.2)
     assert calls == ["ran"] and escaped == []
+
+
+# ---------------------------------------------------------------- later tasks wait for a quiet process (first launch)
+#
+# 02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch. Work HOME never asks for (the
+# deflated Sharpe, EQ's bootstrap) must not take the interpreter from HOME's own requests while HOME loads, so it runs
+# after the HOME tasks AND once the process has gone quiet, or after a time limit, whichever comes first.
+
+
+def test_born_failing_later_tasks_wait_after_the_first_tasks_until_the_process_is_quiet():
+    order: list[str] = []
+    answers = iter([False, False, True, True])
+
+    def quiet() -> bool:
+        order.append("probe")
+        return next(answers, True)
+
+    run_to_end([lambda: order.append("home")], later=[lambda: order.append("later")], quiet=quiet, quiet_windows=2)
+    assert order == ["home", "probe", "probe", "probe", "probe", "later"]
+
+
+def test_a_quiet_window_must_hold_for_the_whole_run_of_windows():
+    order: list[str] = []
+    answers = iter([True, False, True, True])
+
+    def quiet() -> bool:
+        order.append("probe")
+        return next(answers, True)
+
+    run_to_end([], later=[lambda: order.append("later")], quiet=quiet, quiet_windows=2)
+    assert order == ["probe", "probe", "probe", "probe", "later"], "a busy window starts the count again"
+
+
+def test_later_tasks_run_after_the_time_limit_when_the_process_never_goes_quiet(caplog):
+    caplog.set_level(logging.INFO, logger=prewarm.LOG.name)
+    calls: list[str] = []
+    run_to_end([], later=[lambda: calls.append("later")], quiet=lambda: False, quiet_timeout=0.3)
+    assert calls == ["later"]
+    assert "never went quiet" in caplog.text
+
+
+def test_a_quiet_probe_that_raises_is_logged_and_the_later_tasks_still_run(caplog, escaped):
+    def broken() -> bool:
+        raise RuntimeError("no clock")
+
+    calls: list[str] = []
+    caplog.set_level(logging.ERROR, logger=prewarm.LOG.name)
+    run_to_end([], later=[lambda: calls.append("later")], quiet=broken)
+    assert calls == ["later"] and escaped == []
+    assert "quiet check failed" in caplog.text
+
+
+def test_later_tasks_alone_start_a_thread_and_none_at_all_starts_nothing():
+    calls: list[str] = []
+    run_to_end([], later=[lambda: calls.append("later")], quiet=lambda: True)
+    assert calls == ["later"]
+    prewarm._started = False
+    assert prewarm.start_prewarm([], True, later=[]) is None
+
+
+def test_a_failing_later_task_is_contained_like_any_other(escaped):
+    calls: list[str] = []
+
+    def boom() -> None:
+        raise ValueError("deflated failed")
+
+    run_to_end([], later=[boom, lambda: calls.append("next")], quiet=lambda: True)
+    assert calls == ["next"] and escaped == []
+
+
+class FakeCpu:
+    """A process CPU clock and a wall clock that a fake sleep advances: `share` of one core is busy while asleep."""
+
+    def __init__(self, share: float):
+        self.share, self.cpu, self.wall = share, 0.0, 0.0
+
+    def sleep(self, seconds: float) -> None:
+        self.wall += seconds
+        self.cpu += self.share * seconds
+
+
+@pytest.mark.parametrize(("share", "quiet"), [(0.0, True), (0.1, True), (0.24, True), (0.26, False), (1.0, False), (3.0, False)])
+def test_the_process_quiet_probe_reads_the_process_cpu_over_its_window(share, quiet):
+    fake = FakeCpu(share)
+    probe = prewarm.process_quiet_probe(window=0.5, share=prewarm.QUIET_CPU_SHARE, cpu=lambda: fake.cpu,
+                                        clock=lambda: fake.wall, sleep=fake.sleep)
+    assert prewarm.QUIET_CPU_SHARE == 0.25
+    assert probe() is quiet
+    assert fake.wall == pytest.approx(0.5)
+
+
+def test_the_default_quiet_probe_is_the_process_cpu_probe(monkeypatch):
+    seen: dict = {}
+    real = prewarm._run
+
+    def spy(tasks, ready, ready_timeout, later=(), idle=None):
+        seen.update(idle=idle)
+        return real(tasks, ready, ready_timeout, later, idle)
+
+    monkeypatch.setattr(prewarm, "_run", spy)
+    run_to_end([], later=[lambda: None], quiet_timeout=0.2)
+    idle = seen["idle"]
+    assert idle.quiet.__name__ == "process_quiet" and idle.windows == prewarm.QUIET_WINDOWS == 2 and idle.timeout == 0.2

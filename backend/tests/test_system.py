@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from nq_lab import oos_gate
 from nq_lab.config import IS_END, IS_START, OOS_LOG
 from nq_lab.oos_gate import OPENINGS
 from nq_terminal.api import system
@@ -23,9 +24,10 @@ from conftest import api_client
 
 
 def sealed_lines_only(src: Path) -> str:
-    """The real log's sealed lines (all the pin covers), so a fixture copy stays small."""
+    """The real log's sealed lines (all the pin covers), so a fixture copy stays small. A line is read as the gate reads
+    it (oos_gate.parse_log), so the lone '}' a torn append leaves in the real log is no line."""
     lines = src.read_text(encoding="utf-8").splitlines()
-    return "".join(x + "\n" for x in lines if x.strip() and json.loads(x).get("sealed") is True)
+    return "".join(x + "\n" for x in lines if any(e.get("sealed") is True for e in oos_gate.parse_log(x)[0]))
 
 
 @pytest.fixture
@@ -112,11 +114,13 @@ def test_missing_files(tmp_path: Path):
     assert sealed == {"openings_pin_ok": None, "sealed_log_pin_ok": False, "openings_closed": None}
 
 
-def test_half_written_log_line_reports_unknown(data_root):
+def test_a_half_written_sealed_line_is_never_reported_ok(data_root):
+    """A half-written line that could be a sealed line leaves the pin unproven: the gate refuses it (False) or cannot
+    read the log (None), and the terminal reports what the gate says; it is never reported ok."""
     path = data_root / "results" / "oos_access_log.jsonl"
     with path.open("a", encoding="utf-8") as fh:
-        fh.write('{"caller": "rebal_v0", "sea')
-    assert get_health(data_root)["sealed"]["sealed_log_pin_ok"] is None
+        fh.write('{"caller": "rebal_v0", "sealed": tr')
+    assert get_health(data_root)["sealed"]["sealed_log_pin_ok"] is not True
 
 
 def test_kill_switch_follows_the_file(data_root):

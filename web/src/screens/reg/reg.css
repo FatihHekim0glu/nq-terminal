@@ -185,7 +185,14 @@
 
 /* A narrow panel: the rail folds away; the rounds stay reachable through the filter field. */
 @container reg (max-width: 720px) {
-  .reg-rail { display: none; }
+  @container not style(--panel-maximised: 1) {
+    .reg-rail { display: none; }
+  }
+  /* A maximised REG keeps its rounds: the rail stacks above the grid instead of beside it (WCAG 1.4.10). */
+  @container style(--panel-maximised: 1) {
+    .reg-body { flex-direction: column; }
+    .reg-rail { flex: 0 0 auto; }
+  }
 }
 
 /* A short panel: criteria on one wrapping line; the confirmation tables lose their header row but still
@@ -194,19 +201,25 @@
    tooltip, on both REG (the confirmations' band note, the verdict notes) and MT (the stored/recomputed
    line under the family line). */
 @container reg (max-height: 560px) {
-  .reg-crit-head, .reg-universe { display: none; }
   .reg-crit-list { display: flex; flex-wrap: wrap; column-gap: 12px; }
   .reg-crit-list .reg-item { width: auto; }
-  .reg-confirm-table thead { display: none; }
   .reg-band, .reg-notes li, .mt-head .mt-line { white-space: normal; overflow: visible; text-overflow: clip; }
   .mt-chart { min-height: calc(var(--row-h) * 6); }
+  /* A maximised REG keeps the criteria heading, the universe line and the column headers (WCAG 1.3.1: the
+     header cells name the data cells). */
+  @container not style(--panel-maximised: 1) {
+    .reg-crit-head, .reg-universe { display: none; }
+    .reg-confirm-table thead { display: none; }
+  }
 }
 
 /* The 2x2 HOME panel (about 409px under the red bar at 1080p): the grid starts at the top so its header
    and 19 rows fill the body (look spec 8.5 c); the criteria filters stay on the full REG screen, and the
    confirmations follow the grid, reached by scrolling the body. */
 @container reg (max-height: 460px) {
-  .reg-criteria { display: none; }
+  @container not style(--panel-maximised: 1) {
+    .reg-criteria { display: none; }
+  }
 }
 
 /* Narrow viewports (1.4.10): text wraps rather than clipping. */

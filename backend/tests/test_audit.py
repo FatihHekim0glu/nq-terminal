@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from nq_lab import oos_gate
 from nq_lab.config import OOS_LOG, RESULTS, ROOT
 from nq_lab.dtsmom_universe import TABLE
 from nq_lab.oos_gate import OPENINGS
@@ -44,19 +45,34 @@ def real_lines(text: str) -> list[str]:
     return [x for x in text.splitlines() if x.strip()]
 
 
+def gate_entries(text: str) -> list[dict]:
+    """The log's entries as the gate itself reads them (oos_gate.parse_log): a torn fragment is no entry."""
+    return oos_gate.parse_log(text)[0]
+
+
 def sealed_lines_only(text: str) -> str:
-    return "".join(x + "\n" for x in real_lines(text) if json.loads(x).get("sealed") is True)
+    return "".join(x + "\n" for x in real_lines(text) if any(e.get("sealed") is True for e in gate_entries(x)))
+
+
+def gate_fragment_lines(text: str) -> list[int]:
+    """The lines the gate reads as torn fragments (the lone '}' a concurrent append leaves), a half-written last line
+    aside: the research workflows append to the real log while the tests run, so its state is read, never assumed."""
+    last, partial = len(text.split("\n")), not (text.endswith("\n") or text == "")
+    return [n for n, _ in oos_gate.parse_log(text)[1] if not (partial and n == last)]
 
 
 # ---------------------------------------------------------------- OOS log parser
 
 
-def test_the_real_oos_log_parses_fully():
+def test_the_real_oos_log_parses_as_the_gate_reads_it():
+    """Every line the gate reads as an entry is an entry here, and the only errors are the gate's own torn fragments."""
     text = OOS_LOG.read_text(encoding="utf-8")
     lines = real_lines(text)
     log = audit.parse_oos_log(text)
-    assert log.errors == ()
-    assert len(log.entries) == len(lines) - (1 if log.partial_tail else 0)
+    torn = gate_fragment_lines(text)
+    assert [e.line_no for e in log.errors] == torn
+    assert all(e.message.startswith("not JSON") for e in log.errors)
+    assert len(log.entries) == len(lines) - len(torn) - (1 if log.partial_tail else 0)
     found = {e["key_set"] for e in log.entries}
     assert KEY_SETS <= found <= REAL_LOG_KEY_SETS
 
@@ -64,7 +80,7 @@ def test_the_real_oos_log_parses_fully():
 def test_real_key_sets_match_a_direct_count():
     text = OOS_LOG.read_text(encoding="utf-8")
     log = audit.parse_oos_log(text)
-    sealed = sum(1 for x in real_lines(text) if json.loads(x).get("sealed") is True)
+    sealed = sum(1 for e in gate_entries(text) if e.get("sealed") is True)
     assert audit.key_set_counts(log.entries)["sealed"] == sealed
     assert sum(audit.key_set_counts(log.entries).values()) == len(log.entries)
 
@@ -144,9 +160,10 @@ def test_oos_log_endpoint_filters_and_validates():
     assert c.get("/api/audit/oos-log", params={"limit": 5001}).status_code == 422
 
 
-def test_oos_log_endpoint_on_the_real_log_has_no_errors():
+def test_oos_log_endpoint_on_the_real_log_reports_only_the_gates_torn_fragments():
+    torn = gate_fragment_lines(OOS_LOG.read_text(encoding="utf-8"))
     body = client().get("/api/audit/oos-log", params={"limit": 5}).json()
-    assert body["parse_errors"] == []
+    assert [e["line_no"] for e in body["parse_errors"]] == torn
     assert KEY_SETS <= set(body["key_sets"]) <= REAL_LOG_KEY_SETS
     assert body["returned"] == 5
 
@@ -162,13 +179,19 @@ def test_missing_log_is_an_empty_audit(tmp_path: Path):
 
 def test_the_pins_report_ok_on_the_real_files():
     body = client().get("/api/audit/openings").json()
+    openings = real_openings()
     assert body["openings_pin_ok"] is True
     assert body["sealed_log_pin_ok"] is True
-    assert body["openings_closed"] is True
+    assert body["openings_closed"] is all(o.get("closed") is True for o in openings)
     assert body["openings_sha256"] == body["pinned"]["openings_sha256"]
     assert body["sealed_log"]["lines"] == body["pinned"]["sealed_log_lines"]
-    assert [o["caller"] for o in body["openings"]] == ["rebal_v1_confirm"]
+    assert [o["caller"] for o in body["openings"]] == [o["caller"] for o in openings]  # the lab may open more
     assert body["label"] == "spent window, opened 2026-09-26, descriptive only"
+
+
+def real_openings() -> list[dict]:
+    """The real openings file as read now: the lab adds an opening for each new sealed test."""
+    return json.loads(OPENINGS.read_text(encoding="utf-8"))["openings"]
 
 
 def pinned_root(tmp_path: Path, openings: bytes, log_text: str) -> Path:
@@ -208,7 +231,7 @@ def test_every_real_spec_rehashes_to_its_result():
     assert all(r["rehash_ok"] for r in body["rows"]), [r for r in body["rows"] if not r["rehash_ok"]]
     assert body["all_ok"] is True
     confirmations = [r for r in body["rows"] if r["kind"] == "confirmation"]
-    assert [r["name"] for r in confirmations] == ["rebal_v1_confirm"]
+    assert [r["name"] for r in confirmations] == [o["caller"] for o in real_openings()]
 
 
 def spec_root(tmp_path: Path, name: str, spec_bytes: bytes) -> Path:
@@ -268,7 +291,7 @@ def test_commands_context_index_comes_from_the_files():
     body = client().get("/api/commands").json()
     assert [i["root"] for i in body["instruments"]] == [c.root for c in TABLE] + ["RTY"]  # plus catalog-only RTY
     assert body["hypotheses"] == [r["name"] for r in registry_rows()]
-    assert body["confirmations"] == ["rebal_v1_confirm"]
+    assert body["confirmations"] == [o["caller"] for o in real_openings()]
     runs = sorted(p.parent.name for p in (ROOT / "backtests" / "output").glob("*/result.json"))
     assert body["runs"] == runs
     assert body["universe"] == ["27F"]

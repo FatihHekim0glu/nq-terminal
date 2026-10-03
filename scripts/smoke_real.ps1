@@ -199,6 +199,18 @@ function Test-LogLine([string]$Line) {
     return $null
 }
 
+function Test-OtherWorkflowLine([string]$Line) {
+    # A research workflow that serves while the smoke runs appends its own lines. A line with another caller whose
+    # reason is not one of the terminal's (they all begin 'terminal', bars.serve_reason) is that workflow's read: it is
+    # counted, never checked as the terminal's. A line naming no caller, or the terminal's reason under another caller,
+    # is still a problem.
+    try { $entry = $Line | ConvertFrom-Json } catch { return $false }
+    $entryCaller = if ($entry.PSObject.Properties['caller']) { [string]$entry.caller } else { '' }
+    $reason = if ($entry.PSObject.Properties['reason']) { [string]$entry.reason } else { '' }
+    if ($entryCaller -eq '' -or $entryCaller -ceq $ExpectedCaller) { return $false }
+    return -not $reason.StartsWith($ExpectedCaller, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-Log([string]$ResultsDir, [object]$Before) {
     $path = Join-Path $ResultsDir $LogName
     $problems = New-Object System.Collections.Generic.List[string]
@@ -208,13 +220,15 @@ function Test-Log([string]$ResultsDir, [object]$Before) {
     $lines = @()
     if ($null -ne $text) { $lines = @($text -split "`n" | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_ -ne '' }) }
     $entries = New-Object System.Collections.Generic.List[object]
+    $others = 0
     foreach ($line in $lines) {
+        if (Test-OtherWorkflowLine $line) { $others++; continue }
         $problem = Test-LogLine $line
         if ($null -ne $problem) { $problems.Add($problem); continue }
         $e = $line | ConvertFrom-Json
         $entries.Add([pscustomobject]@{ symbol = "$($e.symbol)"; timeframe = "$($e.timeframe)"; variant = "$($e.variant)"; start = "$($e.start)"; end = "$($e.end)" })
     }
-    return [pscustomobject]@{ new_lines = $lines.Count; entries = $entries; problems = $problems }
+    return [pscustomobject]@{ new_lines = $lines.Count; other_workflow_lines = $others; entries = $entries; problems = $problems }
 }
 
 function Compare-Files([object]$Before, [object]$After) {
@@ -263,9 +277,12 @@ function Invoke-SelfTest {
     New-Item -ItemType Directory -Path $dir | Out-Null
     $failures = New-Object System.Collections.Generic.List[string]
     $good = '{"ts_utc": "2026-09-27T08:00:00+00:00", "caller": "terminal", "reason": "terminal display", "start": "2010-01-01 00:00:00+00:00", "end": "2022-01-01 00:00:00+00:00", "rows": 3, "symbol": "NQ.V.0", "timeframe": "1d", "variant": "vendor"}'
+    $other = '{"ts_utc": "2026-10-03T19:21:02+00:00", "caller": "eomtsy_v1_confirm_is", "reason": "selfcheck of the sealed fetch against the in-sample file", "start": "2021-10-01 00:00:00+00:00", "end": "2022-01-01 00:00:00+00:00", "rows": 65, "symbol": "ZF.V.0", "timeframe": "1d", "variant": "vendor"}'
     $cases = @(
         @{ name = 'terminal lines inside the window pass'; append = @($good); edit = $null; fail = $false },
-        @{ name = 'another caller fails'; append = @($good.Replace('"caller": "terminal"', '"caller": "za_screen"')); edit = $null; fail = $true },
+        @{ name = 'another caller with the terminal''s reason fails'; append = @($good.Replace('"caller": "terminal"', '"caller": "za_screen"')); edit = $null; fail = $true },
+        @{ name = 'a line with no caller fails'; append = @($good.Replace('"caller": "terminal", ', '')); edit = $null; fail = $true },
+        @{ name = 'a research workflow''s own line (its caller and reason) is counted, not a problem'; append = @($good, $other); edit = $null; fail = $false },
         @{ name = 'a window ending after 2022-01-01 fails'; append = @($good.Replace('"end": "2022-01-01 00:00:00+00:00"', '"end": "2022-01-02 00:00:00+00:00"')); edit = $null; fail = $true },
         @{ name = 'a window starting before 2010 fails'; append = @($good.Replace('"start": "2010-01-01', '"start": "2009-12-31')); edit = $null; fail = $true },
         @{ name = 'a line with no end fails'; append = @($good.Replace('"end"', '"stop"')); edit = $null; fail = $true },
@@ -809,6 +826,7 @@ $summary = [ordered]@{
     app_launch_checked = ($Mode -eq 'App')
     app_run = if ($Mode -eq 'App' -and $null -ne $appRun) { $appRun.FullName } else { $null }
     new_log_lines = $log.new_lines
+    other_workflow_log_lines = $log.other_workflow_lines
     new_log_lines_all_terminal_in_window = ($log.problems.Count -eq 0)
     new_log_series = $bySeries
     research_files_unchanged = ($fileProblems.Count -eq 0)
@@ -821,7 +839,7 @@ $summaryPath = Join-Path $Work 'smoke_summary.json'
 Remove-Item -LiteralPath $Out -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Output ''
-Write-Output "new log lines: $($log.new_lines) (all caller '$ExpectedCaller', inside [2010-01-01, 2022-01-01): $($log.problems.Count -eq 0))"
+Write-Output "new log lines: $($log.new_lines), of them $($log.other_workflow_lines) from other workflows (the rest all caller '$ExpectedCaller', inside [2010-01-01, 2022-01-01): $($log.problems.Count -eq 0))"
 foreach ($s in $bySeries) { Write-Output "  $s" }
 Write-Output "research files unchanged: $($fileProblems.Count -eq 0) ($($PinnedFiles -join ', '))"
 Write-Output "summary: $summaryPath"

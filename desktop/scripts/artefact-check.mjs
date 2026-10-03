@@ -15,6 +15,13 @@
 //   - a configuration (config\tauri.conf.json, merged with the build's identity file) with createUpdaterArtifacts
 //     other than false or with plugins.updater, a build that is not per-user NSIS with the embedded bootstrapper, an
 //     exe that does not carry the configuration's identifier, or an exe that holds the updater plugin;
+//   - installer hooks (bundle.windows.nsis.installerHooks, windows/nsis/hooks.nsh) that are not set, not included by the
+//     installer script, or not protective: no NSIS_HOOK_PREINSTALL that protects the install folder or NSIS_HOOK_POSTINSTALL
+//     that reads it back, icacls not started by its full path under the system folder with its exit code read, no
+//     inheritance removal, a grant to anyone but the user, SYSTEM and Administrators, a missing refusal of a drive root,
+//     a network path, Program Files or Windows, or a recursive folder removal (CWE-427, CWE-732; 03 section 13.1). The
+//     compiled installer is compressed, so the hooks are proved by the generated script's include of the hooks file
+//     (read from nsis/<build>/ beside the script, else from the include path) and by the configuration that asked for it;
 //   - a PROVENANCE.json without a webview2_bootstrapper entry (sha256, validly signed by Microsoft Corporation) for the
 //     bootstrapper the installers embed and run silently, or whose path is not the one an installer script embeds.
 // Tauri 2 compiles its configuration into the exe as Rust data, not JSON, so the configuration is read from the files
@@ -113,6 +120,74 @@ export function installerFiles(text) {
   return { files, problems }
 }
 
+// ---- the installer hooks ---------------------------------------------------------------------------------------------------
+
+const HOOK_MACROS = { NSIS_HOOK_PREINSTALL: 'NqtProtectInstallDir', NSIS_HOOK_POSTINSTALL: 'NqtVerifyInstallDir' }
+const REFUSAL_TOKENS = ['GetFullPathNameW', 'GetDriveTypeW', 'GetFileAttributesW', '$WINDIR', '$PROGRAMFILES32', '$PROGRAMFILES64']
+const BROAD_PRINCIPAL = /S-1-1-0|S-1-5-11|S-1-5-32-545|Everyone|Users|Authenticated/i
+const SHELL_CALL = /\bExecWait\b|\bExecShell(Wait)?\b|\bExec\s|\bcmd(\.exe)?\s+\/c\b|powershell/i
+const hookCode = (text) => text.split(/\r?\n/).filter((line) => !/^\s*;/.test(line))
+
+/** What is wrong with the installer hooks file (windows/nsis/hooks.nsh): the rules in the header of this file. */
+export function hooksProblems(text, name) {
+  const out = []
+  const add = (message) => out.push(`${name}: installer hooks: ${message}`)
+  const code = hookCode(text)
+  const joined = code.join('\n')
+  for (const [macro, call] of Object.entries(HOOK_MACROS)) {
+    const body = new RegExp(String.raw`^\s*!macro\s+${macro}\b([\s\S]*?)^\s*!macroend`, 'm').exec(joined)
+    if (!body) add(`no ${macro} macro`)
+    else if (!new RegExp(String.raw`Call\s+${call}\b`).test(body[1])) add(`${macro} does not call ${call}`)
+  }
+  if (!/\$SYSDIR\\icacls\.exe/.test(joined)) add('icacls is not started by its full path ($SYSDIR\\icacls.exe)')
+  if (code.some((line) => /(^|['"])icacls\b/.test(line))) add('icacls is started through the search path, not by its full path')
+  if (code.some((line) => SHELL_CALL.test(line))) add('a shell, ExecWait, ExecShell or cmd call (a command line must be started by nsExec::ExecToStack with its full path)')
+  if (!/nsExec::ExecToStack/.test(joined)) add('no nsExec::ExecToStack call, so the icacls exit code is never read')
+  if (!/\/inheritance:r\b/.test(joined)) add('no /inheritance:r: the folder would keep what its parent grants')
+  const grants = code.filter((line) => /\/grant(:r)?\b/i.test(line))
+  for (const sid of ['S-1-5-18', 'S-1-5-32-544']) {
+    if (!grants.some((line) => line.includes(sid))) add(`no grant to ${sid} (SYSTEM or Administrators)`)
+  }
+  for (const line of grants) {
+    if (BROAD_PRINCIPAL.test(line)) add(`a grant to a broad principal (Everyone, Users or Authenticated Users): ${line.trim()}`)
+  }
+  for (const token of REFUSAL_TOKENS) {
+    if (!joined.includes(token)) add(`no refusal rule using ${token} (a drive root, a network path, Program Files, Windows, a link)`)
+  }
+  // MUI2 owns .onGUIInit; a second one stops makensis, so the rule hangs on MUI_CUSTOMFUNCTION_GUIINIT instead.
+  const guiInit = /^\s*!define\s+MUI_CUSTOMFUNCTION_GUIINIT\s+(\w+)/m.exec(joined)
+  const guiBody = guiInit ? new RegExp(String.raw`^\s*Function\s+${guiInit[1]}\b([\s\S]*?)^\s*FunctionEnd`, 'm').exec(joined) : null
+  if (!guiBody || !/Call\s+NqtDefaultUnderPrograms\b/.test(guiBody[1])) add('the default folder is not moved under %LOCALAPPDATA%\\Programs on the folder page (MUI_CUSTOMFUNCTION_GUIINIT does not lead to NqtDefaultUnderPrograms)')
+  if (/^\s*Function\s+\.onGUIInit\b/m.test(joined)) add('a second .onGUIInit: MUI2 defines it and makensis stops (use MUI_CUSTOMFUNCTION_GUIINIT)')
+  const guard = /^\s*Section\s+"-NqtTargetGuard"([\s\S]*?)^\s*SectionEnd/m.exec(joined)
+  if (!guard || !/Call\s+NqtDefaultUnderPrograms\b/.test(guard[1])) add('the default folder is not moved under %LOCALAPPDATA%\\Programs in a silent install (the guard section does not call NqtDefaultUnderPrograms)')
+  if (!joined.includes('$LOCALAPPDATA\\Programs\\')) add('the default folder is not %LOCALAPPDATA%\\Programs\\<product>')
+  if (/\bRMDir\s+\/r\b/i.test(joined)) add('RMDir /r: the uninstaller must remove only what the installer wrote')
+  return out
+}
+
+const includeOf = (scriptText, hooksName) => {
+  const wanted = hooksName.toLowerCase()
+  for (const m of scriptText.matchAll(/^\s*!include\s+"([^"]+)"/gm)) {
+    if (segmentsOf(m[1]).pop()?.toLowerCase() === wanted) return m[1]
+  }
+  return null
+}
+
+/** The installer script includes the hooks file the configuration names, and that file passes the hook rules. */
+export function installerHooksProblems({ scriptText, config, dir, build }) {
+  const configured = config?.bundle?.windows?.nsis?.installerHooks
+  if (typeof configured !== 'string' || configured === '') return [] // configProblems reports it
+  const hooksName = segmentsOf(configured).pop() ?? ''
+  const include = includeOf(scriptText, hooksName)
+  if (!include) return [`${build}: the installer script does not include the installer hooks (${hooksName}), so the install folder is not protected`]
+  const beside = path.join(dir, 'nsis', build, hooksName)
+  const file = fs.existsSync(beside) ? beside : fs.existsSync(include) ? include : null
+  if (!file) return [`${build}: the installer hooks file ${hooksName} is neither in nsis/${build}/ nor at the include path ${include}, so it cannot be checked`]
+  return hooksProblems(fs.readFileSync(file, 'utf8'), build)
+}
+
+
 export function installerScriptProblems(text, name) {
   const out = []
   const map = defines(text)
@@ -187,6 +262,8 @@ export function configProblems({ exe, config, name }) {
   const windows = bundle.windows ?? {}
   if (windows.nsis?.installMode !== 'currentUser') out.push(`${name}: bundle.windows.nsis.installMode is ${windows.nsis?.installMode}, not currentUser`)
   if (windows.webviewInstallMode?.type !== 'embedBootstrapper') out.push(`${name}: bundle.windows.webviewInstallMode is ${JSON.stringify(windows.webviewInstallMode)}, not embedBootstrapper`)
+  const hooks = windows.nsis?.installerHooks
+  if (typeof hooks !== 'string' || !/\.nsh$/i.test(hooks)) out.push(`${name}: bundle.windows.nsis.installerHooks is ${JSON.stringify(hooks)}, not an installer hooks file (it protects the install folder)`)
   if (!config.identifier || !exe.includes(Buffer.from(config.identifier))) out.push(`${name}: the exe does not carry the configuration's identifier ${config.identifier}`)
   for (const token of UPDATER_TOKENS) if (exe.includes(Buffer.from(token))) out.push(`${name}: the exe holds the updater plugin (${token})`)
   out.push(...identityProblems(exe, config.identifier, name))
@@ -247,7 +324,11 @@ function checkBuild(dir, build, options, problems) {
   problems.push(...exeProblems(exe, { loaderFile, loaderSha256: options.loaderSha256 }).map((p) => `${tag}: ${p}`))
   problems.push(...configProblems({ exe: fs.readFileSync(exe), config: effectiveConfig(dir, build), name: build }))
   const script = path.join(dir, 'nsis', build, 'installer.nsi')
-  if (fs.existsSync(script)) problems.push(...installerScriptProblems(fs.readFileSync(script, 'utf8'), build))
+  if (fs.existsSync(script)) {
+    const scriptText = fs.readFileSync(script, 'utf8')
+    problems.push(...installerScriptProblems(scriptText, build))
+    problems.push(...installerHooksProblems({ scriptText, config: effectiveConfig(dir, build), dir, build }))
+  }
   else if (build !== 'smoke') problems.push(`nsis/${build}/installer.nsi is missing`)
   return true
 }

@@ -6,8 +6,11 @@
 // What it proves: Print dossier mounts the dossier and asks the page to print once; in print media the terminal is gone and
 // only the dossier shows, black on white whatever the screen theme, on the named A4 landscape page; its charts are images that
 // have loaded; and the page goes back to screen media with the dossier removed after the print.
-import { expect, test } from './fixtures.ts'
+import type { Browser, Page } from '@playwright/test'
+import { attach, expect, test, VIEWPORT } from './fixtures.ts'
 import { expectClean, open, openHome, watch } from './app.ts'
+import { launchApp, newRunDir, type AppHandle } from './launch.ts'
+import type { RunInfo } from './run.ts'
 
 const LINE = 'volmanaged_v0 EQ'
 const ROOT = '#nqt-print-root'
@@ -27,7 +30,38 @@ interface PrintFacts {
   readonly pageRule: string | null
 }
 
-test('Print dossier: the print stylesheet shows only the dossier, black on white, A4 landscape', async ({ page, run }) => {
+// The print judgement runs in an app of its own, retried once or twice. Emulating print media on a live page now and then leaves
+// the engine's page unresponsive when the media goes back (the page stops answering protocol calls; it showed at one run in three
+// on the merged tree and at the same rate on the tree before it, so it is the engine's, not the page's). In the shared app that
+// would take every later spec down with it; in its own app a hang costs one retry on a fresh app.
+test.describe.configure({ retries: 2 })
+
+test.describe('print', () => {
+  let app: AppHandle
+  let browser: Browser
+  let page: Page
+
+  test.beforeAll(async ({ run }: { run: RunInfo }) => {
+    app = await launchApp({ exe: run.exe, fixture: true, lab: run.lab, runDir: newRunDir('print'), size: `${VIEWPORT.width}x${VIEWPORT.height}` })
+    const attached = await attach(app.cdpUrl, app.origin)
+    browser = attached.browser
+    page = attached.page
+    await page.setViewportSize(VIEWPORT)
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' })
+  })
+
+  test.afterAll(async () => {
+    await browser?.close().catch(() => undefined)
+    const stopped = await app?.stop()
+    expect(stopped?.backendGone, 'the print app backend is gone').toBe(true)
+  })
+
+  test('Print dossier: the print stylesheet shows only the dossier, black on white, A4 landscape', async () => {
+    await judgePrint(page, app.origin)
+  })
+})
+
+async function judgePrint(page: Page, origin: string): Promise<void> {
   const w = watch(page)
   await openHome(page)
   const panel = await open(page, LINE)
@@ -84,5 +118,5 @@ test('Print dossier: the print stylesheet shows only the dossier, black on white
   await expect(panel).toBeVisible()
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
   await expect(page.locator(ROOT)).toHaveCount(0)
-  expectClean(w, run.origin)
-})
+  expectClean(w, origin)
+}

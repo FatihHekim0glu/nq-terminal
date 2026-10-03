@@ -12,9 +12,13 @@ keys and its single-flight: a page request that races a task for the same key wa
 call, one gate line). The two price reads that have no result cache entry (the universe panel and the
 GP bars) go through the same route functions and the bar service's own cache; the page's later reads are hits there.
 
-Order: the two disk-eligible entries first (deflated and the ledger are price-free routes, so they persist to disk even
-while the page's own price requests overlap them; the order only gets them done early), then the price-reading tasks in
-the order the page needs them: MON two-day and universe, GP bars, EQ bootstrap.
+Order (02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch, with an empty state folder): what
+HOME asks for, in the order it needs it, then what HOME never asks for. The ledger first (HOME's REG; price-free, so it
+persists to disk, and on a first launch there is no copy on disk yet), then the run index (price-free and persisted
+too), then the price-reading tasks: MON two-day and universe, GP bars. Then, as `later` tasks that wait until the process is quiet (`services/prewarm.py`), the deflated
+Sharpe (no HOME panel asks for it; 1.2 s cold) and EQ's bootstrap (HOME's EQ panel asks for /panel, the full EQ screen
+for the bootstrap): on a first launch they would otherwise take the interpreter from HOME's own requests while HOME
+loads. On a usual launch the deflated Sharpe and the ledger come from disk at once.
 """
 from __future__ import annotations
 
@@ -96,9 +100,21 @@ def _ledger(state: Any) -> Task:
     return _named("ledger", run)
 
 
+def _runs(state: Any) -> Task:
+    def run() -> object:
+        from nq_terminal.api import runs
+        return runs.cached_runs(state)
+    return _named("runs", run)
+
+
 def home_tasks(state: Any) -> list[Task]:
-    """The prewarm tasks for the HOME layout, in order; none of them runs until the prewarm thread calls it."""
-    return [_deflated(state), _ledger(state), _two_day(state), _universe(state), _gp_bars(state), _eq_bootstrap(state)]
+    """The prewarm tasks for what the HOME layout asks for, in order; none of them runs until the prewarm thread calls it."""
+    return [_ledger(state), _runs(state), _two_day(state), _universe(state), _gp_bars(state)]
+
+
+def later_tasks(state: Any) -> list[Task]:
+    """What no HOME panel asks for but the next screens do; run once HOME is served and the process is quiet."""
+    return [_deflated(state), _eq_bootstrap(state)]
 
 
 def home_prewarm_allowed(app: FastAPI, environ: dict[str, str] | None = None) -> bool:
@@ -114,7 +130,8 @@ def start_home_prewarm(app: FastAPI):
     try:
         if not home_prewarm_allowed(app):
             return None
-        return start_prewarm(home_tasks(app.state), ready=getattr(app.state, PORT_BOUND_KEY, None))
+        return start_prewarm(home_tasks(app.state), ready=getattr(app.state, PORT_BOUND_KEY, None),
+                             later=later_tasks(app.state))
     except Exception:  # noqa: BLE001 - the prewarm must never stop the app from starting
         LOG.exception("the HOME prewarm could not be started")
         return None

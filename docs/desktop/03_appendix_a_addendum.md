@@ -84,8 +84,8 @@ Columns follow Appendix A.1: path, lines, fate (`keep`, `wrap`, `new` or `remove
 
 | Phase | Module | Lines | Fate | Desktop form | Stage | Tests |
 |---|---|---:|---|---|---|---|
-| D1 (W1B) | `backend/nq_terminal/services/prewarm.py` | 117 | new | once-per-process warm-up thread that runs zero-argument tasks in order after the port is bound; on only when `NQT_DESKTOP=1` or `NQT_PREWARM=1`; errors logged, never raised | D1 | `test_prewarm.py` |
-| D1 (W1B) | `backend/nq_terminal/api/home_prewarm.py` | 108 | new | the HOME task list (deflated, ledger, two-day, universe, GP bars, EQ bootstrap) built from the cached route callables and started from the app's lifespan; skipped in fixture mode and for `NQT_PREWARM=0` | D1 | `test_home_prewarm.py` |
+| D1 (W1B) | `backend/nq_terminal/services/prewarm.py` | 171 | new | once-per-process warm-up thread that runs zero-argument tasks in order after the port is bound; later tasks run once the process is quiet (at most a quarter of one core over 0.5 s, twice) or after 20 s; on only when `NQT_DESKTOP=1` or `NQT_PREWARM=1`; errors logged, never raised | D1 | `test_prewarm.py` |
+| D1 (W1B) | `backend/nq_terminal/api/home_prewarm.py` | 137 | new | the HOME task list (ledger, run index, two-day, universe, GP bars) and the later tasks (deflated, EQ bootstrap) that wait for a quiet process, built from the cached route callables and started from the app's lifespan; skipped in fixture mode and for `NQT_PREWARM=0` | D1 | `test_home_prewarm.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/__init__.py` | 13 | new | package marker; names the seam's modules | D2 | `test_build_stamp.py`, `test_desktop_fixture_main.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/lifecycle.py` | 118 | new | the lock taken in the app's lifespan (so every start path takes it); the runtime (token, port, pid, nonce, mode); the same-origin list from the bound port, with the Vite port only under `NQT_DEV=1` | D2 | `test_desktop_lifecycle.py`, `test_app.py` |
 | D2 (W2A) | `backend/nq_terminal/desktop/build_stamp.py` | 81 | new | `dist` current, stale or missing, from `web/dist/build-stamp.json` against the newest source time and the sha256 of `contract/openapi.json` | D2 | `test_build_stamp.py` |
@@ -169,3 +169,38 @@ The new modules that 03 already plans (`services/result_cache.py`, `desktop/lock
 | Conflict markers, `target` and `node_modules` folders under `desktop/`, LF line endings, wave order of this file | checked by `backend/tests/test_desktop_tree.py` |
 | New modules in this wave | none; the two README conflicts of the merge were resolved by keeping the newer status of the main tree and bringing in the D5 step 1 text |
 | Other build workflows on the repository | none besides the owner's 8765 backend (pid 46084, without `--reload`) |
+
+## Preflight of 3 October 2026 (integration DEC1, four owner decisions resolved)
+
+`gen_03_tables.py` was run on the main tree at `49229b9` plus this wave's uncommitted tree, with the nq-lab venv Python.
+
+| Check | Result |
+|---|---|
+| Backend modules, screen folders, support folders and other rows | 128, 25, 26 and 36 |
+| Unmapped rows | 0 |
+| New backend module in this wave | `services/run_curves.py`, a row below |
+| Other build workflows on the repository | a docs-only workflow writes hand-over drafts in its own worktree; it runs no Playwright, no cargo and no backend |
+| Rows added to this addendum | the equity curve view, the file cache weight, the reflow survey, the installer hooks and their tests, below |
+
+### Rows added by DEC1
+
+| Phase | Module | Lines | Fate | Desktop form | Stage | Tests |
+|---|---|---:|---|---|---|---|
+| D5 (DEC1) | `backend/nq_terminal/services/run_curves.py` | 171 | new | the equity curve's own view of a result.json: only the fields the curve reads, sanitised and frozen in one pass, decoded by orjson with an exact json.loads fallback; no I/O, no price read | D3 | `test_runs_ledger_first_launch.py` |
+| D5 (DEC1) | `backend/nq_terminal/services/files.py` | 471 | changed | the file cache charges each entry what it keeps (`retained_bytes`, `entry_weight`), so the run index no longer overflows the 128 MiB desktop cap and thrashes; no cap is raised and no served value changes | D1 | `test_file_cache_weight.py` |
+| D5 (DEC1) | `backend/nq_terminal/services/runs.py`, `api/runs.py`, `services/result_cache.py` | 47, 36, 4 changed | changed | `/api/runs` is a cached, persisted, price-free route (the ninth); the ledger and the index are rebuilt from a fresh listing, never a stale one | D1 | `test_runs_cached_index.py`, `test_result_cache_routes.py` |
+| D5 (DEC1) | `web/e2e/reflow.ts`, `reflow-200.spec.ts` | 154, 189 | new | the shared overflow and clipping detectors and the survey of every panel in three windows at a device pixel ratio of 2 (WCAG 2.2 SC 1.4.4 and 1.4.10) | D5 | `reflow-200.spec.ts` (planted detector case), `50-zoom.desktop.ts` |
+| D5 (DEC1) | `web/src/chrome/PanelChrome.maximised.css.test.ts` | 85 | new | pins that a maximised panel is marked in CSS only, by its pressed maximise toggle, with the fold rules inside the container query | D5 | itself |
+| D5 (DEC1) | `desktop/src-tauri/windows/nsis/hooks.nsh` | 628 | new | the installer hooks: refuse unsafe targets (exit 3), give any install folder a protected DACL before the first file is written (exit 4), read the DACL back after the install (exit 5), and move the bundler's default under `%LOCALAPPDATA%\Programs` (CWE-427, CWE-732) | D5 | `scripts/tests/install-hooks.test.mjs`, `install-test.ps1` |
+| D5 (DEC1) | `desktop/scripts/tests/install-hooks.test.mjs` | 371 | new | a stub installer that includes the hooks the way the template does, run silently against folders under `D:\dev\tmp`: protected DACL under a hostile parent, the refusals, the read-back, the default folder, the file's own rules | D5 | itself |
+| D5 (DEC1) | `desktop/scripts/install-test.ps1` | 895 | changed | the custom-folder and refusal scenarios (a hostile parent, a lab stand-in, a SUBST drive root, a UNC path, a junction, Program Files and Windows, and with `-DefaultFolder` the default under `%LOCALAPPDATA%\Programs`); above 800 lines on purpose, one script owns one runnable scenario list and its self-test | D5 | `-SelfTest` |
+| D5 (DEC1) | `desktop/scripts/artefact-check.mjs`, `build-release.ps1` | 376, 310 | changed | the installer script carries the hooks (`installerHooks` in the three configurations, the guard, the DACL calls and the default-folder rule in the hooks file that `build-release.ps1` keeps beside `installer.nsi`) | D5 | `scripts/tests/artefact-check.test.mjs` |
+| D5 (DEC1) | `docs/desktop/stage1/measure_stage1.mjs` | 875 | changed | the first-launch series gates T3 under the strict reading; the usual launch is gated against the cap and its W3B ceiling; each record carries `apiTimeline`; above 800 lines on purpose, a measurement script with its own self-check | D5 | `node measure_stage1.mjs --dry` (37 checks) |
+| D5 (DEC1) | `desktop/src-tauri/tauri.conf.json`, `tauri.smoke.conf.json`, `tauri.measure.conf.json` | 1 line each | changed | `bundle.windows.nsis.installerHooks` in all three (the identity test requires them to differ only in identity) | D5 | `tests/identity_split.rs` |
+| D5 (DEC1) | `backend/nq_terminal/api/analytics.py`, `services/tearsheet_extended.py` | 418, 298 | changed | a registered row without a series source (a lab registration a later release learns) is no trial of the Deflated Sharpe view and is named in its N note, never a 503; a learned row whose series fails still refuses the view | D1 | `test_registry_new_rows.py`, `test_p1_api.py` |
+| D5 (DEC1) | `backend/tests/test_registry_new_rows.py` | 119 | new | plants a new registration and a new sealed-test opening in a copy of the fixture tree: every research, audit and health route answers, the new row is a plain row | D1 | itself |
+| D5 (DEC1) | `web/src/charts/LineStack.css` | 80 | changed | a legend name wraps in a narrow pane of a maximised panel only, so a shared pane keeps its legend short and the curve clear of it (look spec 6.1) | D5 | `LineStack.css.test.ts`, `des.spec.ts`, `reflow-200.spec.ts` |
+| D5 (DEC1) | `web/scripts/playwrightConfig.test.ts` | 122 | changed | pins that the main run's screenshots read the checked-in fixture tree, never the live registry, with planted cases | D5 | itself |
+| D5 (DEC1) | `scripts/smoke_real.ps1` | 851 | changed | a new access-log line with another caller and a reason that is not the terminal's is counted as another workflow's read, not a problem; over 800 lines before this change (833), one script owning the smoke and its self-test | D5 | `-SelfTest` |
+| D5 (DEC1) | `web/e2e/desktop/60-print.desktop.ts` | 122 | changed | the print judgement runs in an app of its own, retried twice, so an engine hang after print emulation costs one spec and not the rest of the run | D5 | itself |
+| D5 (DEC1) | `src/nq_lab/oos_gate.py`, `tests/test_oos_gate.py` | 1 lock, 1 test | changed | outside the terminal: one append at a time to the access log within a process (a torn line from two threads), born failing with a racy append path | D1 | `tests/test_oos_gate.py` |

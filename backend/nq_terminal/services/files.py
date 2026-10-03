@@ -9,8 +9,12 @@ FileCache
   of the same size inside one mtime tick cannot be seen; NTFS ticks are 100 ns.)
 - A value is cached only when the stat before and after the read agree, so a write racing the read never
   pins a stale value under the new key.
-- LRU bounded by entry count and by the source files' byte sizes; a file bigger than the cap is served
-  but not cached. Thread safe (FastAPI runs sync endpoints in a thread pool).
+- LRU bounded by entry count and by the bytes each entry is charged (`entry_weight`, DEC1): a parsed value
+  that keeps less than half its file (a projection, such as a run's head without its trade arrays) is
+  charged its own retained size, anything else its file's byte size. Charging a projection its whole file
+  made the run index (0.7 MB of heads over 163 MB of result files) overflow the 128 MiB desktop cap on
+  every pass, and an LRU scanned in a cycle larger than itself keeps nothing. An entry charged more than
+  the cap is served but not cached. Thread safe (FastAPI runs sync endpoints in a thread pool).
 - Read hook (result cache, services/result_cache.py): every read, a hit included, reports the file and the
   (mtime_ns, size) it was read at to the result cache's recorder; a missing file is reported as missing, and a file
   that changed while it was read is reported as unpinned, so a result built on it is never cached.
@@ -43,6 +47,7 @@ import math
 import numbers
 import os
 import re
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -262,8 +267,49 @@ class CacheStats:
 @dataclass(frozen=True)
 class _Entry:
     mtime_ns: int
-    size: int
+    size: int  # the file's size at the read (validates the entry)
     value: Any
+    weight: int  # what the entry is charged against `max_bytes` (`entry_weight`)
+
+
+WEIGH_BUDGET_BYTES = 1024**2  # a value keeping more than this is charged its file's size without further counting
+_LEAVES = (str, bytes, int, float, bool, type(None), Decimal)
+_SEQUENCES = (list, tuple, set, frozenset)
+
+
+def retained_bytes(value: Any, budget: int) -> int | None:
+    """The bytes `value` keeps alive: `sys.getsizeof` over JSON-like containers (dicts, `FrozenDict`, lists, tuples,
+    sets) and their leaves (str, bytes, numbers, None, Decimal), each object counted once. None when the count passes
+    `budget` or meets any other type (a DataFrame, say): the cache then charges the file's size instead. The walk
+    stops at the budget, so it costs at most about `budget` bytes' worth of objects."""
+    seen: set[int] = set()
+    stack = [value]
+    total = 0
+    while stack:
+        item = stack.pop()
+        if id(item) in seen:
+            continue
+        seen.add(id(item))
+        total += sys.getsizeof(item)
+        if total > budget:
+            return None
+        if isinstance(item, dict):
+            stack.extend(item.keys())
+            stack.extend(item.values())
+        elif isinstance(item, _SEQUENCES):
+            stack.extend(item)
+        elif not isinstance(item, _LEAVES):
+            return None
+    return total
+
+
+def entry_weight(value: Any, size: int) -> int:
+    """What an entry is charged against the cap: its own retained bytes when it keeps less than half its file (a
+    projection, such as a run's head without its trade arrays), else the file's size. A parsed value never keeps
+    less than half its JSON or CSV text unless the parser dropped part of it, so a full parse is charged as before;
+    a value the estimate cannot weigh is charged the file's size too."""
+    kept = retained_bytes(value, min(WEIGH_BUDGET_BYTES, size // 2))
+    return size if kept is None else min(size, kept)
 
 
 def _positive(name: str, value: float) -> None:
@@ -333,7 +379,7 @@ class FileCache:
             result_cache.record_unstable(target)
             raise
         if stable is not None:
-            self._store(key, _Entry(stable[0], stable[1], value))
+            self._store(key, _Entry(stable[0], stable[1], value, entry_weight(value, stable[1])))
             result_cache.record_file(target, *stable)
         else:
             result_cache.record_unstable(target)
@@ -404,19 +450,19 @@ class FileCache:
     def _pop_locked(self, key: tuple[str, str]) -> None:
         entry = self._entries.pop(key, None)
         if entry is not None:
-            self._bytes -= entry.size
+            self._bytes -= entry.weight
 
     def _store(self, key: tuple[str, str], entry: _Entry) -> None:
         """Replace, insert and evict under one lock, so two threads storing one key count it once."""
         with self._lock:
             self._pop_locked(key)
-            if entry.size > self._max_bytes:
+            if entry.weight > self._max_bytes:
                 return
             self._entries[key] = entry
-            self._bytes += entry.size
+            self._bytes += entry.weight
             while len(self._entries) > self._max_entries or self._bytes > self._max_bytes:
                 _, old = self._entries.popitem(last=False)
-                self._bytes -= old.size
+                self._bytes -= old.weight
 
 
 def file_cache(cap: int | None, *, roots: Iterable[Path], max_bytes: int = DEFAULT_MAX_BYTES, **options: Any) -> FileCache:

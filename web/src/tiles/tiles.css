@@ -72,18 +72,18 @@
   font-family: var(--font-sans);
   font-size: var(--fs-data);
 }
+/* A title or a value wraps rather than ends in an ellipsis: a card in a narrow panel (a maximised panel at 200% zoom is 512 to
+   960 CSS px wide) must not cut a run id or a balance off (WCAG 1.4.10, 1.4.4). One line stays one row high. */
 .nqt-card-title {
-  height: var(--row-h);
+  min-height: var(--row-h);
   margin: 0;
   padding: 0 5px;
-  overflow: hidden;
   background: var(--raised);
   color: var(--white);
   font-size: var(--fs-data);
   font-weight: 700;
   line-height: var(--row-h);
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .nqt-card-summary {
   margin: 0;
@@ -105,12 +105,10 @@
 .nqt-card-rows dd {
   margin: 0;
   min-width: 0;
-  overflow: hidden;
   color: var(--text);
   line-height: var(--row-h);
   text-align: right;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums lining-nums;
 }
 .nqt-card-prose {

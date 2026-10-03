@@ -4,6 +4,33 @@ The stage 1 release figures: backend ready, the cold HOME launch and its ceiling
 
 **Read this first.** These figures come from one complete run of the release check, taken on 3 October 2026 (it started at 04:37 UTC) on the owner's PC, with the other builds on the machine idle but in no owner-named quiet window (manager decision 2). Every run sat behind a 60 second reading of the whole machine's CPU with a limit of 10%, and every reading passed (2.4% to 8.0%), so every series is labelled ACCEPTED. The script still marks the T3 verdict `provisional: true`, because no quiet window was named and the cold-HOME reading is unratified (see T3). The figures are therefore listed in the last section for the quiet re-measure of W5B. The machine was not silent: the CPU during the runs averaged 5% to 14%, and the figure is printed next to every series. No budget or threshold was loosened. This run replaces two earlier runs of the same wave, taken beside the shell build's compiles; their records stay on D: and are not quoted here.
 
+## DEC1 readings (3 October 2026): the decided T3 reading and the EQ Enter unit at the desktop caps
+
+Four decisions the owner delegated were resolved and built in the wave DEC1 (`d5_integration.md` has each decision, its standard, the change and the evidence). Two of them are measured here: the cold HOME is read on a **first launch with an empty state folder** against the 6 s cap (target 4.5 s), with the usual launch held to the same cap and to its W3B ceiling; and the `volmanaged_v0` EQ Enter unit meets its 1 s target **at the shipped desktop caps** (512 MiB of bars, 128 MiB of files, neither raised).
+
+These are DEC1 readings, taken once on the integrated DEC1 tree (base `49229b9` plus the wave's uncommitted tree) on 3 October 2026 with `node measure_stage1.mjs --port 8797`, all four groups, in no owner-named quiet window. The machine was not quiet: the 60 second CPU gate read above the 10% limit (10.3% to 13.4%) on 10 of the 16 series records (two readings were rejected for each, then the run was taken anyway), so those are labelled PROVISIONAL and listed for the W5B quiet re-measure, which takes them alone. Record: `D:\dev\spikes\dec1\merge-stage1\2026-10-03T16-34-49-345Z\`.
+
+| Series | Runs (ms) | Median (ms) | Gate CPU per run (%) | CPU during the run (%) | Label |
+|---|---|---:|---|---|---|
+| First launch, an empty state folder (`home-fresh`, the T3 reading) | 5,034; 4,968; 5,096 | 5,034 | 11.8; 11.8; 12.5 | 17.2; 15.6; 17.2 | PROVISIONAL |
+| Usual launch (`home-disk`) | 3,581; 4,099; 3,150 | 3,581 | 12.9; 9.0; 6.5 | 19.2; 7.7; 13.8 | 1 PROVISIONAL, 2 ACCEPTED |
+| Backend ready, desktop form | 1,390; 1,391; 1,378 | 1,390 | 10.3; 13.4; 12.4 | 15.3; 16.2; 15.1 | PROVISIONAL |
+| Backend ready, browser form | 1,431; 1,366; 1,494 | 1,431 | 11.9; 10.3; 11.4 | 15.7; 13.8; 17.7 | PROVISIONAL |
+| `volmanaged_v0 EQ` Enter unit, desktop caps (judged) | 638; 504; 566; 1,336; 666 | 638 | 3.0 | 7.5 | ACCEPTED |
+| `volmanaged_v0 EQ` Enter unit, browser caps | 484; 641; 757; 631; 732 | 641 | 3.6 | 8.4 | ACCEPTED |
+| `REG` Enter unit, desktop caps (judged) | 421; 329; 421; 420; 435 | 421 | 3.0 | 7.5 | ACCEPTED |
+| `REG` Enter unit, browser caps | 419; 279; 417; 406; 422 | 417 | 3.6 | 8.4 | ACCEPTED |
+| Eight routes, worst repeat of 48, desktop caps | 121 | 121 | 4.6 | 7.3 | ACCEPTED |
+| Eight routes, worst repeat of 48, browser caps | 7 | 7 | 3.1 | 7.3 | ACCEPTED |
+
+- **First launch (T3).** The median of 5,034 ms is under the 6,000 ms cap and above the 4,500 ms target by 534 ms. The ceiling is the first-launch median plus 20%, never above 6 s: 5,034 x 1.2 = 6,041, so 6,000 ms. W3B measured this launch at 6,439 ms, over the cap, which was the open question; the figure is down 1,405 ms (22%). The target is not met, and it is not shown to be reachable from this run: the first-launch HOME API load is dominated by `/api/analytics/hypothesis/{name}/panel` (not cached by design, 2.9 s on a first launch in the builders' timeline), which the next wave can attack (see the last section).
+- **Usual launch.** The median of 3,581 ms is under the cap and is not slower than the W3B median of 3,757 ms (the regression gate; 4,508 ms stays beside it as the noise ceiling).
+- **EQ at the desktop caps.** The Enter unit median is 638 ms against the browser caps' 641 ms: the 1,000 ms target is met at the shipped caps (W3B desktop median 1,168 ms). One run of five (1,336 ms) was above the target and under the 1,500 ms ceiling, taken under the machine load noted above. The cause was not the bars cache but the run index: its file cache charged each run's parsed head at its whole result.json, overflowed the 128 MiB cap in one pass and re-parsed all 72 files on every `/api/runs` call (631 to 674 ms warm); entries are now weighed by what they keep (`services/files.py`), and `/api/runs` is a cached, persisted route of its own (ninth, price-free).
+- **REG at the desktop caps** is 421 ms (W3B 765 ms), for the same reason.
+- **Routes.** The worst desktop repeat is 121 ms, the first repeat of `/api/market/two-day` while the HOME prewarm still ran in that process (the other 47 repeats took 8 ms or less); the 300 ms ceiling is met and the 100 ms target is missed by that one repeat (W3B 88 ms, another route's first repeat: the same noise). `routeTable` still times the eight D1 routes; `/api/runs` is a ninth cached route and is covered by `test_result_cache_routes.py`, not timed here.
+- **T3 verdict:** `fires: false`, `provisional: true` (no owner-named quiet window; a series of the run is PROVISIONAL). Backend ready 1,390 ms against 2,500 ms; first launch 5,034 ms against 6,000 ms; usual launch not regressed.
+- **Watches.** 0 new windows and no change of the foreground window in any group; `ledger.csv`, `registry.csv` and `oos_openings.json` byte-equal; the gate log grew by 622 lines, all caller `terminal`, none bad (its append is now taken one thread at a time, see `d5_integration.md`); no new entry under `terminal\state`.
+
 ## Method
 
 - Machine: AMD Ryzen 9 9950X3D2, 32 logical processors, 31.6 GB memory, Windows 11; Node 24.13.1; the nq-lab virtual environment's Python 3.12 by full path.
@@ -34,7 +61,7 @@ The clock starts before the backend is spawned (desktop form, port 8797) and sto
 | Usual launch, a state folder an earlier launch filled (`home-disk`) | 3,757; 3,709; 3,813 | 3,757 | 6.3; 5.5; 6.5 | 10.2; 9.4; 13.6 | ACCEPTED |
 | First launch, an empty state folder (`home-fresh`) | 6,439; 6,435; 6,603 | 6,439 | 2.6; 5.4; 4.5 | 6.9; 7.9; 13.2 | ACCEPTED |
 
-**The cold-HOME ceiling (02 section 4.1, item 3): median of 3 cold launches plus 20%, never above 6 s: 3,757 ms x 1.2 = 4,508 ms.** G2 tests the app against 4,508 ms; the median of 3,757 ms meets the target of 4.5 s with 0.7 s to spare. The cold launches the ceiling rests on are the usual launch, the one the persisted result cache serves (02 section 4.1, item 1); a first launch has no cache yet and is reported beside it, not gated, as are launches after the lab's result files change. On the first launch the slowest answers were the hypothesis panel (4.0 to 4.1 s after the start of the page), the ledger (3.8 to 4.0 s), the universe (3.2 to 3.4 s) and the hypothesis list (3.2 to 3.3 s); on the usual launch they are the hypothesis panel (1.9 to 2.0 s), the universe (1.5 s), the run index (1.4 s) and the 22-day universe (1.4 s), and the ledger is no longer among them. The backend itself was ready after 1.1 to 1.3 s in every launch. A first launch at 6.4 s is above the 4.5 s target and above the 6 s cap; it is the open question in the last section and decides T3 (below).
+**The cold-HOME ceiling (02 section 4.1, item 3): median of 3 cold launches plus 20%, never above 6 s: 3,757 ms x 1.2 = 4,508 ms.** G2 tests the app against 4,508 ms; the median of 3,757 ms meets the target of 4.5 s with 0.7 s to spare. The cold launches the ceiling rests on are the usual launch, the one the persisted result cache serves (02 section 4.1, item 1); a first launch has no cache yet and is reported beside it, not gated, as are launches after the lab's result files change. On the first launch the slowest answers were the hypothesis panel (4.0 to 4.1 s after the start of the page), the ledger (3.8 to 4.0 s), the universe (3.2 to 3.4 s) and the hypothesis list (3.2 to 3.3 s); on the usual launch they are the hypothesis panel (1.9 to 2.0 s), the universe (1.5 s), the run index (1.4 s) and the 22-day universe (1.4 s), and the ledger is no longer among them. The backend itself was ready after 1.1 to 1.3 s in every launch. A first launch at 6.4 s is above the 4.5 s target and above the 6 s cap. That was the open question of this run; it was decided in DEC1 (the first launch is the reading T3 gates) and the figures after the wave's changes are in the section above (5,034 ms).
 
 The page's own cost of the workspace store (seven reads at start, parallel after the first) is inside these figures; the backend's state folder after a usual launch held `workspaces\linkGroups.json` and `workspaces\watch.json`, the two documents a plain HOME load writes through the store.
 
@@ -75,15 +102,15 @@ Gate CPU and CPU during the run: browser 7.6% and 12.9%, desktop 7.9% and 12.7%;
 | Criterion | Result |
 |---|---|
 | Backend ready on a quiet machine at most 2.5 s (target 1.5 s) | 1,168 ms browser, 1,183 ms desktop (not in a named quiet window, so provisional; see the last section) |
-| Real-data EQ and REG warm at most 1,500 ms (target 1,000 ms) | Ceiling met on every run (largest 1,277 ms). Target met except desktop EQ: median 1,168 ms (see above) |
+| Real-data EQ and REG warm at most 1,500 ms (target 1,000 ms) | Ceiling met on every run (largest 1,277 ms). Target met except desktop EQ: median 1,168 ms (see above). After DEC1: desktop EQ median 638 ms, REG 421 ms (the DEC1 section) |
 | Slow routes on repeat at most 300 ms (target 100 ms), both cap settings | 6 ms browser caps, 88 ms desktop caps (worst repeat of 48 each) |
-| Cold-HOME ceiling fixed | 4,508 ms (usual launch; first launch 6,439 ms, not gated) |
+| Cold-HOME ceiling fixed | W3B: 4,508 ms (usual launch; first launch 6,439 ms, not gated). DEC1: the first launch is the reading, ceiling 6,000 ms, first-launch median 5,034 ms |
 | Browser budgets unchanged: HOME at most 1,500 ms, grid at most 500 ms, shell at most 114.9 kB gzip, library chunks within budget | `e2e:perf` (3 passed): HOME median 616 ms with the store started as in production (loads 924, 616 and 607 ms), fills grid opens in 68 ms, sorts in 32 ms, pages in 35 ms, GIP pan and zoom at 60 fps; shell 109,894 B gzip of 114,900 B, under the diet-4 target of 109,900 B, which was not raised; perspective 86.1 of 100 kB, echarts 201.6 of 230, lightweight-charts 61.4 of 75, uplot 22.1 of 30, tanstack-grid 18.7 of 45 |
 | Real-data smoke passes: every screen opens on real files, every new gate line `caller="terminal"`, research files unchanged | `smoke_real.ps1` passed (18 tests, 66 new gate lines, all caller `terminal` inside the fence, files unchanged) |
 | 3 write routes exactly; 0 shell IPC uses in `web/src` | the backend app test and the IPC scan are green |
 | Every automated check green; screenshot baselines unchanged | backend 3,877 passed and 1 skipped; crosscheck strict PASS 2,495, FAIL 0; QA tests 299; vitest 7,321 passed and 47 skipped (492 files); type checks clean; Playwright 398; offline 190 passed and 3 skipped; no baseline rewritten |
 
-## T3 (02 section 9, end of D3): does not fire on the usual-launch reading
+## T3 (02 section 9, end of D3): the W3B reading, and its DEC1 decision
 
 T3 fires if backend ready is above 2.5 s, or the cold HOME is above its ceiling (at most 6 s), on the quiet-machine median.
 
@@ -92,12 +119,12 @@ T3 fires if backend ready is above 2.5 s, or the cold HOME is above its ceiling 
 
 The verdict is `fires: false` on the usual-launch reading, and it is **provisional** (`provisional: true`): the script marks a verdict provisional while the reading is unratified and while no owner-named quiet window was used (every series was ACCEPTED, so no series adds a reason).
 
-**The reading is a provisional default (manager decision 3).** 02 section 4.1 item 3 says "median of 3 cold launches" and the plan says T3 fires if "the cold-HOME median is above the 6 s ceiling"; neither names which launch. The script gates the usual launch (a state folder an earlier launch filled: 3,757 ms) and reports the first launch on an empty state folder beside it, not gated: 6,439, 6,435 and 6,603 ms, median 6,439 ms, which is above the 6 s cap. **Under the first-launch reading T3 fires** and the chain would stop. The owner must ratify one reading; until then T3 is recorded as does not fire, provisional. The first-launch figure stays on the W5B owner list below.
+**The reading was a provisional default at W3B (manager decision 3), and DEC1 decided it (3 October 2026, a decision the owner delegated): the cold launches are first launches after an install, with an empty state folder.** At W3B the first-launch figures were 6,439, 6,435 and 6,603 ms, median 6,439 ms, above the 6 s cap, so under that reading T3 fired. The wave then built the fixes (the equity curve's projection parsers, a cached and persisted run index, the ledger and run index rebuilt from a fresh listing, prewarm ordering with the later tasks waiting for a quiet process), and the DEC1 section above gives the first-launch median of 5,034 ms: under the cap, `fires: false`, still provisional.
 
 ## For the quiet re-measure of W5B
 
 - Take every series again in an owner-named quiet window (no series was rejected here, but the run was not in a named window, and the machine's own CPU during the runs was 5% to 14%).
 - The desktop `volmanaged_v0 EQ` Enter unit (median 1,168 ms, above the 1 s target, under the 1.5 s ceiling) is reproducible, so profile it as well as re-measuring it: the browser caps give 469 ms for the same screen.
 - The cold-HOME series (`home-disk` and `home-fresh`): the ceiling of 4,508 ms is the figure G2 tests against.
-- Open question for the owner: a first launch on an empty state folder (the first start after an install) takes 6.4 s. The ceiling rule reads as the usual launch; if a first launch must also meet 6 s, the ledger (3.8 to 4.0 s on a first call) is the cost to attack, for example by building its cache during the installer's first run.
+- Decided in DEC1, no longer a question: the first launch on an empty state folder is the T3 reading (5,034 ms in the DEC1 run, cap 6,000 ms, target 4,500 ms not met). W5B takes the first-launch and usual-launch series again alone in a quiet window; the next cost to attack for the target is the uncached hypothesis panel request, then the `/api/health` build-stamp walk of `web/src` (cacheable per process) and the gated session sets of the ledger.
 - The helper libraries (CPU gate, window watch, identity-checked stop) are machine-local in `D:\dev\spikes\t2\lib` and are not tracked.

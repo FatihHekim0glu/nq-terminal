@@ -78,7 +78,7 @@ export const REG = {
   // both for the narrow board, whose column headers cannot; the full board's note is RegParts's RuleNote.
   familyNote: FAMILY_NOTE,
   verdictNote: VERDICT_NOTE,
-  compactNote: `Columns hidden here (maximise the panel to see them): round, control p, Bonferroni, spec sha. 98) Export saves every column. ${FAMILY_NOTE} ${VERDICT_NOTE}`,
+  compactNote: `Columns hidden here (a wider panel shows them; maximising may not be enough at 200% zoom in a small window): round, control p, Bonferroni, DSR, spec sha. 98) Export saves every column, and DES shows a row's spec sha and adjusted p. ${FAMILY_NOTE} ${VERDICT_NOTE}`,
   overlayNote: '[OVERLAY]: a registered risk overlay, in the multiple-testing family, but its PASS is not an edge.',
   notesLabel: 'Verdict notes',
   noteSeparator: ': ',

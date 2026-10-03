@@ -13,13 +13,16 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test, { after } from 'node:test'
 import {
-  PINNED_LOADER_SHA256, configProblems, exeProblems, installerProblems, pathProblems, checkRelease, listFiles,
+  PINNED_LOADER_SHA256, configProblems, exeProblems, hooksProblems, installerProblems, pathProblems, checkRelease, listFiles,
 } from '../artefact-check.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CHECK = path.join(HERE, '..', 'artefact-check.mjs')
 const MANIFEST = fs.readFileSync(path.join(HERE, '..', '..', 'src-tauri', 'windows', 'app.manifest'), 'utf8')
 const SCRATCH = process.env.NQT_TEST_TMP || 'D:/dev/tmp/w5a-package-tests'
+const HOOKS_FILE = path.join(HERE, '..', '..', 'src-tauri', 'windows', 'nsis', 'hooks.nsh')
+const HOOKS_CONFIG_PATH = 'windows/nsis/hooks.nsh'
+const HOOKS_INCLUDE = String.raw`D:\repo\desktop\src-tauri\windows\nsis\hooks.nsh`
 const SPIKE_EXE = 'D:/dev/spikes/tauri-shell/src-tauri/target/release/nq-shell.exe'
 const GOOD_IMPORTS = ['KERNEL32.dll', 'api-ms-win-core-synch-l1-2-0.dll', 'user32.dll']
 const IDENTIFIER = 'dev.nqlab.terminal'
@@ -155,24 +158,26 @@ const LOADER_SHA256 = crypto.createHash('sha256').update(LOADER_BYTES).digest('h
 const goodConfig = (extra = {}) => ({
   productName: 'nq-lab terminal', version: '0.1.0', identifier: IDENTIFIER,
   bundle: { active: true, targets: ['nsis'], createUpdaterArtifacts: false,
-    windows: { webviewInstallMode: { type: 'embedBootstrapper', silent: true }, nsis: { installMode: 'currentUser' } } },
+    windows: { webviewInstallMode: { type: 'embedBootstrapper', silent: true }, nsis: { installMode: 'currentUser', installerHooks: HOOKS_CONFIG_PATH } } },
   ...extra,
 })
 const nsi = (lines = []) => [
   '!define INSTALLMODE "currentUser"', '!define INSTALLWEBVIEW2MODE "embedBootstrapper"', `!define WEBVIEW2BOOTSTRAPPERPATH "${BOOTSTRAPPER_PATH}"`, 'RequestExecutionLevel user',
-  '${GetOptions} $CMDLINE "/NS" $NoShortcutMode', '!insertmacro MUI_PAGE_DIRECTORY', 'SetOutPath $INSTDIR', 'File "${MAINBINARYSRCPATH}"',
+  '${GetOptions} $CMDLINE "/NS" $NoShortcutMode', `!include "${HOOKS_INCLUDE}"`, '!insertmacro MUI_PAGE_DIRECTORY', 'SetOutPath $INSTDIR', 'File "${MAINBINARYSRCPATH}"',
   'File /a "/oname=WebView2Loader.dll" "D:\\dev\\targets\\x\\release\\WebView2Loader.dll"', ...lines].join('\n')
 
 /** A clean release folder in the layout of build-release.ps1 (the exe carries its identifier, as a built one does). */
-function cleanRelease(dir, { exe = buildPe(), config = goodConfig(), identifier = IDENTIFIER, provenance = { webview2_bootstrapper: goodBootstrapper() } } = {}) {
+function cleanRelease(dir, { exe = buildPe(), config = goodConfig(), identifier = IDENTIFIER, provenance = { webview2_bootstrapper: goodBootstrapper() }, hooks = realHooks() } = {}) {
   writeFile(dir, 'payload/release/nq-lab-terminal.exe', Buffer.concat([exe, Buffer.from(`\0${identifier}\0`)]))
   writeFile(dir, 'config/tauri.conf.json', JSON.stringify(config))
   writeFile(dir, 'nq-lab terminal_0.1.0_x64-setup.exe', buildPe({ imports: ['KERNEL32.dll', 'user32.dll'] }))
   writeFile(dir, 'nsis/release/installer.nsi', nsi())
+  if (hooks !== null) writeFile(dir, 'nsis/release/hooks.nsh', hooks)
   writeFile(dir, 'PROVENANCE.json', JSON.stringify(provenance))
   return dir
 }
 const OPTIONS = { loaderSha256: LOADER_SHA256 }
+const realHooks = () => fs.readFileSync(HOOKS_FILE, 'utf8')
 
 // ---- the guards --------------------------------------------------------------------------------------------------------
 
@@ -435,6 +440,121 @@ test('a missing PROVENANCE.json fails the whole check', () => {
   const dir = cleanRelease(scratch('rel'))
   fs.rmSync(path.join(dir, 'PROVENANCE.json'))
   assert.match(checkRelease(dir, OPTIONS).problems.join(' '), /PROVENANCE\.json/)
+})
+
+// ---- the installer hooks (the protected install folder, CWE-427 and CWE-732) ----------------------------------------------
+// The installer script includes windows/nsis/hooks.nsh (bundle.windows.nsis.installerHooks). The compiled installer is
+// compressed, so the proof that the hooks are in it is the generated script's include, the configuration that asked for
+// it and the hooks file's own text (kept beside the script in the release folder, or the include path when it exists).
+
+const hookText = () => realHooks()
+const hookProblems = (text) => hooksProblems(text, 'release').join('\n')
+
+test('the shipped hooks file passes the hook rules', () => {
+  assert.deepEqual(hooksProblems(hookText(), 'release'), [])
+})
+
+for (const macro of ['NSIS_HOOK_PREINSTALL', 'NSIS_HOOK_POSTINSTALL']) {
+  test(`hooks without ${macro} fail`, () => {
+    assert.match(hookProblems(hookText().replaceAll(macro, 'NSIS_HOOK_RENAMED')), new RegExp(macro))
+  })
+}
+
+test('hooks whose before-install macro does not protect the folder fail', () => {
+  assert.match(hookProblems(hookText().replaceAll('NqtProtectInstallDir', 'NqtNothing')), /NqtProtectInstallDir/)
+})
+
+test('hooks whose after-install macro does not verify the folder fail', () => {
+  assert.match(hookProblems(hookText().replaceAll('NqtVerifyInstallDir', 'NqtNothing')), /NqtVerifyInstallDir/)
+})
+
+test('hooks that start icacls through the search path fail', () => {
+  const bare = hookText().replaceAll('"$SYSDIR\\icacls.exe"', 'icacls')
+  assert.match(hookProblems(bare), /icacls/)
+})
+
+test('hooks that start a shell or ExecWait fail', () => {
+  assert.match(hookProblems(`${hookText()}\nExecWait 'cmd /c icacls "$INSTDIR" /grant Users:F'\n`), /ExecWait|cmd/)
+  assert.match(hookProblems(`${hookText()}\nExecShell "open" "$INSTDIR"\n`), /ExecShell|shell/i)
+})
+
+for (const principal of ['*S-1-1-0', '*S-1-5-11', '*S-1-5-32-545', 'Everyone', 'Users', '"Authenticated Users"']) {
+  test(`hooks that grant ${principal} fail`, () => {
+    assert.match(hookProblems(`${hookText()}\nnsExec::ExecToStack '"$SYSDIR\\icacls.exe" "$INSTDIR" /grant ${principal}:(OI)(CI)M'\n`), /broad|grant/i)
+  })
+}
+
+test('hooks that leave inheritance on fail', () => {
+  assert.match(hookProblems(hookText().replaceAll('/inheritance:r', '/inheritance:e')), /inheritance/)
+})
+
+for (const sid of ['S-1-5-18', 'S-1-5-32-544']) {
+  test(`hooks that do not name ${sid} fail`, () => {
+    assert.match(hookProblems(hookText().replaceAll(sid, 'S-1-5-19')), new RegExp(sid))
+  })
+}
+
+for (const token of ['GetFullPathNameW', 'GetDriveTypeW', '$WINDIR', '$PROGRAMFILES64', '$PROGRAMFILES32', 'GetFileAttributesW']) {
+  test(`hooks without the refusal rule using ${token} fail`, () => {
+    assert.match(hookProblems(hookText().replaceAll(token, 'x')), /refus/i)
+  })
+}
+
+test('hooks that do not move the default folder under Programs fail (the folder page and the silent install)', () => {
+  assert.match(hookProblems(hookText().replaceAll('NqtDefaultUnderPrograms', 'NqtNothing')), /default folder/)
+  assert.match(hookProblems(hookText().replace('!define MUI_CUSTOMFUNCTION_GUIINIT', '!define MUI_CUSTOMFUNCTION_RENAMED')), /default folder/)
+  assert.match(hookProblems(`${hookText()}\nFunction .onGUIInit\nFunctionEnd\n`), /second \.onGUIInit/)
+  assert.match(hookProblems(hookText().replaceAll('\\Programs\\', '\\Apps\\')), /default folder/)
+})
+
+test('hooks that never read the icacls exit code fail', () => {
+  assert.match(hookProblems(hookText().replaceAll('nsExec::ExecToStack', 'nsExec::Exec')), /exit code|ExecToStack/)
+})
+
+test('hooks that remove a folder recursively fail (the uninstaller removes only what was written)', () => {
+  assert.match(hookProblems(`${hookText()}\nRMDir /r "$INSTDIR"\n`), /RMDir \/r/)
+})
+
+test('a configuration without installerHooks fails', () => {
+  const config = goodConfig(); delete config.bundle.windows.nsis.installerHooks
+  assert.match(configProblems({ exe: exeWith(IDENTIFIER), config, name: 'release' }).join('\n'), /installerHooks/)
+})
+
+test('a release folder whose configuration has no installerHooks fails the whole check', () => {
+  const config = goodConfig(); delete config.bundle.windows.nsis.installerHooks
+  assert.match(checkRelease(cleanRelease(scratch('rel'), { config }), OPTIONS).problems.join('\n'), /installerHooks/)
+})
+
+test('an installer script that does not include the hooks fails', () => {
+  const dir = cleanRelease(scratch('rel'))
+  writeFile(dir, 'nsis/release/installer.nsi', nsi().replace(`!include "${HOOKS_INCLUDE}"`, ''))
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /does not include the installer hooks/)
+})
+
+test('a release folder with hooks that are not protective fails the whole check', () => {
+  const dir = cleanRelease(scratch('rel'), { hooks: hookText().replaceAll('/inheritance:r', '/inheritance:e') })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /inheritance/)
+})
+
+test('a release folder with no hooks file, and no include path to read, fails', () => {
+  const dir = cleanRelease(scratch('rel'), { hooks: null })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /hooks file/)
+})
+
+test('a missing hooks copy falls back to the include path when that file exists', () => {
+  const dir = cleanRelease(scratch('rel'), { hooks: null })
+  writeFile(dir, 'nsis/release/installer.nsi', nsi().replace(HOOKS_INCLUDE, HOOKS_FILE))
+  assert.deepEqual(checkRelease(dir, OPTIONS).problems, [])
+})
+
+test('the measure build is held to the same hook rules', () => {
+  const dir = cleanRelease(scratch('rel'))
+  const measure = goodConfig({ identifier: `${IDENTIFIER}.measure` })
+  writeFile(dir, 'config/tauri.measure.conf.json', JSON.stringify({ identifier: `${IDENTIFIER}.measure` }))
+  writeFile(dir, 'payload/measure/nq-lab-terminal.exe', Buffer.concat([buildPe(), Buffer.from(`\0${measure.identifier}\0`)]))
+  writeFile(dir, 'nsis/measure/installer.nsi', nsi())
+  writeFile(dir, 'nsis/measure/hooks.nsh', hookText().replaceAll('/inheritance:r', '/inheritance:e'))
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /measure: .*inheritance/)
 })
 
 // ---- the command line --------------------------------------------------------------------------------------------------

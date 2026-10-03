@@ -341,11 +341,17 @@ def run_bootstrap(request: Request, run_id: str = _run_id(), freq: Freq = _freq(
     return json_response(cached_run_bootstrap(request.app.state, {"run_id": run_id, "freq": freq}))
 
 
-def registry_trials(research: ResearchService) -> list[deflated.Trial]:
-    """SV3a steps 1 and 2: every registered hypothesis's Basis A series at 1 tick, no bar service (no gate read)."""
-    trials = []
+def registry_trials(research: ResearchService) -> tuple[list[deflated.Trial], list[str]]:
+    """SV3a steps 1 and 2: every registered hypothesis's Basis A series at 1 tick, no bar service (no gate read), and
+    the registered rows the terminal has not learned yet (no SeriesSource). The lab registers rows the terminal learns
+    in a later release, so such a row is named beside the trials, never a refusal of the view; a learned row whose
+    series cannot be built still refuses it."""
+    trials, unlearned = [], []
     for row in research.registry_rows():
         if not row.registered:
+            continue
+        if row.name not in constants.SERIES_SOURCES:
+            unlearned.append(row.name)
             continue
         try:
             s = series.hypothesis_series(research, row.name, deflated.COST)
@@ -353,7 +359,7 @@ def registry_trials(research: ResearchService) -> list[deflated.Trial]:
             raise HTTPException(status_code=503, detail=f"the Deflated Sharpe needs every registered trial; "
                                                         f"{row.name} could not be built: {exc}") from exc
         trials.append(deflated.Trial(name=row.name, kind=s.kind, periods=s.periods, r=s.r))
-    return trials
+    return trials, unlearned
 
 
 def cached_deflated(state: Any, query: Mapping[str, Any] | None = None) -> bytes:
@@ -362,9 +368,9 @@ def cached_deflated(state: Any, query: Mapping[str, Any] | None = None) -> bytes
 
     def compute() -> bytes:
         with _http_errors():
-            trials = registry_trials(service_for_root(state.settings.data_root))
+            trials, unlearned = registry_trials(service_for_root(state.settings.data_root))
             try:
-                return result_cache.json_body(tearsheet_extended.deflated_view(trials))
+                return result_cache.json_body(tearsheet_extended.deflated_view(trials, unlearned))
             except ValueError as exc:
                 detail = f"the Deflated Sharpe could not be computed: {exc}"
                 raise HTTPException(status_code=503, detail=detail) from exc

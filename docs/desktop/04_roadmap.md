@@ -582,7 +582,7 @@ Decisions O1 to O14 are those of 03 section 23; O15 to O17 are new in this roadm
 | O4 | Tauri on "light" and Rust at an equal score, or Electron's single engine | Tauri | D4 |
 | O5 | Desktop caps 512 MiB bars and 128 MiB files, or 2 GiB | 512 and 128 in desktop mode | D2 |
 | O6 | An opt-in resident backend | not built; offered if T3 fires | D4 |
-| O7 | Drives for the WebView2 data folder and the install folder | D: | D4 |
+| O7 | Drives for the WebView2 data folder and the install folder | D: (the installer's own default is `%LOCALAPPDATA%\Programs\nq-lab terminal`, and any chosen folder, `D:\Apps\nq-lab terminal` among them, is given a protected DACL before the first file is written; decided in DEC1, 3 October 2026, D5.4) | D4 |
 | O8 | Keep the browser door after the dual run | keep | end of D6 |
 | O9 | Mac key alternatives | the Ctrl+Option set | D7 |
 | O10 | IB snapshot in the app | off, a setting | D4 |

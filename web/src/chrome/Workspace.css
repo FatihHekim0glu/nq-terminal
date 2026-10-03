@@ -32,6 +32,10 @@
   .nqt-workspace .dv-view-container { display: flex; flex-direction: column; gap: 2px; }
   .nqt-workspace .dv-sash-container { display: none; }
   .nqt-workspace .dv-groupview { width: auto !important; height: var(--stack-panel-h) !important; }
+  /* A maximised panel is the only one on show (dockview hides the rest), so it takes the whole viewport rather than the
+     stacked share: the page scrolls to it, and its own body scrolls what its controls and chart still do not fit
+     (WCAG 1.4.4, 1.4.10). Marked as PanelChrome.css marks it: by its pressed maximise toggle. */
+  .nqt-workspace .dv-groupview:has(.ptitle [aria-label="Maximise panel"][aria-pressed="true"]) { height: max(16rem, 100dvh) !important; }
 }
 
 .dockview-theme-nqt {

@@ -311,11 +311,13 @@ def test_born_failing_the_fx_month_end_book_is_excluded_as_monthly():
 
 
 def test_every_registered_row_of_the_live_registry_is_decided():
-    """The live registry decides no member or exclusion by raising: each row has a reason or joins the family."""
+    """The live registry decides no member or exclusion by raising: each row has a reason or joins the family, and a
+    row the lab registered after this release (no series source yet) is named with the reason that says so."""
     for row in real_registry_rows():
         if row["registered"] == "True":
-            assert row["name"] in SERIES_SOURCES, f"{row['name']} needs a SERIES_SOURCES entry"
-            spa_family.exclusion_reason(row["name"])
+            reason = spa_family.exclusion_reason(row["name"])
+            if row["name"] not in SERIES_SOURCES:
+                assert reason == spa_family.NO_SOURCE_REASON, row["name"]
 
 
 # ---------------------------------------------------------------- the effective number of members (SV8 step 8)
