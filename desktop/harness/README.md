@@ -37,6 +37,10 @@ figures apart from accepted ones.
 A row passes only if every build it was measured on is within its ceiling; the smoke and measure medians of backend ready, cold
 HOME and idle memory must also agree within noise (10% of each other, or overlapping ranges).
 
+The `cold_home` ceiling of 5,000 ms is the one that passes or fails G2 (04 D5; register 1.1 in
+`docs/desktop/owner_decisions_windows.md`). The 4,508 ms of the stage 1 record (`docs/desktop/stage1/stage1_numbers.md`) is a
+regression reference only: the report may note a reading above it, but it does not fail a row.
+
 Notes on what is synthetic. On a fixture backend the 8,411 fills are answered in the page (the same synthetic rows as the browser
 budgets), and the GIP series is the real response tiled out to 20,000 bars with the timestamps running on (`bars.mjs`; the record says
 `barsSynthetic`). The real-data run reads the real run with 8,411 fills and the real day, and rewrites only the bar count.
