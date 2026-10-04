@@ -6,6 +6,8 @@ are ignored (nothing sits in front of the terminal, so an `X-Forwarded-For` must
 
 The start path (03 sections 2.2 and 2.4, Appendix A row 2):
 
+0. Before the app's imports load numpy, scipy or pyarrow, cap their native thread pools for this process only
+   (`threadcaps.py`; 0.1.1 idle memory). Backtest children keep every core: their allow list drops the cap names.
 1. A live lock in the state folder (`desktop/lock.py`) means another backend serves this lab: print
    `NQT-ATTACH {"port": P}` and exit 0 without binding anything. A lock whose owner or rights are not this user's
    (planted by another principal) is never attached to or replaced: exit `EXIT_UNTRUSTED_LOCK` naming the file.
@@ -38,12 +40,18 @@ from typing import Any, Mapping
 import uvicorn
 from fastapi import FastAPI
 
-from nq_terminal.app import create_app
-from nq_terminal.desktop import handshake, lifecycle, lock, watchdog
-from nq_terminal.desktop.handshake import StdinChannel
-from nq_terminal.desktop.lifecycle import Runtime
-from nq_terminal.services.prewarm import PORT_BOUND_KEY
-from nq_terminal.settings import BIND_HOST, Settings, load_settings
+from nq_terminal.threadcaps import cap_native_pools
+
+# Before numpy, scipy or pyarrow loads (nq_terminal.app imports them): small native thread pools for the server process
+# only, an explicit setting still winning (threadcaps.py; 0.1.1 idle memory).
+cap_native_pools(os.environ)
+
+from nq_terminal.app import create_app  # noqa: E402
+from nq_terminal.desktop import handshake, lifecycle, lock, watchdog  # noqa: E402
+from nq_terminal.desktop.handshake import StdinChannel  # noqa: E402
+from nq_terminal.desktop.lifecycle import Runtime  # noqa: E402
+from nq_terminal.services.prewarm import PORT_BOUND_KEY  # noqa: E402
+from nq_terminal.settings import BIND_HOST, Settings, load_settings  # noqa: E402
 
 SHUTDOWN_GRACE_S = 2
 TOKEN_WAIT_S = 10.0
