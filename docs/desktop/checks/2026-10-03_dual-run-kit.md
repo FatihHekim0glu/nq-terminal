@@ -55,7 +55,7 @@ Copy `2026-10-03_weekly-parity.md` to `YYYY-MM-DD_weekly-parity-week-N.md` and d
    Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{ n = 'FreeGB'; e = { [math]::Round($_.Free / 1GB, 1) } }
    ```
 
-3. [ ] Check the installed tag is the one you expect: the version in Settings, Apps, against `{{W6: final release commit}}` and any fix tag.
+3. [ ] Check the installed tag is the one you expect: the version in Settings, Apps, against `8122c877bb00e4f07ce505d5ba0468d6a9858f41` and any fix tag.
 4. [ ] Read the idle memory of the app at HOME once in week 1 and once in week 4, with the commands of `2026-10-03_visible-run.md`, step 4. G2's rule is at most 500 MB. A value that grows from week 1 to week 4 is a finding even if it is under the ceiling.
 
 ## What to compare between the browser terminal and the app

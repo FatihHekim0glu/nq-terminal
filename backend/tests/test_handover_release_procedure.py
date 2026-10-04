@@ -44,47 +44,21 @@ def test_register_release_tag_names_the_stamped_commit_and_the_follow_up():
 
 def _section_10() -> str:
     text = HANDOVER.read_text(encoding="utf-8")
-    return text[text.index("## 10. Placeholders to fill") :]
+    return text[text.index("## 10. Placeholders") :]
 
 
-def _split_groups() -> tuple[str, str]:
+def test_every_release_placeholder_was_filled_in_the_follow_up_commit():
+    # The follow-up docs-only commit after the tag filled the build-dependent values; none may be left.
+    for path in [HANDOVER, REGISTER, *sorted(DOCS.glob("*.md")), *sorted((DOCS / "checks").glob("*.md"))]:
+        text = path.read_text(encoding="utf-8")
+        assert "{{W6" not in text, path.name
+        assert "{{G2" not in text, path.name
+
+
+def test_placeholder_section_says_they_were_filled_after_the_tag():
     section = _section_10()
-    before = section.index("Before the release commit")
-    after = section.index("After the tag, in the follow-up docs-only commit")
-    assert before < after
-    return section[before:after], section[after:]
-
-
-def test_placeholder_section_splits_before_and_after_the_release_commit():
-    _split_groups()
-
-
-def test_build_dependent_placeholders_are_filled_only_in_the_follow_up_commit():
-    before, after = _split_groups()
-    build_dependent = (
-        "{{W6: installer SHA256}}",
-        "{{W6: installer bytes}}",
-        "{{W6: final release commit}}",
-        "{{W6: install test result on the final installer}}",
-        "{{W6: release_check result and date}}",
-        "{{W6: tag result with date and commit}}",
-        "{{W6: soak result}}",
-    )
-    for placeholder in build_dependent:
-        assert placeholder not in before, placeholder
-        assert placeholder in after, placeholder
-
-
-def test_measurement_placeholders_are_filled_before_the_release_commit():
-    before, after = _split_groups()
-    assert "{{G2" not in before
-    assert "{{G2" not in after
-
-
-def test_placeholder_section_is_removed_only_in_the_follow_up_commit():
-    section = _section_10()
-    assert "then removes this section" not in section
-    assert "removed in the follow-up docs-only commit" in section
+    assert "filled on 4 October 2026 in the follow-up docs-only commit after the tag" in section
+    assert "{{" not in section
 
 
 def test_tag_message_takes_its_hash_from_sha256sums():

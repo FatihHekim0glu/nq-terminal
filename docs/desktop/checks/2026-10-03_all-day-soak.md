@@ -4,7 +4,7 @@ Result: [ ] PASS   [ ] FAIL   Status: NOT RUN
 
 ## Purpose
 
-G2 asks for the whole app to stay at or under 1.5 GB (target 1.0 GB) over an all-day soak at the shipped caps: 512 MiB for the bar cache and 128 MiB for the file cache in desktop mode (04, phase D5 exit table; owner decision O5). The soak of the build night is partial by design: it was a 3-hour real-data run, shorter than the 8-hour minimum of an all-day soak, so it is labelled PARTIAL (3 hours, 36 to 37 samples) and this check is needed. Its result: {{W6: soak result}}. The build-night run showed a start-up peak in its first sample (1,577.4 MB by one sampler, 1,509.8 MB by a second), at most 1,292 MB after 15 minutes and at most 749 MB after 45 minutes (`docs/desktop/g2_windows/results.md`, section 7). So read the whole memory curve, not only the largest sample: a peak at the start that falls away is the app loading its caches, while a curve that keeps rising late in the day is the finding this check exists to catch. The pass rule below still reads the largest sample.
+G2 asks for the whole app to stay at or under 1.5 GB (target 1.0 GB) over an all-day soak at the shipped caps: 512 MiB for the bar cache and 128 MiB for the file cache in desktop mode (04, phase D5 exit table; owner decision O5). The soak of the build night is partial by design: it was a 3-hour real-data run, shorter than the 8-hour minimum of an all-day soak, so it is labelled PARTIAL (3 hours, 36 to 37 samples) and this check is needed. Its result: the W5C soak ran 2 h (harness stopped at 2 h 5 min by the manager; external sampler), PARTIAL: largest sample 705.8 MB, first sample 698.7 MB, median 674.8 MB, +25.9 MB per hour over the last hour (`g2_windows/results.md`, section 8); not an all-day run. The build-night run showed a start-up peak in its first sample (1,577.4 MB by one sampler, 1,509.8 MB by a second), at most 1,292 MB after 15 minutes and at most 749 MB after 45 minutes (`docs/desktop/g2_windows/results.md`, section 7). The W5C re-measure (4 October 2026, after the changes under roadmap trigger T4) repeated the soak for 2 h: the largest sample is 705.8 MB (first sample 698.7 MB, median 674.8 MB, +25.9 MB per hour over the last hour), inside the ceiling and the target, and still PARTIAL. It was harnessed for 3 h and stopped by the manager at 2 h 5 min, so the figures come from the external sampler (`docs/desktop/g2_windows/results.md`, section 8). So read the whole memory curve, not only the largest sample: a peak at the start that falls away is the app loading its caches, while a curve that keeps rising late in the day is the finding this check exists to catch. The pass rule below still reads the largest sample.
 
 The run opens the heavy screens in rounds (GP, GIP, `volmanaged_v0 EQ`, REG, MON, CORR, LEDG, OOS, LIVE, RUNS and MT) so that the caches fill the way a day of use fills them, and samples the whole tree's private working set every 5 minutes. The row is the largest sample. The window is hidden; nothing appears on screen. The harness runs the `smoke` build, because only it can be driven over the debugging protocol.
 
@@ -14,8 +14,9 @@ The run opens the heavy screens in rounds (GP, GIP, `volmanaged_v0 EQ`, REG, MON
 | --- | --- |
 | Run date and start time | |
 | Length planned (hours) | |
-| Release commit | {{W6: final release commit}} |
-| Overnight soak of the build night | 3 hours (36 to 37 samples, PARTIAL); largest sample 1,577.4 MB (the start-up peak; 1,292 MB at most after 15 minutes) |
+| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Overnight soak of the build night (W5B, before) | 3 hours (36 to 37 samples, PARTIAL); largest sample 1,577.4 MB (the start-up peak; 1,292 MB at most after 15 minutes) |
+| Re-measure soak (W5C, after) | 2 h (harness stopped at 2 h 5 min by the manager; external sampler, 25 samples), PARTIAL; largest sample 705.8 MB, first 698.7 MB, median 674.8 MB, slope over the last hour +25.9 MB per hour; source `D:/dev/w5c/measure-runs/soak-outside.jsonl` |
 
 ## Preconditions
 

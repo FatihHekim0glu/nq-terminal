@@ -19,11 +19,11 @@ It also checks the first minute of use by eye: the window appears once, nothing 
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, {{W6: installer bytes}} bytes |
-| Installer SHA-256 | {{W6: installer SHA256}} |
-| Release commit | {{W6: final release commit}} |
+| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, 3,253,432 bytes |
+| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
+| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
 | Installed into | |
-| Measure artefact median, cold HOME | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch |
+| Measure artefact median, cold HOME | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms) |
 | Whether the lab's `terminal\state` folder already held a cache | yes / no |
 
 ## Preconditions
@@ -82,7 +82,7 @@ It also checks the first minute of use by eye: the window appears once, nothing 
 
 | Reading | Rule | Value | Pass |
 | --- | --- | ---: | --- |
-| Cold start to HOME ready, from the log | at most 5,000 ms and within noise of pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch | | [ ] |
+| Cold start to HOME ready, from the log | at most 5,000 ms and within noise of pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms) | | [ ] |
 | Backend ready, from the log | at most 2,500 ms | | [ ] |
 | Idle whole-tree private memory, step 4 | at most 500 MB | | [ ] |
 | Stream line text before the minimise | "live, server events" | | [ ] |

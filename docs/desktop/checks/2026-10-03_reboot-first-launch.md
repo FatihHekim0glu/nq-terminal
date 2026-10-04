@@ -14,9 +14,9 @@ Decision 1.1 of the register (`docs/desktop/owner_decisions_windows.md`, "T3: co
 | --- | --- |
 | Run date | |
 | Build read | the `measure` build (the default of the command) |
-| Release commit | {{W6: final release commit}} |
+| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
 | Machine up time at the run (the harness prints it) | |
-| Measure artefact median for cold HOME, for the "within noise" comparison | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch |
+| Measure artefact median for cold HOME, for the "within noise" comparison | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms) |
 
 ## Preconditions
 
@@ -64,7 +64,7 @@ PASS when all of these hold:
 - `firstAfterBoot` is true (the machine had been up 30 minutes or less). If it says false, the reading is a normal cold launch, not a post-boot one: file it as such and repeat after the next reboot.
 - `windows` is 0: no window of the app's own process tree appeared at any point. The harness hides the window and watches every window on the machine, but it counts only the ones that belong to the app it launched. A window of another program, such as one that starts at sign-in, does not fail the run: it is listed under `watch.notes` in the run's JSON record in the output folder, and you write it in the findings below. A window that the watch could not trace to an owner does fail the run.
 - Every row in the table is at or under its ceiling.
-- Cold start to HOME is within noise of the measure artefact's median pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch. Noise is 10% of the median, or inside the min to max range of the three accepted measure runs.
+- Cold start to HOME is within noise of the measure artefact's median pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms). Noise is 10% of the median, or inside the min to max range of the three accepted measure runs.
 
 A reading the harness labels PROVISIONAL (it could not get a quiet CPU reading in ten minutes) does not fail the check, but it is not accepted either: list it in `2026-10-03_pending-measurements.md` and repeat it in a quiet window.
 

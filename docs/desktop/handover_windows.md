@@ -1,6 +1,6 @@
 # Windows hand-over: install, run, update, roll back, release
 
-Status: brought in line with the tree at commit `f2e03bf` (main, D0 to D4, D5 step 1 and the DEC1 owner decisions) on 3 October 2026, for D6. It is still a hand-over draft in one respect: everything that gate G2 or the final regression will measure, and the last commit list, the tag line and the soak result, is a visible placeholder in double curly brackets that starts with G2 or W6, listed in the last section. Nothing in this document is a measured figure unless it says so and names where it was read. Paths with a space are quoted in every command.
+Status: brought in line with the tree at commit `f2e03bf` (main, D0 to D4, D5 step 1 and the DEC1 owner decisions) on 3 October 2026, for D6. It is still a hand-over draft in one respect: everything that gate G2 or the final regression will measure, and the last commit list, the tag line and the soak result, was a visible placeholder until the follow-up commit after the tag of 4 October 2026 filled them (section 10). Nothing in this document is a measured figure unless it says so and names where it was read. Paths with a space are quoted in every command.
 
 The app is a per-user Windows installer, unsigned (see [smartscreen.md](smartscreen.md)), built on the GNU host. The decisions behind it are in [owner_decisions_windows.md](owner_decisions_windows.md) and the owner checks are in [checks/](checks/README.md). No MSVC build, no CI run and no macOS build exist yet. Everything below is Windows only.
 
@@ -17,14 +17,16 @@ The terminal keeps its React page and the lab's own Python backend. A thin Tauri
 | D4 | The Windows shell: supervisor in a Job Object; keys and app zoom; the allow-listed write module; downloads; crash handling; the lab picker | `desktop/README.md`, `d4_integration.md` |
 | D5 step 1 | The measurement harness, the desktop Playwright project, the served-JSON comparison, the supply-chain checks, the per-user NSIS package, the artefact check, the dated green records and the release check | `desktop/README.md`, `d5_integration.md` |
 | DEC1 | Four owner decisions built: the first launch counted in the cold-HOME cap, the 200% zoom reflow of every maximised panel, the protected install folder with its refusals (`desktop/src-tauri/windows/nsis/hooks.nsh`), and `volmanaged_v0 EQ` inside the desktop caps | `d5_integration.md` (DEC1 sections), register entries 1.1 to 1.4 |
-| D5 step 2 | The G2 measurements `4 October 2026 (night of 3 to 4): not yet passed. Within ceiling: backend ready, splash, usual-launch cold HOME, warm HOME, EQ and REG warm, grid, GIP pan and zoom, keystroke, installer, the eight routes, and the 20,000-point hop; the drift run (T8) passed 14 of 14 on its second run. Over ceiling: first-launch cold HOME (5,048 ms against 5,000 ms), idle memory (T4 fires) and the soak start-up peak. Not tested: the simulated minimise (no engine-level driver yet). Open: the measure-artefact rows. Owner-attended rows pending` | `docs/desktop/g2_windows/results.md (verdict in verdict.md)` |
+| D5 step 2 | The G2 measurements `4 October 2026 (W5C re-measure): the automated part is not passed. One row is over its ceiling: whole-app idle memory at HOME, 505.4 MB against 500 MB (W5B 1,082 MB; T4 still fires on equal terms). Within ceiling: first-launch cold HOME (3,167 ms; W5B 5,048 ms), the soak (largest sample 705.8 MB over 2 h, PARTIAL; W5B 1,577.4 MB), backend ready, splash, usual-launch cold HOME, warm HOME, EQ and REG warm, grid, GIP pan and zoom, keystroke, installer, the eight routes, the 20,000-point hop and the simulated minimise (stream back 0 ms, engine level); the drift run (T8) passed 14 of 14. Open: the measure-artefact rows. Owner-attended rows pending` | `docs/desktop/g2_windows/results.md (verdict in verdict.md)` |
+
+A follow-up release, 0.1.1, is planned: a fix for the one automated row still over its ceiling, whole-app idle memory at HOME (505.4 MB against 500 MB; `g2_windows/verdict.md`), is in progress. It is not part of 0.1.0.
 
 What the 0.1.0 build is and is not:
 
-- Built and checked: the installer, the shell, the backend handshake, the store, the write ban, the research gate and the supply-chain checks. The reference build of `f2e03bf`, at `D:\dev\release-b\0.1.0`, has an installer of 3,253,192 bytes (the ceiling is 30 MB); the artefact check, the 52-step install test and `release_check.ps1` all passed on it on 3 October 2026 (the check reported the self-test WARN that a non-default release folder always gives). The final installer, built on the merged tree into the default folder, is `{{W6: installer bytes}}` bytes, SHA256 `{{W6: installer SHA256}}`. A rebuild gives another hash, so do not compare the final installer with the reference figures.
+- Built and checked: the installer, the shell, the backend handshake, the store, the write ban, the research gate and the supply-chain checks. The reference build of `f2e03bf`, at `D:\dev\release-b\0.1.0`, has an installer of 3,253,192 bytes (the ceiling is 30 MB); the artefact check, the 52-step install test and `release_check.ps1` all passed on it on 3 October 2026 (the check reported the self-test WARN that a non-default release folder always gives). The final installer, built from the release commit `8122c87` into the default folder, is 3,253,432 bytes, SHA256 `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`. A rebuild gives another hash, so do not compare the final installer with the reference figures.
 - The four records of the same day on `f2e03bf` (`terminal\state\release`, written by `record_green.ps1`): backend 4,065 passed and 1 skipped, crosscheck strict 2,495 passed and 0 failed followed by the served-JSON comparison, real-data smoke in the browser and in the app mode each with 67 new gate-log lines and the research files unchanged. They describe that tree only; the merge changes the tree, so the final records are made again on main (section 7).
-- Not measured by this document: start-up times, memory, and the soak. Whole-app idle memory at HOME is `1,082 MB at HOME (median of 3, smoke build, real data, desktop caps, 4 October 2026); over the 500 MB ceiling; about 920 MB once the working set is trimmed after five minutes; the browser terminal in the same session reads 918 MB; T4 fires`, the all-day soak peak is `largest sample 1,577.4 MB (the start-up peak; 1,509.8 MB by a second sampler), at most 1,292 MB after 15 minutes and 749 MB after 45 minutes; 3 hours, PARTIAL`. State these plainly wherever the app is described (risk O01, `05_risks_costs.md`). The soak of the build night was a 3-hour real-data run, so it is PARTIAL by the 8-hour rule of the all-day soak template. Its result: `{{W6: soak result}}`.
-- Owner-attended rows are still pending: the visible run, the real keyboard, the two screen readers (NVDA, Narrator), the reboot first launch, the real minimise, the real JOBS backtest, the all-day soak, the first SmartScreen run and the by-eye zoom check. G2 status: the automated part has not passed (first-launch cold HOME 48 ms over its ceiling in the quiet series, idle memory over its ceiling with T4 firing, and the soak start-up peak over 1.5 GB); the owner rows stay pending until the dated files in `checks/` and a repeat measurement say otherwise (`docs/desktop/g2_windows/verdict.md`). The eomtsy research opening is a research step of the lab, not part of the app, and is not in the checks.
+- Not measured by this document: start-up times, memory, and the soak. Whole-app idle memory at HOME is `505.4 MB at HOME (492.4 to 508.4 MB over six counted launches, smoke build, real data, desktop caps, 4 October 2026, W5C; W5B read 1,082 MB); over the 500 MB ceiling by 5.4 MB; 453.8 MB by the browser comparison's 8 second settle and 388.6 MB after five minutes; the browser terminal on equal terms reads 412.5 MB and in its default form 820.4 MB; T4 still fires on equal terms`, the all-day soak peak is `largest sample 705.8 MB (first sample 698.7 MB, median 674.8 MB, +25.9 MB per hour over the last hour); 2 h (harness stopped at 2 h 5 min by the manager; external sampler), PARTIAL; W5B read 1,577.4 MB over 3 hours`. State these plainly wherever the app is described (risk O01, `05_risks_costs.md`). The soak is a 2-hour real-data run, so it is PARTIAL by the 8-hour rule of the all-day soak template. Its result: the W5C soak ran 2 h (harness stopped at 2 h 5 min by the manager; external sampler), PARTIAL: largest sample 705.8 MB, first sample 698.7 MB, median 674.8 MB, +25.9 MB per hour over the last hour (`g2_windows/results.md`, section 8); not an all-day run.
+- Owner-attended rows are still pending: the visible run, the real keyboard, the two screen readers (NVDA, Narrator), the reboot first launch, the real minimise, the real JOBS backtest, the all-day soak, the first SmartScreen run and the by-eye zoom check. G2 status: the automated part has not passed, because one row is over its ceiling (whole-app idle memory at HOME, 505.4 MB against 500 MB); first-launch cold HOME (3,167 ms) and the soak (705.8 MB, 2 h, PARTIAL), the other two W5B failures, are now inside their ceilings; the owner rows stay pending until the dated files in `checks/` and a repeat measurement say otherwise (`docs/desktop/g2_windows/verdict.md`). The eomtsy research opening is a research step of the lab, not part of the app, and is not in the checks.
 - Not built: macOS, the MSVC build leg and the three CI workflows, code signing, an updater (none by design), the four-week dual run.
 
 ### Commit list
@@ -33,7 +35,7 @@ Newest first, from `git log` of this tree up to `f2e03bf`. The final hand-over c
 
 | Commit | Date | Subject (shortened where needed) |
 |---|---|---|
-| `{{W6: final commits}}` | `{{W6: date}}` | the final hand-over documents, the merge and the final regression, one commit per seam |
+| `8122c87, dd286fd, 09a660d, 6b0ddaf` | `2026-10-04` | the final hand-over documents, the merge and the final regression, one commit per seam |
 | `f2e03bf` | 2026-10-03 | fix: desktop window watch judges only the run's own app tree; backend record in parallel |
 | `e0834c1` | 2026-10-03 | Merge branch 'desktop/handover' |
 | `2024d3b` | 2026-10-03 | feat: desktop owner decisions (first-launch HOME, 200% reflow, protected install folder, EQ at desktop caps) |
@@ -74,7 +76,7 @@ Newest first, from `git log` of this tree up to `f2e03bf`. The final hand-over c
    Get-Content 'D:\dev\release\0.1.0\SHA256SUMS'
    ```
 
-   Expected: `{{W6: installer SHA256}}`. The line in `SHA256SUMS` ends with the installer's name and must carry the same hash (compare without regard to case). `PROVENANCE.json` must name version 0.1.0 and the commit `{{W6: final release commit}}`; if the commit differs, the folder was built from another tree and must be rebuilt.
+   Expected: `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`. The line in `SHA256SUMS` ends with the installer's name and must carry the same hash (compare without regard to case). `PROVENANCE.json` must name version 0.1.0 and the commit `8122c877bb00e4f07ce505d5ba0468d6a9858f41`; if the commit differs, the folder was built from another tree and must be rebuilt.
 
 3. For a copy that arrived by download, read `smartscreen.md` first.
 
@@ -89,7 +91,7 @@ q-lab terminal
 q-lab-terminal.exe` and have the Start menu shortcut run it. The installer does not test DELETE on the parent. A folder directly below a `D:\` child folder is therefore safe only on a single-account PC. With more than one account on the PC, use the profile default (`%LOCALAPPDATA%\Programs
 q-lab terminal`), or protect the parent yourself first (the runbook command in section 6, run on the parent) so that no other account holds Modify on it. If `D:\Apps` does not exist yet, the installer creates it with the protected list. The words it prints are in the register, entry 1.3. Exit code 4 means the permission list could not be set and exit code 5 means the read-back found a wrong list; both leave nothing installed. The installer never asks to run as administrator.
 - **What it creates.** The installer folder holds `nq-lab-terminal.exe`, `WebView2Loader.dll` and `uninstall.exe`, a Start menu shortcut and the uninstall entry under `HKCU`. It does not install the lab, `terminal\state` or any data. It embeds the Microsoft WebView2 bootstrapper, so a missing runtime is repaired during the install (the PC had WebView2 154.0.4258.53 on 3 October 2026).
-- **Evidence for these statements.** The install test of the repository (step 4 of section 7) ran 52 steps with 0 failed against the installer of `f2e03bf` on 3 October 2026: a custom folder under a parent that grants Users Modify and Everyone write ended with exactly three entries (the current user, SYSTEM and Administrators), nothing inherited, and no broad writer on the three files; a user file and a lab stand-in beside it survived the uninstall; and seven refusals (a drive root in three spellings, a network path, a junction, Program Files, the Windows folder) each exited with code 3 and left nothing. The default folder under `%LOCALAPPDATA%\Programs` is covered by the opt-in `-DefaultFolder` run (58 steps, 0 failed, on the installer of an earlier DEC1 build). Install test on the final installer: `{{W6: install test result on the final installer}}`.
+- **Evidence for these statements.** The install test of the repository (step 4 of section 7) ran 52 steps with 0 failed against the installer of `f2e03bf` on 3 October 2026: a custom folder under a parent that grants Users Modify and Everyone write ended with exactly three entries (the current user, SYSTEM and Administrators), nothing inherited, and no broad writer on the three files; a user file and a lab stand-in beside it survived the uninstall; and seven refusals (a drive root in three spellings, a network path, a junction, Program Files, the Windows folder) each exited with code 3 and left nothing. The default folder under `%LOCALAPPDATA%\Programs` is covered by the opt-in `-DefaultFolder` run (58 steps, 0 failed, on the installer of an earlier DEC1 build). Install test on the final installer: `PASS, 52 of 52 steps on the final installer, 4 October 2026, run with the documented `-AllowForeign` flag (report `D:/dev/d5/install/run-20261004-132557.report.json`); three plain runs each failed only the "0 new visible windows, no foreground change" steps, and in each case the window belonged to another program (Task Manager, Chrome, a terminal window on screen 2), never the installer`.
 
 A silent install uses the argument text of the install test: `/S` is silent, `/NS` skips the shortcuts, and `/D=` names the folder, must come last and has no quotes around it, even when the path has a space. The installer is a window program, so a plain `&` call does not wait for it and gives no exit code; start it and wait:
 
@@ -264,19 +266,19 @@ Order matters, because every record and every artefact carries a stamp of the ex
    powershell -NoProfile -File scripts\release_check.ps1 -Tag desktop-v0.1.0 -RequireSmokeApp
    ```
 
-   Do not write the result into any tracked file yet: that would change `git diff HEAD` and a rerun would be refused. It is recorded after the tag (see the end of this section). Passing result: `{{W6: release_check result and date}}`.
+   Do not write the result into any tracked file yet: that would change `git diff HEAD` and a rerun would be refused. It is recorded after the tag (see the end of this section). Passing result: `PASS with no WARN on 4 October 2026 (`release_check.ps1 -Tag desktop-v0.1.0 -RequireSmokeApp`; same-day records on `8122c87`: backend 4,147 passed and 1 skipped, crosscheck PASS 2,495, FAIL 0, SKIP 0, INFO 104, smoke and smoke-app passed)`.
 
 7. **The annotated tag**, on the commit that `release_check.ps1` passed on (the release commit, which is HEAD while steps 2 to 6 run), only after step 6 passed on the same day. SemVer 0.x on purpose: the build is unsigned and the owner-attended rows are pending. The tag message names the version and the installer hash and nothing else:
 
    ```powershell
-   git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' tag -a desktop-v0.1.0 -m "desktop 0.1.0 unsigned per-user installer, SHA256 {{W6: installer SHA256}}"
+   git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' tag -a desktop-v0.1.0 -m "desktop 0.1.0 unsigned per-user installer, SHA256 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590"
    ```
 
-   Replace the placeholder text with the installer's hash exactly as `SHA256SUMS` in the release folder lists it, because the hash is not known before the build and is not written into any tracked file before the tag. The commands of step 7 were not taken from a run log, because the tag does not exist yet; `release_check.ps1` checks that the tag name is free and has the form `desktop-vX.Y.Z`. The push is the owner's: `git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' push origin desktop-v0.1.0`. Tag result: `{{W6: tag result with date and commit}}`.
+   The tag message carries the installer's hash exactly as `SHA256SUMS` in the release folder lists it; the hash was not written into any tracked file before the tag. `release_check.ps1` checks that the tag name is free and has the form `desktop-vX.Y.Z`. The push is the owner's: `git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' push origin desktop-v0.1.0`. Tag result: `annotated tag `desktop-v0.1.0` on `8122c87`, created 4 October 2026 at 13:33 and pushed`.
 
 A record made on the uncommitted tree is refused after the commit, by design. If anything is committed after step 1, run steps 2 to 6 again on the new HEAD; they are scripted and take no choices.
 
-**Recording the outcome.** The tag stays on the release commit, the one the records and `PROVENANCE.json` describe. The installer's hash and size, the install test result on that installer, the soak result, the release commit's own hash, the `release_check` result with its date and the tag result cannot be written inside that commit (section 10 lists them), so they are filled in a follow-up docs-only commit made after the tag: it changes this file, `smartscreen.md`, the register and the templates only, and the tag does not move to it. Nothing is rebuilt or rechecked after it, because the stamped artefacts belong to the tagged commit. A fix of anything beyond documents starts a new release from step 1.
+**Recording the outcome.** The tag stays on the release commit, the one the records and `PROVENANCE.json` describe. The installer's hash and size, the install test result on that installer, the soak result, the release commit's own hash, the `release_check` result with its date and the tag result cannot be written inside that commit (section 10), so they were filled in a follow-up docs-only commit made after the tag: it changes this file, `smartscreen.md`, the register and the templates only, and the tag does not move to it. Nothing is rebuilt or rechecked after it, because the stamped artefacts belong to the tagged commit. A fix of anything beyond documents starts a new release from step 1.
 
 ## 8. Troubleshooting
 
@@ -316,35 +318,9 @@ Owner-attended checks are recorded as dated files in `docs/desktop/checks/` (`YY
 
 Files recorded so far: none. The folder holds the README and thirteen blank templates dated 2026-10-03 (the twelve checks above, with NVDA and Narrator as two files, and the dual-run kit); every one reads NOT RUN or NOT STARTED. A file you fill in is named by the day of its run. Open owner decisions are in [owner_decisions_windows.md](owner_decisions_windows.md).
 
-## 10. Placeholders to fill
+## 10. Placeholders
 
-A placeholder is written in double curly brackets and starts with G2 or W6. They are filled in two groups, because some values exist only after the release build, and the build's `PROVENANCE.json` stamps `git diff HEAD` while `release_check.ps1` demands a clean commit with matching stamps. A hash, a result or a date written into a tracked file before the build would be stale after the rebuild or would dirty the stamped tree. This section is removed in the follow-up docs-only commit, not before.
-
-Before the release commit: the G2 measurement figures only. They come from the G2 measurements (W5B) and do not depend on the final installer. They were filled in wave W5B and are committed, so no placeholder of this group is left.
-
-| Placeholder | Where it appears | Source |
-| --- | --- | --- |
-| none left | all documents | The G2 figures were filled in wave W5B from `g2_windows/results.md` (the gate status is in `g2_windows/verdict.md`); nothing in the documents still carries a G2 placeholder |
-
-After the tag, in the follow-up docs-only commit (section 7): everything that exists only after the release build, the install test, `release_check.ps1` and the tag. The commit changes documents only and the tag does not move to it. The tag message takes the installer hash from `SHA256SUMS`; the same value is then written here.
-
-| Placeholder | Where it appears | Source |
-|---|---|---|
-| `{{W6: installer SHA256}}`, `{{W6: installer bytes}}` | this file, `smartscreen.md`, the templates with a build table | `SHA256SUMS` and the file size of the release build that was tagged, in the default folder `D:\dev\release\0.1.0`, never a self-test folder |
-| `{{W6: final release commit}}` | this file, `smartscreen.md`, every template that has a build table | the commit the tag is made on (section 7) |
-| `{{W6: install test result on the final installer}}` | this file, section 2 | `install-test.ps1` and the permission check on the installer of the tagged build (section 7, step 4) |
-| `{{W6: soak result}}` | this file, section 1, and the soak template | the result of the 3-hour real-data soak of the build night, from its harness record |
-| `{{W6: release_check result and date}}`, `{{W6: tag result with date and commit}}` | this file, section 7 | the release procedure |
-| `{{W6: tag created and pushed, with the release commit}}` | `owner_decisions_windows.md`, 1.5 | the tag and whether the owner pushed it |
-| `{{W6: final commits}}`, `{{W6: date}}` | this file, section 1 | `git log` of the tagged tree, with the follow-up commit last |
-
-Both groups end with the same check. After the follow-up commit this search must find none in the documents and templates the command searches, except the templates' own empty fields (which are blank cells, not placeholders):
-
-```powershell
-Select-String -Path 'docs\desktop\README.md','docs\desktop\handover_windows.md','docs\desktop\smartscreen.md','docs\desktop\owner_decisions_windows.md','docs\desktop\checks\*.md' -Pattern '\{\{(G2|W6)'
-```
-
-This section is removed in the follow-up docs-only commit, once the search is clean.
+All placeholders were filled on 4 October 2026 in the follow-up docs-only commit after the tag, from the release folder `D:\dev\release\0.1.0` (`SHA256SUMS`, `PROVENANCE.json`), the install test report and the `release_check.ps1` result. None is left in the documents or the check templates.
 
 Already filled from the tree of `f2e03bf`, with the source named where it appears: the product folder under `Programs`, the default folder text, the refusal wording and the install test result for the reference build (register 1.3, custom-install-folder template), the zoom spec result (register 1.2, zoom template), and the list of dated files under `checks/` (section 9). The overnight soak figures of the soak template are filled from `g2_windows/results.md`.
 

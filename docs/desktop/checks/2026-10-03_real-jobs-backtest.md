@@ -13,8 +13,8 @@ Everything else the check looks at is a boundary: the run writes its own folder 
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer SHA-256 | {{W6: installer SHA256}} |
-| Release commit | {{W6: final release commit}} |
+| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
+| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
 | Door used (the app, or the browser terminal) | the app |
 | Strategy, data variant and window chosen | |
 | Run id | |

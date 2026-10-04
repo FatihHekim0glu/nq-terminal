@@ -16,9 +16,10 @@ This file lists them, and records the repeat of each in a quiet window. The two 
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Release commit | {{W6: final release commit}} |
-| Pending rows to repeat | backend ready, splash, cold HOME and idle memory on the measure artefact (3 runs each) and the smoke against measure agreement test; skipped because port 8765 was listening (decision 11). The measure build is installed and checked at D:/dev/d5/measure/app; jobs.json sha256 before the repeat was 44CAE38ADB6F6E142C013AC988929B5E12F20363CB82C990A40E77C34B2172D4 and backtests/output was unchanged |
-| Provisional rows to repeat | none by the CPU gate (every counted run at 9.8% or lower, 3.4 to 9.8% across the series). Labelled all the same: no owner-named quiet window; every harness figure UNREPRODUCED (HOME ready +13.8% against W0B); the soak is partial |
+| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Pending rows to repeat | backend ready, splash, cold HOME and idle memory on the measure artefact (3 runs each) and the smoke against measure agreement test; skipped because port 8765 was listening (decision 11). The W5C re-measure (4 October 2026) installed the measure build fresh at D:/dev/w5c/measure/app and skipped the same rows for the same reason (port 8765 listening, pid 46084; `D:/dev/w5c/measure-runs/first-launch-measure` and the measure slots of `D:/dev/w5c/measure-runs/rows` are pending records); jobs.json sha256 was 44CAE38ADB6F6E142C013AC988929B5E12F20363CB82C990A40E77C34B2172D4 before and after and backtests/output held 229 entries before and after |
+| Rows over their ceiling to repeat | whole-app idle at HOME on the smoke build: 505.4 MB (492.4 to 508.4, six counted launches; W5B 1,082 MB) against the 500 MB ceiling, source `D:/dev/w5c/measure-runs/report.json`. Repeat it with the command below after any change that targets it, and on the measure build once the lab is free |
+| Provisional rows to repeat | none by the CPU gate (W5C: every counted run at 4.7% or lower, 2.6 to 4.7% across the series; W5B: 3.4 to 9.8%). The W0B reproduction held in W5C (W5B: every figure UNREPRODUCED). Labelled all the same: no owner-named quiet window (the manager's lock); the soak is 2 h and PARTIAL, taken by the external sampler because the harness record was not written |
 
 ## Preconditions
 

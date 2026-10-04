@@ -1,249 +1,218 @@
-# G2 on Windows: measured results (wave W5B, step 2 of D5)
+# G2 on Windows: measured results (wave W5C, the re-measure after W5B)
 
-Taken on the night of 3 to 4 October 2026 on the owner's PC (host `DESKTOP-FM5O3JM`). This file is the evidence behind the verdict in `verdict.md`. Every figure below was read back from a raw record under `D:\dev\d5\` (the folders are named in each section); nothing here was typed from memory.
+Taken on the morning of 4 October 2026 on the owner's PC (host `DESKTOP-FM5O3JM`), after the W5C performance changes. This file is the evidence behind the verdict in `verdict.md` and replaces the W5B figures (the W5B version of this file is in commit `09a660d`; section 13 sets the two side by side). Every figure below was read back from a raw record under `D:/dev/w5c/measure-runs` (the folders are named in each section); the exploratory readings that are not rows sit apart in `D:/dev/w5c/explore-runs`. Nothing here was typed from memory.
 
 ## 1. Read this first
 
-- **Tree and builds.** Commit `f2e03bf2a159d4e792634e7a4c288cc007a6b86e`, working tree clean for every record (`git diff HEAD` sha256 `e3b0c442...b855`, which is the hash of the empty input, and no untracked file). The builds are the ones recorded in `D:\dev\release-b\0.1.0` (the GNU host build, unsigned, labelled "GNU local build" by owner decision 4): smoke exe sha256 `7c661f7a387073995ebc978abc43a87b81141e2b9a472e6218681cbf63294416`, measure exe sha256 `16e022df550e94c114e3e71c879f206f2c17bf118f0239bc6ae090a2017d5bba`, release installer `nq-lab terminal_0.1.0_x64-setup.exe` (3,253,192 bytes, sha256 `9fb1c339971adc280dc7d4e085c92ea82c88d598ef9470b01bb58ab104f71ee0`). Nothing was rebuilt or re-recorded during the measuring. The merge step on 4 October (section 12) fixed three defects in the drift-run and report tooling, rebuilt the release folder as `D:\dev\release-c\0.1.0` from the resulting tree and re-recorded the dated records; the measured figures in sections 2 to 9 were taken on the `release-b` builds before that and are unchanged by it (the Rust sources and `web/dist` are byte-identical: the dist hash did not change).
-- **GNU stands in for MSVC.** The plan's MSVC measure artefact does not exist on this PC. Every "measure" figure in this file would be the GNU measure artefact; none was taken (section 6). The MSVC agreement stays open.
-- **Quiet machine, as far as it could be.** The owner's GPU training job and the overnight soak app were resident throughout, by design. Every harness run sat behind the 60 second CPU gate (limit 10%, enforced); the gate reading is printed beside each series. All runs of the two smoke series, the usual-launch series, the memory series, the hop series and the stage 1 series were taken with a gate reading at or under 10%, so none is labelled PROVISIONAL by the gate. One kind of label does apply to all of them: **no owner-named quiet window was used** (plan decision 3), so the stage 1 record keeps its own `provisional: true`, and the harness could not reproduce the W0B figure for HOME ready (section 2), so every counted figure carries the harness label UNREPRODUCED. The reproduction run itself had 9 rejected gate readings (kept).
-- **GPU load: unknown per series.** Only a bracket exists: 97% at the start of the work (11,392 MiB, the training job), 11% at the end (2,145 MiB). No series, slot or run of this wave has a GPU reading, so the GPU state of series A and of series B is **unknown** and the table in section 3 says so. The two series differ most on rows that can depend on the GPU and the compositor (GIP pan and zoom, cold HOME, splash), and nothing here separates GPU contention from CPU load as the cause. The harness now samples the GPU (utilisation and memory used, from the driver's tool) after the gate reading and again after each run and writes both into every slot record, rejected ones included (`gpu.atGate`, `gpu.afterRun`; a reading that cannot be taken is recorded as unavailable). Any re-measure taken from now on carries its GPU beside its CPU gate; these two series stay unknown.
-- **Windows.** No window of the apps under test appeared and the foreground never changed because of them in any run (smoke slots, usual-launch series, memory series, hop series, T8, minimise). Other programs' windows were noted, never counted as ours: a Task Manager tooltip and foreground changes between the terminal and the Logitech software while the owner used the PC (slot 3 of the first smoke series), a Steam notification toast during the stage 1 home group, and a Logitech Options+ helper window during the repeat of that group. The stage 1 script judges any new window anywhere, so its `watchClean` reads false for those two groups; the cause is those foreign windows and no process of this run opened one (its browsers are headless).
-- **Backends.** Smoke rows: the real lab through the smoke build (`--lab`, a temporary `--state-dir`, `NQT_JOBS=off`), desktop caps (512 MiB bars, 128 MiB files). Stage 1 and the browser baseline: the real backend on port 8797 with its own temporary state folder. The measure build did not run against the real lab (section 6). Port 8765 and its backend (pid 46084) were never touched and was still listening, with the same pid, at the last check.
-- **Research gate.** Between the two prechecks (about 22:10 and 00:12 local time) the gate log grew by 2,099 lines, all caller `terminal`, none after the fence. The four research files (`ledger.csv`, `registry.csv`, `oos_openings.json`; `oos_access_log.jsonl` only grew) were not written. `jobs.json` sha256 unchanged (`44CAE38A...72D4`), no queued or running job, `backtests/output` unchanged (229 entries, same list), no new entry under `terminal/state`.
-- **Disk.** C: free 97,766 MB at the start of the measuring, 96,262 MB after (a drop of 1,504 MB). Every output of this wave is on D: (free 167,570 MB before, 161,901 MB after); the C: movement came from other programs and is recorded, as manager decision 4 says. The reproduction run alone saw a 254 MB drop on C:.
+- **Tree and builds.** Head `dd286fd1c12635f3a2a99abc8ea6f72c67551a7e` plus the W5C tree (committed afterwards as `8122c87`; the tracked diff between the two hashes to the value below): `git diff HEAD` sha256 `34046e2606d8e4d807cd4c236761826b78da1e4857041f0cfe31542b9fd1de6c` and 11 untracked files (harness stamp `dfedc110...7749`), the same for every record of this file; `web/dist/index.html` sha256 `a6dec56c...5655`. The three GNU builds were made fresh from this tree before any measuring by `desktop/scripts/build-release.ps1 -Version 0.1.0 -TargetDir D:\dev\target\nqt\w5c -OutRoot D:\dev\w5c\release-m` (0 failures, the stamp the same before and after) and passed `artefact-check.mjs` (17 files, 2 installers). Smoke exe sha256 `a5e2b6cbc2e5ac54fff007b0749ec2cb5075e2932d10a8b152b178fb6ba52f12`; measure payload `425c41e97eae3b1a7081a1c6f1559ae5439ced2ff201714bb5b9e92684d2d666`; release installer `nq-lab terminal_0.1.0_x64-setup.exe` 3,253,071 bytes; measure installer 3,219,647 bytes.
+- **GNU stands in for MSVC.** There is no MSVC measure artefact on this PC; the MSVC agreement stays open.
+- **The quiet slot.** The lock `D:/dev/locks/QUIET` was created at 07:14:45 and removed at 09:10:19 local time (BST), after the last timing row; the QuantPad download runners start no new job while it exists. No backend test session, Playwright run, cargo or other build of this wave ran beside any timing row. Every counted run sat behind the 60 second CPU gate (limit 10%): the readings were 2.6 to 4.7% across every series, so **no run was rejected** (0 rejected readings in total) and none is PROVISIONAL by the gate. The slot was set by the manager, not named by the owner, so the stage 1 record keeps its own `provisional: true` for that reason only.
+- **GPU load, per run.** Every harness slot carries its GPU reading at the gate and after the run (`gpu.atGate`, `gpu.afterRun`): 8 to 15% utilisation and 2,059 to 2,097 MiB used throughout (the owner's training job was not running). The tools outside the harness (`t4t5.mjs`, the stage 1 script) do not read the GPU; their series ran between harness slots that read 9 to 15%.
+- **Reproduction held.** The W0B anchor reproduced first (section 2), so no figure of this file carries the UNREPRODUCED label (W5B's all did).
+- **Windows.** No window of any app under test appeared and the foreground never changed because of one, in any run; every harness and tool watch reads clean (0 new windows, 0 foreground changes, 0 foreign notes in the counted runs). Browsers were headless.
+- **Backends.** App rows: the real lab through the GNU smoke build (`--lab`, a fresh temporary `--state-dir` per launch, `NQT_JOBS=off`) at the shipped desktop caps (512 MiB bars, 128 MiB files). Stage 1 and the browser comparator: the real backend on port 8797 with its own temporary state folder. The minimise and T8 runs: the fixture backend and the offline demo server.
+- **Port 8765 was listening (pid 46084, the owner's terminal) at every check.** The harness's real-lab guard therefore refused every measure-artefact real-lab launch and wrote a pending record naming the reason (section 6). Port 8765 and its process were never touched.
+- **Research gate and lab state.** The read-only lab check (kept outside the repository, `D:/dev/w5c/tools`) before the first run and after the last timing row: `jobs.json` sha256 `44CAE38ADB6F6E142C013AC988929B5E12F20363CB82C990A40E77C34B2172D4` both times, no queued or running job, `backtests/output` 229 entries with the same list, `backend.lock` absent, `terminal/state` with the same three entries (`desktop`, `release`, `jobs.json`). The research files `ledger.csv`, `registry.csv` and `oos_openings.json` were byte-equal; the gate log only grew, by lines of caller `terminal` inside the fence (the stage 1 script counted 660 such lines and 0 bad ones; the two real-data smoke runs 67 each). Section 12 has the after-soak check.
+
+## 1a. What changed since W5B, and why
+
+W5B (commit `09a660d`) measured three automated rows over their ceilings: idle at HOME 1,082 MB (ceiling 500 MB, target 400 MB), first launch 5,048 ms (ceiling 5,000 ms, target 4,500 ms) and the soak's first sample 1,577.4 MB (ceiling 1.5 GB, target 1.0 GB). Wave W5C (commit `8122c87`) treated them under roadmap trigger T4 (`docs/desktop/02_decision.md`, 6.5). T4's response is to lower the caps and re-check the route times; the profile showed that what filled the cache, not its size, was the cause, so the caps were deliberately not lowered (section 9, "The cap decision"). The changes:
+
+- MON's two-day sparkline reads only its window in desktop mode instead of keeping a whole 1-minute year per symbol in the bar cache (the main cost of idle memory and of the soak's start-up peak).
+- Arrow uses the system memory pool, so freed memory returns to the operating system.
+- HOME start-up does only the work HOME shows; heavy imports are warmed afterwards (first launch).
+- The audit log is cached as raw bytes plus a compact line index and weighed at its real size.
+- The record-watch reader mounts once HOME's own queries are quiet (deferred).
+- Harness: whole-tree memory and soak reporting; the e2e specs wait for the watch segment.
+
+| Row | Ceiling | Before (W5B) | After (W5C) | Source |
+| --- | ---: | ---: | ---: | --- |
+| Idle at HOME | 500 MB | 1,082 MB | **505.4 MB (492.4 to 508.4), over** | `D:/dev/w5c/measure-runs/report.json` |
+| First launch, cold HOME | 5,000 ms | 5,048 ms | 3,172.5 ms (3,148 to 3,225) | `D:/dev/w5c/measure-runs/report.json` |
+| Soak, first and largest sample | 1,500 MB | 1,577.4 MB (3 h) | 705.8 MB largest, 698.7 MB first (2 h, PARTIAL) | `D:/dev/w5c/measure-runs/soak-outside.jsonl` |
+
+Two of the three rows now pass. The idle row improved by about 580 MB and still sits 5.4 MB over the ceiling on the pooled reading (section 3). The measured build is the committed tree of `8122c87` (finding 8 in section 12).
 
 ## 2. Reproduction of the W0B figures (first, as 04 D5.1 asks)
 
-Folder `D:\dev\d5\runs\w5b2-reproduce`. The spike shell against the fixture backend on 8800, three figures, each judged within 10% of the W0B median or inside its min to max range.
+Folder `D:/dev/w5c/measure-runs/reproduce`. The spike shell against the fixture backend on 8800, one warm-up and three counted launches, every gate reading accepted.
 
-| Figure | W0B median (range) | This run, median of 2 counted | Within |
+| Figure | W0B median (range) | This run, median of 3 | Within |
 | --- | ---: | ---: | --- |
-| Private memory at HOME | 164.9 MB (159.7 to 168.4) | 164.1 MB | yes |
-| Private memory after the heavy set | 369.5 MB (363.1 to 375.2) | 363.4 MB | yes |
-| Launch to HOME ready | 834.5 ms (814 to 892) | 949.5 ms (938 and 961) | **no, +13.8%** |
+| Private memory at HOME | 164.9 MB (159.7 to 168.4) | 164.9 MB (164.7 to 165.3) | yes |
+| Private memory after the heavy set | 369.5 MB (363.1 to 375.2) | 370.3 MB (368.1 to 390.0) | yes |
+| Launch to HOME ready | 834.5 ms (814 to 892) | 856 ms (844 to 861) | yes, +2.6% |
 
-Counted runs: 2 (slot 2 on its 4th attempt at gate 9.8%, slot 4 on its 3rd attempt at gate 9.2%). Slot 3 ran only after 5 rejected readings and is kept as PROVISIONAL and not counted. Rejected readings kept: 9 (10.2 to 12.7%).
-
-The breakdown puts the difference before the page starts, not in the shell: spawn to the HOME document +63 ms (277 against 214 ms) and first frame +38 ms (178 against 140 ms), while HOME ready since navigation is inside the range (672.75 against 618.6 ms). The W0B run had no session token, so it had no launch page and no redeem hop; the spike now opens a one-time launch page first (the harness README says so). The harness therefore did not mark the reproduction as done, and the rows were taken with `--allow-unreproduced`, which labels every counted figure UNREPRODUCED. The standalone backend ready of the real backend (informational) read 1,212 ms against 1,566 ms at W0B.
+The verdict reads `reproduced: true`, so the rows below were taken without `--allow-unreproduced`. The breakdown is inside its references too (spawn to the HOME document 235 ms against 214, ready since navigation 609.5 ms against 618.6, first frame 154.2 ms against 140.2).
 
 ## 3. The budget rows on the GNU smoke build
 
-Two series, real data, desktop caps, the harness's `rows` mode, one warm-up launch then three accepted launches each, one fresh state folder per launch (so the cold HOME is a first launch). The harness's own report is `node desktop\harness\report.mjs <folder>`; the second column of the table is read from the raw records by `report.mjs`, and `--check` found no figure that differed from its raw record.
+Folder `D:/dev/w5c/measure-runs/rows`: the harness's `rows` mode, `--build both --rows all --runs 3 --warmup 1 --real-data`, smoke and measure slots interleaved, one fresh state folder per launch (so every cold HOME is a first launch with an empty state folder). Gate readings 2.7, 2.6 and 2.9%; GPU 9 to 15%. The measure slots were refused by the lab guard (section 6). Three more first-launch readings on the same build come from the harness's first-launch mode, `D:/dev/w5c/measure-runs/first-launch-smoke-1` to `-3` (gate 3.5, 2.8 and 3.0%), which reads the same process rows at the same points.
 
-- Series A: `D:\dev\d5\runs\w5b-smoke`, started 21:27 UTC, gate readings 8.2, 8.0, 9.1%.
-- Series B (repeat, quieter machine): `D:\dev\d5\runs-repeat\w5b-smoke2`, started 23:07 UTC, gate readings 3.8, 3.5, 4.3%.
+| Row | Target | Ceiling | Rows series, median (min to max) | First-launch series, median (min to max) | `report.mjs` over the folder (n = 6) | Verdict |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Backend ready | 1,500 ms | 2,500 ms | 1,402 (1,378 to 1,425) | 1,426 (1,387 to 1,434) | 1,413.5 ms (1,378 to 1,434) | within target |
+| Splash (first contentful paint) | 500 ms | 1,000 ms | 313 (311.7 to 346) | 330.7 (307.9 to 342.2) | 321.9 ms (307.9 to 346) | within target |
+| Cold HOME, first launch, with data | 3,500 ms (first launch 4,500 ms) | 5,000 ms | 3,167 (3,162 to 3,178) | 3,188 (3,148 to 3,225) | 3,172.5 ms (3,148 to 3,225) | within target |
+| Warm HOME | 1,000 ms | 1,500 ms | 537.2 (530.1 to 538.7) | | | within target |
+| `volmanaged_v0 EQ`, warm (second run of the line) | 1,000 ms | 1,500 ms | 41.3 (31.2 to 44.5) | | | within target |
+| `REG`, warm (second run of the line) | 1,000 ms | 1,500 ms | 57 (56.9 to 57.8) | | | within target |
+| Grid open, 8,411 fills | 100 ms | 500 ms | 63.3 (63 to 64.1) | | | within target |
+| GIP pan and zoom p95, 20,000 bars | 16.7 ms | 25 ms | 6.0 (5.8 to 6.2) | | | within target |
+| Keystroke to paint, p95 | 50 ms | 100 ms | 8.3 (8.2 to 8.3) | | | within target |
+| Whole app idle at HOME (private working set) | 400 MB | 500 MB | 497.1 (492.4 to 506.7) | 506.3 (504.4 to 508.4) | **505.4 MB (492.4 to 508.4)** | **over the ceiling on the pooled reading; see below** |
+| Installer (`nq-lab terminal_0.1.0_x64-setup.exe`) | 15 MB | 30 MB | 3.1 MB (3,253,071 bytes) | | | within target |
 
-| Row | Target | Ceiling | A: median (min to max) | B: median (min to max) | Verdict |
-| --- | ---: | ---: | ---: | ---: | --- |
-| Backend ready | 1,500 ms | 2,500 ms | 1,610 (1,579 to 2,124) | 1,378 (1,373 to 1,383) | within ceiling; target met in B only |
-| Splash (first contentful paint) | 500 ms | 1,000 ms | 339 (309 to 359) | 308 (300 to 313) | within target |
-| Cold HOME, first launch, with data | 3,500 ms | 5,000 ms | **5,583 (5,434 to 5,826)** | **5,048 (5,030 to 5,060)** | **over the ceiling in both series** |
-| Warm HOME | 1,000 ms | 1,500 ms | 714 (704 to 742) | 652 (652 to 675) | within target |
-| `volmanaged_v0 EQ`, warm (second run of the line) | 1,000 ms | 1,500 ms | 33 (31 to 40) | 39 (39 to 44) | within target |
-| `REG`, warm | 1,000 ms | 1,500 ms | 57 (53 to 111) | 58 (57 to 61) | within target |
-| Grid open, 8,411 fills | 100 ms | 500 ms | 131 (130 to 146) | 132 (66 to 137) | within ceiling; target met in 1 launch of 6 |
-| GIP pan and zoom p95, 20,000 bars | 16.7 ms | 25 ms | 10.3 (7.5 to 11.4) | 6.4 (6.3 to 6.5) | within target |
-| Keystroke to paint, p95 | 50 ms | 100 ms | 8.2 (8.1 to 8.2) | 8.2 (8.1 to 8.3) | within target |
-| Whole app idle at HOME (private working set) | 400 MB | 500 MB | **1,102 (1,086 to 1,206)** | **1,082 (1,067 to 1,099)** | **over the ceiling in both series** |
-| Installer (`nq-lab terminal_0.1.0_x64-setup.exe`) | 15 MB | 30 MB | 3.1 MB (3,253,192 bytes) | | within target |
+Method (from `desktop/harness/README.md` and `lib/launch-run.mjs`): cold HOME is the page probe's HOME ready mark from the spawn instant; backend ready is spawn to `supervise_checked` in the shell log; splash is first contentful paint over the debugging protocol; idle memory is the whole-tree private working set from the performance counters, the median of three samples two seconds apart, read straight after HOME is ready and a 2.5 second idle check (the W0B reading point), before any page row runs. The GIP row reads a 20,000-bar series the harness tiles from the real response (`barsSynthetic: true`); the 8,411 fills are the real run `nt_dtsmom_v0_lo0`. Every teardown closed gracefully with 0 survivors; the new files appeared only under each launch's own temporary state folder (14 in a rows launch, 11 in a first-launch launch) and none under `terminal/state`. The installer row is the harness's `installer` mode (`D:/dev/w5c/measure-runs/installer`).
 
-Method (from `desktop/harness/README.md`): cold HOME is the page probe's HOME ready mark from the spawn instant; backend ready is spawn to `supervise_checked` in the shell log; splash is first contentful paint over the debugging protocol; memory is the whole-tree private working set from the performance counters, the median of three samples two seconds apart, after HOME and an 8 second settle. The GIP row reads a 20,000-bar series that the harness tiles from the real response (the record says `barsSynthetic: true`, base 1,364 bars); the 8,411 fills are the real run `nt_dtsmom_v0_lo0` (the row is the Fills tab click to the painted grid). Provenance on every figure: head `f2e03bf2...`, empty diff and untracked hashes, `web/dist/index.html` sha256 `518b248f...`. The shell log reads the same builds as `dev.nqlab.terminal.smoke`; every teardown closed gracefully with 0 survivors; 14 new files appeared under each run's own temporary state folder and none under `terminal/state`.
-
-Two readings that need a plain statement:
-
-- **Cold HOME on a first launch is over the 5,000 ms ceiling** (5,048 ms in the quiet series, +0.96%, and 5,583 ms in the first). The T3 cap for a first launch (6,000 ms, target 4,500 ms) is not exceeded, and register 1.1 of `owner_decisions_windows.md` says the 5,000 ms G2 ceiling governs. As the harness enforces it, this row fails. The stage 1 reading below (headless Chromium, no shell) is 4,260 to 4,639 ms for the same first launch, so about 0.8 to 1.0 s of the app's figure is the shell's own start (backend spawn and handshake, splash, window, page load).
-- **Whole-app idle memory is more than twice the ceiling.** See T4 (section 8).
+**Whole-app idle memory sits on its ceiling.** The rows series alone reads 497.1 MB, 2.9 MB inside the ceiling, but one of its three launches read 506.7 MB, and the three first-launch launches of the same build, taken minutes later by the same method, read 504.4 to 508.4 MB. Four of the six counted launches are above 500 MB, and `report.mjs` over the whole folder, which pools every counted launch of the row, reads **505.4 MB (492.4 to 508.4) and marks the row over its ceiling**. The breakdown (informational, `idleBreakdown`): backend 297.3 MB, UI tree 198.2 MB (renderer 109, GPU process 38, browser 35, network 10.7, storage 3.3, crashpad 1.6), shell 4.2 MB, median of the rows series; the UI tree is far below the 350 MB of the T4 canvas clause (`uiOver350: false` in every run). The reading falls quickly after the reading point: the same build followed for ten minutes (section 9) read 455.2 MB at 9 s, 420.7 MB at 61 s and 388.6 MB at 301 s, and read by the browser comparator's method (an 8 second settle) it is 453.8 MB. The fall is in the backend (297 to 251 MB within about 10 s), which is when the prewarm's later tasks (ledger, deflated Sharpe, EQ bootstrap) finish and the system allocator hands their memory back. The row's reading point is unchanged from W0B and W5B, so the row is reported as the harness reads it.
 
 ### The usual launch (state folder already filled), in the app
 
-Folder `D:\dev\d5\t4t5\2026-10-03T23-02-08-950Z-usual-app`. One priming launch (cold HOME 5,073 ms, not counted), then three launches on the same state, config and WebView2 folders. Cold HOME 3,321, 3,337 and 3,321 ms, **median 3,321 ms** (gate 3.4, 3.4, 4.0%): within the 3,500 ms target, 1,679 ms under the ceiling and under the stage 1 regression reference of 4,508 ms. Method: the probe's HOME ready mark from spawn, the same as the table. (The first attempt at this series, folder `...22-57-09-728Z-usual-app`, failed three times with "no page target" because a stale `DevToolsActivePort` file in the reused profile named the previous run's port; the second series removes that file before each launch. The first attempt is kept. The shell-log milestones in these records read as negative numbers because the reused config folder keeps one log across launches; only the probe's figure is used.)
+Folder `D:/dev/w5c/measure-runs/t4t5/2026-10-04T06-33-24-434Z-usual-app` (tool `t4t5.mjs usual-app`, kept outside the repository in `D:/dev/w5c/tools`). One priming launch (cold HOME 3,161 ms, not counted), then three launches on the same state, config and WebView2 folders, a stale `DevToolsActivePort` removed before each: cold HOME 2,750, 2,746 and 2,777 ms, **median 2,750 ms** (gate 2.6, 2.8, 3.3%), within the 3,500 ms target. The shell-log milestones of these records read negative because the reused config folder keeps one log across launches; only the probe's figure is used.
 
-## 4. Stage 1 figures re-taken alone: first launch, usual launch, the eight routes at both caps, EQ and REG
+## 4. Stage 1 figures re-taken alone: backend ready, both launches, the eight routes at both caps, EQ and REG
 
-Tool: `docs/desktop/stage1/measure_stage1.mjs` (headless Chromium over the real backend on 8797, temporary state, `NQT_JOBS=off`), `--max-rejects 4`. Folders: `D:\dev\d5\stage1-w5b\2026-10-03T21-56-48-525Z` (all groups) and `D:\dev\d5\stage1-w5b-home2\2026-10-03T22-15-58-100Z` (the home group again, because the first run's home group saw a foreign window). Every run was accepted by the gate; the record's `provisional: true` is for the missing owner-named window only.
+Tool: `docs/desktop/stage1/measure_stage1.mjs --max-rejects 4` (headless Chromium over the real backend on 8797, temporary state, `NQT_JOBS=off`). Folder `D:/dev/w5c/measure-runs/stage1/2026-10-04T06-47-08-881Z`. Every run accepted by the gate (2.6 to 3.5%); the window watch is clean; the research files were byte-equal after the run and the gate log grew by 660 lines, all caller `terminal`, inside the fence; no new entry under `terminal/state`.
 
-| Series | Target | Ceiling | Runs, first record (gate %) | Median | Repeat of the home group (gate %) | Median |
-| --- | ---: | ---: | --- | ---: | --- | ---: |
-| Backend ready, browser form | 1,500 ms | 2,500 ms | 1,344; 1,251; 1,345 | 1,344 | | |
-| Backend ready, desktop form | 1,500 ms | 2,500 ms | 1,394; 1,272; 1,236 (7.3, 6.9, 8.1) | 1,272 | | |
-| Cold HOME, first launch (the T3 reading) | 4,500 ms | 5,000 ms (G2); cap 6,000 ms | 4,554; 4,653; 4,639 (6.6, 7.3, 6.5) | 4,639 | 4,213; 4,350; 4,260 (3.9, 4.3, 3.9) | 4,260 |
-| Cold HOME, usual launch | 3,500 ms | 5,000 ms | 3,439; 3,247; 3,413 | 3,413 | 3,235; 3,115; 3,296 (5.6, 6.2, 8.0) | 3,235 |
-| Eight routes, worst repeat, browser caps | 100 ms | 300 ms | 6 | 6 | | |
-| Eight routes, worst repeat, desktop caps | 100 ms | 300 ms | 73 | 73 | | |
-| `volmanaged_v0 EQ` Enter, warm, browser caps | 1,000 ms | 1,500 ms | 628; 634; 636; 613; 652 | 634 | | |
-| `volmanaged_v0 EQ` Enter, warm, **desktop caps** | 1,000 ms | 1,500 ms | 779; 623; 630; 502; 628 | **628** | | |
-| `REG` Enter, warm, browser caps | 1,000 ms | 1,500 ms | 287; 281; 418; 269; 429 | 287 | | |
-| `REG` Enter, warm, **desktop caps** | 1,000 ms | 1,500 ms | 416; 415; 427; 427; 428 | **427** | | |
+| Series | Target | Ceiling | Runs | Median |
+| --- | ---: | ---: | --- | ---: |
+| Backend ready, browser form | 1,500 ms | 2,500 ms | 1,240; 1,207; 1,209 | 1,209 |
+| Backend ready, desktop form | 1,500 ms | 2,500 ms | 1,201; 1,199; 1,223 | 1,201 |
+| Cold HOME, first launch (the T3 reading) | 4,500 ms | 5,000 ms (G2); cap 6,000 ms | 2,681; 2,700; 2,865 | 2,700 |
+| Cold HOME, usual launch | 3,500 ms | 5,000 ms | 2,439; 2,425; 2,417 | 2,425 |
+| Eight routes, worst repeat, browser caps | 100 ms | 300 ms | 8 | 8 |
+| Eight routes, worst repeat, desktop caps (512 and 128 MiB) | 100 ms | 300 ms | 12 | 12 |
+| `volmanaged_v0 EQ` Enter, warm, browser caps | 1,000 ms | 1,500 ms | 641; 680; 629; 646; 621 | 641 |
+| `volmanaged_v0 EQ` Enter, warm, **desktop caps** | 1,000 ms | 1,500 ms | 662; 653; 662; 631; 653 | **653** |
+| `REG` Enter, warm, browser caps | 1,000 ms | 1,500 ms | 459; 458; 447; 462; 450 | 458 |
+| `REG` Enter, warm, **desktop caps** | 1,000 ms | 1,500 ms | 459; 481; 421; 424; 452 | **452** |
 
-T3 does not fire on either record (`fires: false`): first launch 4,639 ms (4,260 ms in the repeat) against the 6,000 ms cap, usual launch 3,413 ms (3,235 ms) against the 3,757 ms of W3B and the 4,508 ms regression reference. The first launch met its 4,500 ms target in the repeat (4,260 ms) and missed it in the first record (4,639 ms): the two records differ by 379 ms, so the target is not reliably met. The script compared the eight cold bodies across the two caps: six are byte-equal and two (two-day, seasonality) differ, which stage 1 already recorded as by design (they differ only in the gate bookkeeping fields `cached` and `reads_this_process`); that cause was not re-diffed in this run. After a restart on the same state folder the bodies equal the first process's for every route the script lists. The research files were byte-equal after the run and the gate log grew by 622 and 322 lines, all caller `terminal`, all inside the fence; no new entry under `terminal/state`.
-
-The EQ unit that G2 judges at desktop caps is the Enter unit: 628 ms, under the 1,000 ms target without raising either cap (register 4.1 of `owner_decisions_windows.md`). The 33 and 39 ms in section 3 are the harness's second run of the same line (a page-cache hit) and are not the figure of record for that decision.
+T3 does not fire (`fires: false`): first launch 2,700 ms against the 6,000 ms cap and inside its 4,500 ms target; usual launch 2,425 ms against its W3B median of 3,757 ms and the 4,508 ms regression reference. The DEC1 decision on EQ holds at the shipped caps without raising them: 653 ms against the 1,000 ms target. The route times at the desktop caps are re-checked and the worst repeat is 12 ms (W5B: 73 ms).
 
 ## 5. T5: pan and zoom, and the 20,000-point data hop
 
-- **Pan and zoom p95** at 20,000 bars: 10.3 ms (series A) and 6.4 ms (series B) against 25 ms. Zoom and pan separately in series B: 6.3 to 6.5 ms and 4.5 to 5.0 ms. T5 does not fire on this row.
-- **Data hop**, in the smoke build over the debugging protocol, real data, desktop caps: the page fetches `/api/bars` (symbol `NQ.V.0`, 1-minute, vendor variant, from 2018-01-02, `max_points=20000`) and parses the JSON; the clock runs from the request to the parsed object. The route sizes its answer in whole buckets, so it did not return exactly 20,000 points for any window tried; seven windows ending between 2018-03-01 and 2019-01-01 gave 7,617 to 17,097 points. Folder `D:\dev\d5\t4t5\2026-10-03T21-55-13-668Z-hop` (gate 8.6%): the largest, **17,097 points (875,675 bytes), warm median 14.9 ms (14.9, 17.7, 20.8, 14.9, 14.9), first fetch of that window 15.9 ms** (the first fetch of any window in the session was 36.1 ms). The earlier series `...21-53-41-694Z-hop` (11,376 points) read a warm median of 10.9 ms (maximum 17.4) and a first fetch of 37.3 ms. Against the 100 ms limit this is a margin of about five times. Extrapolating linearly from 17,097 to 20,000 points gives about 17 to 24 ms; that is an estimate and is labelled so. The hop is a loopback transfer and parse, not a render. T5 does not fire.
+- **Pan and zoom p95** at 20,000 bars, in the app: 6.0 ms (5.8 to 6.2) against 25 ms (section 3). In the browser budgets (`e2e:perf`, alone, one worker, fixture backend): zoom p95 18.0 ms and pan p95 18.7 ms at 60 frames a second, inside the browser budget. T5 does not fire.
+- **Data hop**, in the smoke build over the debugging protocol, real data, desktop caps, folder `D:/dev/w5c/measure-runs/t4t5/2026-10-04T06-45-48-484Z-hop` (gate 2.8%): the page fetches `/api/bars` (`NQ.V.0`, 1-minute, vendor variant, from 2018-01-02, `max_points=20000`) and parses the JSON. The route answers in whole buckets; the largest answer at or under 20,000 points was again **17,097 points (875,675 bytes): first fetch 13.9 ms, warm median 15.2 ms (15.5, 34.4, 14.5, 15.2, 14.0), largest 34.4 ms**, against the 100 ms limit. T5 does not fire.
 
-## 6. The measure artefact: installed and seeded, real-lab rows pending
+## 6. The measure artefact: installed fresh, real-lab rows pending
 
-- **Install (step 1).** The measure installer of `D:\dev\release-b\0.1.0` (3,219,653 bytes, sha256 `b42ce24b...2f43`) was installed silently with `/S /NS /D=` into `D:\dev\d5\measure\app` (the folder created first with inheritance removed, as `install-test.ps1` does), after the earlier install there (built from an older tree) was removed with its own silent uninstaller. Installed files: `nq-lab-terminal.exe`, `WebView2Loader.dll`, `uninstall.exe`. The installed exe is byte-identical to the measure payload (sha256 `16e022df...5bba`). The global window watch saw 0 new windows and 0 foreground changes. Record: `D:\dev\d5\w5b\install-measure-b.json`.
-- **Seed (step 2).** The harness seeds the measure build's own settings and WebView2 folders per launch under the run folder (`NQT_MEASURE_DIR`, a settings file with the real lab, a `wv` folder), all on D:; no folder under the roaming profile is written. No separate `D:\dev\d5\wv-measure` folder was needed.
-- **Prechecks (step 3), `D:\dev\d5\w5b\precheck-before2.json` and `precheck-after.json`.** Before the first run: port 8765 listening (pid 46084, the owner's backend), `backend.lock` absent, no queued or running job, `jobs.json` sha256 `44CAE38A...72D4`, `backtests/output` 229 entries. **8765 listens, so the measure-artefact real-lab rows were skipped and are pending (plan decision 11)**, and the process rows were taken on the smoke build with the real lab, a temporary state folder and `NQT_JOBS=off`. After every run the same checks read: 8765 still pid 46084, lock absent, jobs hash unchanged, `backtests/output` unchanged. No spawn-or-attach check applies to a measure run that did not happen.
-- **Informational only, not counted.** The harness's dry mode ran the installed measure build three times on a derived lab with no data (`D:\dev\d5\runs\w5b-measure-dry`, gate 8.2, 8.1, 8.8%, status `dry`): backend ready 2,927; 2,344; 2,523 ms, splash 395; 278; 258 ms (load event), home painted 3,375; 2,869; 2,898 ms, idle memory 240.5 to 241.2 MB. These are not comparable with the real-lab rows (no data, no prewarm, a derived lab whose source copy has no compiled caches, so imports are slower), and they do not enter any median or any agreement test. They show only that the installed measure build starts, paints and closes cleanly with the engine settings read back off.
+- **Install.** The measure installer of `D:/dev/w5c/release-m/0.1.0` was installed silently with `install-test.ps1`'s flags (`/S /NS /D=`) into the new folder `D:/dev/w5c/measure/app` (inheritance removed first), record `D:/dev/w5c/measure-runs/install-measure.json`: exit 0, files `nq-lab-terminal.exe`, `WebView2Loader.dll`, `uninstall.exe`, 0 new windows, 0 foreground changes. The installed exe (sha256 `ac46c9ff...9171`) differs from the measure payload in 3 bytes only: the bundler's bundle-type marker reads `NSS` in the installed copy and `UNK` in the payload (W5B's installed copy was byte-identical to its payload). The harness seeds the measure build's settings and WebView2 folders per launch under the run folder on D:.
+- **Pending.** The harness's lab guard read port 8765 listening (pid 46084) before every measure launch: the four measure slots of the rows run and the measure first-launch record (`D:/dev/w5c/measure-runs/first-launch-measure`) are `pending` with the reason `port 8765 is listening (pid 46084): the owner's terminal is live`, and nothing was started. **Backend ready, splash, cold HOME and idle memory on the measure artefact, and the smoke against measure agreement, stay pending (decision 11).** The very first launch after install on the measure build, as DEC1 defines it, needs the same free lab and is pending with them; the smoke build's first launch with an empty state folder is in section 3.
 
-## 7. Minimise, T8 and the soak
+## 7. Minimise, T8 and the browser budgets
 
-### Simulated minimise with LIVE (NOT TESTED at engine level)
+### Simulated minimise with LIVE, at engine level
 
-Folder `D:\dev\d5\runs\w5b-minimise-sim`, gate 5.4%, the fixture backend (no real data, no IB), 1,800 second hold (30 minutes, the low end of 04's 30 to 60). The page reported `hidden` for the whole hold (30 of 30 minute samples), the stream read "live, server events" in every sample, and **stream back 0 ms** after the restore against a 30,000 ms ceiling. Memory at the sampling points fell from 809.6 MB (first minute) to 646 to 648 MB for the rest of the hold. Driver: of the three tried, `controller-file` and `wm-size` did not hide the page; `page-override` did. **This row is NOT TESTED and does not count as within ceiling.** `page-override` only changes what `document.visibilityState` reports; the web app has no visibility-driven stream logic (its one `visibilitychange` listener flushes the store), so the unbroken "live, server events" reading and the 0 ms stream-back follow by construction. The engine's throttling of a hidden or minimised WebView2, the real risk, was never exercised (`engineLevel: false`). The harness now fails such a run with a NOT TESTED problem. It stays pending until a smoke-only visibility hook exists in the shell and the 30 minute hold is repeated. The real minimise and restore is not run (owner decision 10 keeps it with the owner's visible run).
+Folder `D:/dev/w5c/measure-runs/minimise-sim`, gate 4.7%, GPU 9 to 10%, the fixture backend, an 1,800 second hold (30 minutes). The first driver tried, `controller-file` (the smoke build's visibility hook: the harness writes `hidden` or `visible` to `smoke-visibility.txt` in the config folder and the shell calls `put_IsVisible`), hid the WebView2 controller itself: the page reported `hidden` 110 ms after the request and in all 30 minute samples. Over the hold the stream read "live, server events", and at its lifetime "reconnecting: the server ended the stream at its lifetime; the browser resumes after the last event it saw". After the controller was shown again the page read `visible` within 223 ms and **the stream read "live, server events" again with a stream back of 0 ms** against the 30,000 ms ceiling. `engineLevel: true`, `driverEffective: true`, verdict accepted with no problem. Memory over the hold: 325.9 MB in the first minute, 287.8 to 296.5 MB for the rest. This replaces W5B's NOT TESTED reading (page-level override only). The same run was made in W5B release round 3 (folder `D:/dev/d5/runs/w5b3-minimise-sim`, gate 9.4%, `controller-file` driver, `engineLevel: true`, `driverEffective: true`, accepted): stream back in 0 ms against 30,000 ms. Both runs are tested rows within the ceiling; neither is the real minimise. The real minimise and restore stays with the owner's visible run.
 
 ### T8, the drift run, once
 
-Folder `D:\dev\d5\runs\w5b-t8c`, gate 6.3%. The smoke build attached to the offline demo server on 4373, then the desktop Playwright project against it. **WebView2 runtime 154.0.4258.53** (engine string `Edg/154.0.4258.53`, registry `pv` 154.0.4258.53). Result: **12 passed, 2 failed**. Both failures are in `10-walk.desktop.ts` and have one cause: the walk asserts "no failed API answers" and the offline demo server answers 404 for six workspace-store routes (`/api/workspaces/workspaces`, `layouts`, `linkGroups`, `watch`, `history`, `prefs`) that D3 added and the demo API does not serve. That is a gap in the T8 stand-in, not a change in the engine. The harness's `t8` mode also refused to start from its documented command (`node run.mjs --mode t8 --playwright`) because its "another Playwright run is alive" check matches the harness's own `--playwright` flag; the run was started from a one-line script (`D:\dev\d5\tools\run-t8.mjs`) that calls the same mode with the same arguments.
+Folder `D:/dev/w5c/measure-runs/t8`, gate 3.4%, started from the documented command (`node run.mjs --mode t8 --playwright`). The smoke build attached to the offline demo server on 4373, then the desktop Playwright project against it: **14 passed, 0 failed**, WebView2 runtime **154.0.4258.53** (engine `Edg/154.0.4258.53`, registry `pv` 154.0.4258.53), 0 new windows. Clean on this runtime; it says nothing about a later runtime.
 
-**Second run, after the merge fixes (4 October, folder `D:\dev\d5\runs\2026-10-03T23-55-25-354Z-t8`, gate accepted, started from the documented command).** The walk's answer check now ignores an answer that carries the offline demo's own refusal header (the demo declining a route it holds no body for; the fixture and real backends never set it), and the mode's self-match is fixed (section 12). Result: **14 passed, 0 failed**, WebView2 runtime 154.0.4258.53 again, 0 new windows. T8 reads clean on this runtime. It is a drift check against one runtime, so it says nothing about a later runtime update.
+### Browser budgets, unchanged
 
-### The 3 hour soak (finished, PARTIAL)
+`corepack pnpm run e2e:perf` from `web`, alone, one worker, own output folder `D:/dev/w5c/pw-perf-out` (log `D:/dev/w5c/measure-runs/e2e-perf.log`), after every backend test session of the release check had ended: 3 passed. HOME first render median 611 ms against 1,500 ms; GIP zoom p95 18.0 ms, pan p95 18.7 ms, 0 missed frames; the 8,411-fill grid opens in 66.2 ms against 500 ms (sort 33.0 ms, page 37.2 ms). The release check's own run read 637 ms, 18.1 ms and 62 ms.
 
-The soak ran from 20:15 to 23:15 UTC (3 hours, the harness's soak mode, real lab, the smoke build at the shipped caps of 512 and 128 MiB; sampled every 5 minutes; labelled **PARTIAL, 3 hours, not an all-day run**). It had finished by the time this file was written, so its figures are final; W6 reads them and does not repeat them. Records: `D:\dev\d5\soak\soak-smoke-s01-a1-measure.json` (the harness's own samples, 37) and `D:\dev\d5\soak\samples.jsonl` (an outside sampler of the same shell, 36 samples, same method, a few seconds apart). The soak ran the smoke exe of `D:\dev\release\0.1.0`, which is byte-identical to the smoke exe measured here (sha256 `7c661f7a...4294`); its provenance stamp carries the head the harness was started on (`e0834c15...`), with an empty diff and no untracked file.
+## 8. The soak
 
-| Reading (whole-tree private working set) | Harness samples | Outside sampler |
-| --- | ---: | ---: |
-| First sample (start-up, 0 minutes) | **1,577.4 MB** | 1,509.8 MB |
-| Minutes 5 and 10 | 1,463.3; 1,446.8 | 1,457.9; 1,432.7 |
-| Minutes 15 to 30 | 1,269.7 to 1,292.2 | 1,201.4 to 1,260.4 |
-| Minutes 35 and 40 (the working set is trimmed) | 978.3; 805.2 | 885.9; 706.0 |
-| Minute 45 to the end | 679.0 to 748.8 (last 704.5) | 582.3 to 648.1 (last 648.1 at 176 minutes) |
-| Private bytes (committed) | up to 3,814.9 MB | 3,285 to 3,622 MB |
-| JavaScript heap | 29.2 to 56.8 MB | |
+The soak ran from 11:14 to 13:15 local time (BST) on the smoke build, real lab, shipped caps (512 and 128 MiB), harness `soak` mode started with `--hours 3` and stopped by the manager at 13:20 after 2 h 5 min. **Label: 2 h (harness stopped at 2 h 5 min by the manager; external sampler), PARTIAL, not an all-day run.** The harness record `soak-smoke-s01-a1-measure.json` was never written (the harness holds its samples in memory until the end), so the figures below are the external whole-tree sampler's: `D:/dev/w5c/measure-runs/soak-outside.jsonl`, 25 samples of the app's whole process tree (10 processes, pid 24092 for the shell), one every 5 minutes from 11:15 to 13:15, same method as W5B's outside sampler. Window watch: `D:/dev/w5c/measure-runs/soak/soak-smoke-s01-a1-measure.watch.jsonl` (26 records: 15 new windows and 9 foreground changes, all from other programs while the owner used the PC, 0 in the app's own process tree).
 
-The row is the **largest sample, 1,577.4 MB, which is 77.4 MB (5.2%) over the 1,500 MB ceiling** (1,509.8 MB, 9.8 MB over, by the outside sampler). Both are the first sample, taken during the start-up peak; the largest sample after minute 15 is 1,292.2 MB (under the ceiling, over the 1,000 MB target), and after minute 45 it is 748.8 MB. As the harness defines the row, it is over the ceiling; whether a start-up transient belongs in a steady-state soak row is for the merge and the owner to decide, and the 3 hour run does not settle the all-day question. Memory did not grow without bound: the page's JavaScript heap stayed between 29 and 57 MB, and the working set after minute 45 drifted up by about 60 to 70 MB over 2 hours (the committed memory is flat to slightly up). No workload error, the shell closed gracefully at the end (exit 0, no survivor).
+| Reading (whole-tree private working set) | W5C, 2 h | W5B, 3 h (outside sampler) | Ceiling | Target |
+| --- | ---: | ---: | ---: | ---: |
+| First sample | 698.7 MB | 1,509.8 MB | | |
+| Largest sample (the row) | **705.8 MB** (the last, at 2 h) | 1,509.8 MB (the first); 1,577.4 MB by the harness | 1,500 MB | 1,000 MB |
+| Smallest sample | 622.8 MB (at 10 min) | | | |
+| Median | 674.8 MB | | | |
+| Slope over the last hour (12 samples, least squares) | +25.9 MB per hour (674.8 MB at 1 h to 705.8 MB at 2 h) | about 60 to 70 MB over 2 h after minute 45 | | |
+| Private bytes (committed), range | 2,363.6 to 2,476.2 MB | 3,285 to 3,622 MB | | |
 
-The harness classed this record `window-fail`: its watch saw 54 new windows and 57 foreground changes over the three hours, all from other programs (Chrome, Task Manager, Performance Monitor, Explorer, the Logitech helper, a Steam toast and a credential prompt broker; the owner was using the PC), **0 of them in the soak app's own process tree**. The harness rule since 3 October 2026 judges only the run's own tree, under which these are notes; the soak started on the earlier code and kept the older verdict.
+The row is inside its ceiling and its target. W5B's start-up peak is gone: the first sample is 698.7 MB, not 1.5 GB, because the sparkline no longer fills the bar cache with 1-minute years and the system pool returns freed memory (section 1a). The curve is flat after the first five minutes (698.7 to 624.8 MB), then climbs slowly (+25.9 MB per hour over the last hour); a 2 h run cannot say whether that climb flattens, so the all-day check stays. The sampler's first reading was taken 1 s after it found the app, about a minute after the app started, so the very first minute is not covered. The harness's own samples (workload errors, JavaScript heap, graceful close) are not available for this run. Sources: `D:/dev/w5c/measure-runs/soak-outside.jsonl` and `D:/dev/w5c/measure-runs/soak/soak-smoke-s01-a1-measure.watch.jsonl`.
 
-## 8. T4: memory, and the browser terminal in the same session
+## 9. T4: memory, and the browser terminal in the same session
 
-Method for the app: the table in section 3 and the time series below. Method for the browser terminal: the real backend in its browser form (browser caps, 2 GiB of bars), headless Chromium on HOME with the same four panels settled, an 8 second settle, three samples two seconds apart, the whole-tree private working set of the backend tree plus the browser tree, three runs behind the gate (7.4 to 7.9%). Folder `D:\dev\d5\t4t5\2026-10-03T21-37-50-055Z-browser-home`. An earlier series in `...21-33-21-953Z-browser-home` lost the browser's root process (its command-line match was wrong) and holds the backend alone (737 to 758 MB); it is kept and not used.
+Method for the browser terminal: the real backend in its browser form (browser caps, 2 GiB of bars), headless Chromium on HOME with the same four panels settled, an 8 second settle, three samples two seconds apart, the whole-tree private working set of the backend tree plus the browser tree, three runs behind the gate. Two forms were read, one straight after the other: **on equal terms** (`NQT_TWO_DAY_WINDOW=1`, so MON's two-day sparkline reads its exact window as the app does and keeps no 1-minute year), and **the default form** (the year kept, as `start.ps1` runs it every day).
 
-| Tree at HOME, idle | Backend | UI (WebView2 or Chromium) | Whole tree |
-| --- | ---: | ---: | ---: |
-| Browser terminal, median of 3 | 741.8 MB (719 to 750) | 177.5 MB (176 to 184) | **917.6 MB** (897 to 934) |
-| App, smoke build, series A median of 3 | | | 1,101.7 MB |
-| App, smoke build, series B median of 3 | | | 1,081.9 MB |
+| Tree at HOME, idle | Backend | UI (WebView2 or Chromium) | Shell | Whole tree, median of 3 (range) | Folder under `D:/dev/w5c/measure-runs/t4t5` |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Browser terminal, equal terms | 232.9 MB | 180.4 MB | | **412.5 MB** (412.2 to 418.2), gate 3.5, 2.7, 2.9% | `2026-10-04T06-37-10-774Z-browser-home-equal-terms` |
+| Browser terminal, default form (year kept) | 643.8 MB | 178.1 MB | | **820.4 MB** (819.5 to 832.7), gate 2.9, 2.8, 2.7% | `2026-10-04T06-41-29-712Z-browser-home-year-kept` |
+| App, smoke build, the harness reading point (section 3) | 297.3 MB | 198.2 MB | 4.2 MB | **497.1 MB** (rows series); 505.4 MB (492.4 to 508.4) pooled | `../rows`, `../first-launch-smoke-*` |
+| App, smoke build, read by the browser method (8 s settle) | 251.4 MB | 198.8 MB | 4.2 MB | **453.8 MB** (452.2 to 455.4), gate 2.7, 2.8, 2.7% | `2026-10-04T07-25-56-252Z-app-home-matched` |
 
-The same app launch followed for 10 minutes (`D:\dev\d5\t4t5\2026-10-03T21-42-20-309Z-app-mem`, gate 8.5%, real data): whole tree 1,114.0 MB at 9 s, 1,097.7 at 31 s, 1,085.8 at 61 s, 1,081.9 at 121 s, then **920.5 MB at 301 s and 919.4 MB at 601 s**. The backend interpreter was 911.8 MB at the start and 766.6 MB from 301 s; the WebView2 processes together about 200 MB, falling to about 150 MB; private bytes (committed memory) stayed near 2.6 GB for the backend and did not fall. The step at about 5 minutes is the working set being trimmed, not memory returned. The all-day soak shows the same shape (section 7).
+The equal-behaviour citation (D8): the switch `NQT_TWO_DAY_WINDOW` is documented in `backend/nq_terminal/settings.py` ("The browser or launcher backend reads MON's two-day sparkline as the app does (its exact window, no 1m year kept), so the T4 and G2 comparison with the browser terminal's HOME is made on equal terms"); the equal-terms records carry `twoDayWindowSwitch: "1"`, the default-form records `null`.
 
-Reading against 02 section 6.5, trigger T4 ("idle above 550 MB or above the browser terminal's HOME in the same session, or a heavy session above 1.5 GB"): **T4 fires on both counts at the harness's reading point.** The app at HOME idles at about 1.08 to 1.10 GB (about 920 MB once trimmed, still above 550 MB), against 918 MB for the browser terminal in the same session. The difference sits in the backend: 912 MB at desktop caps with the HOME prewarm and the persisted result cache, against 742 MB in browser form. The UI tree is not the cost (WebView2 about 200 MB against 178 MB for Chromium; the 350 MB UI-tree test of 02 is passed with room). The roadmap's response is to lower the caps and re-check route times; that is a decision for the merge and the owner, not made here. The heavy-session leg (above 1.5 GB) was not measured in the app; the soak (section 7) is its nearest reading.
+The app followed for ten minutes after one launch (exploratory, `D:/dev/w5c/explore-runs/2026-10-04T07-14-30-980Z-app-mem`, gate accepted): whole tree 455.2 MB at 9 s, 435.7 at 31 s, 420.7 at 61 s, 420.4 at 121 s, 388.6 at 301 s and 396.8 MB at 601 s; the backend interpreter 248.2 MB at 9 s and 238 MB from 301 s; the WebView2 renderer 112.9 MB at 9 s falling to about 70 to 77 MB.
 
-## 9. Agreement of the two builds, and the pending list
+**T4 re-read (02 section 6.5: "idle above 550 MB or above the browser terminal's HOME in the same session, or a heavy session above 1.5 GB").**
+
+- Above 550 MB: **no.** The app reads 497.1 MB (rows series) and 505.4 MB (492.4 to 508.4) pooled at the harness reading point, 453.8 MB by the browser method.
+- Above the browser terminal's HOME in the same session: **against the default form, no** (820.4 MB, the app is about 320 MB lower); **on equal terms, yes** (412.5 MB: the app is 41 MB above it read by the same method, 85 to 93 MB above at the harness reading point). Read by the same method the difference splits into backend +18.5 MB, UI tree +18.4 MB (WebView2 with its GPU process against headless Chromium) and the shell's 4.2 MB. On equal terms this clause of T4 fires.
+- A heavy session above 1.5 GB: **no.** The largest whole-tree working set of the 2 h soak is 705.8 MB (section 8) and the minimise hold peaked at 325.9 MB.
+- The UI tree alone tops 350 MB idle: **no** (194 to 201 MB in every run), so the canvas backing stores are not the lead.
+
+**The cap decision.** T4's response is to lower the caps and re-check the route times. An exploratory series at a 256 MiB bar cap (`NQT_CACHE_BYTES=268435456`, everything else the same, `D:/dev/w5c/explore-runs/idle-cache256`, gate 2.9, 2.7, 3.1%) read idle 494.1 MB (492.0 to 494.2) against 497.1 and 506.3 MB at 512 MiB: a difference inside the spread of the shipped-cap launches, because the bar cache holds little at HOME since the app stopped keeping the 1-minute year (W5C D1). A series with the prewarm off (`NQT_PREWARM=0`, `D:/dev/w5c/explore-runs/idle-noprewarm`) read 511.1 MB (500.7 to 511.9): without the prewarm HOME's own requests do the same work at the same moment. Lowering the caps therefore does not move the idle row, and the route times at the shipped caps are already re-checked (section 4). **Decision: the caps stay at 512 MiB (bars) and 128 MiB (files).** The profile showed that what filled the cache, not its size, was the cause: MON's two-day sparkline kept a whole 1-minute year per symbol in the bar cache. Commit `8122c87` removes that cost (the sparkline reads only its window in desktop mode) under roadmap trigger T4 (`docs/desktop/02_decision.md`, 6.5), which is the standard of decision 1.4 of `owner_decisions_windows.md`: meet a budget by removing the cost, not by moving the ceiling. With the cost gone a lower cap changes nothing measurable (494.1 MB at 256 MiB against 497.1 and 506.3 MB at 512 MiB), and a lower cap would only evict data the app still reads. The route times at the shipped caps are re-checked in section 4 (worst repeat 12 ms against 300 ms).
+
+## 10. Correctness through the app
+
+| Check | Result |
+| --- | --- |
+| `crosscheck.served` (`uv run --project terminal/qa python -m crosscheck.served`), the app-launched fixture backend of the new smoke build (`NQT_SMOKE_EXE`) | 8 of 8 routes equal: `runs_compare`, `ledger`, `bootstrap_hypothesis`, `bootstrap_run`, `deflated` and `spa` byte-equal; `two_day` and `seasonality_nq` equal before the gate block, with only `cached` and `reads_this_process` differing (as in W5B); `served: OK`, no window-watch failure |
+| `smoke_real.ps1`, browser mode | First run: 16 passed, 2 failed, both on a refused Enter (`ZA_V0 DES` and `NQ GIP 2019-03-14` stayed in the command line marked invalid; `web/e2e/perf/pages.ts` `runLine` presses Enter once and waits 60 s for the line to clear, so an Enter that lands before the command index reaches the page is never repeated; the release check fixed the same race in `p11.spec.ts` only). Second run, nothing changed: **18 passed, smoke run passed**. Both runs: 67 new gate log lines, all caller `terminal` inside [2010-01-01, 2022-01-01), research files unchanged |
+| `smoke_real.ps1 -Mode App` on the new smoke build | 5 passed, smoke run passed; the shell log shows a real, own-folders launch; the gate log lines all caller `terminal`, inside the fence |
+| Gate log over the whole measuring | only caller `terminal` lines, none after 2021-12-31 (section 1) |
+
+Logs: `D:/dev/w5c/measure-runs/chain2.log` (served, both first smoke runs) and `D:/dev/w5c/measure-runs/smoke-real-browser-2.log`. These runs were not made through `record_green.ps1`: the dated records must be made on the committed tree, because a commit changes the stamp.
+
+## 11. Agreement of the two builds, and the pending list
 
 | Test | State |
 | --- | --- |
-| Smoke against measure within noise: backend ready, cold HOME, idle memory | **Pending** (no real-lab measure run) |
-| Backend ready, splash, cold HOME, idle memory on the measure artefact (3 runs each, real lab) | **Pending**: port 8765 listening; command in `docs/desktop/checks/2026-10-03_pending-measurements.md` |
-| All-day soak at the shipped caps | The 3 hour run is PARTIAL and its largest sample (1,577.4 MB, start-up) is over the ceiling (section 7); the all-day run stays an owner check |
+| Smoke against measure within noise: backend ready, cold HOME, idle memory | **Pending**: no measure run (port 8765 listening) |
+| Backend ready, splash, cold HOME and idle memory on the measure artefact, real lab, 3 runs each; the very first launch after install on the measure build | **Pending**: port 8765 listening (decision 11); installed at `D:/dev/w5c/measure/app` |
+| All-day soak at the shipped caps | **PARTIAL**: 2 h run (largest 705.8 MB), no harness record; the all-day run stays an owner check |
 | Real minimise and restore, stream back within 30 s | Owner-attended (visible run) |
 | First launch after a reboot | Owner-attended |
 | Keys 16 of 16 plus print, NVDA, Narrator, the real JOBS backtest | Owner-attended |
-| T8 drift run | Passed 14 of 14 on the second run (WebView2 154.0.4258.53); the first run's 2 failures were the answer check meeting the demo's refusals (section 7) |
-| Records for the release check | Re-recorded on 4 October on the tree of the merge (section 12). `release_check.ps1` passes every check except the clean-tree check, which needs a commit; the commit changes HEAD, so W6 records and builds again on the committed tree and runs the check on the default release folder |
+| T8 drift run | 14 of 14 (WebView2 154.0.4258.53) |
+| Dated records and the release check | Not made here: they need the manager's commit (section 10) |
 
-`node desktop\harness\report.mjs D:\dev\d5\runs --check` finds no figure that differs from its raw record. It exits 1 and names exactly the rows above that were not measured (the four measure-build rows, the soak row, which the report cannot read because the soak record sits outside that folder, the real minimise check, and the simulated minimise, which the report now reads as not tested because only a page-level driver hid the view), and nothing else. The folder also holds earlier dry and self-test records from the build night, which the report ignores; its reproduction line reads the first reproduction record it finds (an earlier dry one), so the real verdict is the one in section 2.
+`node desktop/harness/report.mjs D:/dev/w5c/measure-runs --check`: exits 1 with six lines, none a defect of a measured row: the measure build has no reading for backend ready, splash, cold HOME and idle memory (port 8765 listening); the soak row has no reading on the smoke build (the harness record was not written); the real minimise has no reading (owner's visible run). It lists `idle_mem_home` on the smoke build as 505.4 MB (492.4 to 508.4), **over-ceiling**, and the simulated minimise as within ceiling (worst 0 ms against 30,000 ms). The rows are in `D:/dev/w5c/measure-runs/report.json`.
 
-## 10. Findings for the merge (nothing here was changed in `terminal/`)
+## 12. Findings for the manager (nothing in `terminal/` was changed by the measuring)
 
-1. **Cold HOME on a first launch is 48 ms over its ceiling in the quiet series** (and 583 ms over in the first). Decide whether the 5,000 ms ceiling or the 6,000 ms first-launch cap is the G2 row for a first launch; the register says 5,000 ms.
-2. **T4 fires.** The backend at desktop caps with the prewarm holds 912 MB (742 MB in browser form); the UI tree is fine. 02 section 6.5 says lower the caps and re-check route times. The cheapest first look is the prewarm's peak and the result cache's resident size, since the figure falls by about 150 MB after five minutes of idle without any request.
-3. **Soak row by the largest-sample rule** reads over the ceiling because of the first sample. If the rule should start after the settle period, change it in the soak mode and report; otherwise the row fails.
-4. **Fixed in the merge (section 12).** **`modes/t8.mjs`, `otherTestRuns`:** the check "another Playwright or vitest run is alive" matches the harness's own command line (`node run.mjs --mode t8 --playwright`), so the documented command always refuses itself. It should skip its own process and its parents.
-5. **Resolved in the merge (section 12), in the walk rather than the demo.** **The offline demo API** (`web/e2e/offline`) does not serve the six `/api/workspaces/*` store routes, so the attach-mode walk in `web/e2e/desktop/10-walk.desktop.ts` fails on 404s. Add the routes to the demo API (or make the walk tolerate them in attach mode), then repeat T8.
-6. **Fixed in the merge (section 12).** **`report.mjs`** reads the first `reproduce` record in a folder, which can be an older dry one; it should read the newest non-dry verdict (`reproduce-verdict.json` at the folder root of the real run is the right one).
-7. **`measure_stage1.mjs`** fails its window watch on any new window anywhere (a Steam toast, a Logitech helper window), unlike the D5 harness since 3 October; give it the own-tree rule.
-8. **The reproduction gate** cannot pass while the spike's reference omits the launch-page hop. Either re-baseline `reference/w0b-tauri.json` with the hop (its breakdown shows where the 115 ms sit) or accept that every figure carries UNREPRODUCED.
-9. **No usual-launch row in the harness.** The harness's rows always use a fresh state folder; the usual launch of the app was taken by `D:\dev\d5\tools\t4t5.mjs usual-app` (a primed state, three launches). It belongs in the harness as a row if G2 keeps both launch readings.
-10. **Resolved in the merge (section 12).** **Same-day records.** The records in `terminal/state/release` are dated 2026-10-03; the release check refuses a record from another day, and the date is now 4 October.
-11. **Measure artefact rows.** When 8765 is free (the owner closes the launcher), run `node desktop\harness\run.mjs --build measure --rows backend_ready,splash_painted,cold_home,idle_mem_home --runs 3 --real-data --measure-exe D:\dev\d5\measure\app\nq-lab-terminal.exe` from `terminal`, after the manual lab preconditions listed in `docs/desktop/checks/2026-10-03_pending-measurements.md` (the harness does not check them), then the smoke and measure agreement test in `report.mjs`.
+1. **Whole-app idle at HOME is 5.4 MB over its 500 MB ceiling on the pooled reading** (505.4 MB over six counted launches; 497.1 MB in the rows series alone, 506.3 MB in the first-launch series). Lowering the caps does not move it (256 MiB bars: 494.1 MB), because the bar cache holds little at HOME now. What does move it is time: the backend falls from about 297 MB to about 251 MB within some 10 s of HOME ready, when the prewarm's later tasks (ledger, deflated Sharpe, EQ bootstrap) finish, and the whole tree reads 453.8 MB by the browser comparator's 8 second settle and 388.6 MB after five minutes. The levers are a backend change that keeps those tasks' working memory out of the HOME window (or lowers their peak), or an owner decision on the reading point (the harness reads at HOME ready plus a 2.5 second idle check, the W0B point; the comparator reads after an 8 second settle). Neither was changed here.
+2. **T4 on equal terms fires.** Against the browser terminal on equal terms (412.5 MB) the app is 41 MB higher by the same method: backend +18.5 MB, UI tree +18.4 MB (WebView2 with its GPU process against headless Chromium) and the shell's 4.2 MB. Against the default browser form (820.4 MB) it is about 320 MB lower. Which comparator governs the "no more than the browser terminal's HOME" condition is for the manager and the owner; this file reports both. Headless Chromium is also lighter than the headed browser the owner uses, so the equal-terms comparator is a strict one.
+3. **A race in the real-data smoke's driver.** `web/e2e/perf/pages.ts` `runLine` presses Enter once and waits 60 s for the line to clear; an Enter that lands before the command index reaches the page is refused and never repeated (first browser-mode run: `ZA_V0 DES` and `NQ GIP 2019-03-14`). The release check fixed the same race in `p11.spec.ts` by waiting for the command preview; `runLine` needs the same wait. The second run passed 18 of 18.
+4. **The installed measure exe is not byte-identical to its payload.** It differs in the 3-byte bundle-type marker (`NSS` installed, `UNK` in `payload/measure`), so a check that compares the installed exe with the payload hash fails on this build (W5B's pair was identical). Nothing measured depends on it; `build-release.ps1` should copy the payload after the bundler has marked the exe, or the check should compare with the marker masked.
+5. **`report.mjs` pools every counted record under the folder it is given**, at any depth, so exploratory series must not sit under the evidence folder (they were moved to `D:/dev/w5c/explore-runs` before the final check).
+6. **The soak harness did not write its record.** The first soak (`D:/dev/w5c/measure-runs/soak-aborted-2h`, outside sampler only, 24 samples from 09:13, first 606.3 MB, last 644.3 MB at 6,925 s) was cut short by the measuring session's own two-hour limit on a background command. The soak of record was started detached with `--hours 3` and stopped by the manager at 13:20 after 2 h 5 min, because 2 h was the planned length, so its harness record was not written either (the harness keeps its samples in memory until the end). The row rests on the external sampler (`soak-outside.jsonl`, 25 samples). The soak mode would be more robust if it appended each sample to its record as it is taken.
+7. **Measure-artefact rows.** When 8765 is free, run `node desktop/harness/run.mjs --build measure --rows backend_ready,splash_painted,cold_home,idle_mem_home --runs 3 --real-data --measure-exe D:/dev/w5c/measure/app/nq-lab-terminal.exe` from `terminal` (the harness's lab guard checks the lab itself), then the smoke and measure agreement in `report.mjs`; the very first launch after install on the measure build needs the same free lab.
+8. **The figures in the commit message of `8122c87` come from an earlier build of this tree and are not the measure of record.** Its spot readings (idle 451.6 MB median, first launch about 3,200 ms; `D:/dev/w5c/spot/rows-real`, three launches, taken at 05:51 to 05:54 on a build stamped `diffSha256` `7301e032...`) predate the build measured here (`diffSha256` `34046e26...`, built at 07:15). The tracked diff from `dd286fd` to `8122c87` hashes to `34046e26...`, the stamp of every record in this file, so the measured build is the committed tree. On it idle reads 505.4 MB, not 451.6 MB. The first-launch figure agrees (spot 3,201 ms median, measured 3,172.5 ms). Why the later build reads about 50 MB higher at the same reading point is not established here.
 
-## 11. What changed in the world during the run
+## 13. W5B against W5C
 
-During the measuring nothing in `terminal/` was edited (the tree stayed clean at `f2e03bf` until this folder was written); the merge step's edits are listed in section 12. The tools written for this wave are not part of the repository: `D:\dev\d5\tools\reinstall-measure-b.mjs` (the install), `t4t5.mjs` (browser baseline, app memory over time, usual launch, data hop), `run-t8.mjs`, `facts.mjs` and `facts2.mjs` (they print the figures above from the raw files).
+| Row | Ceiling | W5B (3 to 4 October) | W5C (4 October) |
+| --- | ---: | ---: | ---: |
+| Backend ready | 2,500 ms | 1,378 ms | 1,402 ms (rows), 1,413.5 ms (1,378 to 1,434) pooled |
+| Splash | 1,000 ms | 308 ms | 313 ms |
+| Cold HOME, first launch | 5,000 ms | **5,048 ms** (over) | 3,167 ms (rows), 3,172.5 ms (3,148 to 3,225) pooled |
+| Cold HOME, usual launch | 5,000 ms | 3,321 ms | 2,750 ms |
+| Warm HOME | 1,500 ms | 652 ms | 537.2 ms |
+| EQ, warm, Enter unit, desktop caps (stage 1) | 1,500 ms | 628 ms | 653 ms |
+| REG, warm, Enter unit, desktop caps (stage 1) | 1,500 ms | 427 ms | 452 ms |
+| Eight routes, worst repeat, desktop caps | 300 ms | 73 ms | 12 ms |
+| Grid open, 8,411 fills | 500 ms | 132 ms | 63.3 ms |
+| GIP pan and zoom p95 | 25 ms | 6.4 ms | 6.0 ms |
+| Keystroke to paint p95 | 100 ms | 8.2 ms | 8.3 ms |
+| 20,000-point hop (17,097 points), warm median | 100 ms | 14.9 ms | 15.2 ms |
+| Whole app idle at HOME | 500 MB | **1,082 MB** (over) | **497.1 MB** (rows), **505.4 MB (492.4 to 508.4)** pooled (over) |
+| Browser terminal at HOME, same session | | 918 MB (year kept) | 820.4 MB (year kept); 412.5 MB (equal terms) |
+| Soak, largest sample | 1,500 MB | **1,577.4 MB** (over, 3 h) | **705.8 MB** (within, 2 h, PARTIAL, external sampler; first sample 698.7 MB) |
+| Simulated minimise, stream back | 30,000 ms | not tested | 0 ms, engine level |
+| T8 | clean | 14 of 14 | 14 of 14 |
+| Installer | 30 MB | 3.1 MB | 3.1 MB |
 
-## 12. The merge step (4 October 2026)
+## 14. What changed in the world during the run
 
-Done after the measuring, on the tree of `f2e03bf` plus the edits below. Logs are under `D:\dev\d5\w5b-merge\`.
-
-### Edits (each test first)
-
-1. **Walk answer check** (`web/e2e/desktop/app.ts`, `failedAnswers`). It now leaves out an answer that carries the offline demo's refusal header. This is the cause of the two T8 failures of section 7: the demo declined the workspace store routes on purpose, because the page keeps its own copy. The fixture and real backends never set the header, so their runs are as strict as before. Born failing: two new cases in `web/scripts/playwrightOffline.test.ts` (the refusal is dropped; a 404 without the header, a header with another value and a 500 stay). The demo API itself was not changed.
-2. **T8 self-match** (`desktop/harness/modes/t8.mjs`). The "another run is alive" check counted the harness's own `--playwright` flag. It now leaves out the harness process and its parents (`testRunPids`). Born failing: a case in `desktop/harness/tests/t8.test.mjs`. The documented command (`node run.mjs --mode t8 --playwright`) now starts.
-3. **Reproduction line of the report** (`desktop/harness/report.mjs`, `newestReproduction`). The report took the first reproduction verdict in a folder, which could be an earlier dry one. It now takes the newest real verdict and falls back to a dry one only when no other exists. Born failing: a case in `desktop/harness/tests/report.test.mjs`.
-
-Two defects listed for this step were already gone: the offline demo test (`e2e:offline` passes) and the missing temporary state folder in `smoke_real.ps1` (it sets `NQT_STATE_DIR` and `NQT_JOBS=off` itself).
-
-### Checks, run once on this tree
-
-| Check | Result |
-| --- | --- |
-| Backend suite, through `record_green.ps1 -Check backend` | 4,065 passed, 1 skipped, 86 s; record `2026-10-04_backend.json` |
-| QA tests (`terminal/qa/tests`) | 333 passed |
-| Crosscheck strict, then `crosscheck.served`, through `record_green.ps1 -Check crosscheck` | strict: 2,495 pass, 0 fail, 0 skip (104 info); served through the app-launched backend: 8 of 8 routes equal (6 byte-equal, 2 equal before the gate block with only `cached` and `reads_this_process` differing); record `2026-10-04_crosscheck.json` |
-| `test:types`, `test:e2e-types`, `gen-api --check` | all exit 0 |
-| vitest | 496 files, 7,383 passed, 47 skipped |
-| Playwright `e2e` | 539 passed (14.9 min) |
-| Playwright `e2e:offline` | 190 passed, 3 skipped |
-| Playwright `e2e:desktop` (smoke build of `release-b`, clean PATH) | 42 passed, window watch clean |
-| Playwright `e2e:perf`, alone | 3 passed (HOME first render median 614 ms against 1,500; fills grid opens in 67 ms against 500; GIP pan and zoom p95 17.8 ms and 18.1 ms at 60 frames a second) |
-| T8 (section 7) | 14 passed |
-| Harness node tests | 119 passed (118 before the three new cases of this step) |
-| `desktop\scripts\check.ps1` | exit 0, 30 steps PASS (fmt, clippy for three feature sets, cargo tests for three, deny, deny plant 64 of 64, audit, advisories, dist scan, scripts tests 163, harness tests 119, release-check tests, install-test self-test, order scan, look css, module scope, release-profile smoke build, PE and loader checks); the born-failing no-show proof was not run (it needs screen 2) |
-| `smoke_real.ps1`, browser mode, through `record_green.ps1 -Check smoke` | passed; research files unchanged; record `2026-10-04_smoke.json` |
-| `smoke_real.ps1 -Mode App`, through `record_green.ps1 -Check smoke-app` | passed; record `2026-10-04_smoke-app.json` |
-| `web/dist` | rebuilt; same hash as before (`cb41280e...d55d`) |
-| `build-release.ps1 -Version 0.1.0 -OutRoot D:\dev\release-c`, target `D:\dev\targets\int1` | 0 failures; installer `nq-lab terminal_0.1.0_x64-setup.exe` 3,253,179 bytes, sha256 `6dbf8f49709fca3d7f934e94e88f657de00dad426da49e7df61a39ef4bd2eca0` (the `release-b` installer was 3,253,192 bytes: the builds differ by 13 bytes and the hash changes with every rebuild); the folder `D:\dev\release` was not touched |
-| `artefact-check.mjs`, `install-test.ps1` on the new folder | artefact check passed (17 files, 2 installers); install test 52 steps, 0 failed, 0 windows |
-| `report.mjs D:\dev\d5\runs --check` | exit 1, naming exactly the rows that were not measured: the four measure-build rows, the soak row (its record sits in `D:\dev\d5\soak` and carries the old `window-fail` status, so the report cannot count it) the real minimise check and the simulated minimise (not tested: page-level driver only; the report now says so, test first in `desktop/harness/tests/report.test.mjs`); no figure differs from its raw record |
-
-### The release check
-
-`release_check.ps1 -Tag desktop-v0.1.0 -ReleaseDir D:\dev\release-c\0.1.0 -RequireSmokeApp`: PASS for the tag name, the four records (same day, same PC, same stamp), the artefact provenance (built from this tree), the record inputs (the smoke exe is the release payload; `web/dist` and the dumps are those the checks used), `SHA256SUMS` (16 files) and the artefact check. **One FAIL: the clean-tree check** (tracked files differ from HEAD and three files are untracked), because nothing is committed yet. The `ReleaseDir` argument also makes the run a self-test by the script's own rule (a WARN), so it is not a release check in any case. The check cannot pass before the manager commits, and the commit changes HEAD and so the stamp of every record and of the artefacts: W6 records and builds again on the committed tree, then runs the check on the default folder `D:\dev\release\0.1.0` (which holds the older build the soak ran from). No tag was created.
-
-### Safety and state, before and after
-
-- Port 8765: still listening, pid 46084, never touched. No process outside this run was stopped.
-- Research files: `ledger.csv`, `registry.csv` and `oos_openings.json` byte-equal; `jobs.json` sha256 unchanged (`44CAE38A...72D4`); `backtests/output` unchanged (139 entries at the top level).
-- `oos_access_log.jsonl` grew by 281 lines (22,023 to 22,304): every new line has caller `terminal`, no window ends after 2022-01-01 (the exclusive fence), no line is torn.
-- `terminal/state`: the only new files are the four dated records under `state/release` (git-ignored); nothing else.
-- C: free space 96,242 MB before the merge and 95,579 MB after (663 MB): the outputs of this step are on D:, and the movement came from the browser and installer test runs and other programs; it is recorded, not a stop (manager decision 4).
-
-### Round 2 review
-
-Read against the raw records: the series B figures of section 3 were re-read with `report.mjs` and match (backend ready 1,378, cold HOME 5,048, idle 1,081.9); the soak's 1,577.4 MB is in its raw record; the gate readings, rejected runs and the 8765 checks are as stated in sections 1 to 6. Nothing was found that changes a figure. The wording of the verdict was tightened on three points: the soak row is stated by the harness's largest-sample rule and also as the steady figure; the first-launch row is reported against the 5,000 ms ceiling that governs (register 1.1) and not against the 6,000 ms cap; T4 is reported as firing, with the decision (lower the caps and re-check route times) left to the owner.
-
-## 13. The release check after the review fixes (4 October 2026)
-
-Done on the tree of `f2e03bf` plus the merge edits, the review fixes and the two defect fixes below. Logs are under `D:\dev\d5\w5b-final\`. Nothing was rebuilt and no figure of sections 2 to 9 was re-measured; this pass re-ran the suites and re-recorded the dated records.
-
-### Defect fixed in this pass
-
-- **The report read the page-level simulated minimise as within ceiling.** The harness verdict already refused such a run (NOT TESTED), but `report.mjs` still read its raw figure (0 ms, `engineLevel: false`) and printed `within-ceiling`. It now reads `not-tested` and `--check` names it as a problem. Born failing first: two cases in `desktop/harness/tests/report.test.mjs` (the page-level run reads not tested; an engine-level run still reads within ceiling).
-- **The installer figure in the verdict named the wrong build.** It gave 3,253,179 bytes (the `release-c` self-test build); the harness read 3,253,192 bytes from `release-b`. Corrected, with the range of the three builds (3,253,179 to 3,253,317 bytes, all 3.1 MB).
-
-### Results
-
-| Check | Result |
-| --- | --- |
-| Harness node tests | 143 passed |
-| Backend suite (`-n 16 --dist loadfile`) | 4,075 passed, 1 skipped (4,065 before the ten cases of the two new documentation tests) |
-| QA tests | 333 passed |
-| vitest | 496 files, 7,383 passed, 47 skipped |
-| `test:types`, `test:e2e-types` | exit 0 |
-| Playwright `e2e` (8 workers) | 538 passed, 1 failed: `reflow-200.spec.ts` EQ-run, page not mounted within 45 s while the type checks and vitest ran beside it; the whole file (133 tests) passed alone on the rerun |
-| Playwright `e2e:offline` | 190 passed, 3 skipped |
-| Playwright `e2e:desktop` (smoke build of `release-b`, clean PATH) | 42 passed |
-| Playwright `e2e:perf`, alone | 3 passed, CPU 3.1% over the 30 seconds before |
-| `report.mjs D:\dev\d5\runs --check` | exit 1, naming the four measure-build rows, the soak row, the real minimise check and the simulated minimise (not tested); no figure differs from its raw record |
-
-### The release check
-
-`release_check.ps1 -Tag desktop-v0.1.0` on the default folder `D:\dev\release\0.1.0`, run after the records of this pass: it fails the clean-tree check (nothing is committed) and the artefact provenance check (that folder was built from an older commit, `e0834c1`, and is the one the soak ran from). It cannot pass before the manager commits; the commit changes HEAD, so W6 records and builds again on the committed tree and then runs it on the default folder. No tag was created.
+During the measuring nothing in `terminal/` was edited; the tree's stamp is the same in every record. The tools of this wave are outside the repository in `D:/dev/w5c/tools`: `t4t5.mjs` (a copy of the W5B tool with the output folder moved and an `app-home` mode added that reads the app by the browser method), `reinstall-measure.mjs` (the install), the read-only lab check, `chain1.sh`, `chain2.sh`, `explore.sh`, `soak-sampler.mjs` (the outside soak sampler) and `facts.mjs` (prints every figure above from the raw files into `D:/dev/w5c/measure-runs/facts.json`). C: free space 96,706 MB at the start and 96,693 MB after the timing rows; every output of this wave is on D:.
