@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in the terminal or the Windows desktop app does not work as it should.
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. Please check the [open issues](https://github.com/FatihHekim0glu/nq-terminal/issues) first.
+
+        This terminal is read only: it never places, changes or cancels an order. If you think you have found a way to make it do that, or any other security problem, do not post it here. Use the Security tab of this repository (see the security policy) to report it privately.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The desktop app version (for example 0.1.0), or the commit you are running (`git rev-parse --short HEAD`).
+      placeholder: "0.1.0 or a commit hash"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Operating system and version
+      description: For Windows, the version shown by `winver` (for example Windows 11 24H2, build number). For macOS or Linux, say which.
+      placeholder: "Windows 11 24H2, build 26100"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where you ran it
+      options:
+        - Windows desktop app (installer)
+        - Browser, full terminal (start.ps1 or start.sh)
+        - Browser, demo (DEMO DATA)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+      description: Leave empty for the desktop app.
+      placeholder: "Chrome 140"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps, starting from a fresh start of the terminal. Name the screen and the command you typed (for example `GP <GO>`).
+      placeholder: |
+        1. Start the terminal.
+        2. Type ...
+        3. Press ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happened instead. A screenshot helps for anything visual.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and output
+      description: |
+        Paste the error text, the launcher output or the browser console lines that matter.
+        Before you post, remove anything private: your user name and folder paths if you do not want them public, session links, tokens, and anything from your own research files. A session link (`/session.html#...`) is a one-time code, but do not paste it anyway.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed private details from everything I pasted.
+          required: true
+        - label: This is not a security problem (those go through the private report under the Security tab).
+          required: true

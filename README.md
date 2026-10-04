@@ -1,64 +1,77 @@
 <h1 align="center"><img src="docs/media/banner.svg" alt="nq-terminal: keyboard-first, read-only terminal for NautilusTrader NQ-futures research" width="100%"></h1>
 
 <p align="center">
+  <a href="#status">Status</a> ·
   <a href="#try-the-demo">Try the demo</a> ·
+  <a href="#install-on-windows">Install on Windows</a> ·
+  <a href="#start-it-from-source">Start it from source</a> ·
   <a href="#screens">Screens</a> ·
-  <a href="#keyboard-first">Keyboard</a> ·
-  <a href="#start-it-on-macos-or-linux">macOS and Linux</a> ·
-  <a href="#full-setup-with-nq-lab">Full setup</a> ·
-  <a href="#architecture">Architecture</a> ·
+  <a href="#how-it-is-built">How it is built</a> ·
   <a href="#safety-model">Safety model</a> ·
-  <a href="#analytics-and-qa">Analytics and QA</a>
+  <a href="#testing-and-quality-gates">Testing</a> ·
+  <a href="#documentation">Docs</a>
 </p>
 
 <p align="center">
   <a href="#safety-model"><img src="https://img.shields.io/badge/read%20only-no%20order%20path-870F1E?style=flat-square&labelColor=191919" alt="read only: no order path"></a>
   <a href="#try-the-demo"><img src="https://img.shields.io/badge/demo-runs%20in%20the%20browser-FFB000?style=flat-square&labelColor=191919" alt="demo: runs in the browser"></a>
-  <a href="#architecture"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
-  <a href="#architecture"><img src="https://img.shields.io/badge/front%20end-React%2019%20%C2%B7%20TypeScript%206%20%C2%B7%20Vite%208-D7D7D7?style=flat-square&labelColor=191919" alt="front end: React 19, TypeScript 6, Vite 8"></a>
+  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.1.0%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.1.0 for Windows, unsigned"></a>
+  <a href="#how-it-is-built"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
 </p>
 
 <p align="center">
   <img src="docs/media/hero-home.webp" width="100%" alt="nq-terminal HOME screen in demo mode: four linked panels showing NQ1 Index daily candles with volume and RV22, the 27-futures monitor, the volmanaged_v0 equity curve against its benchmark, and the registry board, with the READ ONLY, NO ORDER PATH and DEMO DATA flags at top right">
 </p>
-<p align="center"><em>HOME in demo mode: candles, the 27-futures monitor, a hypothesis equity curve and the registry board, linked by groups A and B. Demo prices are synthetic; every screen carries the DEMO DATA flag.</em></p>
+<p align="center"><em>HOME in demo mode. Demo prices are synthetic, and every screen carries the DEMO DATA flag.</em></p>
 
-**nq-terminal**, the research terminal for nq-lab, runs on your machine and reads nq-lab's NautilusTrader research on
-NQ futures. One keyboard-driven screen shows the pre-registered hypotheses, the backtest runs and their analytics, the
-out-of-sample audit trail, the sealed results and the IB paper book's journals. The look is a dense, flat-black
-terminal: amber on black, function keys, a command line.
+**nq-terminal** is a local research terminal for nq-lab, a private NautilusTrader research project on NQ (Nasdaq-100
+E-mini) futures. It runs on your own machine and shows that research on one keyboard-driven screen: the pre-registered
+hypotheses, the backtest runs and their analytics, the out-of-sample audit trail, the sealed results and the journals of
+the IB paper book. It looks like a dense, flat-black terminal: amber on black, function keys and a command line. It comes
+as a web app you start from a script, and since 4 October 2026 also as a Windows desktop app.
+
+It is not a trading platform. It never places, modifies or cancels an order, never connects to a real broker account,
+and reads market data only through nq-lab's data gate, which serves nothing after the in-sample end date of 2021-12-31.
+Tests enforce all three. It is a personal research tool shared in public: the code is here to read and to try in demo
+mode, and the full terminal needs the private nq-lab checkout beside it.
 
 > [!IMPORTANT]
-> The terminal never places, modifies or cancels an order. It has no order path, and tests fail if one appears.
+> The terminal has no order path. Tests fail if an order call, or a route or component named like an order action,
+> appears anywhere in the terminal.
+
+## Status
+
+As of 4 October 2026:
+
+- **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 81 API paths.
+- **Windows desktop app, 0.1.0.** Released as the annotated tag `desktop-v0.1.0` (commit `8122c87`): an unsigned,
+  per-user installer of 3,253,432 bytes ([hand-over](docs/desktop/handover_windows.md), section 1).
+- **Gate G2 (speed and memory on Windows).** The automated part of G2 has **not** passed. One row is over its
+  ceiling: whole-app idle memory at HOME reads 505.4 MB against a 500 MB ceiling. Every other row measured
+  automatically is inside its ceiling, among them first-launch cold HOME at 3,167 ms and a 2-hour soak whose largest
+  sample was 705.8 MB (a partial run, not all day). The owner-attended checks (screen readers, real keyboard, visible run, SmartScreen first run and others) are
+  still pending. Source: [G2 verdict](docs/desktop/g2_windows/verdict.md).
+- **Next: 0.1.1.** A fix for the idle-memory row is in progress and will ship as 0.1.1. It is not part of 0.1.0.
+- **macOS app.** Not built. It waits for its own gate (G1). On macOS and Linux, use the web terminal or the demo.
 
 ## Highlights
 
-- **Read only by construction.** All 81 API paths are GET, bar three writes: the `JOBS` backtest queue (`POST /api/jobs` and
-  `DELETE /api/jobs/{job_id}`) and the workspace store (`PUT /api/workspaces/{doc}`), and tests fail on any other method or on a write call in the backend. See the
-  [safety model](#safety-model).
-- **No order path.** The one IB client is read only (an optional paper snapshot on client id 95), and tests fail on an
-  IB order call or on any route or component named like an order action.
+- **Read only by construction.** All 81 API paths are GET, bar three writes: queueing and stopping a backtest on the
+  `JOBS` screen (`POST /api/jobs`, `DELETE /api/jobs/{job_id}`) and saving a workspace (`PUT /api/workspaces/{doc}`).
+  Tests fail on any other method.
 - **One gated door to prices.** Every price read goes through nq-lab's out-of-sample gate, which decides and logs it.
-  Nothing after 2021-12-31 is served.
 - **Honest labels.** `[PRE-REG]` marks a value read from a registered result and `[POST HOC]` one the terminal
   computed. Sealed windows show as spent. The terminal adds no pass or fail of its own.
 - **Keyboard first.** 30 mnemonics on a command line drive dockable panels that link by group and share a time
-  crosshair; `HL` searches functions, metrics, instruments and help text. See [Keyboard first](#keyboard-first).
-- **A layout you can get back.** `RESET` puts a screen's layout back and `UNDO` restores yours (the last 10 changes);
-  `SAVE`, `LOAD` and `FORGET` keep named workspaces; a `#go=` link reopens a view.
-- **Exports keep their labels.** `GRAB` saves a panel as an image with its basis, unit, tag and source in the caption;
-  DES and the tear sheet also make an HTML evidence pack and a print dossier, from the answers already on screen.
-- **Notices what changed.** `WATCH` and a `NEW` or `CHG` mark on REG, RUNS and LEDG show which research records are new
-  or were rewritten since you last looked; a connection strip says when the backend stops answering.
-- **Three implementations of the headline metrics.** The terminal's own functions, Nautilus statistics and
-  reference libraries must agree. See [Analytics and QA](#analytics-and-qa).
-- **Accessible.** The target is WCAG 2.2 AA. [`contrast.test.ts`](web/src/theme/contrast.test.ts) holds every text
-  pair at 4.5:1 and every graphic pair at 3:1, in the default theme and both colour-vision-deficiency themes. Every
-  canvas chart carries a data summary and a table view.
+  crosshair. `HL` searches functions, metrics, instruments and help text.
+- **Exports keep their labels.** `GRAB` saves a panel as an image whose caption names its basis, unit, tag and source.
+- **Three implementations of the headline metrics.** The terminal's own functions, Nautilus statistics and reference
+  libraries must agree ([Testing](#testing-and-quality-gates)).
+- **Accessible by target.** WCAG 2.2 AA, with colour contrast pinned by a test in every theme ([Accessibility](#accessibility)).
 
 ## Try the demo
 
-The first quick start needs no backend and no nq-lab. You need Node 24 (`web/.nvmrc` says 24, `engines` in
+The demo needs no backend, no Python and no nq-lab. You need Node 24 (`web/.nvmrc` says 24, `engines` in
 `web/package.json` asks for 24 or later, and `web/pnpm-workspace.yaml` sets `engineStrict: true`) and pnpm 11 through
 corepack, which may ask once to download pnpm 11.5.1.
 
@@ -68,70 +81,206 @@ On macOS or Linux, from the repository folder:
 ./start.sh --demo
 ```
 
-On any system, including Windows:
+On any system, Windows included:
 
 ```sh
 corepack pnpm --dir web install
 corepack pnpm --dir web demo
 ```
 
-Open http://127.0.0.1:5174. The terminal opens on HOME, with DEMO DATA in the frame strip and on the
-status line. `./start.sh --demo` installs the web dependencies when they are missing and opens the browser itself;
-`./start.sh doctor` says what a plain start would do on your machine (see [Start it on macOS or
-Linux](#start-it-on-macos-or-linux)).
+Open http://127.0.0.1:5174. The terminal opens on HOME, with DEMO DATA in the frame strip and on the status line.
 
-## Demo mode
-
-Demo mode runs the whole terminal in the browser on fixture data. Before the terminal renders, the demo replaces the
-page's fetch and EventSource: it answers `/api` inside the page and refuses any request that is not a GET and any
-other origin, including a real backend on 127.0.0.1:8765. Nothing is sent to a backend.
+Before the terminal renders, the demo replaces the page's fetch and EventSource and answers `/api` inside the page from
+fixtures. It refuses any request that is not a GET and any other origin, a real backend on port 8765 included, so
+nothing is sent anywhere.
 
 > [!NOTE]
-> DEMO DATA marks all of it: registry records captured from the real research files, hypothesis pages from those files
-> and from the fixture backend, the fixture backend's runs and analytics, synthetic prices that never pass through the
-> gate, and market views (`MON`, `CORR`, `VCONE`, `SEAS`, `EVT`) that are seeded or hand-built fillers on the backend's
-> scale, not statistics of real prices. LIVE and JRNL replay a recorded journal through an in-page event stream. FIXTURE
-> DATA is the same warning for a real backend that reads the fixture folder; the two are never shown together.
-
-- **What is captured and what is not.** In the demo, `HELP <GO>` opens with About this demo, which says which answers
-  are captured, which are synthetic and which are gaps. The route table is
-  [`web/src/demo/routes.ts`](web/src/demo/routes.ts): one handler per contract path, typed so that a missing path
-  fails the compile.
-- **Gaps say so.** A path, run or request the demo holds no honest body for answers "not in the demo dataset", and
-  the screen shows that text. It is a gap in the demo, not a fault and not a finding. (`JOBS` and the IB snapshot
-  answer as a server with both off.)
-- **GET only.** The demo refuses any other method in the page, before anything else looks at the request.
-- **No demo code in a production build.** [`bundleCheck.ts`](web/scripts/bundleCheck.ts) fails a production build that
-  contains demo code, and fails a demo build that lacks it.
-- **Not for publishing.** A built demo bundle carries snapshots of real research files. It is for your own machine.
+> DEMO DATA marks all of it: registry records captured from the real research files, the fixture backend's runs and
+> analytics, synthetic prices that never pass through the gate, and market views (`MON`, `CORR`, `VCONE`, `SEAS`,
+> `EVT`) that are seeded fillers, not statistics of real prices. In the demo, `HELP <GO>` opens with "About this demo",
+> which says which answers are captured, which are synthetic and which are gaps.
 
 <details>
-<summary>Build a static demo bundle</summary>
+<summary>More about the demo</summary>
 
-```sh
-corepack pnpm --dir web build:demo
-```
-
-This writes `web/dist-demo` (git-ignored) and runs the bundle check with `--demo`.
+- **Gaps say so.** A path or request the demo holds no honest body for answers "not in the demo dataset". That is a
+  gap in the demo, not a fault and not a finding. The route table is [`web/src/demo/routes.ts`](web/src/demo/routes.ts):
+  one handler per contract path, typed so that a missing path fails the compile.
+- **No demo code in a production build.** [`bundleCheck.ts`](web/scripts/bundleCheck.ts) fails a production build that
+  contains demo code, and a demo build that lacks it.
+- **Static bundle.** `corepack pnpm --dir web build:demo` writes `web/dist-demo` (git-ignored). A built demo bundle
+  carries snapshots of real research files, so it is for your own machine, not for publishing.
 
 </details>
 
-## Walkthrough
+## Install on Windows
 
-<p align="center"><img src="docs/media/walkthrough.gif" width="100%" alt="Animated walkthrough in demo mode: from HOME, the commands REG, volmanaged_v0 DES, volmanaged_v0 RET and HOME are typed at the command line and each screen opens in turn"></p>
-<p align="center"><em>Four commands typed at the command line in demo mode: <code>REG</code>, <code>volmanaged_v0 DES</code>, <code>volmanaged_v0 RET</code>, then <code>HOME</code>. 15 s loop.</em></p>
+The desktop app is a Tauri shell ([`desktop/`](desktop/README.md)) that opens one window over the page the lab's own
+backend serves. **It is not standalone:** on first run it asks for an nq-lab folder and accepts one only when it holds
+the lab's virtual environment and this terminal. Without the private nq-lab checkout, use the [demo](#try-the-demo).
+
+**1. Get the installer.** Installers are attached to releases on this repository's
+[Releases page](https://github.com/FatihHekim0glu/nq-terminal/releases). On the build PC the owner's copy sits in the
+release folder that section 2 of the [hand-over](docs/desktop/handover_windows.md) names, with `SHA256SUMS` and
+`PROVENANCE.json` beside it.
+
+| Release | File | Size | SHA256 |
+|---|---|---:|---|
+| `desktop-v0.1.0` | `nq-lab terminal_0.1.0_x64-setup.exe` | 3,253,432 bytes | `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` |
+
+**2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:
+
+```powershell
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.1.0_x64-setup.exe' | Format-List Algorithm,Hash
+```
+
+PowerShell prints the hash in capitals; compare it with the value above without regard to case. If it differs by one
+character, delete the copy and do not run it.
+
+**3. Expect SmartScreen.** The installer is unsigned by the owner's decision, so a downloaded copy shows "Windows
+protected your PC" with "Unknown publisher". After you have checked the hash, choose "More info", then "Run anyway". If
+Smart App Control is on, Windows refuses an unsigned program outright with no "Run anyway" button. Why the build is
+unsigned, what signing would cost and the record to keep of the first run are in
+[`docs/desktop/smartscreen.md`](docs/desktop/smartscreen.md).
+
+**4. Install.** The installer is per user and never asks for administrator rights; if a prompt asks for them, cancel it.
+
+- The default folder is `%LOCALAPPDATA%\Programs\nq-lab terminal`. You can pick another; the installer refuses a drive
+  root, a network path, Program Files, the Windows folder and any folder holding files that are not its own.
+- It creates the folder with a protected permission list (you, SYSTEM and Administrators only) and adds a Start menu
+  entry and an uninstall entry. It installs no lab and no data.
+- On first run, choose your nq-lab folder and the WebView2 data folder. The app saves both in `settings.json` under
+  `%APPDATA%\dev.nqlab.terminal`.
+
+**Uninstall and roll back.** Uninstall from Settings, Apps, "nq-lab terminal", or run `uninstall.exe` in the install
+folder. The uninstaller removes only what the installer wrote; the lab, its research files and `terminal\state` are
+never touched. There is no updater: an update is a new installer run by hand. To roll back, uninstall, then install the
+older installer after checking its hash. Back up your workspaces first, and leave the "delete app data" box in the
+uninstaller unticked unless you mean to reset the app: ticked, it removes `%APPDATA%\dev.nqlab.terminal`, including
+`settings.json`. Sections 2 to 6 and section 8 of the [hand-over](docs/desktop/handover_windows.md) have the exact
+commands, the permission check and the troubleshooting table.
+
+The app and the browser terminal can run at the same time. They share one backend per lab: whichever starts first owns
+it and the other attaches. Every `/api` path, on either door, answers 401 without the session token.
+
+## Start it from source
+
+### Windows, with nq-lab
+
+The folder sits inside the nq-lab checkout as `nq-lab\terminal`. The backend runs in the nq-lab virtual environment
+(`nq-lab\.venv`), which provides `nq_lab`, `nautilus_trader`, FastAPI and uvicorn, and reads the research files next
+to it. Neither is in this repository. You also need Node 24 and pnpm 11 for the front end, and uv for the cross-check.
+
+From the `nq-lab` folder, in PowerShell:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1
+```
+
+The script checks that the venv imports FastAPI and uvicorn, rebuilds `web\dist` when it is older than the sources
+(`pnpm install --frozen-lockfile`, then `pnpm build`), starts the backend on http://127.0.0.1:8765 with an allow-listed
+environment, and opens the browser on a one-time link that swaps its code for a session cookie. The code lives 60
+seconds and works once. **Closing the script's window stops the backend**; Ctrl+C does the same. When a backend of this
+lab is already running (the desktop app's, for example), the script attaches to it and starts nothing.
+
+In the browser, type a function code in the command line and press Enter (`<GO>`). `HELP <GO>` lists every function
+and key.
+
+<details>
+<summary>start.ps1 options, fixture mode and ports</summary>
+
+| Option | Effect |
+|---|---|
+| `-Port 8790` | Serve on another loopback port (default 8765) |
+| `-NoBrowser` | Do not open the browser: print the one-time link instead |
+| `-NoBuild` | Serve `web\dist` as it is, even when it is older than the sources |
+| `-DryRun` | Print the plan (paths, commands, port, build decision) and start nothing |
+| `-Dev` | Backend under `uvicorn --reload`, plus the Vite dev server on 127.0.0.1:5173 |
+| `-DevPort 5180` | Serve the dev server on another port (default 5173) |
+
+`-Dev` is for front-end work: the dev server proxies `/api` to the port the backend's lock records. It stops with a
+message when a backend already holds the lock, so stop the normal server first.
+
+**Fixture mode** points the backend at the small test files in `backend\tests\fixtures` instead of the research files.
+Nothing there is a price source, so the chart and market screens answer 503; every other screen works.
+
+```powershell
+$env:NQT_FIXTURE_DIR = "$PWD\terminal\backend\tests\fixtures"
+powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1 -Port 8790
+Remove-Item Env:NQT_FIXTURE_DIR
+```
+
+**Read-only IB snapshot** (off by default):
+
+| Variable | Meaning |
+|---|---|
+| `NQT_IB_READONLY` | Set to exactly `1` to show a paper TWS or Gateway on this machine on `LIVE`, as API client 95: account summary, positions, working orders (view only) and today's executions |
+| `IB_HOST` | Default 127.0.0.1; a host that is not this machine is refused |
+| `IB_PORT` | Default 7497 (TWS paper; Gateway paper is 4002). The live ports 7496 and 4001 are refused |
+
+**Ports.** 8765 serves the built front end and `/api` from one origin; `-Dev` adds 5173; the demo runs on 5174; the
+Windows Playwright tests use 8795 and 4273 by default and refuse 8765; the offline Playwright tests use 4373 and 4374.
+All of them bind 127.0.0.1. The desktop app takes a free port of its own.
+
+</details>
+
+### macOS and Linux
+
+`start.sh` is the macOS and Linux counterpart of `start.ps1`. Run it from the repository folder:
+
+```sh
+./start.sh doctor
+./start.sh --dry-run --no-browser
+./start.sh
+```
+
+`./start.sh doctor` checks the machine (Node, the web dependencies, corepack, a browser for Playwright, the nq-lab
+virtual environment, the ports, the API types and the age of `web/dist`) and says which mode a plain start would pick.
+A `FAIL` line is advice, not a gate: without nq-lab the demo still starts.
+
+| Mode | When | What starts |
+|---|---|---|
+| FULL | The nq-lab venv is found (`.venv/bin/python` in the folder above this one, or in `NQT_LAB_ROOT`) and imports FastAPI, uvicorn and `nq_lab` | The backend on http://127.0.0.1:8765, serving the built front end and `/api` |
+| FIXTURE | As FULL, with `NQT_FIXTURE_DIR` set | The same, on the fixture files |
+| DEMO ONLY | No usable venv, or `--demo` | Vite serves the demo on http://127.0.0.1:5174 |
+
+<details>
+<summary>start.sh options and the Node guard</summary>
+
+| Option | Effect |
+|---|---|
+| `doctor` | Check this machine and say which mode would start |
+| `--demo` | Serve the demo, whatever the machine has |
+| `--full` | Need the backend: stop with a message when `nq_lab` is missing, instead of falling back to the demo |
+| `--dev` | Backend under `uvicorn --reload` on 8765, plus the Vite dev server on 127.0.0.1:5173 |
+| `--port N` | Serve on another loopback port, 1024 to 65535 |
+| `--no-browser` | Do not open the browser |
+| `--no-build` | Serve `web/dist` as it is, even when it is older than the sources |
+| `--dry-run` | Print the plan and start nothing |
+| `--help` | List the options |
+
+| Environment | Effect |
+|---|---|
+| `NQT_NODE` | A Node binary to run the launcher with |
+| `NQT_NODE_SWITCH=off` | Do not look for a newer Node when the default one is too old |
+| `NQT_LAB_ROOT` | The nq-lab folder that holds `.venv` (default: the folder above this one) |
+| `NQT_FIXTURE_DIR` | Serve the fixture files in this folder instead of the research files |
+
+The front end needs Node 24 or later; under Node 20, pnpm and vitest stop with `ERR_UNKNOWN_BUILTIN_MODULE` for
+`node:sqlite`, which says nothing about the cause. `start.sh` checks first. If the default Node is older, it looks for
+an installed Node 24 in a fixed list of local places, says which one it uses and runs itself again under it. If it
+finds none, it says how to install one and stops. It never installs anything.
+
+</details>
 
 ## Screens
 
-All images come from demo mode. The registry and multiple-testing views are the API's answers on the real research
-files, captured on 2026-09-27. The DES pages mix real answers with the fixture backend's; volmanaged_v0's, shown
-here, is the fixture backend's. Run and analytics bodies come from the fixture backend. Prices are synthetic, from a
-seeded generator, and never pass through the gate, and the market views (`MON`, `CORR`, `VCONE`, `SEAS`, `EVT`) are
-seeded or hand-built fillers on the backend's scale, not statistics of real prices.
+<p align="center"><img src="docs/media/walkthrough.gif" width="100%" alt="Animated walkthrough in demo mode: from HOME, the commands REG, volmanaged_v0 DES, volmanaged_v0 RET and HOME are typed at the command line and each screen opens in turn"></p>
+<p align="center"><em>Four commands typed in demo mode: <code>REG</code>, <code>volmanaged_v0 DES</code>, <code>volmanaged_v0 RET</code>, then <code>HOME</code>.</em></p>
 
-Nine of the twelve images keep the full 1920x1080 viewport, so the DEMO DATA flag and the status line stay in
-frame. OOS and LIVE + JRNL are cropped to their filled upper part, which keeps the DEMO DATA flag. The last image is
-not a screen: it is the file `GRAB` saves, at its own size. Click an image to open it at full size.
+All images come from demo mode. The registry and multiple-testing views are the API's answers on the real research
+files, captured on 2026-09-27; runs, analytics and the DES page shown here come from the fixture backend; prices are
+synthetic and never pass through the gate. Click an image to open it at full size.
 
 <table>
   <tr>
@@ -139,37 +288,29 @@ not a screen: it is the file `GRAB` saves, at its own size. Click an image to op
     <td width="50%" valign="top"><img src="docs/media/screen-reg-evidence.webp" width="100%" alt="REG 92) Evidence beside MT 85) Family: the evidence matrix lists every registry row against its recorded evidence, with columns from the result files and columns computed in the browser, and a note that no column is a score and there is no total"><br><sub><b>REG 92) Evidence</b> · Every registry row against its recorded evidence; no score, no total</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/media/screen-mt-replication.webp" width="100%" alt="REG beside MT 86) Replication: each sealed confirmation's p value drawn against its parent's registered in-sample p on reversed log axes, with the family alpha, the own alpha and the alpha over k lines, and a table of the one confirmation"><br><sub><b>MT 86) Replication</b> · A sealed confirmation's p against its parent's in-sample p; stored numbers only</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/screen-mt-replication.webp" width="100%" alt="REG beside MT 86) Replication: each sealed confirmation's p value drawn against its parent's registered in-sample p on reversed log axes, with the family alpha, the own alpha and the alpha over k lines, and a table of the one confirmation"><br><sub><b>MT 86) Replication</b> · A sealed confirmation's p against its parent's in-sample p</sub></td>
     <td width="50%" valign="top"><img src="docs/media/screen-des-robustness.webp" width="100%" alt="DES for volmanaged_v0 on the 5) Robustness tab: the verbatim hypothesis and pass bar above bar charts of the pre-registered variants, one for the Sharpe difference and one for alpha, the headline variant outlined"><br><sub><b>volmanaged_v0 DES 5) Robustness</b> · The variants the screen file recorded; nothing is recomputed</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/media/screen-des.webp" width="100%" alt="DES for volmanaged_v0: the verbatim hypothesis and pass bar, spec sha256 marked sha ok and re-hash ok, pre-registered KPI tiles, pass checks, the cost ladder, registration details and a spent sealed-window section"><br><sub><b>volmanaged_v0 DES</b> · One hypothesis: verbatim spec, pass bar, re-hashed spec, costs and linked runs</sub></td>
-    <td width="50%" valign="top"><img src="docs/media/screen-eq.webp" width="100%" alt="EQ for volmanaged_v0: equity against the same-exposure buy-and-hold benchmark under a row of KPI tiles, with a lower pane showing the performance difference"><br><sub><b>volmanaged_v0 EQ</b> · Equity against its benchmark; every tile carries its tag, and its popover names the basis and unit</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/screen-eq.webp" width="100%" alt="EQ for volmanaged_v0: equity against the same-exposure buy-and-hold benchmark under a row of KPI tiles, with a lower pane showing the performance difference"><br><sub><b>volmanaged_v0 EQ</b> · Equity against its benchmark; every tile carries its tag</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/media/screen-dd.webp" width="100%" alt="DD for volmanaged_v0: KPI tiles tagged POST HOC or PRE-REG, the equity curve against the same-exposure buy-and-hold benchmark, both underwater curves below it, and the top-drawdowns table with a -9.49% drawdown from 2011-04-27 to 2011-06-17, not yet recovered"><br><sub><b>volmanaged_v0 DD</b> · Drawdown: equity and underwater curves against the benchmark, deepest drawdowns listed</sub></td>
-    <td width="50%" valign="top"><img src="docs/media/screen-ret.webp" width="100%" alt="RET for volmanaged_v0: KPI tiles tagged POST HOC or PRE-REG, the return series beside a histogram with VaR and CVaR lines, summary and validity tables, and the Sharpe-difference card"><br><sub><b>volmanaged_v0 RET</b> · Returns and risk: VaR, CVaR, PSR and MinTRL beside the Sharpe-difference test</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/screen-dd.webp" width="100%" alt="DD for volmanaged_v0: KPI tiles tagged POST HOC or PRE-REG, the equity curve against the same-exposure buy-and-hold benchmark, both underwater curves below it, and the top-drawdowns table with a -9.49% drawdown from 2011-04-27 to 2011-06-17, not yet recovered"><br><sub><b>volmanaged_v0 DD</b> · Equity and underwater curves against the benchmark</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/screen-ret.webp" width="100%" alt="RET for volmanaged_v0: KPI tiles tagged POST HOC or PRE-REG, the return series beside a histogram with VaR and CVaR lines, summary and validity tables, and the Sharpe-difference card"><br><sub><b>volmanaged_v0 RET</b> · Returns and risk beside the Sharpe-difference test</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src="docs/media/screen-corr.webp" width="100%" alt="27F CORR: a clustered 27 by 27 futures correlation matrix over 252 sessions in red and green cells, with the rolling NQ against ZN correlation from 2010 to 2021 underneath"><br><sub><b>27F CORR</b> · Clustered correlation matrix with a rolling pair, on seeded demo values</sub></td>
     <td width="50%" valign="top"><img src="docs/media/screen-oos.webp" width="100%" alt="OOS: the out-of-sample gate's access log listing time, caller, reason, symbol, window, rows and result for each read, with two sealed reads flagged and the openings line showing a spent window"><br><sub><b>OOS</b> · The gate's access log: every read by caller, sealed reads flagged</sub></td>
   </tr>
   <tr>
-    <td width="50%" valign="top"><img src="docs/media/screen-live-jrnl.webp" width="100%" alt="LIVE above JRNL: the read-only paper book for MNQZ6 with target, held and exposure, a fixture row where the book halted after a reconciliation failure, order path none, and the journal list with plumbing rows hatched under their banner"><br><sub><b>LIVE + JRNL</b> · The paper book, read only, above its journals; plumbing rows never feed performance</sub></td>
-    <td width="50%" valign="top"><img src="docs/media/export-grab.webp" width="100%" alt="The image GRAB saves for the volmanaged_v0 EQ panel: the equity chart and its performance-difference pane, the resampled-paths cone, and a caption naming the panel, DEMO DATA, the Basis A tag line, the spent window and the GET paths the answer came from"><br><sub><b>GRAB</b> · The image <code>GRAB</code> saves for a panel: the charts with a caption of basis, tag, window, source and time</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/screen-live-jrnl.webp" width="100%" alt="LIVE above JRNL: the read-only paper book for MNQZ6 with target, held and exposure, a fixture row where the book halted after a reconciliation failure, order path none, and the journal list with plumbing rows hatched under their banner"><br><sub><b>LIVE + JRNL</b> · The paper book, read only, above its journals</sub></td>
+    <td width="50%" valign="top"><img src="docs/media/export-grab.webp" width="100%" alt="The image GRAB saves for the volmanaged_v0 EQ panel: the equity chart and its performance-difference pane, the resampled-paths cone, and a caption naming the panel, DEMO DATA, the Basis A tag line, the spent window and the GET paths the answer came from"><br><sub><b>GRAB</b> · The image <code>GRAB</code> saves, with a caption of basis, tag, window, source and time</sub></td>
   </tr>
 </table>
 
 The halted row on LIVE is a test fixture in the paper book's journal format. The terminal only displays journals; it
 never halts, reconciles or trades anything.
-
-**Exports.** Most tables have `98) Export`, which saves the table on screen as CSV. `GRAB <GO>`, or Grab as image in a
-panel's Options, saves the panel's charts as one PNG whose caption names the panel, the basis and tag line, the window,
-the `GET` paths the answer came from and the time; Copy image puts the same picture on the clipboard. On DES and the
-tear sheet, Options also has Evidence pack (HTML), one file with the key figures and tables, the charts as shown and
-their sources, and Print dossier, which opens the browser's print dialog (choose Save as PDF). All of them are built
-from answers already in the browser. They make no request and recompute nothing, so a tear sheet has to be open
-before a dossier can include it, and the DEMO DATA flag travels with a demo export.
 
 <details>
 <summary>What each screen holds</summary>
@@ -178,27 +319,30 @@ Numbers such as `92)` are the item numbers of a panel's views and tabs: type the
 
 | Screen | Views and features |
 |---|---|
-| `HOME` | Four linked panels: NQ1 Index daily candles, the 27-futures monitor, volmanaged_v0 equity and the registry board. A one-line orientation tells a first visit where to begin |
-| `REG` | 91) Board, the registry by round with verdict, n, p, Holm and BH q, plus the sealed confirmations; 92) Evidence, every row against its recorded evidence (`[PRE-REG]` columns from the result files, `[POST HOC]` columns computed in the browser); 93) Cost survival, one cost ladder per hypothesis on its own scale; 94) Effect map, annual Sharpe against track length for every trial, marked by verdict; 95) Compare, up to eight hypotheses marked with Space, their screen series drawn together. Filters, CSV export, and a Seen column that marks `NEW` and `CHG` rows |
-| `MT` | 85) Family, sorted p against the Bonferroni, Holm and BH lines, the adjusted table, the Deflated Sharpe view and a power table (the smallest annual Sharpe each registered test can detect); 86) Replication, each sealed confirmation's p against its parent's registered p; 87) Effective trials, the effective number of trials estimated from the trials' own return correlations, with the SR0 and Deflated Sharpe each N would set (served with the Deflated Sharpe view, an extra view only) |
-| `DES` | A hypothesis: 1) Profile with the verbatim spec and pass bar and the re-hashed spec; 2) Pass checks; 3) Costs and blocks; 4) Linked runs; 5) Robustness, the spec curve, exposure-shift placebo, leave-one-year-out and per-year stability, volatility quintiles, tails, recorded subsets and the forks of the hypothesis, all as the screen file records them. An instrument: Profile, Coverage, Notes and Contracts. 98) Report, and in Options the evidence pack and the print dossier |
-| `RUNS`, `RUN` | RUNS: every backtest run with badges and checks, filters 85) to 89), a Space basket of up to eight runs, and 90) Compare, their account equity rebased to 1.0 with the served statistics. RUN: tabs for the chart, trades and fills (the last two as a table or a pivot), the decision, close and roll logs, the config and the notes, and the ledger command to copy for an eligible run |
-| `EQ`, `DD`, `RET`, `RR`, `MRET` | The analytics tear sheet for a hypothesis (Basis A) or a run (Basis B). EQ and DD add a Market context toggle: the frozen stress windows as bands and the volatility regime as a strip. DD adds the deepest drawdowns as episode lanes, linked to its table. RET carries the Sharpe-difference card. A run's books add trade paths, holding times, streaks and the exposure composition |
-| `COST`, `BLK`, `EXPO`, `SEAL` | The cost ladder or a run's cost waterfall; the blocks of a hypothesis; a run's exposure and turnover, and its composition by instrument and by sector; the sealed-window files behind an allowlist |
-| `GP`, `GIP`, `MON`, `CORR` | Candles with roll markers, fills and an RV22 pane; one session intraday; the 27-futures monitor with 2Day sparklines; the clustered correlation matrix with a rolling pair |
-| `VCONE`, `SEAS`, `EVT`, `ROLL`, `DQ` | Volatility cone and the 27 futures at one horizon; seasonality by month, weekday, week of month, 30 minutes and month by year; event study around CPI, PPI, NFP and FOMC; roll calendar; data quality calendar and guard fingerprints |
-| `OOS`, `LEDG` | The gate's access log and openings (the log as a table or a pivot); the run ledger with its anchor pairs |
-| `LIVE`, `JRNL` | The paper book, read only: target against actual, Routes and Fills, paper against model tracking, and the paper book placed on its hypothesis's backtest expectation cone or on a cone resampled from the paper book's own sessions, chosen with a Backtest start / Live start toggle (`[POST HOC]`, resampled history, not a forecast, served by the backend); its journals with plumbing rows hatched. Server-sent events, or 2 s polling as a fallback |
-| `HELP` | Every function with runnable examples, the keys, a drawn keyboard, link groups, licences and a glossary of every label the terminal prints. `HL` searches all of it |
+| `HOME` | Four linked panels: NQ1 Index daily candles, the 27-futures monitor, volmanaged_v0 equity and the registry board |
+| `REG` | 91) Board, the registry by round with verdict, n, p, Holm and BH q, plus the sealed confirmations; 92) Evidence; 93) Cost survival; 94) Effect map; 95) Compare, up to eight hypotheses. Filters, CSV export and a Seen column that marks `NEW` and `CHG` rows |
+| `MT` | 85) Family, sorted p against the Bonferroni, Holm and BH lines, the Deflated Sharpe view and a power table; 86) Replication; 87) Effective trials |
+| `DES` | A hypothesis: Profile with the verbatim spec and the re-hashed spec, Pass checks, Costs and blocks, Linked runs and Robustness. An instrument: Profile, Coverage, Notes and Contracts |
+| `RUNS`, `RUN` | Every backtest run with badges and checks and a compare basket; one run's chart, trades, fills, logs, config and notes |
+| `EQ`, `DD`, `RET`, `RR`, `MRET` | The analytics tear sheet for a hypothesis (Basis A) or a run (Basis B) |
+| `COST`, `BLK`, `EXPO`, `SEAL` | Cost ladder or cost waterfall; the blocks of a hypothesis; a run's exposure and turnover; the sealed-window files |
+| `GP`, `GIP`, `MON`, `CORR` | Candles with roll markers and fills; one session intraday; the 27-futures monitor; the clustered correlation matrix |
+| `VCONE`, `SEAS`, `EVT`, `ROLL`, `DQ` | Volatility cone, seasonality, event study around CPI, PPI, NFP and FOMC, roll calendar and data quality |
+| `OOS`, `LEDG` | The gate's access log and openings; the run ledger with its anchor pairs |
+| `LIVE`, `JRNL` | The paper book, read only, with its expectation cone; its journals with plumbing rows hatched. Server-sent events, or 2 s polling as a fallback |
+| `HELP` | Every function with runnable examples, the keys, link groups, licences and a glossary of every label the terminal prints |
+
+**Exports.** Most tables have `98) Export` (CSV). `GRAB` saves a panel's charts as one PNG with a caption, and on DES
+and the tear sheet the Options menu also makes an HTML evidence pack and a print dossier. All are built from answers
+already in the browser: they make no request and recompute nothing, and the DEMO DATA flag travels with a demo export.
 
 </details>
 
 ## Keyboard first
 
 The command line reads `[NXTW] [context [SECTOR]] [FUNCTION [args]] [HELP] <GO>`. The context is an instrument (one
-of the 27 futures, or a generic ticker such as `NQ1`), a hypothesis, a run id, or `27F` for the universe. Leave it out
-to use the focused panel's link group. Examples: `NQ GP`, `NQ1 Index GP`, `volmanaged_v0 DES`, `27F CORR`, `REG`,
-`GP HELP`.
+of the 27 futures, or a generic ticker such as `NQ1`), a hypothesis, a run id, or `27F` for the universe. Examples:
+`NQ GP`, `volmanaged_v0 DES`, `27F CORR`, `REG`, `GP HELP`.
 
 | Key | Action |
 |---|---|
@@ -211,14 +355,14 @@ to use the focused panel's link group. Examples: `NQ GP`, `NQ1 Index GP`, `volma
 | <kbd>Home</kbd> | Focus the command line from anywhere else |
 | <kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Page back and forward; a number first (`3` <kbd>PgDn</kbd>) jumps that many pages |
 | <kbd>Shift</kbd>+<kbd>PgUp</kbd> / <kbd>PgDn</kbd> | Walk the command history |
-| <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd> | Focus panel 1 to 9 |
+| <kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>9</kbd> | Focus panel 1 to 9 |
 | <kbd>Ctrl</kbd>+<kbd>K</kbd> | Focus the command line and select its text |
 | <kbd>Alt</kbd>+<kbd>K</kbd> | Show or hide the key map |
-| `N` <kbd>Enter</kbd> | Run numbered item N of the focused panel: menu rows, tabs, the HELP index |
-| Chart focused | <kbd>Left</kbd> / <kbd>Right</kbd> step the crosshair one bar, <kbd>+</kbd> / <kbd>-</kbd> zoom, <kbd>Home</kbd> / <kbd>End</kbd> jump to the data ends, <kbd>T</kbd> toggles the table view |
+| `N` <kbd>Enter</kbd> | Run numbered item N of the focused panel |
+| Chart focused | <kbd>Left</kbd> / <kbd>Right</kbd> step the crosshair, <kbd>+</kbd> / <kbd>-</kbd> zoom, <kbd>T</kbd> toggles the table view |
 
-Panels in link group A, B or C share one context: setting it in one panel retargets every panel of the group and
-syncs their time crosshair. `HELP <GO>` lists every function and key.
+Panels in link group A, B or C share one context: setting it in one panel retargets every panel of the group and syncs
+their time crosshair.
 
 <p align="center"><img src="docs/media/command-line.webp" width="692" alt="The command line after typing VC: grouped suggestions for functions (VCONE), instruments (FV1 Comdty), hypotheses, runs and a help search"></p>
 <p align="center"><em>Suggestions group functions, instruments, hypotheses and runs as you type.</em></p>
@@ -226,31 +370,15 @@ syncs their time crosshair. `HELP <GO>` lists every function and key.
 <p align="center"><img src="docs/media/menu.webp" width="959" alt="The numbered related-functions menu over NQ, grouped into prices and markets, research, runs and performance, live and audit, and terminal, each item reachable by its number and GO"></p>
 <p align="center"><em>MENU lists related functions, numbered; type the number and <code>&lt;GO&gt;</code>.</em></p>
 
-### Command words
+**Command words.** Besides the mnemonics, the command line knows a few words that change the terminal and never the
+research: `HL text` (search), `MENU`, `LAST` (the last 8 commands), `MAIN`, `NO` (event tape on or off), `RESET` (put
+the screen's layout back), `UNDO` (the last 10 layout changes), `WATCH` (what changed in the research records since you
+marked them seen), `GRAB` (save the panel as an image), `SAVE NAME`, `LOAD NAME` and `FORGET NAME` (named workspaces,
+at most 12).
 
-Besides the 30 mnemonics, the command line knows a few words of its own. They change the terminal and never the research.
-
-| Word | Effect |
-|---|---|
-| `HL text` | Search functions, command words, metrics, instruments, help text, hypotheses and runs |
-| `MENU` | Open the related functions of the focused panel |
-| `LAST` | List the last 8 commands |
-| `MAIN` | The same as `HOME` |
-| `NO` | Turn the event tape on or off |
-| `RESET` | Put the shown screen's layout back to its default. The layout carries a `*` in the frame strip and on the status line once you have edited it |
-| `UNDO` | Undo the last layout change. The last 10 are kept until the page reloads |
-| `WATCH` | List what changed in the research records since you marked them seen: registry rows, confirmations, openings, ledger rows, gate log lines and runs. `WATCH SEEN` marks all of it as seen. It is a local change watch in this browser, not a proof |
-| `GRAB` | Save the focused panel's charts as one image, with a caption of their basis, tag, window, source and time. Options also has Copy image |
-| `SAVE NAME` | Keep the panels on screen as a named workspace: 2 to 16 letters, digits or `_`, starting with a letter, not a function or trading word; at most 12 |
-| `LOAD NAME` | Rebuild a saved workspace. `LOAD` alone lists them; the first six also get a tab in the frame strip |
-| `FORGET NAME` | Remove a saved workspace |
-
-**Links.** A panel's Options menu has Copy link and Copy link as Markdown. A link is `#go=<line>` in the address bar
-(up to 8 `go=` parts, each a command line in the command alphabet), replayed through the command line when the page
-opens. The fragment never leaves the browser, and it is cleared from the address bar once the link has run, so a
-reload does not run it twice. Links open screens, contexts and help only: the chrome words above (`RESET`, `UNDO`,
-`WATCH`, `GRAB`, `SAVE`, `LOAD`, `FORGET`), numbers and `HL` never run from a URL, and a link with any other line is
-refused whole. A page opened with no link at all restores the workspace you saved or loaded last.
+**Links.** A panel's Options menu has Copy link. A link is `#go=<line>` in the address bar, replayed through the
+command line when the page opens and then cleared. Links open screens, contexts and help only: the command words above,
+numbers and `HL` never run from a URL, and a link with any other line is refused whole.
 
 <details>
 <summary>All 30 mnemonics</summary>
@@ -293,204 +421,56 @@ and P2 (`JOBS`) with the owner's approval of 2026-10-01.
 
 </details>
 
-## Start it on macOS or Linux
-
-`start.sh` is the macOS and Linux counterpart of `start.ps1`. Run it from the repository folder. Everything it starts
-binds 127.0.0.1, and Ctrl+C stops everything it started.
-
-```sh
-./start.sh doctor
-./start.sh --dry-run --no-browser
-./start.sh
-```
-
-`./start.sh doctor` checks the machine: the Node version, the web dependencies, corepack, a browser for Playwright, the
-nq-lab virtual environment, the ports 8765, 5173 and 5174, whether the API types match the contract, and whether
-`web/dist` is older than the sources. Each line reads `ok` or `FAIL` with the fix, and the last says which mode a plain
-start would pick. A `FAIL` is advice, not a gate: without the nq-lab checkout the demo still starts.
-`./start.sh --dry-run` prints the plan (mode, Node, port, build decision, each step and anything that would stop it)
-and starts nothing.
-
-| Mode | When | What starts |
-|---|---|---|
-| FULL | The nq-lab virtual environment is found (`.venv/bin/python` in the folder above this one, or in `NQT_LAB_ROOT`) and imports FastAPI, uvicorn and `nq_lab` | The backend on http://127.0.0.1:8765, serving the built front end and `/api` from one origin. It first rebuilds `web/dist` when that is older than the sources (`pnpm install --frozen-lockfile`, then `pnpm build`) |
-| FIXTURE | As FULL, with `NQT_FIXTURE_DIR` set | The same, on the fixture files instead of the research files |
-| DEMO ONLY | No usable virtual environment, or `--demo` | Vite serves the [demo](#demo-mode) on http://127.0.0.1:5174. No Python is needed |
-
-| Option | Effect |
-|---|---|
-| `doctor` | Check this machine and say which mode would start |
-| `--demo` | Serve the demo, whatever the machine has |
-| `--full` | Need the backend: stop with a message when `nq_lab` is missing, instead of falling back to the demo |
-| `--dev` | Backend under `uvicorn --reload` on 8765, plus the Vite dev server on 127.0.0.1:5173 (both ports must be free) |
-| `--port N` | Serve on another loopback port, 1024 to 65535 (default 8765, the demo 5174; `--dev` needs 8765) |
-| `--no-browser` | Do not open the browser |
-| `--no-build` | Serve `web/dist` as it is, even when it is older than the sources |
-| `--dry-run` | Print the plan and start nothing |
-| `--help` | List the options |
-
-| Environment | Effect |
-|---|---|
-| `NQT_NODE` | A Node binary to run the launcher with |
-| `NQT_NODE_SWITCH=off` | Do not look for a newer Node when the default one is too old |
-| `NQT_LAB_ROOT` | The nq-lab folder that holds `.venv` (default: the folder above this one) |
-| `NQT_FIXTURE_DIR` | Serve the fixture files in this folder instead of the research files |
-
-**Node.** The front end needs Node 24 or later. Under Node 20, pnpm and vitest stop with `ERR_UNKNOWN_BUILTIN_MODULE`
-for `node:sqlite`, which says nothing about the cause. `start.sh` checks first. If the default Node is older, it looks
-for an installed Node 24 in a fixed list of local places (`NQT_NODE`, `NVM_BIN`, `~/.local/share/node-v*`,
-`~/.nvm/versions/node`, Volta, Homebrew's `node@24` and the system Node), says which one it uses, and runs itself again
-under it. If it finds none, it says how to install one (`nvm install 24`, or set `NQT_NODE`) and stops. It never
-installs anything.
-
-FULL and FIXTURE need this folder to sit inside the nq-lab checkout, as [Full setup](#full-setup-with-nq-lab) describes.
-The backend and its tests, and `pnpm e2e`, need `nq_lab` and are not run on a machine without it.
-
-## Windows desktop app
-
-On Windows the terminal also comes as a desktop app: a Tauri shell in [`desktop/`](desktop/README.md) that opens one
-window over the page the lab's own backend serves. The installer is unsigned and per-user, installs without an
-administrator prompt (into `%LOCALAPPDATA%\Programs` by default, or into a folder you pick, which is refused when it is
-a drive root, a network path, Program Files or the Windows folder), and Windows SmartScreen may warn on the first run.
-Install, update, roll back, the access-list runbook and the owner checks are in
-[`docs/desktop/handover_windows.md`](docs/desktop/handover_windows.md); the status of the build is in
-[`docs/desktop/README.md`](docs/desktop/README.md).
-
-The app and the browser door below share one backend per lab, so they can run at the same time: whichever starts first
-owns the backend and the other attaches to it. Every `/api` path, on either door, answers 401 without the session
-token. The app holds the token itself and never shows it. The browser door gets it as a one-time link from
-`start.ps1`. A terminal from before the token (an older backend on port 8765) is refused rather than attached to.
-
-## Full setup with nq-lab
-
-The second quick start runs the terminal on nq-lab's research files. The steps below are for Windows and
-PowerShell; on macOS or Linux use [`./start.sh`](#start-it-on-macos-or-linux) from the same layout.
-
-The folder sits at `nq-lab\terminal`. The backend runs in the nq-lab virtual environment (`nq-lab\.venv`), which
-provides `nq_lab`, `nautilus_trader`, FastAPI and uvicorn. It reads the research files next to it: results, specs,
-journals and the processed data, which are not in this repository.
-
-For the front end you need Node 24 and pnpm 11. The cross-check needs uv, which builds its own environment in
-`terminal\qa` and never touches `nq-lab\.venv`.
-
-From the `nq-lab` folder, in PowerShell:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1
-```
-
-The script checks that the venv imports FastAPI and uvicorn. When `web\dist` is older than the front-end sources it
-rebuilds it (`pnpm install --frozen-lockfile`, then `pnpm build`). It then starts the backend on
-http://127.0.0.1:8765 with an allow-listed environment and opens the browser on a one-time link
-(`/session.html#<code>`) that swaps its code for a session cookie. Every `/api` path, the live stream included,
-answers 401 without that cookie, and a write needs a same-origin `Origin` as well. The code lives 60 seconds and works
-once. The script keeps the backend's input open for as long as its window runs: **closing the window stops the
-backend** (it stops its jobs and exits within 5 seconds); Ctrl+C does the same. When a backend of this lab is already
-running, the script checks that it is the lab's own, opens a fresh link on it and starts nothing; it never stops a
-backend it did not start. If a terminal from before the token holds port 8765, the script says so and stops: close
-that terminal, then start again.
-
-In the browser, type a function code in the command line and press Enter (`<GO>`). `HELP <GO>` lists every function
-and key; see [Keyboard first](#keyboard-first).
-
-<details>
-<summary>start.ps1 options</summary>
-
-| Option | Effect |
-|---|---|
-| `-Port 8790` | Serve on another loopback port (default 8765) |
-| `-NoBrowser` | Do not open the browser: print the one-time link instead |
-| `-NoBuild` | Serve `web\dist` as it is, even when it is older than the sources |
-| `-DryRun` | Print the plan (paths, commands, port, build decision) and start nothing |
-| `-Dev` | Backend under `uvicorn --reload`, plus the Vite dev server on 127.0.0.1:5173 |
-| `-DevPort 5180` | Serve the dev server on another port (default 5173) |
-
-`-Dev` is for front-end work: the dev server proxies `/api` to the port the backend's lock records and keeps the
-browser's `Origin`. It stops with a message when a backend already holds the lock, so stop the normal server first;
-each reload ends the sessions and the script prints a fresh link.
-
-To see what the script would do without starting anything:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1 -DryRun
-```
-
-</details>
-
-<details>
-<summary>Fixture mode</summary>
-
-Fixture mode points the backend at the small test files in `backend\tests\fixtures` instead of the research files.
-Nothing there is a price source, so the chart and market screens answer 503; every other screen works.
-
-```powershell
-$env:NQT_FIXTURE_DIR = "$PWD\terminal\backend\tests\fixtures"
-powershell -NoProfile -ExecutionPolicy Bypass -File terminal\start.ps1 -Port 8790
-Remove-Item Env:NQT_FIXTURE_DIR
-```
-
-</details>
-
-Ports: 8765 serves the built front end and `/api` from one origin; `-Dev` adds the Vite dev server on 5173; the demo
-runs on 5174; the Windows Playwright tests use 8795 and 4273 by default and refuse 8765; the offline Playwright tests
-use 4373 and 4374. All of them bind 127.0.0.1.
-
-## Architecture
+## How it is built
 
 ```mermaid
 flowchart TB
   subgraph lab["nq-lab (private, not in this repo)"]
     files["Research files:<br/>results, specs, journals"]
-    serve["nq_lab.data.serve:<br/>OOS gate, logged"]
+    gate["Data gate:<br/>logged, in-sample only"]
   end
-  backend["FastAPI backend:<br/>127.0.0.1, GET only"]
-  web["React 19 front end:<br/>command line, dockview panels"]
+  backend["FastAPI backend:<br/>127.0.0.1 only, session token"]
+  web["React page:<br/>command line, dockable panels"]
+  browser["Browser door:<br/>start.ps1 or start.sh"]
+  shell["Desktop door:<br/>Tauri shell, WebView2"]
   contract["contract/openapi.json"]
-  demo["Demo fixtures:<br/>in-browser fetch"]
-  dumps["JSON dumps"]
+  demo["Demo fixtures:<br/>answered in the page"]
   qa["qa cross-check:<br/>reference libraries"]
 
   files --> backend
-  serve -->|"prices to 2021-12-31"| backend
-  backend -->|"/api, one origin"| web
-  contract -.->|"types"| web
-  contract -.->|"pinned by pytest"| backend
+  gate -->|"prices to 2021-12-31"| backend
+  backend -->|"/api and the page, one origin"| web
+  web --> browser
+  web --> shell
+  contract -.->|"types, checked both sides"| web
+  contract -.-> backend
   demo -.->|"demo mode only"| web
-  backend -->|"test run writes"| dumps
-  dumps --> qa
+  backend -->|"test dumps"| qa
 ```
 
-- **Backend.** FastAPI 0.141.1 on uvicorn 0.54.0 in the nq-lab venv, package `nq_terminal`, JSON through orjson. It
-  binds 127.0.0.1, answers GET only (bar the three writes), refuses every `/api` request that has no live session
-  cookie, and serves the built front end and `/api` from one origin.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 81 paths. pytest compares `app.openapi()` with
-  it; `pnpm gen:api` generates the front end's types with openapi-typescript, and `pnpm test` fails first when they
-  have drifted. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4.1 indexes all 81 paths with the screens that
-  read them, and a test keeps that index equal to the contract.
-- **Front end.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1: dockview panels under a command line built on cmdk,
-  with the terminal's own key handler, zustand and TanStack Query. Every screen loads lazily, and one GET client
-  ([`web/src/api/client.ts`](web/src/api/client.ts)) makes every request.
-- **Charts and grids.** uPlot for line stacks, TradingView Lightweight Charts for candles, Apache ECharts tree-shaken
-  to four series types (bar, line, scatter, custom) for its chart kinds, TanStack Table with virtual rows, and
-  Perspective pivots (WebAssembly) on LEDG, the RUN trades and fills, and the OOS log, each behind a Table or Pivot
-  toggle.
-- **Live data.** While LIVE or JRNL is on screen, `/api/live/stream` sends Server-Sent Events. The client falls back to
-  2 s polling when the browser has no EventSource, the stream is refused, or a reconnect takes over 8 s. A connection
-  strip shows API DOWN when `/api/health` stops answering, retries with a back-off and says how many requests it
-  retried when the backend returns.
-- **Demo.** [`web/src/demo/`](web/src/demo) replaces the page's fetch and EventSource before the terminal renders. Its
-  route table has one handler per contract path, typed so that a missing path fails the compile.
-- **Exports.** [`web/src/export/`](web/src/export) makes the GRAB image, the HTML evidence pack and the print dossier
-  from answers already in the browser; it loads on demand and makes no request of its own.
-- **Browser-side formulas.** [`web/src/quant/`](web/src/quant) holds the one formula the terminal still computes itself (power and
-  minimum detectable Sharpe), pinned to a reference in [`qa/golden/`](qa/golden) and shown as computed in the browser.
-  The effective number of trials and of members and the paper book's place on its cone are served by the backend; the
-  browser copies of their estimators are test references that no production file imports.
-- **qa.** A separate uv project (Python 3.12) pinning quantstats 0.0.82, empyrical-reloaded 0.5.12, arch 8.0.0,
-  statsmodels 0.15.0 and scipy 1.18.1. It reads the JSON dumps the backend tests write and never imports the backend.
+- **Backend.** FastAPI on uvicorn, package `nq_terminal` in [`backend/`](backend), run in the nq-lab virtual
+  environment. It binds 127.0.0.1, refuses every `/api` request without a live session, and serves the built page and
+  `/api` from one origin. One backend runs per lab, guarded by a lock file and a challenge-response handshake.
+- **The data gate.** Every price read goes through nq-lab's `nq_lab.data.serve` with caller `terminal`, so the gate
+  decides and logs each read and serves nothing after 2021-12-31. Prices are cached in memory only, never on disk.
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 81 paths. pytest compares the app with it, and
+  `pnpm gen:api` generates the page's types from it; `pnpm test` fails first when they have drifted.
+- **Web page.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1, with dockview panels under a cmdk command line, zustand
+  and TanStack Query. Charts use uPlot, TradingView Lightweight Charts and Apache ECharts; grids use TanStack Table and
+  Perspective pivots. One GET client ([`web/src/api/client.ts`](web/src/api/client.ts)) makes every request.
+- **Desktop shell.** A Tauri 2 app in Rust ([`desktop/`](desktop/README.md)) that opens one window over the page and
+  gives the page no shell command. It starts the lab's backend in a Windows Job Object, holds the session token itself
+  and keeps its WebView2 profile and settings outside the lab.
+- **qa.** A separate uv project ([`qa/`](qa)) that recomputes the dumped analytics with reference libraries and never
+  imports the backend.
 
-[`web/scripts/bundleCheck.ts`](web/scripts/bundleCheck.ts) runs after every `pnpm build`. It fails a build that goes
-over budget or loads a chart or grid library with the shell.
+[`web/scripts/bundleCheck.ts`](web/scripts/bundleCheck.ts) runs after every `pnpm build` and fails a build that goes
+over its per-chunk gzip budget or loads a chart or grid library with the shell. The full stack, folder layout,
+endpoint index and design decisions are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and section 7 of
+[`docs/PRD.md`](docs/PRD.md).
+
+<details>
+<summary>Bundle budgets</summary>
 
 | Chunk, gzip | Budget | Measured 2026-10-02 |
 |---|---:|---:|
@@ -501,194 +481,96 @@ over budget or loads a chart or grid library with the shell.
 | TanStack grid | 45.0 kB | 18.7 kB |
 | Perspective | 100.0 kB | 86.1 kB |
 
-`scripts/shellBudget.test.ts` pins the shell ceiling (the gallery build gets 115.8 kB), plus a 109.9 kB target with at least 5 kB of headroom since shell diet 4 (v2.1), which moved the key actions, the command line menus and three unused library pieces out of first paint; raise a ceiling only in the change that needs the room, and say why. cmdk's unused Radix dialog is aliased to `src/vendor/radixDialogStub.tsx` in `vite.config.ts`, so its layer, focus and scroll lock code is in no build, and cmdk's unused command-score is swapped for `src/vendor/commandScoreStub.ts` by the `cmdkScoreStub` plugin there.
-
-**Status.** P0, P1 and P2 are built: 30 of the 30 mnemonics open a screen. `JOBS` is the one screen that writes. It
-queues an in-sample backtest (`backtests/run_base.py`, one worker, at most ten jobs waiting), shows each job's status in
-words, the tail of its log and a link to the produced run in `RUN`, and stops a queued or running job after one
-confirmation. The browser sends exactly two kinds of write, a POST to queue and a DELETE to stop, both with the
-`X-NQT: 1` header, and only from `web/src/api/jobsClient.ts`. A run writes `backtests/output/<run id>` and its gate log
-lines, never the ledger, and the screen connects to no broker. P2 also adds the read-only IB snapshot on `LIVE`
-(off unless `NQT_IB_READONLY=1`), the family test on `MT` (88), the risk extras and the trend regime on the tear sheet,
-a run's capacity, the term structure on `ROLL`, and the optional amber classic theme in the Options menu.
-
-| Variable | Meaning |
-|---|---|
-| `NQT_IB_READONLY` | Set to exactly `1` to turn on the read-only IB snapshot (off by default). With it on, the terminal connects to a paper TWS or Gateway on this machine as API client 95 and shows the account summary, positions, working orders (view only) and today's executions. It never places, changes or cancels an order |
-| `IB_HOST` | IB host for the snapshot, default 127.0.0.1; a host that is not this machine is refused |
-| `IB_PORT` | IB port for the snapshot, default 7497 (TWS paper; Gateway paper is 4002). The live ports 7496 and 4001 are refused |
-
-<details>
-<summary>Decisions</summary>
-
-The full log is [`docs/PRD.md`](docs/PRD.md) section 7, with later decisions in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) section 4 and the look spec section 7. The ones that shape daily use:
-
-- **One origin.** uvicorn on 127.0.0.1:8765 serves both the built front end and `/api`. The Vite server runs only in
-  `-Dev` mode.
-- **In-memory price cache.** A copy of prices on disk would be an ungated copy, so there is none.
-- **Counts from files.** Registry counts and verdicts, with the adjusted p values, come from `results\registry.csv`
-  at run time, never from the code.
-- **Real fills beside their own strategy.** The quote-check sample shows on za_orb runs only, and the paper book's
-  close rows on volmanaged runs only.
-- **Reduced templates.** Where the look spec asks for something the API does not send, a screen shows less and says
-  so. The list is in the look spec section 7.
-- **Grids and live data.** P0 grids are TanStack Table with virtual rows. The Perspective pivot grid (LEDG, the RUN
-  trades and fills, the OOS log) and the server-sent live stream for LIVE and JRNL are built (P1), with 2 s polling as
-  the fallback. The backtest queue and the read-only IB snapshot (P2) are built, and the owner approved them on 2026-10-01.
-- **Demo on fixture data.** The demo answers `/api` inside the page from captured fixtures and seeded prices, marks
-  every screen DEMO DATA, and reaches no backend. It exists to try the terminal, not to publish results, and a
-  production build contains none of its code.
-- **Exports keep their labels.** GRAB, the HTML evidence pack and the print dossier are made from the answers already
-  on screen. Each number keeps its tag, basis and unit, each figure its source GET and time, and the DEMO DATA flag
-  travels with a demo export. They recompute nothing and make no request.
-- **One Node.** Node 24 or later, from `engines` in `web/package.json`, `web/.nvmrc` and `engineStrict: true` in
-  `web/pnpm-workspace.yaml`.
-- **The build log stays local.** `docs/TASKS.md` is git-ignored and not in the repository; the design notes in `docs/`
-  are.
+`web/scripts/shellBudget.test.ts` pins the shell ceiling. Raise a ceiling only in the change that needs the room, and say
+why.
 
 </details>
 
 ## Safety model
 
-The research rules of nq-lab (the nq-lab project rules) bind the backend, and the terminal is built so that it cannot
-break them.
+nq-lab's research rules bind the backend, and the terminal is built so that it cannot break them.
 
 <p align="center"><img src="docs/media/status-line.webp" width="725" alt="Part of the status line: the served data window 2010-01-01..2021-12-31, FIXTURE DATA, TWS not monitored, KILL off, gate reads 0, READ ONLY and NO ORDER PATH"></p>
 <p align="center"><em>The status line on every screen: the served window, the data source, gate reads, READ ONLY and NO ORDER PATH.</em></p>
 
-- **Read only.** Every route is GET except the two `JOBS` writes; a test pins the route set and fails on any other
-  method, and on any other write beside those two. A syntax-tree scan
-  bans write calls anywhere in the backend. The ledger is never written: for an eligible run, RUN shows the
-  `scripts\ledger_append.py` command for you to copy and run yourself. Tests:
-  [`test_app.py`](backend/tests/test_app.py), [`test_safety_ast.py`](backend/tests/test_safety_ast.py).
-- **One door to prices.** Every price read goes through `nq_lab.data.serve` with caller `terminal`, so the OOS gate
-  decides and logs each read. `serve_sealed` is never called, and nothing after 2021-12-31 is served. The same
-  scan bans direct parquet reads. Prices are cached in memory by calendar year, never on disk, so a normal
-  session adds a handful of lines to `results\oos_access_log.jsonl`, each with caller `terminal`. Tests:
+- **Read only.** A test pins the route set to GET plus the three writes and fails on anything else. A syntax-tree scan
+  bans write calls anywhere in the backend. The ledger is never written: for an eligible run, `RUN` shows the command
+  for you to copy and run yourself. Tests: [`test_app.py`](backend/tests/test_app.py),
   [`test_safety_ast.py`](backend/tests/test_safety_ast.py).
-- **No order path.** The one IB client (`services/ib_readonly_client.py`, client id 95, paper accounts only, opt-in) can
-  send eight read-only message kinds and nothing else, and its order-style calls raise. A scan bans IB order calls
-  across `terminal\`, and the browser tests assert that every request is a GET (bar the queue's POST and DELETE) and
-  that no route or component is named like an order action.
-  Tests: [`test_safety_ast.py`](backend/tests/test_safety_ast.py), [`safety.spec.ts`](web/e2e/flows/safety.spec.ts).
-- **Local only.** The server binds 127.0.0.1 in code and refuses a peer that is not loopback. It accepts only the
-  hosts 127.0.0.1 and localhost and has no CORS. A same-origin guard stops another page from triggering gate reads.
-  Every response sends a strict content security policy and refuses framing: `default-src 'self'` and
-  `frame-ancestors 'none'`, with `X-Frame-Options: DENY`, `nosniff`, `no-referrer` and no Server header. The
-  policy's `'wasm-unsafe-eval'` is there only for Perspective's WebAssembly. Tests:
+- **One door to prices.** Every price read goes through the gate; the sealed door is never called, and the same scan
+  bans direct parquet reads.
+- **No order path.** The one IB client is opt-in, paper only and read only: it can send eight read-only message kinds,
+  and its order-style calls raise. A scan bans IB order calls across the terminal, and the browser tests assert that no
+  route or component is named like an order action. Tests: [`test_safety_ast.py`](backend/tests/test_safety_ast.py),
+  [`safety.spec.ts`](web/e2e/flows/safety.spec.ts).
+- **Local only.** The server binds 127.0.0.1 in code, refuses a peer that is not loopback, accepts only the hosts
+  127.0.0.1 and localhost, has no CORS, and sends a strict content security policy that refuses framing. Tests:
   [`test_app.py`](backend/tests/test_app.py), [`test_csp_wasm.py`](backend/tests/test_csp_wasm.py).
-- **Links cannot act.** A `#go=` link is untrusted input. It is read by hand, capped in length and count, held to the
-  command alphabet, and may only open screens, contexts and help. It can never reset, undo, export, grab, save or
-  forget anything.
-- **No private data out.** Error bodies and served research files carry no local paths. Account ids are masked, and
-  environment values are reported as set or unset.
-- **Honesty on screen.** Values the terminal computes carry `[POST HOC]`; values read from a registered result
-  carry `[PRE-REG]`. Sealed results show as a spent window. Plumbing rows keep the paper book's banner and never
-  feed a performance chart, and a run whose balance check fails is marked unusable and not drawn.
-- **Tests leave the research alone.** During the backend tests an audit hook refuses any write, removal or rename
-  under `results\`, `backtests\output\`, `data\` or `live\`. A session fixture hashes `oos_access_log.jsonl`,
-  `ledger.csv`, `registry.csv` and `oos_openings.json` before and after. Tests that touch the gate use a fake
-  serve with a temporary log. Tests: [`research_guard.py`](backend/tests/research_guard.py),
-  [`test_research_guard.py`](backend/tests/test_research_guard.py).
+- **Links cannot act.** A `#go=` link is untrusted input: capped, held to the command alphabet, and limited to opening
+  screens, contexts and help.
+- **No private data out.** Error bodies and served files carry no local paths, account ids are masked, and environment
+  values are reported only as set or unset.
+- **Tests leave the research alone.** During the backend tests an audit hook refuses any write under the research
+  folders, and a session fixture hashes the audit log, ledger, registry and openings before and after. Tests:
+  [`research_guard.py`](backend/tests/research_guard.py), [`test_research_guard.py`](backend/tests/test_research_guard.py).
 
-## Analytics and QA
+## Testing and quality gates
 
 <img src="docs/media/sv7-card.webp" align="right" width="360" alt="The Sharpe-difference card from RET: an interval chart at 1 and 2 ticks per side and a table of Ledoit-Wolf, Memmel and bootstrap provenance values, including block length, 4,999 replications and the seed">
 
-**Three implementations.** The terminal's own numpy and pandas pure functions produce every number the API serves.
+**Three implementations.** The terminal's own numpy and pandas functions produce every number the API serves.
 Nautilus statistics are the second implementation, inside the backend tests. The `qa` project's reference libraries
-are the third: quantstats 0.0.82, empyrical-reloaded 0.5.12, arch 8.0.0 and statsmodels 0.15.0 recompute every value
-the backend tests dump. Closed forms agree to 1e-9 relative, anchors to the project's own files to 1e-12, and the
-bootstrap exactly under a fixed seed. The one formula the browser still computes itself (power, minimum detectable Sharpe)
-is labelled "computed in the browser", never shown as a served number, and pinned to golden vectors from the same qa project.
+(quantstats, empyrical-reloaded, arch and statsmodels) are the third and recompute every value the backend tests
+dump. Nautilus's own alpha and tear sheet never produce a displayed number, because they zero-fill weekends and
+annualise geometrically. Every chart names its return basis and unit.
 
-**What never reaches the screen.** Nautilus's alpha, its tear sheet and `PortfolioAnalyzer.portfolio_returns()` never
-produce a displayed number: they zero-fill weekends and annualise geometrically.
+**The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2), from
+performance and drawdowns to research integrity and live paper monitoring.
 
-**Two return bases, always named.** Basis A is a research screen's own series (r = PnL / K); Basis B is a Nautilus
-account, compounded from K. Every chart names its basis and unit, and every tile names them in its popover. P is 252
-for daily series and 12 for monthly ones, sessions only, and the risk-free rate is 0.
-
-**Born-failing checks.** A tampered spec hash, a shifted anchor, a plumbing row reaching a performance series, a price
-read that bypasses the gate and a wrong annualisation factor (√365) must each make a test fail.
-
-**The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2),
-from performance and drawdowns to research integrity and live paper monitoring. All seven P2 metrics are built. The
-strict cross-check runs recorded in it: on 2026-09-27 P1 bundles PASS 1,453, FAIL 0, INFO 84 and Phase 11 bundles
-PASS 467, FAIL 0; on 2026-10-02 the whole dump folder, P2 and LV6 bundles included, PASS 2,455, FAIL 0, INFO 104.
+**Latest full run.** The release check of the 0.1.0 tree read: backend 4,147 passed and 1 skipped, and crosscheck strict
+PASS 2,495, FAIL 0 ([hand-over](docs/desktop/handover_windows.md), section 7); vitest 7,394 passed, Playwright e2e 538
+of 539 on its last full run (one environmental socket error, 36 of 36 on repeat), offline 190, desktop 42 and
+`check.ps1` 29 of 29 ([G2 verdict](docs/desktop/g2_windows/verdict.md)).
 
 <br clear="right">
-
-| Layer | What it proves | Size (2026-10-02, working tree on `3c06235`) | Command |
-|---|---|---|---|
-| Backend pytest | GET-only routes, loopback and header rules, the syntax-tree bans, every API view, analytics against Nautilus statistics and the anchors; writes the QA dumps | 2,107 test functions in 144 files (3,675 cases) | nq-lab venv's pytest, see Test commands |
-| qa cross-check | Every dumped value, recomputed by the reference libraries | 296 tests in 18 files, plus `crosscheck --strict` (2026-10-02: PASS 2,495, FAIL 0, INFO 104) | `uv run --project terminal\qa ...` |
-| Vitest | The contract check first, then view models, copy rules, colour contrast, the launcher, the docs drift test and the demo layer | 7,080 tests in 477 files (47 skipped) | `pnpm --dir terminal\web test` |
-| Types and build | `tsc -b` over the app; a production build under the bundle budgets | n/a | `test:types`, `build` |
-| Playwright with axe (Windows) | Every mnemonic in Chromium against the fixture backend: GET-only traffic, no order-like names, the keys, axe scans, screenshots | 391 tests in 34 specs (388 run by `pnpm e2e`, 3 perf), 210 screenshot baselines | `pnpm --dir terminal\web e2e` |
-| Playwright offline (macOS, Linux) | The same specs against the demo layer, served as `GET /api/*` from Node: no Python and no backend | 190 tests in 14 files, plus 3 performance tests; `e2e:offline` skips 2 and `e2e:offline:perf` skips 1 | `pnpm --dir web e2e:offline`, `e2e:offline:perf` |
-
-The table gives suite sizes, not pass rates. The backend suite needs the private nq-lab venv. Two tests assume the
-nq-lab layout, with this repository as `terminal\` inside nq-lab, and fail outside it:
-`web/src/grids/JournalTable.model.test.ts` reads nq-lab's `src/nq_lab/paper_plumbing.py`, and qa's
-`test_the_default_dump_folder_is_under_terminal_qa` expects the qa folder's parent to be named `terminal`.
-
-<details>
-<summary>Test commands</summary>
 
 From the `nq-lab` folder, in PowerShell:
 
 ```powershell
-# Backend (it also writes the JSON dumps the cross-check reads, into terminal\qa\.dumps)
+# Backend (it also writes the JSON dumps the cross-check reads)
 & .venv\Scripts\python.exe -m pytest -p no:warnings -o addopts="" -q terminal\backend\tests
 
 # Independent cross-check: its own tests, then every dumped value against the reference libraries
 uv run --project terminal\qa python -m pytest -q terminal\qa\tests
 uv run --project terminal\qa python -m crosscheck --strict
 
-# Front end: the contract check with the unit tests, the type check and a production build
+# Front end: the contract check with vitest, the type check, a production build, then Playwright with axe
 pnpm --dir terminal\web test
 pnpm --dir terminal\web test:types
 pnpm --dir terminal\web build
-```
-
-Every `/api` path is behind a session cookie, so tests talk to the app only through the shared client in
-`backend\tests\conftest.py`: `api_client(app)` (or the `authed_client` fixture) holds a live session. `bare_client` has
-none and is for the tests of the refusals, the proof and the session routes only; no test builds a `TestClient`
-itself. A test or smoke backend gets its own temporary `NQT_STATE_DIR` and `NQT_JOBS=off`, so it never shares the lock
-or the job queue with the terminal you use. A backend that a test starts in a process of its own is reached the same
-way as the page does it: `GET /api/session` with the token in `Authorization: NQT <hex>` and the page origin in
-`X-NQT-Origin` gives the cookie, and a write sends that origin as `Origin`. The browser projects redeem a one-time code
-in a global set-up (`web\e2e\session.setup.ts`) and keep the cookie as storage state; the offline project needs none.
-`smoke_real.ps1` reads the token from the backend's own lock, mints a code and hands the link to Playwright.
-
-The Playwright tests start their own fixture backend and a preview server on two spare loopback ports (8795 and
-4273 by default). Nothing they do reaches the research files or the real audit log. Choose other ports when those
-are taken; port 8765 is refused:
-
-```powershell
-$env:NQT_E2E_API_PORT = "8796"; $env:NQT_E2E_WEB_PORT = "4274"
 pnpm --dir terminal\web e2e
-Remove-Item Env:NQT_E2E_API_PORT, Env:NQT_E2E_WEB_PORT
+pnpm --dir terminal\web e2e:perf
 ```
 
-The first run on a new machine needs the browser: `pnpm --dir terminal\web exec playwright install chromium`.
+The Playwright tests start their own fixture backend and preview server on spare loopback ports and never reach the
+research files. The first run on a new machine needs the browser:
+`pnpm --dir terminal\web exec playwright install chromium`.
 
-When the backend's API changes on purpose, regenerate the contract and the front-end types together:
+**Desktop and release gates.** From the terminal folder (`desktop\README.md` has the details):
 
 ```powershell
-$env:NQT_UPDATE_CONTRACT = "1"
-& .venv\Scripts\python.exe -m pytest -p no:warnings -o addopts="" -q `
-  terminal\backend\tests\test_openapi_contract.py
-Remove-Item Env:NQT_UPDATE_CONTRACT
-pnpm --dir terminal\web gen:api
+powershell -NoProfile -File desktop\scripts\check.ps1
+uv run --project qa python -m crosscheck.served
+powershell -NoProfile -File scripts\smoke_real.ps1 -Mode App
+powershell -NoProfile -File scripts\record_green.ps1 -Check backend
+powershell -NoProfile -File scripts\release_check.ps1 -Tag desktop-vX.Y.Z -RequireSmokeApp
 ```
 
-User-facing text lives in `web\src\copy\`. A unit test there checks every copy module for em and en dashes and US
-spellings, and another fails if a screen or chrome file holds a prose string of its own.
-
-</details>
+`corepack pnpm e2e:desktop`, run from the `web` folder, drives the desktop Playwright project against the hidden smoke
+build. `record_green.ps1` writes a dated record for each check (`backend`, `crosscheck`, `smoke`, `smoke-app`), and
+`release_check.ps1` refuses a tag unless today's records, the artefacts and a clean commit all describe the same tree.
+It never creates the tag. The full release procedure is section 7 of the
+[hand-over](docs/desktop/handover_windows.md).
 
 <details>
 <summary>Test it on macOS or Linux (no nq-lab needed)</summary>
@@ -703,13 +585,8 @@ corepack pnpm --dir web build:gallery
 corepack pnpm --dir web build:demo
 ```
 
-`test` runs the contract check, then Vitest. Outside the nq-lab layout its one expected failure is
-`web/src/grids/JournalTable.model.test.ts`, which reads nq-lab's `src/nq_lab/paper_plumbing.py`; every other test
-passes. `docs/ARCHITECTURE.md` and this README are tested too: `web/scripts/docsSync.test.ts` fails when the endpoint
-index in ARCHITECTURE section 4.1 differs from `contract/openapi.json`, when a `pnpm` command here names a script that
-`web/package.json` lacks, or when section 1's versions drift from `web/package.json`.
-
-The offline Playwright suite runs the Windows specs against the demo layer instead of a backend, so it needs no Python:
+The offline Playwright suite runs the Windows specs against the demo layer, served as `GET /api/*` from Node, so it
+needs no Python and no backend:
 
 ```sh
 corepack pnpm --dir web e2e:offline:baseline
@@ -717,55 +594,93 @@ corepack pnpm --dir web e2e:offline
 corepack pnpm --dir web e2e:offline:perf
 ```
 
-- **What it starts.** It builds the gallery and demo bundles into `web/node_modules/.tmp` and serves them with
-  `vite preview` on 127.0.0.1:4373 and 4374 (`NQT_E2E_OFFLINE_PORT`, `NQT_E2E_DEMO_PORT`; 8765, 5173 and 5174 are
-  refused). The demo route table is served over HTTP as `GET /api/*`, so the specs see real requests.
-- **Browser.** The bundled Chromium, or the installed Google Chrome when that is missing (`NQT_E2E_CHANNEL` forces a
-  channel). `corepack pnpm --dir web exec playwright install chromium` fetches Chromium.
-- **Baselines.** `e2e:offline:baseline` writes this machine's screenshot baselines once, under
-  `web/e2e/__screenshots__/offline-<platform>` (git-ignored); `e2e:offline` then compares against them. They are never
-  compared with the Windows ones. Committing them is your decision.
-- **Projects.** `e2e:offline` runs the `offline` and `offline-demo` projects; `e2e:offline:perf` runs the performance
-  budgets alone, with one worker. `pnpm e2e` and `pnpm e2e:perf` (Windows, fixture backend) are unchanged.
-- **What it leaves out.** Two probes of a real backend's routes (write methods, a cross-site read) are excluded, and
-  GIP is not in the offline screen list, because the demo has no 1m bars.
+`e2e:offline:baseline` writes this machine's screenshot baselines once (git-ignored); `e2e:offline` then compares
+against them. A few tests whose data the demo dataset does not hold are skipped by name, and each says why;
+[`docs/TESTING.md`](docs/TESTING.md) lists them.
 
-`e2e:offline` lists 190 tests in 14 files. With the demo dataset as it is, two are skipped by name and one more leaves one
-step out and still passes; the step prints an `[offline-skip]` line to the run output. `e2e:offline:perf` lists 3 tests and
-skips one. Every skip is a test whose data the demo dataset does not hold, and each says so:
-
-| Test | Skipped or trimmed because |
-|---|---|
-| `e2e/flows/keyboard.spec.ts`: NQ GIP 2019-03-14, Left and Right reach the chart (the GIP iteration only) | Test skipped. 1m bars are not in the demo dataset |
-| `e2e/flows/safety.spec.ts`: every /api path refuses a missing cookie, a wrong cookie and a foreign origin | Test skipped. The demo layer has no session |
-| `e2e/perf/budgets.spec.ts`: GIP pan and zoom run near 60 fps | Test skipped in `e2e:offline:perf`. 1m bars are not in the demo dataset |
-| `e2e/flows/rules.spec.ts`: the fence test, one step (opening NQ GIP 2019-03-14) | Step left out, the rest of the test runs. 1m bars are not in the demo dataset |
-
-[`docs/TESTING.md`](docs/TESTING.md) has the full table, the screens the offline list changes and leaves out (GIP), and the
-substitutions the offline path makes. A screen or demo data change moves the screenshots, and `e2e:offline` then fails
-those baseline comparisons until `e2e:offline:baseline` rewrites them.
+Two tests assume the nq-lab layout and fail outside it: `web/src/grids/JournalTable.model.test.ts` reads nq-lab's
+`src/nq_lab/paper_plumbing.py`, and qa's `test_the_default_dump_folder_is_under_terminal_qa` expects the qa folder's
+parent to be named `terminal`.
 
 </details>
 
-## Repository layout
+**Docs are tested too.** `web/scripts/docsSync.test.ts` fails when this README names a `pnpm` script that
+`web/package.json` lacks, links a file that does not exist, quotes a version the package does not pin or lists the
+mnemonics out of step with the registry. User-facing text lives in `web/src/copy/`, where a test checks every module
+for em and en dashes and US spellings.
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/PRD.md`](docs/PRD.md) | What the terminal is for, its scope by priority, the non-goals and the decision log |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack and versions, folder layout, data contracts, the endpoint index of all 81 paths, the gate, security, run and test commands |
+| [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | The frame, design tokens, command line and keys, honesty labels, screens, components and copy rules |
+| [`docs/BLOOMBERG_LOOK.md`](docs/BLOOMBERG_LOOK.md) | The look and behaviour spec: palette, type, chrome, keyboard, charts and screens |
+| [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) | Every metric with its priority, definition, inputs and QA reference |
+| [`docs/TESTING.md`](docs/TESTING.md) | Which suites run where, the session token in tests, and what the offline suite skips |
+| [`docs/media/README.md`](docs/media/README.md) | Where each image on this page came from and how it was captured |
+| [`docs/desktop/README.md`](docs/desktop/README.md) | Index of the desktop documents, in reading order, with the build status |
+| [`docs/desktop/handover_windows.md`](docs/desktop/handover_windows.md) | Install, run, update, roll back, the permission runbook, the release procedure and troubleshooting |
+| [`docs/desktop/smartscreen.md`](docs/desktop/smartscreen.md) | SmartScreen and Smart App Control with the unsigned installer, hash checks and signing options |
+| [`docs/desktop/g2_windows/verdict.md`](docs/desktop/g2_windows/verdict.md) | The G2 verdict for the Windows app; measurements in [`results.md`](docs/desktop/g2_windows/results.md) |
+| [`docs/desktop/owner_decisions_windows.md`](docs/desktop/owner_decisions_windows.md) | The owner's decisions for the Windows app, open and closed |
+| [`docs/desktop/checks/README.md`](docs/desktop/checks/README.md) | Templates for the owner-run checks |
+| [`docs/desktop/02_decision.md`](docs/desktop/02_decision.md), [`03_migration_plan.md`](docs/desktop/03_migration_plan.md), [`04_roadmap.md`](docs/desktop/04_roadmap.md), [`05_risks_costs.md`](docs/desktop/05_risks_costs.md) | Why Tauri, how the desktop build was planned, the phases and the risk register |
+| [`desktop/README.md`](desktop/README.md) | The shell's layout, build identities, modules, static bans and checks |
+| [`desktop/harness/README.md`](desktop/harness/README.md) | The G2 measurement harness |
+
+<details>
+<summary>Repository layout</summary>
 
 | Path | What it holds |
 |---|---|
-| `backend/` | The FastAPI package `nq_terminal` and its tests. It binds to 127.0.0.1 only |
-| `web/` | The front end (React 19 on Vite, in TypeScript): a command line over dockable panels. Demo mode lives in `web/src/demo/`, the launcher in `web/scripts/start/`, the E2E specs in `web/e2e/` |
-| `qa/` | An independent cross-check that recomputes the headline analytics with reference libraries; it never imports the backend. `qa/golden/` holds the reference values the browser-side formulas are pinned to |
-| `contract/openapi.json` | The API contract. The front end's types are generated from it, and both sides test that they still match it |
-| `docs/` | The design notes: [`PRD.md`](docs/PRD.md), [`ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`UI_SPEC.md`](docs/UI_SPEC.md), [`ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md), the look spec [`BLOOMBERG_LOOK.md`](docs/BLOOMBERG_LOOK.md) and [`TESTING.md`](docs/TESTING.md). [`docs/media/`](docs/media) holds the images on this page. The build log, `TASKS.md`, is kept local and is not in the repository |
-| `desktop/` | The Windows shell (a Tauri 2 crate in `src-tauri/`), its check and release scripts in `scripts/`, and the G2 measurement harness in `harness/`. See [`desktop/README.md`](desktop/README.md) |
-| `start.ps1` | The start command on Windows |
-| `start.sh`, `scripts/start.mjs` | The start command on macOS and Linux (`./start.sh doctor` first). `start.sh` finds Node and hands over to `scripts/start.mjs`, which checks the Node version and runs the launcher in `web/scripts/start/` |
+| `backend/` | The FastAPI package `nq_terminal` and its tests |
+| `web/` | The page (React on Vite, in TypeScript). Demo mode is in `web/src/demo/`, the launcher in `web/scripts/start/`, the Playwright specs in `web/e2e/` |
+| `qa/` | The independent cross-check; `qa/golden/` holds the reference values the browser-side formulas are pinned to |
+| `contract/openapi.json` | The API contract; both sides test that they match it |
+| `desktop/` | The Windows shell (a Tauri crate in `src-tauri/`), its check and release scripts and the G2 harness |
+| `docs/` | The design notes and the desktop documents. The build log, `TASKS.md`, is kept local and is not in the repository |
+| `scripts/` | The macOS and Linux launcher entry (`scripts/start.mjs`), the real-data smoke, the green records and the release check |
+| `start.ps1`, `start.sh` | The start commands for Windows, and for macOS and Linux |
+
+</details>
+
+## Contributing
+
+Contributions are welcome. This is one person's research tool, so every change is reviewed by a single maintainer
+([@FatihHekim0glu](https://github.com/FatihHekim0glu)) and may take a while. Please open an issue before a large change.
+Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before you start. Changes that add an order path,
+a broker connection or a way past the data gate will not be accepted.
+
+## Code of conduct
+
+Everyone taking part is expected to follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please do not report a security problem in a public issue. Use private vulnerability reporting under this repository's
+**Security** tab instead. [`SECURITY.md`](SECURITY.md) has the details. For anything else,
+open a [GitHub issue](https://github.com/FatihHekim0glu/nq-terminal/issues).
+
+## Accessibility
+
+The target is WCAG 2.2 AA. [`contrast.test.ts`](web/src/theme/contrast.test.ts) holds every text pair at 4.5:1 and every
+graphic pair at 3:1, in the default theme and both colour-vision-deficiency themes; every canvas chart carries a data
+summary and a table view, and the Windows Playwright suite runs axe scans over every mnemonic. Screen-reader passes with NVDA and
+Narrator on the desktop app are still owner checks to come. [`ACCESSIBILITY.md`](ACCESSIBILITY.md) has the full
+statement.
+
+## Licence
+
+See [LICENSE](LICENSE).
 
 ## Credits
 
 Built for research on [NautilusTrader](https://github.com/nautechsystems/nautilus_trader) 1.231.0, which nq-lab uses
 as a library, unmodified. The UI stands on dockview, uPlot, TradingView Lightweight Charts, Apache ECharts, TanStack
-(Table, Virtual, Query), Perspective, cmdk and zustand. The fonts are Bergoom, Source Sans 3 and PT Mono, under the
-SIL Open Font Licence 1.1 and self-hosted.
+(Table, Virtual, Query), Perspective, cmdk and zustand; the desktop shell on Tauri. The fonts are Bergoom, Source Sans
+3 and PT Mono, under the SIL Open Font Licence 1.1 and self-hosted.
 
 Candlestick charts use TradingView Lightweight Charts (Apache-2.0); the TradingView attribution logo stays on every
 candle chart.
@@ -775,5 +690,3 @@ candle chart.
 
 Not affiliated with or endorsed by Bloomberg L.P.; Bloomberg and Bloomberg Terminal are trademarks of Bloomberg
 Finance L.P.
-
-No licence file is published.

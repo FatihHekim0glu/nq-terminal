@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest a change or an addition to the terminal.
+title: "Feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a personal research tool shared publicly, and one maintainer reviews everything. A clear problem statement helps more than a finished design.
+
+        Some things are out of scope by design. The terminal is read only and has no order path, it reads prices only through the research project's data gate and never past its date fence, and it binds to the local machine only. A request that needs any of those to change will be declined.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today? Name the screen or command if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to see
+      description: Your idea, in a few sentences. A sketch or a screenshot is welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other ways to solve it, including doing it outside the terminal.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - A screen or a function code
+        - Keyboard use or accessibility
+        - Charts or tables
+        - Windows desktop app
+        - Documentation
+        - Backend or API
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you send a pull request for it?
+      description: Read CONTRIBUTING.md first. Tests come first and some suites need the research project.
+      options:
+        - "Yes"
+        - "Maybe, with guidance"
+        - "No"
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the open and closed issues and found nothing like this.
+          required: true
+        - label: This does not ask for order placement, a broker connection, or reading prices past the date fence.
+          required: true
