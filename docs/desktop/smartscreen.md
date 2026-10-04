@@ -29,7 +29,7 @@ The table below is the record of 3 October 2026, made on the 0.1.0 builds. The c
 
 Smart App Control matters more than SmartScreen. When it is on it can refuse an unsigned program outright, with no "Run anyway" button, and it judges every program, not only downloads. It is off here. If a later Windows update or a reset turns it on, the unsigned installer and the unsigned app will not run, and the only fixes are to turn Smart App Control off or to sign the build (see below). Re-read the registry value at the start of every dual-run week: it costs one command.
 
-The readings above were made on two builds. `D:\dev\release\0.1.0` held a build from `e0834c1`, and `D:\dev\release-b\0.1.0` holds the reference build of `f2e03bf`. The default folder holds the final build, made from the release commit `8122c87`, so the 0.1.0 installer you verified was that one: `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`, size `3,253,432` bytes. The 0.1.1 installer is {{0.1.1: installer bytes}} bytes, SHA256 `{{0.1.1: installer SHA256}}`. A rebuild changes the hash every time. The mark reading does not depend on the build: a file made on this PC and copied by this PC carries no mark, whichever build it is.
+The readings above were made on two builds. `D:\dev\release\0.1.0` held a build from `e0834c1`, and `D:\dev\release-b\0.1.0` holds the reference build of `f2e03bf`. The default folder holds the final build, made from the release commit `8122c87`, so the 0.1.0 installer you verified was that one: `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`, size `3,253,432` bytes. The 0.1.1 installer is 3,253,307 bytes, SHA256 `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`. A rebuild changes the hash every time. The mark reading does not depend on the build: a file made on this PC and copied by this PC carries no mark, whichever build it is.
 
 ## Verify the installer before you run it
 
@@ -45,8 +45,8 @@ Do this for any copy that did not come straight from the build folder on this PC
 
 2. Compare it with the expected value, which must come from a place other than the copy itself:
    - `SHA256SUMS` in the build folder (`D:\dev\release\0.1.1\SHA256SUMS`), read on the PC that built it;
-   - the value in the hand-over note, `{{0.1.1: installer SHA256}}` (the final 0.1.0 installer gave `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` and the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
-   - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the commit that the tag {{0.1.1: tag}} names (for 0.1.0 it was `8122c877bb00e4f07ce505d5ba0468d6a9858f41`).
+   - the value in the hand-over note, `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` (the final 0.1.0 installer gave `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` and the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
+   - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the commit that the tag desktop-v0.1.1 names (for 0.1.0 it was `8122c877bb00e4f07ce505d5ba0468d6a9858f41`).
 
 3. If the two hashes differ by even one character, stop. Delete the copy and fetch it again from the build folder. Do not click through the prompt.
 

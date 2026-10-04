@@ -44,8 +44,8 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 As of 4 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 81 API paths.
-- **Windows desktop app, 0.1.1.** Released as the annotated tag {{0.1.1: tag}}: an unsigned, per-user installer of
-  {{0.1.1: installer bytes}} bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
+- **Windows desktop app, 0.1.1.** Released as the annotated tag desktop-v0.1.1: an unsigned, per-user installer of
+  3,253,307 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
   pools of the backend server, which is what brought idle memory under its ceiling. The earlier 0.1.0 release
   (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes) stays available.
 - **Gate G2 (speed and memory on Windows).** **AUTOMATED PASS, OWNER ROWS PENDING.** Whole-app idle memory at HOME
@@ -128,7 +128,7 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 
 | Release | File | Size | SHA256 |
 |---|---|---:|---|
-| `{{0.1.1: tag}}` | `nq-lab terminal_0.1.1_x64-setup.exe` | {{0.1.1: installer bytes}} bytes | `{{0.1.1: installer SHA256}}` |
+| `desktop-v0.1.1` | `nq-lab terminal_0.1.1_x64-setup.exe` | 3,253,307 bytes | `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` |
 | `desktop-v0.1.0` | `nq-lab terminal_0.1.0_x64-setup.exe` | 3,253,432 bytes | `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` |
 
 **2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:

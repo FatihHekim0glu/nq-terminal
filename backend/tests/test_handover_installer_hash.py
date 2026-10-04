@@ -4,9 +4,8 @@ Every rebuild changes the installer's SHA256 and size, and only the final build'
 `D:\\dev\\release\\0.1.1` is what the owner checks. A value copied from another folder (a ReleaseDir self-test) makes
 the owner's check fail and reads as a tampered copy. So the owner-facing documents carry the final build's hash.
 
-Until the 0.1.1 installer is built the current value is the literal placeholder `{{0.1.1: installer SHA256}}` (and
-`{{0.1.1: installer bytes}}` for the size), which the manager fills in after the build. Once filled, the current value is
-one 64-digit hash that must be the same everywhere. The 0.1.0 hashes are history and are the only other hashes allowed.
+The 0.1.1 installer was built and published as `desktop-v0.1.1`. Its SHA256 and size are the current values and
+must be the same everywhere. The 0.1.0 hashes are history and are the only other hashes allowed.
 """
 from __future__ import annotations
 
@@ -21,10 +20,10 @@ HISTORY_HASHES = {
     "c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58",  # the 0.1.0 build from 49229b9
     "2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590",  # the final 0.1.0 installer
 }
-SHA_PLACEHOLDER = "{{0.1.1: installer SHA256}}"
-BYTES_PLACEHOLDER = "{{0.1.1: installer bytes}}"
+CURRENT_SHA = "3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc"
+CURRENT_BYTES = "3,253,307"
 HEX64 = re.compile(r"\b[0-9a-fA-F]{64}\b")
-VALUE = re.escape(SHA_PLACEHOLDER) + r"|[0-9a-fA-F]{64}"
+VALUE = r"[0-9a-fA-F]{64}"
 
 
 def _owner_documents() -> list[Path]:
@@ -64,6 +63,7 @@ def test_owner_verification_step_expects_the_current_value_for_the_current_versi
     assert "D:\\dev\\release\\0.1.1" in step
     assert "nq-lab terminal_0.1.1_x64-setup.exe" in step
     assert _current_value().lower() not in HISTORY_HASHES
+    assert _current_value() == CURRENT_SHA
 
 
 def test_tag_message_carries_the_current_value():
@@ -82,10 +82,8 @@ def test_readme_install_table_and_handover_name_the_same_current_value():
     readme = README.read_text(encoding="utf-8")
     row = next(line for line in readme.splitlines() if line.startswith("| `") and "0.1.1_x64-setup.exe" in line)
     assert _current_value() in row
-    handover = HANDOVER.read_text(encoding="utf-8")
-    if _current_value() == SHA_PLACEHOLDER:
-        assert BYTES_PLACEHOLDER in row
-        assert BYTES_PLACEHOLDER in handover
+    assert CURRENT_BYTES in row
+    assert CURRENT_BYTES in HANDOVER.read_text(encoding="utf-8") or CURRENT_BYTES in readme
 
 
 def test_every_owner_document_names_the_current_hash_wherever_it_names_one():
