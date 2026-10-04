@@ -15,7 +15,12 @@ One door (ARCHITECTURE section 5). The service never reads a price file. Every f
   capped by bytes; `version` is the file's (mtime_ns, size) from the catalog, so a processed file rewritten by
   another workflow is served again rather than kept stale. A miss is loaded under a per-key lock, so concurrent
   requests for one year make one serve, and at most `MAX_CONCURRENT_LOADS` serves run at once. Nothing is
-  written to disk.
+  written to disk. The year-aligned cache stays for every 1m reader but one.
+- The one exception, a non-retaining read (`frame` and `bars` with `keep=False`; W5C D1): the two-day sparkline in
+  desktop mode (`Settings.two_day_keeps_year`). It uses a year frame that is already cached (a hit, sliced, no serve);
+  on a miss it takes the same per-key lock and a load slot, serves only the part of the year the request covers under
+  the same `CacheKey` (so the gate logs the same reason, with the year label), and never stores the frame. The gate
+  read is recorded and the serve counter moves exactly as for a cached read; the result reports `cached=False`.
 - Span cap: one request covers at most `MAX_SPAN` of its timeframe (1m one year; 5m to 4h three years; 1d the
   whole window), checked after the fence and before any serve (`SpanTooLong`), so one call cannot load and
   bucket the whole 1m history.
@@ -335,8 +340,9 @@ class BarService:
             return self._reads, len(self._entries), self._bytes
 
     def frame(self, symbol: str, source_tf: str, variant: str, start: pd.Timestamp, end: pd.Timestamp, *,
-              version: tuple[int, int] | None = None) -> Served:
-        """The served rows in [start, end) for one processed series, assembled from cached year frames."""
+              version: tuple[int, int] | None = None, keep: bool = True) -> Served:
+        """The served rows in [start, end) for one processed series, assembled from cached year frames. With
+        `keep=False` a missing year is served for the requested part only and not stored (the module docstring)."""
         if source_tf not in PRICE_COLUMNS:
             raise ValueError(f"unknown source timeframe {source_tf!r}")
         if variant not in VARIANTS:
@@ -346,7 +352,11 @@ class BarService:
         try:
             parts, years, cached = [], [], True
             for year, lo, hi in year_windows(source_tf, start, end):
-                part, hit = self._cached_serve(CacheKey(symbol, source_tf, variant, year, version), lo, hi)
+                key = CacheKey(symbol, source_tf, variant, year, version)
+                if keep:
+                    part, hit = self._cached_serve(key, lo, hi)
+                else:
+                    part, hit = self._window_serve(key, max(lo, start), min(hi, end))
                 cached = cached and hit
                 years.extend(range(IS_START.year, IS_END.year) if year is None else [year])
                 if not part.empty:
@@ -357,11 +367,12 @@ class BarService:
         return Served(frame=slice_window(frame, start, end), years=tuple(years), cached=cached)
 
     def bars(self, symbol: str, timeframe: str, variant: str, start: pd.Timestamp, end: pd.Timestamp, *,
-             max_points: int = DEFAULT_MAX_POINTS, version: tuple[int, int] | None = None) -> BarsResult:
+             max_points: int = DEFAULT_MAX_POINTS, version: tuple[int, int] | None = None,
+             keep: bool = True) -> BarsResult:
         source_tf = source_timeframe(timeframe)
         precheck_window(start, end)
         check_span(timeframe, start, end)
-        served = self.frame(symbol, source_tf, variant, start, end, version=version)
+        served = self.frame(symbol, source_tf, variant, start, end, version=version, keep=keep)
         frame = served.frame
         ts_ns = frame["ts"].to_numpy(dtype="datetime64[ns]").astype(np.int64) if not frame.empty else np.array([])
         bucket, minutes = choose_bucket(ts_ns, timeframe, max_points)
@@ -395,6 +406,19 @@ class BarService:
                 frame = self._load(key, start, end)
             self._store(key, frame)
             return frame, False
+
+    def _window_serve(self, key: CacheKey, start: pd.Timestamp, end: pd.Timestamp) -> tuple[pd.DataFrame, bool]:
+        """[start, end) inside `key`'s year: the cached year sliced on a hit; else one serve of just that window under
+        the same key (the same reason), handed out and never stored."""
+        frame = self._lookup(key)
+        if frame is not None:
+            return slice_window(frame, start, end), True
+        with self._key_lock(key):
+            frame = self._lookup(key)
+            if frame is not None:
+                return slice_window(frame, start, end), True
+            with self._load_slots:
+                return self._load(key, start, end), False
 
     def _load(self, key: CacheKey, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
         from nq_lab import oos_gate

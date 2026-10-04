@@ -53,16 +53,8 @@ export type { SavedWorkspaces }
 
 export const HELP_TWICE_MS = 500
 
-/** Every reserved F-key's message (U11): F2 and F4 from copy/chrome.ts, F3 and F5 to F7 from
- * copy/help.ts, so a new reserved key never posts undefined. */
-const RESERVED_MESSAGES: Readonly<Record<ReservedFKey, string>> = {
-  F2: MESSAGES.reservedKeys.F2,
-  F3: RESERVED_F_MESSAGES.F3,
-  F4: MESSAGES.reservedKeys.F4,
-  F5: RESERVED_F_MESSAGES.F5,
-  F6: RESERVED_F_MESSAGES.F6,
-  F7: RESERVED_F_MESSAGES.F7,
-}
+/** Every reserved F-key's message (U11), all six from copy/navKeys.ts, so a new reserved key never posts undefined. */
+const RESERVED_MESSAGES: Readonly<Record<ReservedFKey, string>> = RESERVED_F_MESSAGES
 
 function favouritesMenu(saved: SavedWorkspaces): MenuModel {
   const tabs = [

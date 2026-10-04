@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import appSource from '../App.tsx?raw'
 import statusBarSource from './StatusBar.tsx?raw'
 import viewSource from './RecordWatch.view.tsx?raw'
+import readerSource from './RecordWatch.live.tsx?raw'
 import { emptyDiff } from '../state/recordWatch.schema'
 import { useWatchMarksStore } from './RecordWatch.marks'
 import { WatchSegment, resetRecordWatchView, useIdleReady, useRecordWatch, useWatchStore, type RecordWatchView } from './RecordWatch.view'
@@ -111,6 +112,14 @@ describe('the shell rule: the reader stays out of the first-paint shell', () => 
     const specifiers = staticSpecifiers(statusBarSource)
     expect(specifiers).toContain('./RecordWatch.view')
     expect(specifiers).not.toContain('./RecordWatch.live')
+  })
+
+  it('the quiet gate loads with the reader, never with the shell: the reader imports it, App and the view do not', () => {
+    expect(staticSpecifiers(readerSource)).toContain('./useQuietReady')
+    expect(staticSpecifiers(appSource)).not.toContain('./chrome/useQuietReady')
+    expect(staticSpecifiers(viewSource)).not.toContain('./useQuietReady')
+    expect(appSource).toMatch(/\{idle \? \(\s*<LazyBoundary onError=\{\(\) => \{\}\}>\s*<Suspense fallback=\{null\}>\s*<RecordWatchReader \/>/)
+    expect(viewSource).toMatch(/export function useIdleReady\(/)
   })
 
   it('App mounts the reader through a dynamic import only', () => {

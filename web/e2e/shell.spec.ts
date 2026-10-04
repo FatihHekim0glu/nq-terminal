@@ -18,6 +18,7 @@ import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page, type Request } from '@playwright/test'
 import { MASK_COLOR } from './gallery.ts'
 import { recordDemoRefusals, withoutDemoRefusals } from './target.ts'
+import { expectWatchSegment } from './watchReady.ts'
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 const HOME_TITLES = ['NQ GP 1d', '27F MON', 'volmanaged_v0 EQ', 'REG']
@@ -394,6 +395,7 @@ test.describe('terminal shell', () => {
       await page.setViewportSize(size)
       await openApp(page)
       await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
+      await expectWatchSegment(page)
       // The HOME screens load lazily; on a slow machine a panel can still read "Loading this screen."
       // (a stable frame) when the screenshot is taken, so wait for every screen and chart to settle.
       await expect(page.getByText('Loading this screen.')).toHaveCount(0)

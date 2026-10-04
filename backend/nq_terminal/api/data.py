@@ -20,6 +20,12 @@ own message and the loader is never called (see `services/bars.py`).
 Result cache (D1.3). `/api/market/two-day` answers from `services/result_cache.py` through `cached_two_day`, which the
 HOME prewarm calls too. `services_for(state)` and `get_result_cache(state)` give any caller the app's services and
 cache from `app.state`; a cached body is returned as is (`json_response`), byte-equal to a fresh one.
+
+Two-day window (W5C D1). In desktop mode (`Settings.two_day_keeps_year` False) `_two_day` reads each symbol's exact
+window, `[last_sessions()[0] - SESSION_SHIFT, IS_END)`, through the bar service's non-retaining read: a cached 1m year
+is used, a missing one is served for that window only (same reason, one gate line per symbol as before) and not kept.
+The browser and launcher forms keep the year-aligned read. The route, the result cache key and the body model are the
+same in every form, and the body is byte-equal across forms outside `gate.cached` and `gate.reads_this_process`.
 """
 from __future__ import annotations
 
@@ -513,7 +519,8 @@ def _two_day(services: DataServices, service: BarService, wanted: list[str]) -> 
             continue
         try:
             result = service.bars(symbol, TWO_DAY_TF, DAILY_VARIANT, lo, IS_END,
-                                  version=services.catalog.version(symbol, "1m", DAILY_VARIANT))
+                                  version=services.catalog.version(symbol, "1m", DAILY_VARIANT),
+                                  keep=services.settings.two_day_keeps_year)
         except GateRefusal as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
         except UnknownSeries:

@@ -10,6 +10,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 import { AXE_TAGS, MASK_COLOR } from './gallery.ts'
+import { expectWatchSegment } from './watchReady.ts'
 
 const RUN = 'nt_dtsmom_v0_fixture_ts1'
 const INTRADAY_RUN = 'nt_overnight_v0_fixture_open'
@@ -246,6 +247,7 @@ test.describe('screenshots', () => {
         await settle(page)
         await page.mouse.move(0, 0)
         await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
+        await expectWatchSegment(page)
         // The gate read count depends on what ran before in this backend process: masked.
         const gate = page.getByRole('contentinfo').locator('.seg', { hasText: /^Gate reads/ })
         await expect(page).toHaveScreenshot(`${shot.name}-${size.width}x${size.height}.png`, { mask: [gate], maskColor: MASK_COLOR })

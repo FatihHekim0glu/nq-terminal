@@ -16,6 +16,13 @@ OOS log (`results/oos_access_log.jsonl`)
   columns (`SEVERITY_LEVELS`): 4 a sealed read; 3 a window that ends past the fence, starts before the in-sample
   start, or cannot be read (the gate refuses such windows, so a logged one needs a look); 2 a read by any caller
   other than the terminal (a research read); 1 a terminal display read.
+- The route keeps the log in a compact form (`CompactLog`, W5C D6): the file's raw bytes, one index row per entry
+  (byte offset and length, line number, `ts_utc` in epoch microseconds, interned caller and symbol ids, key set,
+  severity) and the whole-log counts. Only the page a request asks for is decoded, with the same `_parse_line` and
+  `_annotate` as the full parser, so a served entry is the same mapping in content. A log that only grew is indexed
+  from its last complete line on (`extend_oos_log`); any other change is indexed again in full. The value weighs
+  what it keeps (`CompactLog.retained_bytes`): the bytes plus about 34 bytes a line, where the parsed entries kept
+  about 1.6 KB a line. `parse_oos_log` stays the reference parser (the tests compare against it).
 - `start` and `end` are served as ISO 8601 UTC (`2010-09-28T00:00:00+00:00`), the form `ts_utc` already has; the
   gate records them as `2010-09-28 00:00:00+00:00`, and a time without an offset is read as UTC. Text that does not
   parse is passed through unchanged, with a None epoch.
@@ -33,16 +40,19 @@ import json
 import math
 import numbers
 import re
+import sys
+from array import array
+from bisect import bisect_left
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from nq_lab.config import IS_END, IS_START
 from nq_terminal.models.audit import SpecHash
 from nq_terminal.models.research import RegistryRow
-from nq_terminal.services.files import freeze
+from nq_terminal.services.files import FrozenDict, freeze
 from nq_terminal.services.research import RegistryMissing, service_for_root
 
 BASIC_KEYS = frozenset({"ts_utc", "caller", "reason", "start", "end", "rows"})
@@ -180,8 +190,224 @@ def parse_oos_log(text: str) -> ParsedLog:
 
 
 def parse_oos_log_bytes(raw: bytes) -> ParsedLog:
-    """For `FileCache.get`: utf-8 with replacement, so a multi-byte character cut by a live append cannot fail it."""
+    """The reference parser over bytes: utf-8 with replacement, so a multi-byte character cut by a live append cannot
+    fail it."""
     return parse_oos_log(raw.decode("utf-8", errors="replace"))
+
+
+# ---------------------------------------------------------------- OOS log, compact form (W5C D6)
+
+
+NO_TS = -(2**63)  # an index row whose ts_utc does not parse: below every real stamp, and never matches a since
+NO_SYMBOL = 0  # symbol id of an entry without a text symbol
+_NEWLINE = b"\n"
+_EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_ONE_US = timedelta(microseconds=1)
+_KEY_SET_NAMES: tuple[str, ...] = (*KEY_SETS, OTHER)
+_KEY_SET_IDS = {name: index for index, name in enumerate(_KEY_SET_NAMES)}
+SEALED_LEVEL = 4  # `severity` gives 4 exactly when an entry is sealed
+
+
+def _micros(stamp: datetime) -> int:
+    """Epoch microseconds of an aware stamp, exact (the order of these is the order of the stamps)."""
+    return (stamp - _EPOCH_UTC) // _ONE_US
+
+
+class _Index:
+    """The index rows while they are built; frozen into a `CompactLog` by `finish`. Never shared between threads."""
+
+    def __init__(self) -> None:
+        self.starts, self.lengths, self.line_nos = array("q"), array("I"), array("I")
+        self.ts_us, self.caller_ids, self.symbol_ids = array("q"), array("I"), array("I")
+        self.key_set_ids, self.severities = array("B"), array("B")
+        self.callers: list[str] = []
+        self.caller_index: dict[str, int] = {}
+        self.symbols: list[str | None] = [None]
+        self.symbol_index: dict[str, int] = {}
+        self.errors: list[LineError] = []
+
+    @classmethod
+    def prefix_of(cls, log: "CompactLog", rows: int) -> "_Index":
+        """A new index holding the first `rows` rows of `log` (copies: the cached value is never changed)."""
+        made = cls()
+        for name in ("starts", "lengths", "line_nos", "ts_us", "caller_ids", "symbol_ids", "key_set_ids", "severities"):
+            setattr(made, name, getattr(log, name)[:rows])
+        made.callers, made.caller_index = list(log.callers), dict(log.caller_index)
+        made.symbols = list(log.symbols)
+        made.symbol_index = {name: index for index, name in enumerate(log.symbols) if index != NO_SYMBOL}
+        made.errors = [e for e in log.errors if e.line_no < log.next_line_no]
+        return made
+
+    def _intern(self, table: list, index: dict, name: str) -> int:
+        found = index.get(name)
+        if found is None:
+            found = index[name] = len(table)
+            table.append(name)
+        return found
+
+    def add(self, obj: dict[str, Any], start: int, length: int, line_no: int) -> None:
+        """One entry: the same window, fence and severity rules as `_annotate`, kept as numbers and ids."""
+        begin, end = _when(obj["start"]), _when(obj["end"])
+        level = severity({"is_sealed": obj.get("sealed") is True, "start_epoch_s": _epoch(begin),
+                          "past_fence": None if end is None else end > _FENCE, "caller": obj["caller"]})
+        stamp = _when(obj["ts_utc"])
+        symbol = obj.get("symbol")
+        self.starts.append(start)
+        self.lengths.append(length)
+        self.line_nos.append(line_no)
+        self.ts_us.append(NO_TS if stamp is None else _micros(stamp))
+        self.caller_ids.append(self._intern(self.callers, self.caller_index, obj["caller"]))
+        self.symbol_ids.append(self._intern(self.symbols, self.symbol_index, symbol)
+                               if isinstance(symbol, str) else NO_SYMBOL)
+        self.key_set_ids.append(_KEY_SET_IDS[key_set(obj)])
+        self.severities.append(level)
+
+    def scan(self, raw: bytes, begin: int, first_line_no: int) -> tuple[bool, int, int]:
+        """Index every line of `raw` from byte `begin` (just after a newline, or 0), numbered from `first_line_no`,
+        by the rules of `parse_oos_log`. Returns (partial tail, end of the last complete line, next line number)."""
+        pieces = raw[begin:].split(_NEWLINE)
+        offset, partial = begin, False
+        for position, piece in enumerate(pieces):
+            line_no = first_line_no + position
+            text = piece.decode("utf-8", errors="replace")
+            if text.strip():
+                obj, problem = _parse_line(text)
+                if obj is not None:
+                    self.add(obj, offset, len(piece), line_no)
+                elif position == len(pieces) - 1:
+                    partial = True  # a last line with no newline that does not parse: a write in progress
+                else:
+                    self.errors.append(LineError(line_no, problem or "unreadable"))
+            offset += len(piece) + 1
+        return partial, len(raw) - len(pieces[-1]), first_line_no + len(pieces) - 1
+
+    def finish(self, raw: bytes, partial: bool, stable_end: int, next_line_no: int) -> "CompactLog":
+        key_sets = {_KEY_SET_NAMES[k]: n for k, n in Counter(self.key_set_ids).items()}
+        callers = {self.callers[k]: n for k, n in Counter(self.caller_ids).items()}
+        levels = {str(k): n for k, n in sorted(Counter(self.severities).items())}
+        return CompactLog(
+            raw=raw, starts=self.starts, lengths=self.lengths, line_nos=self.line_nos, ts_us=self.ts_us,
+            caller_ids=self.caller_ids, symbol_ids=self.symbol_ids, key_set_ids=self.key_set_ids,
+            severities=self.severities, callers=tuple(self.callers), caller_index=FrozenDict(self.caller_index),
+            symbols=tuple(self.symbols), errors=tuple(self.errors), partial_tail=partial, stable_end=stable_end,
+            next_line_no=next_line_no, key_set_counts=FrozenDict(key_sets), caller_counts=FrozenDict(callers),
+            severity_counts=FrozenDict(levels))
+
+
+@dataclass(frozen=True, eq=False)
+class CompactLog:
+    """The OOS log as raw bytes plus an index row per entry (see the module docstring). Read-only once built: the
+    arrays are never changed after `_Index.finish`, and `extend_oos_log` copies them."""
+
+    raw: bytes
+    starts: array  # byte offset of each entry's line
+    lengths: array  # bytes in the line, without its newline
+    line_nos: array
+    ts_us: array  # ts_utc in epoch microseconds, NO_TS when it does not parse
+    caller_ids: array  # into `callers`
+    symbol_ids: array  # into `symbols`; NO_SYMBOL when the entry has no text symbol
+    key_set_ids: array  # into _KEY_SET_NAMES
+    severities: array
+    callers: tuple[str, ...]
+    caller_index: Mapping[str, int]
+    symbols: tuple[str | None, ...]
+    errors: tuple[LineError, ...]
+    partial_tail: bool
+    stable_end: int  # bytes up to and including the last newline: an append is indexed from here
+    next_line_no: int  # the number of the line that starts at `stable_end`
+    key_set_counts: Mapping[str, int]  # whole-log counts, keys in order of first appearance (as Counter gives them)
+    caller_counts: Mapping[str, int]
+    severity_counts: Mapping[str, int]  # keyed by the level as text, in level order
+
+    def __len__(self) -> int:
+        return len(self.starts)
+
+    @property
+    def entries(self) -> "LazyEntries":
+        """Every entry in file order, decoded only when read."""
+        return LazyEntries(self, range(len(self)))
+
+    @property
+    def sealed_reads(self) -> int:
+        return self.severity_counts.get(str(SEALED_LEVEL), 0)
+
+    def decode(self, row: int) -> Mapping[str, Any]:
+        """Index row `row` as the full parser's entry: the same `_parse_line` and `_annotate` on the same text."""
+        start = self.starts[row]
+        obj, _ = _parse_line(self.raw[start:start + self.lengths[row]].decode("utf-8", errors="replace"))
+        return _annotate(obj, self.line_nos[row])
+
+    def rows_matching(self, caller: str | None, floor: datetime | None, rows: Sequence[int] | None = None
+                      ) -> Sequence[int]:
+        """The rows (of `rows`, else of the whole log) from `caller` written at or after `floor`, in file order."""
+        rows = range(len(self)) if rows is None else rows
+        if caller is None and floor is None:
+            return rows
+        wanted = None if caller is None else self.caller_index.get(caller)
+        if caller is not None and wanted is None:
+            return []
+        least = None if floor is None else _micros(floor)
+        ids, stamps = self.caller_ids, self.ts_us
+        return [r for r in rows if (wanted is None or ids[r] == wanted)
+                and (least is None or (stamps[r] != NO_TS and stamps[r] >= least))]
+
+    def count_reads(self, *, caller: str, symbol: str) -> int:
+        """Entries from `caller` whose symbol is `symbol` (the instrument page's count), from the index alone."""
+        wanted_caller = self.caller_index.get(caller)
+        wanted_symbol = next((k for k, name in enumerate(self.symbols) if k != NO_SYMBOL and name == symbol), None)
+        if wanted_caller is None or wanted_symbol is None:
+            return 0
+        return sum(1 for c, s in zip(self.caller_ids, self.symbol_ids) if c == wanted_caller and s == wanted_symbol)
+
+    def retained_bytes(self) -> int:
+        """What this value keeps alive, for `FileCache.get(weigh=...)`: the bytes, the arrays (their allocation), the
+        interned names, the errors and the count tables."""
+        parts: list[Any] = [self, self.raw, self.starts, self.lengths, self.line_nos, self.ts_us, self.caller_ids,
+                            self.symbol_ids, self.key_set_ids, self.severities, self.callers, self.caller_index,
+                            self.symbols, self.errors, self.key_set_counts, self.caller_counts, self.severity_counts]
+        parts.extend(self.callers)
+        parts.extend(name for name in self.symbols if name is not None)
+        parts.extend(self.severity_counts)
+        for error in self.errors:
+            parts.extend((error, error.__dict__, error.message))
+        return sum(sys.getsizeof(part) for part in parts)
+
+
+class LazyEntries(Sequence):
+    """A read-only sequence of a `CompactLog`'s entries over some of its rows: an item is decoded when it is read,
+    and a slice is another view (so a page decodes only its own lines)."""
+
+    __slots__ = ("log", "rows")
+
+    def __init__(self, log: CompactLog, rows: Sequence[int]):
+        self.log, self.rows = log, rows
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __getitem__(self, index):  # type: ignore[override]
+        if isinstance(index, slice):
+            return LazyEntries(self.log, self.rows[index])
+        return self.log.decode(self.rows[index])
+
+    def __iter__(self) -> Iterator[Mapping[str, Any]]:
+        return (self.log.decode(row) for row in self.rows)
+
+
+def compact_oos_log(raw: bytes) -> CompactLog:
+    """For `FileCache.get`: the whole log indexed from its first byte (the full parse)."""
+    index = _Index()
+    return index.finish(raw, *index.scan(raw, 0, 1))
+
+
+def extend_oos_log(old: CompactLog, raw: bytes) -> CompactLog | None:
+    """For `FileCache.get(extend=...)`: when `raw` is `old`'s bytes with more after them, keep `old`'s rows up to
+    its last complete line and index only what follows (a half-written last line is read again); else None, and
+    the cache parses `raw` in full."""
+    if len(raw) <= len(old.raw) or not raw.startswith(old.raw):
+        return None
+    index = _Index.prefix_of(old, bisect_left(old.starts, old.stable_end))
+    return index.finish(raw, *index.scan(raw, old.stable_end, old.next_line_no))
 
 
 def key_set_counts(entries: Iterable[Mapping[str, Any]]) -> dict[str, int]:
@@ -205,22 +431,28 @@ def parse_since(text: str) -> datetime:
     return stamp
 
 
-def filter_entries(entries: Sequence[Mapping[str, Any]], *, caller: str | None,
-                   since: str | datetime | None) -> list[Mapping[str, Any]]:
-    """Every entry from `caller` written at or after `since`, in file order."""
+def filter_entries(entries: Sequence[Mapping[str, Any]] | CompactLog, *, caller: str | None,
+                   since: str | datetime | None) -> Sequence[Mapping[str, Any]]:
+    """Every entry from `caller` written at or after `since`, in file order. Over a `CompactLog` (or a view of one)
+    the filters run on the index and the result is a `LazyEntries` view: nothing is decoded here."""
     floor = parse_since(since) if isinstance(since, str) else since
+    if isinstance(entries, CompactLog):
+        return LazyEntries(entries, entries.rows_matching(caller, floor))
+    if isinstance(entries, LazyEntries):
+        return LazyEntries(entries.log, entries.log.rows_matching(caller, floor, entries.rows))
     return [e for e in entries
             if (caller is None or e["caller"] == caller)
             and (floor is None or ((stamp := _when(e["ts_utc"])) is not None and stamp >= floor))]
 
 
-def select_entries(entries: Sequence[Mapping[str, Any]], *, caller: str | None, since: str | datetime | None,
-                   limit: int, offset: int = 0) -> list[Mapping[str, Any]]:
+def select_entries(entries: Sequence[Mapping[str, Any]] | CompactLog, *, caller: str | None,
+                   since: str | datetime | None, limit: int, offset: int = 0) -> list[Mapping[str, Any]]:
     """One page of matching entries, oldest first: the `limit` entries that come `offset` entries before the
-    newest (offset 0 is the newest window, offset = limit the one before it)."""
+    newest (offset 0 is the newest window, offset = limit the one before it). Over a `CompactLog` only the page's
+    lines are decoded."""
     kept = filter_entries(entries, caller=caller, since=since)
     stop = len(kept) - max(offset, 0)
-    return kept[max(stop - limit, 0):stop] if limit > 0 and stop > 0 else []
+    return list(kept[max(stop - limit, 0):stop]) if limit > 0 and stop > 0 else []
 
 
 # ---------------------------------------------------------------- openings

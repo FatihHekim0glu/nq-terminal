@@ -15,6 +15,11 @@ FileCache
   made the run index (0.7 MB of heads over 163 MB of result files) overflow the 128 MiB desktop cap on
   every pass, and an LRU scanned in a cycle larger than itself keeps nothing. An entry charged more than
   the cap is served but not cached. Thread safe (FastAPI runs sync endpoints in a thread pool).
+- Optional hooks on `get` (W5C D6), for a caller whose value is not JSON-like: `weigh(value)` gives the bytes the
+  value really keeps, charged in place of `entry_weight` (a compact index over a file's bytes weighs more than the
+  file, and the estimate cannot walk it); `extend(old, raw)` builds the new value from the cached one when the file
+  has only grown (a larger size, an mtime no older), and returns None to fall back to the full parser. The hook
+  checks the bytes themselves (the old ones a prefix of the new), so the stat test only decides when to ask.
 - Read hook (result cache, services/result_cache.py): every read, a hit included, reports the file and the
   (mtime_ns, size) it was read at to the result cache's recorder; a missing file is reported as missing, and a file
   that changed while it was read is reported as unpinned, so a result built on it is never cached.
@@ -358,8 +363,10 @@ class FileCache:
     def read_csv(self, path: Path) -> pd.DataFrame:
         return self.get(path, parse_csv, kind="csv").copy()
 
-    def get(self, path: Path, parser: Callable[[bytes], T], *, kind: str) -> T:
-        """The parsed file, from the cache while `(mtime_ns, size)` is unchanged. `kind` names the parser."""
+    def get(self, path: Path, parser: Callable[[bytes], T], *, kind: str, weigh: Callable[[T], int] | None = None,
+            extend: Callable[[T, bytes], T | None] | None = None) -> T:
+        """The parsed file, from the cache while `(mtime_ns, size)` is unchanged. `kind` names the parser; `weigh` and
+        `extend` are the optional hooks of the module docstring."""
         target = self._confine(Path(path))
         key = (os.path.normcase(str(target)), kind)
         try:
@@ -372,6 +379,8 @@ class FileCache:
         if cached is not None:
             result_cache.record_file(target, cached.mtime_ns, cached.size)
             return cached.value
+        if extend is not None:
+            parser = self._extending(key, stat.st_mtime_ns, stat.st_size, parser, extend)
         try:
             value, stable = self._load(target, parser)
         except Exception:
@@ -379,7 +388,8 @@ class FileCache:
             result_cache.record_unstable(target)
             raise
         if stable is not None:
-            self._store(key, _Entry(stable[0], stable[1], value, entry_weight(value, stable[1])))
+            weight = entry_weight(value, stable[1]) if weigh is None else weigh(value)
+            self._store(key, _Entry(stable[0], stable[1], value, weight))
             result_cache.record_file(target, *stable)
         else:
             result_cache.record_unstable(target)
@@ -405,6 +415,21 @@ class FileCache:
         if target.exists() and not target.is_file():
             raise FileAccessError(f"{target.name} is not a regular file")
         return target
+
+    def _extending(self, key: tuple[str, str], mtime_ns: int, size: int, parser: Callable[[bytes], T],
+                   extend: Callable[[T, bytes], T | None]) -> Callable[[bytes], T]:
+        """`parser`, or one that first offers the stale cached value to `extend` when the file has only grown."""
+        with self._lock:
+            stale = self._entries.get(key)
+        if stale is None or size <= stale.size or mtime_ns < stale.mtime_ns:
+            return parser
+        old = stale.value
+
+        def parse(raw: bytes) -> T:
+            grown = extend(old, raw)
+            return parser(raw) if grown is None else grown
+
+        return parse
 
     def _read_bytes(self, target: Path) -> bytes:
         return target.read_bytes()

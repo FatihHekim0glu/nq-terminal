@@ -114,11 +114,6 @@ export const MESSAGES = {
   tapeOn: 'Event tape on. <NO> <GO> hides it.',
   tapeOff: 'Event tape off.',
   noEquities: 'No equities in nq-lab: Equity is accepted but matches nothing.',
-  /** F2 and F4 have no function of their own (look spec 5.2); the browser does not get them either. */
-  reservedKeys: {
-    F2: 'F2 has no function in nq-lab. Type REG <GO> for the registry, or use a key on the key toolbar.',
-    F4: 'F4 has no function in nq-lab. Type LEDG <GO> for the ledger, or use a key on the key toolbar.',
-  },
   backNone: 'Nothing to go back to in this panel.',
   forwardNone: 'Nothing to go forward to in this panel.',
   noPanel: 'No panel {value} on this screen.',

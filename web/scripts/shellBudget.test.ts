@@ -55,6 +55,11 @@ const PINNED_SHELL_CEILING = 114_900
  * lives in that chunk (state/remoteStore.ts applyLookOnStoredChange), not in the shell modules, and so does the shared
  * storage's write observer (state/safeStorage.observe.ts wraps the shared instance when the store starts). The shell
  * measures 109,894 B, 6 B under this target: the next change that grows it must move something else out first.
+ *
+ * Wave W5C (desktop memory and first launch) held it too. The record watch's quiet gate (chrome/useQuietReady.ts) sits in
+ * the reader's own chunk, and F2 and F4's lines moved from copy/chrome.ts to copy/navKeys.ts beside F3 and F5 to F7, which
+ * only the on-demand key actions read. The shell measures 109,827 B. A change to any lazy chunk renames it, and the new
+ * hashes in the shell's import list move its gzip size by a few bytes either way (7 B measured), so keep a margin.
  */
 const SHELL_TARGET_AFTER_DIET_4 = 109_900
 /** The gallery build's shell, which is about 0.9 kB larger (113,738 B measured), plus the same 2 kB. */
@@ -91,6 +96,8 @@ const ON_DEMAND: ReadonlyArray<readonly [string, string]> = [
   // Shell diet 4 (v2.1 polish): what a key press or a menu needs loads on demand through a small loader in the shell
   // (chrome/KeyToolbar.lazy.ts, chrome/CommandLine.menus.load.ts) and is preloaded at the first idle moment.
   ['the key actions and their copy (chrome/KeyToolbar.actions.ts, copy/navKeys.ts)', 'F5 would reload'],
+  // W5C: F2 and F4's lines moved from copy/chrome.ts (MESSAGES, a shell object) to copy/navKeys.ts beside F3 and F5 to F7.
+  ['the F2 and F4 reserved-key lines (copy/navKeys.ts, read by chrome/KeyToolbar.actions.ts)', 'F2 has no function in nq-lab'],
   ["the command line's menu builders and the sector menu copy (chrome/CommandLine.menus.ts, copy/sectorMenu.ts)", 'No futures in nq-lab carry this sector key.'],
   ['the numbered menu sheet (chrome/CommandLine.menu.tsx)', 'menu-crumb'],
   ['the suggestion sheet (chrome/CommandLine.sheet.tsx)', 'grp-head'],

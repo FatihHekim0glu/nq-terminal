@@ -10,7 +10,7 @@
 // The command line has focus from the first paint (U05), so a line typed straight after load is not lost to <body>.
 // The provider supervises the backend connection (roadmap 7): the API DOWN strip sits under the header and
 // the status line names the time the backend went quiet. The research-record watch (roadmap 16) reads its
-// six records only after the first idle moment; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
+// six records once HOME's own queries go quiet; its segment, WATCH <GO> and WATCH SEEN <GO> reach the chrome
 // through useRecordWatch. The reader, the diff and their long copy load on demand, never with this file. GRAB <GO> asks
 // the Workspace handle to grab the focused panel; the image code and its copy load with the Workspace and on
 // demand, never through this file. SAVE, LOAD and FORGET (roadmap #14) go through the Workspace handle (saveWorkspace,
@@ -70,7 +70,8 @@ const KeyMapOverlay = lazy(() => import('./chrome/KeyToolbar.overlay').then((m) 
 // without a word, since the line is a courtesy and HELP says the same.
 const HomeOrientation = lazy(() => import('./screens/home/HomeOrientation'))
 // The record watch's reader (the six reads, the marks and WATCH SEEN) mounts after the first idle moment and loads as a
-// chunk of its own then, so the shell carries the view (chrome/RecordWatch.view.tsx) and none of the reader. A chunk that
+// chunk of its own then, so the shell carries the view (chrome/RecordWatch.view.tsx) and none of the reader. Its six reads
+// wait inside that chunk until HOME's own queries have gone quiet (chrome/useQuietReady.ts, W5C D5). A chunk that
 // cannot be fetched is dropped without a word: the watch is a courtesy and its segment simply stays away.
 const RecordWatchReader = lazy(() => import('./chrome/RecordWatch.live').then((m) => ({ default: m.RecordWatchReader })))
 
@@ -340,8 +341,10 @@ function Terminal() {
   // the last command ran in, else panel 1 (look spec 4.2, 4.3).
   const panel = { id: focused?.panelId ?? null, number: focused?.number ?? null }
   const tapeOn = useTapeOn()
-  // The six reads of the record watch start at the browser's first idle moment (at the latest 4 s), so they
-  // never compete with HOME's first render. The reader renders nothing; its view is read with useRecordWatch.
+  // The key actions load and the record watch's reader mounts at the browser's first idle moment (at the latest 4 s).
+  // The reader's six reads then wait until HOME's own queries have settled and no fetch has been in flight for 500 ms,
+  // then for the next idle moment (at the latest 12 s after it mounts), so they never compete with HOME's first reads.
+  // The reader renders nothing; its view is read with useRecordWatch.
   const idle = useIdleReady()
   const watch = useRecordWatch()
   const cmd = useRef<CommandLineHandle>(null)

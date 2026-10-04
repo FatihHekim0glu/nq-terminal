@@ -9,6 +9,7 @@
 // - screenshots at 1920x1080 and 1366x768.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectGalleryAxeClean, watchGallery, type GalleryWatch } from './gallery.ts'
+import { expectWatchSegment } from './watchReady.ts'
 
 // 14:02:11 ET (look spec 4.10), the frozen status-line time the shell baselines use.
 const FROZEN_NOW = new Date('2026-09-25T18:02:11Z')
@@ -177,6 +178,7 @@ test.describe('REG and MT', () => {
       await page.clock.setFixedTime(FROZEN_NOW)
       await openReg(page, size)
       await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
+      await expectWatchSegment(page)
       await expect(page).toHaveScreenshot(`reg-${size.width}x${size.height}.png`)
     })
   }

@@ -19,6 +19,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { MASK_COLOR, expectGalleryClean, watchGallery } from '../gallery.ts'
 import { OFFLINE } from '../target.ts'
+import { expectWatchSegment } from '../watchReady.ts'
 import {
   auditCharts,
   axeViolations,
@@ -93,6 +94,7 @@ for (const viewport of VIEWPORTS) {
         const charts = (await auditCharts(page, TABLE_TOGGLE)).summaries.length
         expect(await axeViolations(page), 'axe at rest').toEqual([])
 
+        await expectWatchSegment(page)
         await openDropdown(page)
         await page.mouse.move(0, 0)
         await expect(page).toHaveScreenshot(`${screen.name}-dropdown-${sizeName(viewport)}.png`, { mask: runCounters(page), maskColor: MASK_COLOR })

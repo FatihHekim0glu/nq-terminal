@@ -1,6 +1,7 @@
 // The shell side of the research-record watch (roadmap 16): what the status line, the command line and the grids
-// see of it. The view store starts "waiting"; the reader (RecordWatch.live.tsx) fills it after the first idle
-// moment, so the six reads, the marks, WATCH SEEN and their words load with the reader and never with the shell.
+// see of it. The view store starts "waiting"; the reader (RecordWatch.live.tsx) fills it once HOME's own queries
+// have gone quiet (useQuietReady.ts, in the reader: no fetch in flight for 500 ms, then an idle moment, at the latest 12 s),
+// so the six reads, the marks, WATCH SEEN and their words load with the reader and never with the shell.
 // SHELL RULE: this file imports neither the reader nor the diff nor the query hooks (RecordWatch.view.test.tsx).
 // A local change watch from this browser, not a proof.
 import { useEffect, useState } from 'react'

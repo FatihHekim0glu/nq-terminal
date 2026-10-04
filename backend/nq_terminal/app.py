@@ -17,6 +17,8 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   never be served around the gate and FileCache.
 - `web/dist` is mounted at `/` only when it exists (after the API routes, so `/api` always wins).
 - Interactive docs are off (they load scripts from a CDN); the schema is at /api/openapi.json.
+- `create_app` first makes the system allocator Arrow's memory pool (`services/allocator.py`, W5C D2), so every form
+  returns freed memory to the operating system.
 """
 from __future__ import annotations
 
@@ -37,6 +39,7 @@ from nq_terminal.api.home_prewarm import start_home_prewarm
 from nq_terminal.desktop import lifecycle, watchdog
 from nq_terminal.api import audit, commands, live  # 2.4
 from nq_terminal.api import research  # 2.2
+from nq_terminal.services import allocator  # W5C D2: the system memory pool
 from nq_terminal.services import research as research_service
 from nq_terminal.api import runs  # 2.1
 from nq_terminal.api import data  # 2.3
@@ -131,6 +134,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    allocator.use_system_pool()  # W5C D2: Arrow hands freed memory back to the OS, in every form
     settings = settings if settings is not None else load_settings()
     app = FastAPI(
         lifespan=_lifespan,

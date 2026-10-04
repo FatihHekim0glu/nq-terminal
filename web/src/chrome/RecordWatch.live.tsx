@@ -1,13 +1,13 @@
-// The research-record watch's reader (roadmap 16): after the first idle moment it reads six records the terminal
-// already serves, compares them with this browser's checkpoint, and offers the result to the status line
-// (WatchSegment), the command line (WATCH and WATCH SEEN) and the grids (useWatchMarks) through the view store in
+// The research-record watch's reader (roadmap 16): once HOME's own queries have gone quiet (useQuietReady, W5C D5)
+// it reads six records the terminal already serves, compares them with this browser's checkpoint, and offers the
+// result to the status line (WatchSegment), the command line (WATCH and WATCH SEEN) and the grids (useWatchMarks) through the view store in
 // RecordWatch.view.tsx.
 // SHELL RULE: this file loads on demand (App.tsx mounts it through a dynamic import after the first idle moment),
 // so nothing in the first-paint shell may import it; the shell reads RecordWatch.view.tsx. The diff, the WATCH <GO>
 // list and their long copy load through one dynamic import of ./RecordWatch.lazy, so this file must never import
 // them statically (state/recordWatch.split.test.ts). It re-exports the view module, so callers and tests keep one
 // import path. A local change watch from this browser, not a proof.
-import { useEffect } from 'react'
+import { useEffect, type ReactElement } from 'react'
 import { useConfirmations, useLedger, useOosLog, useOpenings, useRegistry, useRuns } from '../api/queries'
 import { WATCH_READ } from '../copy/watchReader'
 import { fillCopy } from '../copy/workspace'
@@ -24,6 +24,7 @@ import { useRecordWatchStore } from '../state/recordWatch.store'
 import { postMessage } from './MessageLine.store'
 import { useWatchMarksStore, type WatchMark, type WatchMarks as Marks } from './RecordWatch.marks'
 import { useWatchStore, watchListMenu, type RecordWatchView, type WatchLazy } from './RecordWatch.view'
+import { useQuietReady } from './useQuietReady'
 
 // Screens import these from ./RecordWatch.marks directly (see the leaf's header) and the shell reads the view from
 // ./RecordWatch.view; the re-exports keep this module's own callers working.
@@ -131,11 +132,17 @@ function ingest(lazy: WatchLazy, inputs: WatchInputs): void {
 }
 
 /**
- * Mount it once, after the first idle moment (useIdleReady): it renders nothing and calls the six GETs of
- * the records the watch follows, which start with the mount. Once all six have settled it loads the diff and
- * reads the ones that succeeded.
+ * Mount it once, after the first idle moment (useIdleReady): it renders nothing until HOME's own queries have gone
+ * quiet (useQuietReady, W5C D5: no fetch in flight for 500 ms, then an idle moment, at the latest 12 s after this
+ * mount), then mounts the six GETs of the records the watch follows. The gate lives here, in the reader's chunk, so
+ * the shell carries none of it.
  */
-export function RecordWatchReader(): null {
+export function RecordWatchReader(): ReactElement | null {
+  return useQuietReady() ? <RecordWatchReads /> : null
+}
+
+/** The six GETs, which start with the mount. Once all six have settled it loads the diff and reads the ones that succeeded. */
+function RecordWatchReads(): null {
   const registry = useRegistry()
   const confirmations = useConfirmations()
   const openings = useOpenings()

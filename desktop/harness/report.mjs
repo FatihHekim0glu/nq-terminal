@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { loadRecords, COUNTED } from './lib/record.mjs'
 import { ROWS, CHECKS, verdictOf } from './lib/rows.mjs'
 import { median, range, agreeWithinNoise, round } from './lib/stats.mjs'
+import { SETTLED_FROM_S } from './lib/mem.mjs'
 
 export const AGREE_ROWS = ['backend_ready', 'cold_home', 'idle_mem_home']
 
@@ -98,6 +99,8 @@ export function checkEvidence(records, report, { minRuns = 3, builds = ['smoke',
     if (!f.method || !f.unit || f.cpuLoadPct === undefined || !f.stamp?.head) problems.push(`figure ${f.row}/${f.build} in ${path.basename(f.file)} lacks its method, unit, CPU load or provenance stamp`)
   }
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'missing') problems.push(`check ${id} has no reading`)
+  const unread = idleBreakdownUnread(records)
+  if (unread.unread > 0) problems.push(`T4 canvas clause not evaluated: the idle breakdown was not read in ${unread.unread} of ${unread.taken} counted run(s): ${unread.reason}`)
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'not-tested') problems.push(`check ${id} is not tested: only a page-level driver hid the view (no engine-level proof)`)
   return problems
 }
@@ -111,17 +114,59 @@ export function overCeiling(report) {
   return bad
 }
 
-function printTable(report) {
-  const fmt = (v) => (v === null || v === undefined ? '-' : String(round(v, 1)))
-  console.log('row | build | n | median (min..max) | target / ceiling | verdict')
-  for (const r of report.rows) {
-    for (const [build, b] of Object.entries(r.builds)) console.log(`${r.id} | ${build} | ${b.accepted}${b.provisional ? `+${b.provisional}P` : ''} | ${fmt(b.median)} (${fmt(b.min)}..${fmt(b.max)}) ${r.unit} | ${r.target} / ${r.ceiling} | ${b.verdict} ${b.label}`)
-  }
-  for (const [id, a] of Object.entries(report.agreement)) console.log(`agreement ${id}: smoke ${fmt(a.smoke)} measure ${fmt(a.measure)} -> ${a.agree === null ? 'not both measured' : a.agree ? 'within noise' : 'DISAGREE'}`)
-  for (const [id, c] of Object.entries(report.checks)) console.log(`check ${id}: ${c.verdict} (worst ${fmt(c.worstMs)} ms, ceiling ${c.ceiling})`)
-  if (report.unreproducedRuns > 0) console.log(`UNREPRODUCED runs counted: ${report.unreproducedRuns}`)
-  console.log(`rejected runs kept: ${report.rejectedKept.length}; reproduction: ${report.reproduction ? (report.reproduction.reproduced ? 'reproduced' : 'NOT reproduced') + (report.reproduction.dry ? ' (dry)' : '') : 'no verdict in this folder'}`)
+const INFO = 'informational, not the row'
+const T4_CANVAS_NOTE = 'T4: the UI tree alone is above 350 MB idle; look at canvas backing stores per panel (02_decision.md).'
+
+/** Counted records that took an idle reading since the idle breakdown was recorded (the key is present; null means it was not read). */
+function idleBreakdownUnread(records) {
+  const taken = records.filter((r) => COUNTED.includes(r.status) && 'idleBreakdown' in r)
+  const unread = taken.filter((r) => !r.idleBreakdown)
+  const reason = unread.map((r) => r.idleBreakdownError).find(Boolean) ?? 'no reason recorded'
+  return { taken: taken.length, unread: unread.length, reason }
 }
+
+/** Informational lines of the counted records: the idle breakdown per build and the soak's start-up peak and settled maximum.
+ *  They sit beside the row verdicts and never change them; a record without the fields adds nothing. */
+export function informationalLines(records) {
+  const fmt = (v) => String(round(v, 1))
+  const lines = []
+  const counted = records.filter((r) => COUNTED.includes(r.status))
+  for (const build of [...new Set(counted.filter((r) => r.idleBreakdown).map((r) => r.build))]) {
+    const mine = counted.filter((r) => r.build === build && r.idleBreakdown)
+    const med = (get) => median(mine.map(get).filter((v) => typeof v === 'number'))
+    const types = [...new Set(mine.flatMap((r) => Object.keys(r.idleBreakdown.perType ?? {})))]
+    const perType = types.map((t) => `${t} ${fmt(med((r) => r.idleBreakdown.perType?.[t]))}`).join(', ')
+    lines.push(`${INFO}: idle breakdown, ${build} build, median of ${mine.length}: backend ${fmt(med((r) => r.idleBreakdown.backendMB))} MB, UI tree ${fmt(med((r) => r.idleBreakdown.uiTreeMB))} MB, shell ${fmt(med((r) => r.idleBreakdown.shellMB))} MB${perType ? `; UI tree by type (MB): ${perType}` : ''}`)
+    if (mine.some((r) => r.uiOver350 === true)) lines.push(`${INFO}: ${T4_CANVAS_NOTE}`)
+    const cmdFail = mine.find((r) => r.idleBreakdown.commandLineError)
+    if (cmdFail) lines.push(`${INFO}: command lines not read in ${mine.filter((r) => r.idleBreakdown.commandLineError).length} of ${mine.length} runs (${build} build): ${cmdFail.idleBreakdown.commandLineError}; the WebView2 processes are counted as unknown`)
+  }
+  const unread = idleBreakdownUnread(records)
+  if (unread.unread > 0) lines.push(`${INFO}: idle breakdown not read in ${unread.unread} of ${unread.taken} runs: ${unread.reason}; T4 canvas clause not evaluated for those runs`)
+  for (const r of counted.filter((x) => x.soak && typeof x.soak.startupPeakMB === 'number')) {
+    const sk = r.soak
+    const settled = typeof sk.settledMaxMB === 'number' ? `${fmt(sk.settledMaxMB)} MB` : 'none (no sample from 900 s)'
+    if (sk.breakdownFailures > 0) lines.push(`${INFO}: soak breakdown not read in ${sk.breakdownFailures} samples: ${sk.breakdownError}`)
+    lines.push(`${INFO}: soak, start-up peak ${fmt(sk.startupPeakMB)} MB (first sample at ${sk.firstSampleAtS} s), settled maximum ${settled} (samples from ${SETTLED_FROM_S} s); the row is the largest sample, ${fmt(sk.maxMB)} MB`)
+  }
+  return lines
+}
+
+/** The report as printed: the table, the agreement and check lines, then the informational lines. */
+export function reportLines(report, records = []) {
+  const fmt = (v) => (v === null || v === undefined ? '-' : String(round(v, 1)))
+  const out = ['row | build | n | median (min..max) | target / ceiling | verdict']
+  for (const r of report.rows) {
+    for (const [build, b] of Object.entries(r.builds)) out.push(`${r.id} | ${build} | ${b.accepted}${b.provisional ? `+${b.provisional}P` : ''} | ${fmt(b.median)} (${fmt(b.min)}..${fmt(b.max)}) ${r.unit} | ${r.target} / ${r.ceiling} | ${b.verdict} ${b.label}`)
+  }
+  for (const [id, a] of Object.entries(report.agreement)) out.push(`agreement ${id}: smoke ${fmt(a.smoke)} measure ${fmt(a.measure)} -> ${a.agree === null ? 'not both measured' : a.agree ? 'within noise' : 'DISAGREE'}`)
+  for (const [id, c] of Object.entries(report.checks)) out.push(`check ${id}: ${c.verdict} (worst ${fmt(c.worstMs)} ms, ceiling ${c.ceiling})`)
+  if (report.unreproducedRuns > 0) out.push(`UNREPRODUCED runs counted: ${report.unreproducedRuns}`)
+  out.push(`rejected runs kept: ${report.rejectedKept.length}; reproduction: ${report.reproduction ? (report.reproduction.reproduced ? 'reproduced' : 'NOT reproduced') + (report.reproduction.dry ? ' (dry)' : '') : 'no verdict in this folder'}`)
+  return [...out, ...informationalLines(records)]
+}
+
+function printTable(report, records) { for (const line of reportLines(report, records)) console.log(line) }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const argv = process.argv.slice(2)
@@ -131,7 +176,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const records = loadRecords(dir)
   const report = buildReport(records, { minRuns })
   fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report, null, 1) + '\n', 'utf8')
-  if (argv.includes('--json')) console.log(JSON.stringify(report, null, 1)); else printTable(report)
+  if (argv.includes('--json')) console.log(JSON.stringify(report, null, 1)); else printTable(report, records)
   if (argv.includes('--check')) {
     const problems = checkEvidence(records, report, { minRuns })
     for (const p of problems) console.error(`CHECK FAILED: ${p}`)

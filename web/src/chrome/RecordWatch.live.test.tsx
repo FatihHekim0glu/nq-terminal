@@ -80,6 +80,9 @@ function Harness({ delayMs = 0, onMarks }: { readonly delayMs?: number; readonly
 function mount(node = <Harness />) {
   client = createApiQueryClient()
   client.setDefaultOptions({ queries: { retry: false } })
+  // HOME has answered and nothing is in flight, so the reader's quiet gate (useQuietReady, W5C D5) opens 500 ms after
+  // the reader mounts, then at the next idle moment (jsdom has no idle callback: a short timer stands in).
+  client.setQueryData(['home answered'], true)
   return render(<ApiProvider client={client}>{node}</ApiProvider>)
 }
 

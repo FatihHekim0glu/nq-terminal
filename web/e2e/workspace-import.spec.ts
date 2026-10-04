@@ -25,6 +25,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BACKEND_CSP } from './backendCsp.ts'
+import { removeTree } from './removeTree.ts'
 import { LOOPBACK, readLock } from '../scripts/start/session.ts'
 
 // ---------------------------------------------------------------- harness (restated in desktop-seams.spec.ts)
@@ -330,7 +331,7 @@ test.describe('workspace import from localStorage (03 section 10.4)', () => {
     await siteB?.close()
     await siteA?.close()
     await backend?.stop()
-    if (root !== '') fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 })
+    if (root !== '') await removeTree(root)
   })
 
   test('the first load of a seeded origin imports all ten keys into six documents and lists the origin', async ({ browser }) => {
@@ -419,7 +420,7 @@ test.describe('workspace import against a backend without the store (an older ba
     } finally {
       await site.close()
       await backend.stop()
-      fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 })
+      await removeTree(root)
     }
   })
 })

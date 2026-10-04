@@ -1,5 +1,5 @@
 // The key messages' shell rule (SHELL-DIET): the BACK and FORWARD lines and the reserved F-key lines are read
-// by the key toolbar's actions (KeyToolbar.actions.ts, part of the first-paint shell), so they live in
+// by the key toolbar's actions (KeyToolbar.actions.ts, on demand since shell diet 4), so they live in
 // copy/navKeys.ts. copy/help.ts holds what the HELP screen and the key map overlay read, both of which load
 // later, and must stay out of the shell. This reads the sources as text.
 import { describe, expect, it } from 'vitest'
@@ -18,7 +18,10 @@ const importsCopy = (text: string, name: string) => new RegExp(String.raw`\bfrom
 describe('navKeys: the shell lines', () => {
   it('keeps the strings the key toolbar posted before the move', () => {
     expect(NAV_MESSAGES).toEqual({ backTo: 'Back to {value}.', forwardTo: 'Forward to {value}.' })
-    expect(Object.keys(RESERVED_F_MESSAGES)).toEqual(['F3', 'F5', 'F6', 'F7'])
+    // W5C: F2 and F4 joined them from copy/chrome.ts (MESSAGES), word for word.
+    expect(Object.keys(RESERVED_F_MESSAGES)).toEqual(['F2', 'F3', 'F4', 'F5', 'F6', 'F7'])
+    expect(RESERVED_F_MESSAGES.F2).toBe('F2 has no function in nq-lab. Type REG <GO> for the registry, or use a key on the key toolbar.')
+    expect(RESERVED_F_MESSAGES.F4).toBe('F4 has no function in nq-lab. Type LEDG <GO> for the ledger, or use a key on the key toolbar.')
     expect(RESERVED_F_MESSAGES.F5).toBe('F5 would reload: every panel history would be lost. Type HOME <GO> instead.')
     expect(RESERVED_F_MESSAGES.F3).toContain('browser find bar')
     expect(RESERVED_F_MESSAGES.F6).toContain('address bar')

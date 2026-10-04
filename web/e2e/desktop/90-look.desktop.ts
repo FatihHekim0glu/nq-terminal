@@ -11,6 +11,7 @@
 // This file runs last: the frozen clock is installed in the page for good (the engine's one context cannot be thrown away).
 import type { Locator, Page } from '@playwright/test'
 import { MASK_COLOR } from '../gallery.ts'
+import { expectWatchSegment } from '../watchReady.ts'
 import { FROZEN_NOW, SCREENS, closeDropdown, openDropdown, openScreen, type ScreenCase } from '../visual/screens.ts'
 import { expect, test, VIEWPORT } from './fixtures.ts'
 import { clearStorage, openHome, settle, watch } from './app.ts'
@@ -56,6 +57,7 @@ const frameOptions = (page: Page): Locator => page.locator('.frame-btn[aria-labe
 async function hideScrollbars(page: Page): Promise<void> {
   await page.addStyleTag({ content: '* { scrollbar-width: none !important }' })
   await settle(page)
+  await expectWatchSegment(page)
 }
 
 test.describe('the look against the Windows Chromium baselines', () => {

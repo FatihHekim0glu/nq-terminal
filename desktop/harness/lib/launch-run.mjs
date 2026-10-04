@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import { attach, sleep } from './cdp.mjs'
 import { shellSpec, startShell, readDevToolsPort, teardown, identityRows, listState, newState } from './shell.mjs'
 import { readShellLog, milestones, engineSettingsProblems, waitForMilestone } from './shelllog.mjs'
-import { memTree } from './mem.mjs'
+import { memTree, memTreeBreakdown, errorText, T4_UI_TREE_MB } from './mem.mjs'
 import { mergeRecorded } from './survivors.mjs'
 import { makeLab } from './lab.mjs'
 import { isMainTree, LAB, TERMINAL } from './paths.mjs'
@@ -71,6 +71,20 @@ async function memSamples(pid, n, gapMs) {
 }
 
 const memRow = (samples) => round1(median(samples.map((s) => mb(s.wsPrivate))))
+
+/**
+ * Where the idle reading sits: backend, UI tree (WebView2) and shell in MB, and the UI tree by process type. Information beside
+ * the unchanged idle_mem_home figure; null when the tree cannot be read, because a failed side reading must never fail the launch.
+ */
+export function idleBreakdownOf(pid, read = memTreeBreakdown, onError = () => {}) {
+  try {
+    const { backendMB, uiTreeMB, shellMB, perType, commandLineError } = read(pid)
+    return { backendMB, uiTreeMB, shellMB, perType, ...(commandLineError ? { commandLineError } : {}) }
+  } catch (e) { onError(errorText(e)); return null }
+}
+
+/** The T4 canvas clause: the UI tree alone above 350 MB at idle. null when there is no breakdown (not read, which is not the same as not over). */
+export const uiOver350Of = (breakdown) => (breakdown ? breakdown.uiTreeMB > T4_UI_TREE_MB : null)
 
 async function smokePageRows(cdp, port, rows, detail, o) {
   const kind = o.realData ? 'real' : 'fixture'
@@ -161,6 +175,8 @@ export async function launchRun({ build, exe, runDir, o = {} }) {
     result.memSamples = samples.map((s) => ({ n: s.n, wsPrivateMB: round1(mb(s.wsPrivate)), privateBytesMB: round1(mb(s.privateBytes)), wsMB: round1(mb(s.ws)), cpuTotalPct: s.cpuTotalPct }))
     treeRows = mergeRecorded(...samples.map(identityRows))
     result.rows.idle_mem_home = memRow(samples)
+    result.idleBreakdown = idleBreakdownOf(run.child.pid, undefined, (why) => { result.idleBreakdownError = why; console.error(`idle breakdown not read: ${why}`) })
+    result.uiOver350 = uiOver350Of(result.idleBreakdown)
     result.processCount = samples.at(-1).n
     if (session && opts.pageRows) await smokePageRows(session.cdp, session.port, result.rows, result.detail, opts)
   } catch (e) {

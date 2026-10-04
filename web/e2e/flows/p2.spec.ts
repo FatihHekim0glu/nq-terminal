@@ -9,6 +9,7 @@
 // with X-NQT: 1). Screenshot baselines are taken with the masked areas painted black.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { MASK_COLOR } from '../gallery.ts'
+import { expectWatchSegment } from '../watchReady.ts'
 import { axeViolations, FROZEN_NOW, VIEWPORTS, type Viewport } from '../visual/screens.ts'
 import { expectCleanFlow, openScreen, openTerminal, runLine, settle, status, watchFlow } from './support.ts'
 
@@ -34,6 +35,7 @@ async function start(page: Page, viewport: Viewport) {
 }
 
 async function shot(page: Page, name: string, viewport: Viewport, also: Locator[] = []): Promise<void> {
+  await expectWatchSegment(page)
   await page.mouse.move(0, 0)
   await expect(page).toHaveScreenshot(`p2-${name}-${size(viewport)}.png`, { mask: [...counters(page), ...also], maskColor: MASK_COLOR })
 }

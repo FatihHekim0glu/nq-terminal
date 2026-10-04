@@ -275,7 +275,9 @@ fn watch_visibility(window: &WebviewWindow, config_dir: &std::path::Path) {
                 let text = crate::reads::read_log_tail(&file, 32)
                     .ok()
                     .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
-                if let Some(next) = next_visibility(current, text.as_deref().and_then(parse_visibility)) {
+                if let Some(next) =
+                    next_visibility(current, text.as_deref().and_then(parse_visibility))
+                {
                     apply_visibility(&window, next);
                     current = next;
                 }

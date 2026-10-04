@@ -2,7 +2,7 @@
 // must each be caught; a complete synthetic set must pass.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildReport, checkEvidence, overCeiling, collectFigures } from '../report.mjs'
+import { buildReport, checkEvidence, overCeiling, collectFigures, reportLines } from '../report.mjs'
 import { ROWS, rowsForLaunch } from '../lib/rows.mjs'
 import { figure } from '../lib/record.mjs'
 
@@ -149,4 +149,92 @@ test('an engine-level simulated minimise still reads within ceiling', () => {
     figures: [figure({ row: 'minimise_sim_stream_back_ms', build: 'smoke', value: 2500, unit: 'ms', method: 'm', cpuLoadPct: 2, provenance: STAMP, extra: { driver: 'controller-file', engineLevel: true } })] }
   const report = buildReport([engine])
   assert.equal(report.checks.minimise_sim_stream_back_ms.verdict, 'within-ceiling')
+})
+
+// Informational lines (born failing: reportLines did not exist). They sit beside the row verdicts and never change them.
+const BREAKDOWN = { backendMB: 164.5, uiTreeMB: 180.9, shellMB: 4.2, perType: { renderer: 93.7, 'gpu-process': 36.4, browser: 35.7 } }
+const idleRecord = (slot, over = {}) => record('smoke', slot, GOOD.smoke, { idleBreakdown: BREAKDOWN, uiOver350: false, ...over })
+const soakRecord = (maxMB, extra = {}) => record('smoke', 9, { soak_mem: maxMB }, { mode: 'soak', soak: { n: 4, maxMB, lastMB: 700, slopeMBPerHour: -300, firstSampleAtS: 5, startupPeakMB: maxMB, settledMaxMB: 1290, ...extra } })
+const info = (lines) => lines.filter((l) => /informational, not the row/.test(l))
+
+test('a soak record over 1,500 MB still fails its row, with the informational lines beside it', () => {
+  const recs = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(1577.4)]
+  const report = buildReport(recs)
+  const row = report.rows.find((r) => r.id === 'soak_mem')
+  assert.equal(row.builds.smoke.verdict, 'over-ceiling')
+  assert.equal(row.verdict, 'over-ceiling')
+  assert.ok(overCeiling(report).some((b) => /soak_mem is over/.test(b)))
+  const lines = reportLines(report, recs)
+  assert.ok(lines.some((l) => /^soak_mem \| smoke \|.*over-ceiling ACCEPTED$/.test(l)), 'the row line is the one of today')
+  const soakInfo = info(lines).filter((l) => /soak/i.test(l))
+  assert.equal(soakInfo.length, 1)
+  assert.match(soakInfo[0], /start-up peak 1577\.4 MB/)
+  assert.match(soakInfo[0], /first sample at 5 s/)
+  assert.match(soakInfo[0], /settled maximum 1290 MB/)
+  assert.match(soakInfo[0], /from 900 s/)
+})
+
+test('the informational lines are added after the table and leave every existing line as it was', () => {
+  const plain = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(900)].map((r) => { const { soak, ...rest } = r; return r.mode === 'soak' ? { ...rest, soak: { n: 4, maxMB: 900, lastMB: 700, slopeMBPerHour: 0 } } : r })
+  const rich = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(900)].map((r) => (r.build === 'smoke' && r.mode === 'rows' ? { ...r, idleBreakdown: BREAKDOWN, uiOver350: false } : r))
+  const before = reportLines(buildReport(plain), plain)
+  const after = reportLines(buildReport(rich), rich)
+  assert.equal(info(before).length, 0, 'no new fields, no informational line')
+  assert.equal(info(after).length, 2, 'one for the idle breakdown, one for the soak')
+  assert.deepEqual(after.filter((l) => !/informational, not the row/.test(l)), before)
+  assert.ok(after.indexOf(info(after)[0]) > after.findIndex((l) => /^rejected runs kept/.test(l)))
+})
+
+test('the idle breakdown is one labelled line per build, and a UI tree over 350 MB prints the T4 canvas note', () => {
+  const recs = [...complete(), idleRecord(11), idleRecord(12)]
+  const lines = info(reportLines(buildReport(recs), recs)).filter((l) => /idle/i.test(l))
+  assert.equal(lines.length, 1)
+  assert.match(lines[0], /backend 164\.5 MB/)
+  assert.match(lines[0], /UI tree 180\.9 MB/)
+  assert.match(lines[0], /shell 4\.2 MB/)
+  assert.match(lines[0], /renderer 93\.7/)
+  assert.doesNotMatch(reportLines(buildReport(recs), recs).join('\n'), /canvas/i)
+  const tall = [...complete(), idleRecord(11, { uiOver350: true, idleBreakdown: { ...BREAKDOWN, uiTreeMB: 412 } })]
+  const text = reportLines(buildReport(tall), tall).join('\n')
+  assert.match(text, /T4/)
+  assert.match(text, /canvas backing stores per panel/)
+})
+
+test('rejected and dry records add nothing to the informational lines', () => {
+  const recs = [...complete(), idleRecord(11, { status: 'rejected' }), idleRecord(12, { status: 'dry' })]
+  assert.equal(info(reportLines(buildReport(recs), recs)).length, 0)
+})
+
+test('the informational lines carry no em or en dash', () => {
+  const recs = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(1577.4), idleRecord(11, { uiOver350: true })]
+  assert.doesNotMatch(reportLines(buildReport(recs), recs).join('\n'), /[\u2013\u2014]/)
+})
+
+// "Not read" must not look like "not over" (born failing: a null breakdown printed nothing and --check was silent).
+const unreadRecord = (slot, why) => record('smoke', slot, GOOD.smoke, { idleBreakdown: null, uiOver350: null, ...(why ? { idleBreakdownError: why } : {}) })
+
+test('runs whose idle breakdown was not read print a not-read line and say the T4 canvas clause was not evaluated', () => {
+  const recs = [...complete(), unreadRecord(11, 'powershell timed out'), unreadRecord(12, 'powershell timed out'), idleRecord(13)]
+  const lines = info(reportLines(buildReport(recs), recs))
+  assert.ok(lines.some((l) => /idle breakdown not read in 2 of 3 runs: powershell timed out/.test(l) && /T4 canvas clause not evaluated/.test(l)), lines.join('\n'))
+  const all = [...complete(), unreadRecord(11), unreadRecord(12)]
+  const allLines = info(reportLines(buildReport(all), all))
+  assert.ok(allLines.some((l) => /idle breakdown not read in 2 of 2 runs: no reason recorded/.test(l)), allLines.join('\n'))
+  assert.doesNotMatch(allLines.join('\n'), /[\u2013\u2014]/)
+})
+
+test('--check refuses to call the T4 clause clear while a counted run has no breakdown, and passes when every run was read', () => {
+  const bad = [...complete(), unreadRecord(11, 'cim error')]
+  assert.ok(checkEvidence(bad, buildReport(bad)).some((p) => /T4 canvas clause not evaluated/.test(p) && /1 of 1/.test(p)))
+  const ok = [...complete(), idleRecord(11)]
+  assert.deepEqual(checkEvidence(ok, buildReport(ok)), [])
+  const old = complete()
+  assert.deepEqual(checkEvidence(old, buildReport(old)), [], 'records from before the field existed are not accused')
+})
+
+test('a failed command-line lookup and failed soak breakdown reads each print an informational line', () => {
+  const cmd = [...complete(), idleRecord(11, { idleBreakdown: { ...BREAKDOWN, commandLineError: 'cim failed' } })]
+  assert.ok(info(reportLines(buildReport(cmd), cmd)).some((l) => /command lines not read/.test(l) && /cim failed/.test(l) && /unknown/.test(l)))
+  const sk = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(900, { breakdownFailures: 3, breakdownError: 'timeout' })]
+  assert.ok(info(reportLines(buildReport(sk), sk)).some((l) => /soak breakdown not read in 3 samples: timeout/.test(l)))
 })

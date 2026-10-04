@@ -8,6 +8,9 @@ NQT_PORT         port bound on 127.0.0.1 (default 8765; default 0 in desktop mod
 NQT_CACHE_BYTES  byte cap of the in-memory gated bar cache (default 2 GiB in the browser, 512 MiB in desktop mode)
 NQT_JOBS         "off": this backend never runs a backtest or the IB snapshot (test and smoke backends); unset, empty
                  or "on": the queue as today. Any other value is refused.
+NQT_TWO_DAY_WINDOW exactly "1": measurement only. The browser or launcher backend reads MON's two-day sparkline as the
+                 app does (its exact window, no 1m year kept), so the T4 and G2 comparison with the browser terminal's
+                 HOME is made on equal terms. Never set by start.ps1; leave it unset in daily use.
 NQT_DEV          exactly "1": start.ps1 -Dev; the Vite dev origin (DEV_PORT) joins the same-origin list.
 NQT_FIXTURE_DIR  folder laid out like the project root (results/, live/, ...) that replaces it for every
                  research and live file read; used by tests, E2E and screenshots. It is resolved (strict)
@@ -18,6 +21,11 @@ NQT_STATE_DIR    the backend's own state folder (default terminal/state, git-ign
                  its persisted bodies in <state>/cache. A given value is resolved strictly (it must be an existing
                  folder) and refused when it is a UNC or device path, the project root or any parent of it, or a
                  folder under results/, data/, live/ or backtests/output/. Tests point it at a temporary folder.
+
+Derived (NQT_TWO_DAY_WINDOW above can only turn it off in the other forms):
+two_day_keeps_year  False in desktop mode, True in the browser and launcher forms. In the app, MON's two-day sparkline
+                    reads its exact window and keeps no 1m year in the bar cache (W5C D1); a year frame already cached
+                    is still used. The other forms keep the year-aligned read (PRD DL1), so their budgets are unchanged.
 """
 from __future__ import annotations
 
@@ -65,6 +73,7 @@ class Settings:
     jobs_enabled: bool = True
     dev: bool = False
     file_cache_bytes: int | None = None  # None: each FileCache keeps its own default (the browser terminal)
+    two_day_window_only: bool = False  # NQT_TWO_DAY_WINDOW=1: measurement only, see the module docstring
 
     @property
     def fixture_mode(self) -> bool:
@@ -81,6 +90,12 @@ class Settings:
     def reads_stdin(self) -> bool:
         """Whether `python -m nq_terminal` reads TOKEN and NONCE on stdin (desktop or launcher mode only)."""
         return self.desktop or self.stdin_control
+
+    @property
+    def two_day_keeps_year(self) -> bool:
+        """Whether the two-day sparkline keeps the 1m year it reads in the bar cache: not in desktop mode (W5C D1),
+        and not in a browser or launcher form that the measurement switch NQT_TWO_DAY_WINDOW has put on the same read."""
+        return not (self.desktop or self.two_day_window_only)
 
     @property
     def data_root(self) -> Path:
@@ -200,4 +215,5 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         jobs_enabled=_jobs_enabled(source),
         dev=_switch(source, "NQT_DEV"),
         file_cache_bytes=DESKTOP_FILE_CACHE_BYTES if desktop else None,
+        two_day_window_only=_switch(source, "NQT_TWO_DAY_WINDOW"),
     )

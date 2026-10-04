@@ -9,6 +9,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Locator, type Page, type Request } from '@playwright/test'
 import { AXE_TAGS, MASK_COLOR } from './gallery.ts'
+import { expectWatchSegment } from './watchReady.ts'
 
 const SIZES = [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }] as const
 const FROZEN_NOW = new Date('2026-09-25T18:02:11Z')
@@ -38,6 +39,9 @@ async function openLine(page: Page, line: string, timeout = 10_000): Promise<Loc
   await page.keyboard.press('Control+k')
   const box = page.getByRole('combobox', { name: 'Command line' })
   await box.fill(line)
+  // The preview names what <GO> will do, so it shows only once the command index has reached the page: the index response
+  // arriving is not that (an Enter pressed in between is refused as an unknown line and leaves the text in the box).
+  await expect(page.locator('.cmd-preview')).toContainText('<GO>')
   await box.press('Enter')
   await expect(box).toHaveValue('')
   const panel = page.locator(`[data-nqt-title="${line}"]`)
@@ -284,6 +288,7 @@ test.describe('Phase 11 screenshots', () => {
         await settle(page)
         await page.mouse.move(0, 0)
         await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
+        await expectWatchSegment(page)
         const gate = page.getByRole('contentinfo').locator('.seg', { hasText: /^Gate reads/ })
         await expect(page).toHaveScreenshot(`p11-${shot.name}-${size.width}x${size.height}.png`, {
           mask: [gate, page.locator('.mkt-gate')],

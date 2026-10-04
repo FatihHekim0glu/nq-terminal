@@ -125,6 +125,32 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 
 `pagejs.mjs` and `probe.js` are the page scripts of the T2 harness (the screen wait, the pivot step and the HOME marks), unchanged.
 
+## Where the memory sits (informational, not a row)
+
+The idle and soak rows are unchanged: `idle_mem_home` is the private working set of the whole tree after HOME has settled, and
+`soak_mem` is the largest sample of the soak. Beside them the records now carry figures that say where that memory sits and when the
+soak peaked. None of them has a ceiling, none changes a row's rule, ceiling or reading point, and `report.mjs` labels each line
+`informational, not the row`.
+
+| Field | Record | Meaning |
+|---|---|---|
+| `idleBreakdown` | rows record, at the idle reading | `backendMB` (python, its launcher and console host), `uiTreeMB` (all WebView2 processes), `shellMB` (everything else, the shell executable) and `perType` (the UI tree by process type), in MB of private working set, from one read after the three idle samples; `null` when the tree could not be read, with the reason in the record's `idleBreakdownError` (also on stderr); `commandLineError` is added when the command-line lookup failed and the WebView2 processes were counted as `unknown` |
+| `perType` keys | | `browser` (the WebView2 root, no `--type`), `renderer`, `gpu-process`, `utility-network`, `utility-storage`, `utility-other`, `crashpad`, `other`, and `unknown` when a command line could not be read |
+| `uiOver350` | rows record | `true` when `uiTreeMB` is above 350 MB: the T4 clause of `02_decision.md` (look at canvas backing stores per panel) |
+| `soak.firstSampleAtS`, `soak.startupPeakMB` | soak record | the time and the reading of the first sample, taken after the first workload round; the start-up peak |
+| `soak.settledMaxMB` | soak record | the largest sample at 900 s or later; `null` when no sample reaches 900 s |
+| `soak.privateBytesMinMB`, `soak.privateBytesMaxMB` | soak record | the range of the private bytes (commit charge, not part of the row) over the samples |
+| `soak.breakdown` | soak record | `{ first, last }`: the breakdown of the first and of the last sample that has one, each with its `atS` |
+| `soak.breakdownFailures`, `soak.breakdownError` | soak record | present only when a sample's breakdown read failed: how many samples, and the first reason |
+
+A `null` breakdown means not read, never not over: `report.mjs` prints `idle breakdown not read in N of M runs` and `--check` fails with `T4 canvas clause not evaluated` while any counted run lacks it, so the T4 canvas clause is never recorded as clear without being measured.
+
+`soak.maxMB` stays the largest sample and is still the row; the start-up peak and the settled maximum sit beside it and the owner
+decides how the row reads. In the same way `libmem.mjs` exports `classifyTree(processes)` (pure: each process is
+`{ pid, parent, name, commandLine, wsPrivate }` with the private working set in bytes; the three parts add up to `totalMB`) and
+`memTreeBreakdown(rootPid)`, which reads the tree with `mem.ps1` and joins each process with its command line from one hidden
+PowerShell query. The breakdown is read for information only: if it fails, the record keeps `null` and the run carries on.
+
 ## Known limits
 
 - The harness measures; it does not decide G2. `report.mjs --check` fails when a row, a build's readings or a figure's provenance is missing, and

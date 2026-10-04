@@ -12,16 +12,25 @@ keys and its single-flight: a page request that races a task for the same key wa
 call, one gate line). The two price reads that have no result cache entry (the universe panel and the
 GP bars) go through the same route functions and the bar service's own cache; the page's later reads are hits there.
 
-Order (02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch, with an empty state folder): what
-HOME asks for, in the order it needs it, then what HOME never asks for. The ledger first (HOME's REG; price-free, so it
-persists to disk, and on a first launch there is no copy on disk yet), then the run index (price-free and persisted
-too), then the price-reading tasks: MON two-day and universe, GP bars. Then, as `later` tasks that wait until the process is quiet (`services/prewarm.py`), the deflated
+Order (02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch, with an empty state folder; W5C
+D4: no work HOME does not show runs during the HOME window): what HOME asks for, in the order it needs it, then what
+HOME never asks for. First the `warm` task, which reads no price and writes no gate line: it imports
+`nq_lab.sizing_stats` (and with it `scipy.stats`), `scipy.cluster.hierarchy` and `scipy.spatial.distance`, and builds
+the XNYS calendar once through `data.last_sessions`. Those modules stay lazy imports off the start path (D1.1); paying
+for them here, after the port is bound, takes about 1.15 s off HOME's EQ panel request on a first launch. Then the
+run index (price-free; HOME's GP panel requests /api/runs through `useGpData`, and a first launch has no persisted
+index, so a request that raced a later task would build it cold from the heads of the result files while HOME loads).
+Then the price-reading tasks: MON two-day and universe, GP bars. Then, as `later` tasks that wait until the process is
+quiet (`services/prewarm.py`): the ledger (price-free and persisted to disk; it serves RecordWatch and LEDG, never HOME:
+HOME's REG panel reads the registry, hypotheses, multiple-testing and confirmations, not the ledger), the deflated
 Sharpe (no HOME panel asks for it; 1.2 s cold) and EQ's bootstrap (HOME's EQ panel asks for /panel, the full EQ screen
-for the bootstrap): on a first launch they would otherwise take the interpreter from HOME's own requests while HOME
-loads. On a usual launch the deflated Sharpe and the ledger come from disk at once.
+for the bootstrap, and the EQ Enter unit of DEC1 depends on it being warm). On a first launch they would otherwise take
+the interpreter from HOME's own requests while HOME loads. On a usual launch the deflated Sharpe and the ledger come
+from disk at once.
 """
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 from typing import Any, Callable
@@ -54,6 +63,18 @@ def two_day_symbols() -> list[str]:
     the grid. Rows below the fold are the page's own requests (each cell asks only once it has been on screen)."""
     from nq_lab.dtsmom_universe import TABLE
     return [f"{c.root}.V.0" for c in TABLE[:HOME_MON_ROWS]]
+
+
+def _warm(state: Any) -> Task:
+    """Price-free warm-up: the analytics imports and the XNYS calendar HOME's EQ panel would otherwise pay for. No
+    serve call, no gate line; `state` is not read."""
+    def run() -> object:
+        importlib.import_module("nq_lab.sizing_stats")  # pulls in scipy.stats
+        importlib.import_module("scipy.cluster.hierarchy")
+        importlib.import_module("scipy.spatial.distance")
+        from nq_terminal.api import data
+        return data.last_sessions()
+    return _named("warm", run)
 
 
 def _two_day(state: Any) -> Task:
@@ -109,12 +130,12 @@ def _runs(state: Any) -> Task:
 
 def home_tasks(state: Any) -> list[Task]:
     """The prewarm tasks for what the HOME layout asks for, in order; none of them runs until the prewarm thread calls it."""
-    return [_ledger(state), _runs(state), _two_day(state), _universe(state), _gp_bars(state)]
+    return [_warm(state), _runs(state), _two_day(state), _universe(state), _gp_bars(state)]
 
 
 def later_tasks(state: Any) -> list[Task]:
     """What no HOME panel asks for but the next screens do; run once HOME is served and the process is quiet."""
-    return [_deflated(state), _eq_bootstrap(state)]
+    return [_ledger(state), _deflated(state), _eq_bootstrap(state)]
 
 
 def home_prewarm_allowed(app: FastAPI, environ: dict[str, str] | None = None) -> bool:

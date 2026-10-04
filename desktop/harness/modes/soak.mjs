@@ -10,7 +10,7 @@ import { openSmoke } from '../lib/launch-run.mjs'
 import { resolveBuild } from '../lib/build.mjs'
 import { runLine, waitHomeReady } from '../lib/page-rows.mjs'
 import { executeSlot } from '../lib/slot.mjs'
-import { memTree } from '../lib/mem.mjs'
+import { memTree, memTreeBreakdown, errorText, SETTLED_FROM_S } from '../lib/mem.mjs'
 import { figure } from '../lib/record.mjs'
 import { MB } from '../lib/rows.mjs'
 import { isMainTree } from '../lib/paths.mjs'
@@ -20,17 +20,47 @@ export const SAMPLE_EVERY_S = 300
 const GIP_DATE = { fixture: '2011-01-20', real: '2019-03-14' }
 export const workload = (kind) => ['NQ GP 1d', `NQ GIP ${GIP_DATE[kind]}`, 'volmanaged_v0 EQ', 'REG', '27F MON', '27F CORR', 'LEDG', 'OOS', 'LIVE', 'RUNS', 'MT']
 
-/** Summary of a sample series: the largest, the last, the slope of a straight-line fit (MB per hour) and whether it is still growing. */
+export { SETTLED_FROM_S }
+
+/**
+ * Summary of a sample series. maxMB is the soak row (the largest sample) and its meaning does not change. Beside it, as
+ * information only: firstSampleAtS and startupPeakMB (the first sample with a reading), settledMaxMB (the largest sample
+ * from SETTLED_FROM_S, null when there is none), the range of the private bytes and the breakdown (backend, UI tree, shell)
+ * at the first and last sample that carries one (breakdownFailures and breakdownError, the first reason, only when a read failed). Also the last sample and the slope of a straight-line fit (MB per hour).
+ */
 export function summariseSoak(samples) {
-  const xs = samples.map((s) => s.wsPrivateMB).filter((v) => typeof v === 'number')
-  if (xs.length === 0) return { n: 0, maxMB: null, lastMB: null, slopeMBPerHour: null }
-  const t = samples.filter((s) => typeof s.wsPrivateMB === 'number').map((s) => s.atS / 3600)
+  const have = samples.filter((s) => typeof s.wsPrivateMB === 'number')
+  const empty = { n: 0, maxMB: null, lastMB: null, slopeMBPerHour: null, firstSampleAtS: null, startupPeakMB: null, settledMaxMB: null, privateBytesMinMB: null, privateBytesMaxMB: null, breakdown: null }
+  if (have.length === 0) return empty
+  const xs = have.map((s) => s.wsPrivateMB)
+  const t = have.map((s) => s.atS / 3600)
   const n = xs.length
   const mt = t.reduce((a, b) => a + b, 0) / n
   const mx = xs.reduce((a, b) => a + b, 0) / n
   const den = t.reduce((a, b) => a + (b - mt) ** 2, 0)
   const slope = den === 0 ? 0 : t.reduce((a, b, i) => a + (b - mt) * (xs[i] - mx), 0) / den
-  return { n, maxMB: Math.max(...xs), lastMB: xs.at(-1), slopeMBPerHour: Math.round(slope * 10) / 10 }
+  const settled = have.filter((s) => s.atS >= SETTLED_FROM_S).map((s) => s.wsPrivateMB)
+  const pb = samples.map((s) => s.privateBytesMB).filter((v) => typeof v === 'number')
+  const withBreakdown = samples.filter((s) => s.breakdown)
+  const at = (s) => ({ atS: s.atS, ...s.breakdown })
+  const failed = samples.filter((s) => s.breakdownError)
+  return { n, maxMB: Math.max(...xs), lastMB: xs.at(-1), slopeMBPerHour: Math.round(slope * 10) / 10,
+    firstSampleAtS: have[0].atS, startupPeakMB: have[0].wsPrivateMB, settledMaxMB: settled.length ? Math.max(...settled) : null,
+    privateBytesMinMB: pb.length ? Math.min(...pb) : null, privateBytesMaxMB: pb.length ? Math.max(...pb) : null,
+    breakdown: withBreakdown.length ? { first: at(withBreakdown[0]), last: at(withBreakdown.at(-1)) } : null,
+    ...(failed.length ? { breakdownFailures: failed.length, breakdownError: failed[0].breakdownError } : {}) }
+}
+
+/** The breakdown of the tree for one sample, or null: it is information, and a failed read must not end the soak. The reason goes to onError. */
+export function breakdownOf(pid, onError = () => {}, read = memTreeBreakdown) {
+  try { const { backendMB, uiTreeMB, shellMB, perType } = read(pid); return { backendMB, uiTreeMB, shellMB, perType } } catch (e) { onError(errorText(e)); return null }
+}
+
+/** The breakdown fields of one sample: the breakdown, or the reason it was not read (also written to stderr). */
+function sampleBreakdown(pid) {
+  let breakdownError = null
+  const breakdown = breakdownOf(pid, (why) => { breakdownError = why; console.error(`soak breakdown not read: ${why}`) })
+  return breakdownError === null ? { breakdown } : { breakdown, breakdownError }
 }
 
 async function round(cdp, kind, errors) {
@@ -64,7 +94,8 @@ export async function run({ args, outDir, provenance }) {
           await round(session.cdp, kind, errors)
           const m = memTree(session.run.child.pid)
           samples.push({ atS: Math.round((Date.now() - t0) / 1000), wsPrivateMB: Math.round((m.wsPrivate / MB) * 10) / 10, privateBytesMB: Math.round((m.privateBytes / MB) * 10) / 10, processes: m.n,
-            jsHeapMB: Math.round(((await session.cdp.eval('performance.memory ? performance.memory.usedJSHeapSize / 1048576 : null').catch(() => null)) ?? 0) * 10) / 10 })
+            jsHeapMB: Math.round(((await session.cdp.eval('performance.memory ? performance.memory.usedJSHeapSize / 1048576 : null').catch(() => null)) ?? 0) * 10) / 10,
+            ...sampleBreakdown(session.run.child.pid) })
           if (fs.existsSync(SOAK_STOP_FILE)) { stoppedEarly = true; break }
           const wait = everyS * 1000 - ((Date.now() - t0) % (everyS * 1000))
           await sleep(Math.min(wait, Math.max(0, totalS * 1000 - (Date.now() - t0))))
@@ -76,7 +107,7 @@ export async function run({ args, outDir, provenance }) {
       result.soak = summariseSoak(samples)
       result.rows = result.soak.maxMB === null ? {} : { soak_mem: result.soak.maxMB }
       result.homeReady = result.homeReady !== false
-      result.figures = result.soak.maxMB === null ? [] : [figure({ row: 'soak_mem', build: 'smoke', value: result.soak.maxMB, unit: 'MB', method: 'soak runner: whole-tree private working set, the largest sample', cpuLoadPct: gate?.avgPct, provenance, extra: { samples: samples.length, hours, partial: result.stoppedEarly || totalS < 8 * 3600 } })]
+      result.figures = result.soak.maxMB === null ? [] : [figure({ row: 'soak_mem', build: 'smoke', value: result.soak.maxMB, unit: 'MB', method: 'soak runner: whole-tree private working set, the largest sample', cpuLoadPct: gate?.avgPct, provenance, extra: { samples: samples.length, hours, partial: result.stoppedEarly || totalS < 8 * 3600, startupPeakMB: result.soak.startupPeakMB, settledMaxMB: result.soak.settledMaxMB } })]
       return result
     } })
   console.log(JSON.stringify({ mode: 'soak', status: out.status, soak: out.result?.soak, partial: out.result?.stoppedEarly, windows: out.result?.watch?.newWindows.length }))

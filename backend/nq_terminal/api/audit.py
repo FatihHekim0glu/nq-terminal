@@ -2,8 +2,10 @@
 
 - `/api/audit/oos-log?caller=&since=&limit=&offset=`: whole-log counts (by key set and caller, terminal and sealed
   reads) plus one page of the entries that match the filters: `offset` counts back from the newest (0 is the newest
-  window), entries oldest first inside the page; `matched` counts every matching entry. The parsed log is cached on the file's (mtime, size)
-  through `FileCache`, so a research workflow appending lines only costs a re-parse.
+  window), entries oldest first inside the page; `matched` counts every matching entry. The log is cached in its
+  compact form (`audit.CompactLog`, W5C D6) on the file's (mtime, size) through `FileCache`: an index over the raw
+  bytes, charged what it really keeps, of which only the requested page is decoded. The gate or a research workflow
+  appending lines costs only the appended lines (`audit.extend_oos_log`); any other change is a full parse.
 - `/api/audit/openings`: the openings file, its sha256, the sealed-line digest and the gate's pin checks
   (`oos_gate.check_openings_pin`, `check_sealed_log_pin` via `api.system.sealed_status`), next to the pinned values.
 - `/api/audit/spec-hashes`: every registry spec and every sealed-window confirmation re-hashed now.
@@ -41,7 +43,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit"], responses=error_response
 
 _STATE_KEY = "audit_files"
 _LOCK = threading.Lock()
-_EMPTY = audit.ParsedLog(entries=(), errors=(), partial_tail=False)
+_EMPTY = audit.compact_oos_log(b"")
 MAX_FILTER_CHARS = 128
 
 
@@ -67,10 +69,12 @@ def _files(request: Request) -> FileCache:
     return cache
 
 
-def read_log(request: Request) -> tuple[audit.ParsedLog, bool]:
-    """The parsed OOS log and whether the file exists (a missing log is an empty audit, not an error)."""
+def read_log(request: Request) -> tuple[audit.CompactLog, bool]:
+    """The OOS log in its compact form and whether the file exists (a missing log is an empty audit, not an error).
+    `.entries` is a lazily decoded view; a caller that only counts should use the index (`count_reads`)."""
     try:
-        parsed = _files(request).get(_settings(request).oos_log_path, audit.parse_oos_log_bytes, kind="oos-log")
+        parsed = _files(request).get(_settings(request).oos_log_path, audit.compact_oos_log, kind="oos-log",
+                                     weigh=audit.CompactLog.retained_bytes, extend=audit.extend_oos_log)
     except FileNotFoundError:
         return _EMPTY, False
     return parsed, True
@@ -89,23 +93,23 @@ def oos_log(
         floor = audit.parse_since(since) if since else None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    parsed, present = read_log(request)
-    matched = audit.filter_entries(parsed.entries, caller=caller, since=floor)
+    log, present = read_log(request)
+    matched = audit.filter_entries(log, caller=caller, since=floor)
     entries = audit.select_entries(matched, caller=None, since=None, limit=limit, offset=offset)
-    callers = audit.caller_counts(parsed.entries)
+    callers = dict(log.caller_counts)
     return OosLog(
         log_present=present,
-        total=len(parsed.entries),
+        total=len(log),
         returned=len(entries),
         matched=len(matched),
-        partial_tail=parsed.partial_tail,
-        parse_errors=[LineProblem(line_no=e.line_no, message=e.message) for e in parsed.errors],
-        key_sets=audit.key_set_counts(parsed.entries),
+        partial_tail=log.partial_tail,
+        parse_errors=[LineProblem(line_no=e.line_no, message=e.message) for e in log.errors],
+        key_sets=dict(log.key_set_counts),
         counts_by_caller=callers,
         terminal_reads=callers.get(audit.TERMINAL_CALLER, 0),
-        sealed_reads=sum(1 for e in parsed.entries if e["is_sealed"]),
+        sealed_reads=log.sealed_reads,
         severity_levels=[SeverityLevel(level=level, meaning=text) for level, text in audit.SEVERITY_LEVELS],
-        severity_counts=audit.severity_counts(parsed.entries),
+        severity_counts=dict(log.severity_counts),
         fence_end=IS_END.date().isoformat(),
         filters=OosLogFilters(caller=caller, since=since, limit=limit, offset=offset),
         entries=[OosLogEntry.model_validate(dict(e)) for e in entries],

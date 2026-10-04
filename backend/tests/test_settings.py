@@ -261,3 +261,35 @@ def test_nqt_dev_is_on_only_for_exactly_1():
 
 def test_desktop_mode_keeps_the_state_dir(tmp_path):
     assert load_settings({"NQT_DESKTOP": "1", "NQT_STATE_DIR": str(tmp_path)}).state_dir == tmp_path.resolve()
+
+
+@pytest.mark.parametrize(("env", "keeps"), [
+    ({"NQT_DESKTOP": "1"}, False),  # the app: the two-day sparkline reads its exact window (W5C D1)
+    ({}, True),  # the browser terminal keeps the year-aligned read (PRD DL1)
+    ({"NQT_STDIN_CONTROL": "1"}, True),  # the launcher too
+    ({"NQT_DESKTOP": "0"}, True),
+])
+def test_only_desktop_mode_reads_the_two_day_window_without_keeping_the_year(env, keeps):
+    assert load_settings(env).two_day_keeps_year is keeps
+
+
+def test_two_day_keeps_year_follows_the_desktop_field():
+    from dataclasses import replace
+
+    base = load_settings({})
+    assert replace(base, desktop=True).two_day_keeps_year is False
+    assert replace(base, desktop=False, stdin_control=True).two_day_keeps_year is True
+
+
+@pytest.mark.parametrize(("env", "keeps"), [
+    ({"NQT_TWO_DAY_WINDOW": "1"}, False),  # measurement only: the browser form reads the same window as the app
+    ({"NQT_TWO_DAY_WINDOW": "1", "NQT_STDIN_CONTROL": "1"}, False),
+    ({"NQT_TWO_DAY_WINDOW": "1", "NQT_DESKTOP": "1"}, False),
+    ({"NQT_TWO_DAY_WINDOW": "0"}, True),
+    ({"NQT_TWO_DAY_WINDOW": "yes"}, True),
+    ({"NQT_TWO_DAY_WINDOW": ""}, True),
+])
+def test_the_two_day_window_switch_gives_the_browser_form_the_apps_read(env, keeps):
+    s = load_settings(env)
+    assert s.two_day_keeps_year is keeps
+    assert s.two_day_window_only is (env.get("NQT_TWO_DAY_WINDOW") == "1")

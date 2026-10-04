@@ -24,6 +24,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BACKEND_CSP } from './backendCsp.ts'
+import { removeTree } from './removeTree.ts'
 import { LOOPBACK, mintCode, readLock } from '../scripts/start/session.ts'
 
 // ---------------------------------------------------------------- harness (restated in desktop-seams.spec.ts)
@@ -321,7 +322,7 @@ test.describe('seam: the workspace store across a backend restart', () => {
       await after.close()
     } finally {
       await shutdown()
-      fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 })
+      await removeTree(root)
     }
   })
 })
@@ -346,7 +347,7 @@ test.describe('seams: the launch code and the bridge', () => {
   test.afterAll(async () => {
     await site?.close()
     await backend?.stop()
-    if (root !== '') fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 })
+    if (root !== '') await removeTree(root)
   })
 
   test('a launch code opens the terminal once and a reused code is refused', async ({ browser }) => {

@@ -29,11 +29,14 @@ from test_result_cache_routes import LOCAL, LOOPBACK, Lab
 from conftest import api_client
 
 WAIT_S = 20.0
-# What HOME asks for first, in the order it needs it; then the entries HOME never asks for (the deflated Sharpe, EQ's
-# bootstrap), which a first launch must not compute while HOME is loading (02 section 4.1 item 3: the first launch).
-HOME_FIRST = ["ledger", "runs", "two_day", "universe", "gp_bars"]
-AFTER_HOME = ["deflated", "eq_bootstrap"]
+# The price-free warm-up first (scipy and the XNYS calendar, which HOME's EQ panel request would otherwise pay for),
+# then what HOME asks for, in the order it needs it (the run index first of the reads: HOME's GP panel requests
+# /api/runs); then the entries HOME never asks for (the ledger, which serves RecordWatch and LEDG, the deflated Sharpe,
+# EQ's bootstrap), which a first launch must not compute while HOME is loading (02 section 4.1 item 3: the first launch).
+HOME_FIRST = ["warm", "runs", "two_day", "universe", "gp_bars"]
+AFTER_HOME = ["ledger", "deflated", "eq_bootstrap"]
 TASK_NAMES = HOME_FIRST + AFTER_HOME
+WARM_MODULES = ["nq_lab.sizing_stats", "scipy.cluster.hierarchy", "scipy.spatial.distance"]
 
 
 @pytest.fixture(autouse=True)
@@ -98,13 +101,59 @@ def test_the_task_list_is_the_home_layout_in_order_and_builds_without_any_read()
     assert all(callable(t) for t in tasks)
 
 
-def test_born_failing_the_ledger_runs_first_and_nothing_home_never_asks_for_runs_before_home_is_served():
-    """A first launch has no ledger on disk: the ledger (HOME's REG) starts first, and the deflated Sharpe (1.2 s cold,
-    asked for by no HOME panel) and EQ's bootstrap (HOME's EQ panel asks for /panel) wait until every HOME task ran."""
+def test_home_task_order():
+    """W5C D4: the warm task heads the HOME list; only the ledger moves to the front of the later list, because HOME's
+    REG reads the registry, hypotheses, multiple-testing and confirmations, never the ledger. The run index stays in the
+    HOME list (right after warm): HOME's GP panel requests /api/runs (useGpData), and on a first launch there is no
+    persisted run index, so a request that raced a later task would build it cold during HOME."""
+    state = SimpleNamespace()
+    assert [t.__name__ for t in home_prewarm.home_tasks(state)] == ["warm", "runs", "two_day", "universe", "gp_bars"]
+    assert [t.__name__ for t in home_prewarm.later_tasks(state)] == ["ledger", "deflated", "eq_bootstrap"]
+
+
+def test_born_failing_nothing_home_never_asks_for_waits_but_the_run_index_is_warm_before_home_asks():
+    """The ledger (RecordWatch, LEDG), the deflated Sharpe (1.2 s cold, asked for by no HOME panel) and
+    EQ's bootstrap (HOME's EQ panel asks for /panel) wait until every HOME task ran."""
     names = [t.__name__ for t in home_prewarm.home_tasks(SimpleNamespace())]
     later = [t.__name__ for t in home_prewarm.later_tasks(SimpleNamespace())]
-    assert names[0] == "ledger"
+    assert names[0] == "warm"
     assert names == HOME_FIRST and later == AFTER_HOME, "what HOME never asks for waits for a quiet process"
+
+
+def test_warm_task_reads_no_price(tmp_path, monkeypatch):
+    """The warm task imports the analytics modules HOME's EQ panel needs and builds the XNYS calendar once, with no
+    serve call, no gate line and no bump of the process serve counter."""
+    import importlib
+
+    from nq_terminal.services import result_cache
+
+    lab = Lab(tmp_path, "warm").build()
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the warm task must not serve a price")
+
+    lab.app.state.serve_fn = refuse
+    imported: list[str] = []
+    real_import = importlib.import_module
+
+    def record(name, package=None):
+        imported.append(name)
+        return real_import(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", record)
+    sessions: list[int] = []
+    real_last = data.last_sessions
+
+    def spy_last(*args, **kwargs):
+        sessions.append(1)
+        return real_last(*args, **kwargs)
+
+    monkeypatch.setattr(data, "last_sessions", spy_last)
+    serves, lines = result_cache.serve_count(), len(gate_lines(lab))
+    named(lab.app.state, "warm")()
+    assert [name for name in imported if name in WARM_MODULES] == WARM_MODULES
+    assert sessions == [1], "the XNYS calendar is built through the route's own helper"
+    assert result_cache.serve_count() == serves and len(gate_lines(lab)) == lines
 
 
 # ---------------------------------------------------------------- when it starts

@@ -3,7 +3,8 @@
 `root` must match `^[A-Z0-9]{1,5}$` (else 422) and name a root the terminal knows: the 27 universe futures, the
 catalog-only extras (`constants.EXTRA_INSTRUMENTS`) or a root with a processed series in the catalog (else 404,
 before any file is read). No price is read: the catalog describes files from their parquet footers, the OOS log
-and the results files are read through the data services' confined caches. Errors never carry a path.
+and the results files are read through the data services' confined caches; the logged-read count comes from the
+OOS log's compact index (W5C D6), so no log entry is decoded. Errors never carry a path.
 """
 from __future__ import annotations
 
@@ -18,6 +19,7 @@ from nq_terminal.api.system import gate_stats
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.instruments import InstrumentDes
 from nq_terminal.services import instruments, journals
+from nq_terminal.services.bars import CALLER
 from nq_terminal.services.files import FileAccessError, FileDecodeError, redact_local_paths, thaw
 
 router = APIRouter(prefix="/api", tags=["instruments"], responses=error_responses(404, 422, 503))
@@ -45,6 +47,7 @@ def instrument(request: Request, root: str = PathParam(..., pattern=ROOT_PATTERN
     found = instruments.describe(
         root, entries=services.catalog.entries(), files=services.files,
         results_dir=services.settings.results_dir, read_json=_reader(services),
-        logged=instruments.logged_reads(parsed.entries, root), this_process=gate_stats(request.app.state)[0],
+        logged=parsed.count_reads(caller=CALLER, symbol=f"{root}.V.0"),
+        this_process=gate_stats(request.app.state)[0],
         today_et=journals.today_et())
     return InstrumentDes.model_validate(redact_local_paths(found.model_dump(), services.settings.data_root))

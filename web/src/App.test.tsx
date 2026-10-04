@@ -679,16 +679,33 @@ function replyWithRecords(url: string): Response {
   return body === undefined ? reply(url) : new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
-/** jsdom has no requestIdleCallback: install one the test fires by hand (RecordWatch.live falls back to a 2 s timer). */
-function holdIdle(): { readonly fire: () => void; readonly requested: () => number } {
-  let waiting: (() => void) | null = null
+/**
+ * jsdom has no requestIdleCallback: install one the test fires by hand (RecordWatch.live falls back to a 2 s timer).
+ * The chrome asks for one idle moment at once (the key actions and the record watch's reader mount on it); the reader asks
+ * for its own only after HOME's queries have been quiet for 500 ms (useQuietReady), so `fireQuiet` fires the first, waits
+ * for that later request and fires it too.
+ */
+function holdIdle(): { readonly fire: () => void; readonly fireQuiet: () => Promise<void>; readonly requested: () => number } {
+  let waiting: Array<() => void> = []
   const request = vi.fn((callback: () => void) => {
-    waiting = callback
-    return 1
+    waiting.push(callback)
+    return waiting.length
   })
   Object.assign(window, { requestIdleCallback: request, cancelIdleCallback: vi.fn() })
+  const fire = () =>
+    act(() => {
+      const now = waiting
+      waiting = []
+      now.forEach((callback) => callback())
+    })
   return {
-    fire: () => act(() => waiting?.()),
+    fire,
+    fireQuiet: async () => {
+      const before = request.mock.calls.length
+      fire() // the first idle moment: the reader mounts (a no-op when it already has)
+      await waitFor(() => expect(request.mock.calls.length).toBeGreaterThan(before), { timeout: 8000 })
+      fire() // the reader's own idle moment, asked for once HOME has been quiet for 500 ms
+    },
     requested: () => request.mock.calls.length,
   }
 }
@@ -716,14 +733,51 @@ describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
     render(<App />)
     await homeLoaded()
     const status = screen.getByRole('contentinfo')
-    expect(idle.requested()).toBe(1)
+    expect(idle.requested()).toBeGreaterThanOrEqual(1)
     expect(gateLogReads()).toHaveLength(0)
     expect(segmentLike(status, /^WATCH /)).toBeUndefined()
-    idle.fire()
+    await idle.fireQuiet()
     await waitFor(() => expect(gateLogReads()).toHaveLength(1))
     await waitFor(() => expect(segment(status, 'WATCH from now')).toBeTruthy())
     const calls = fetchSpy.mock.calls as unknown as Array<[string, RequestInit | undefined]>
     expect(calls.every(([, init]) => (init?.method ?? 'GET').toUpperCase() === 'GET')).toBe(true)
+  })
+
+  it('record watch reads wait until HOME queries settle', { timeout: 40_000 }, async () => {
+    // HOME's REG panel reads the registry and the confirmations: hold both pending, answer everything else.
+    const held: Array<() => void> = []
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/registry' || url === '/api/confirmations') {
+        await new Promise<void>((release) => held.push(release))
+      }
+      return replyWithRecords(url)
+    })
+    const idle = holdIdle()
+    render(<App />)
+    await homeLoaded()
+    await waitFor(() => expect(held.length).toBeGreaterThan(0))
+    // Past the first idle moment (4 s at the latest) with HOME's reads still in flight: the reader has not mounted. The 4 s
+    // after the idle callback leave a reader that did mount (the old behaviour) ample time to load its chunk and read.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+    })
+    idle.fire()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 4000))
+    })
+    // HOME's own panels read the registry, the confirmations and the runs (the same query keys the reader shares), so only
+    // the routes HOME never reads show whether the reader has mounted.
+    const WATCH_ROUTES = ['/api/ledger', GATE_LOG_READ, '/api/audit/openings']
+    const watchReads = () => fetchSpy.mock.calls.filter(([url]) => WATCH_ROUTES.includes(String(url)))
+    expect(watchReads()).toHaveLength(0)
+    expect(segmentLike(screen.getByRole('contentinfo'), /^WATCH /)).toBeUndefined()
+    // HOME's queries settle: after 500 ms of quiet and one idle callback the six reads start.
+    act(() => held.splice(0).forEach((release) => release()))
+    await idle.fireQuiet()
+    await waitFor(() => expect(gateLogReads()).toHaveLength(1))
+    await waitFor(() => expect(WATCH_ROUTES.every((route) => fetchSpy.mock.calls.some(([url]) => String(url) === route))).toBe(true))
+    await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH from now')).toBeTruthy())
   })
 
   it('reads WATCH no change on a later visit with the same records', async () => {
@@ -731,7 +785,7 @@ describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
     const idle = holdIdle()
     render(<App />)
     await homeLoaded()
-    idle.fire()
+    await idle.fireQuiet()
     await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH no change')).toBeTruthy())
   })
 
@@ -755,7 +809,7 @@ describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
     render(<App />)
     await homeLoaded()
     const status = screen.getByRole('contentinfo')
-    idle.fire()
+    await idle.fireQuiet()
     await waitFor(() => expect(segmentLike(status, /^WATCH 1 changed/)).toBeTruthy())
     expect(segmentLike(status, /^WATCH 1 changed/)?.className).toMatch(/\bwarn\b/)
 
@@ -779,7 +833,7 @@ describe('record watch in the chrome (roadmap 16)', { timeout: 20_000 }, () => {
     const idle = holdIdle()
     render(<App />)
     await homeLoaded()
-    idle.fire()
+    await idle.fireQuiet()
     await waitFor(() => expect(segment(screen.getByRole('contentinfo'), 'WATCH 1 new')).toBeTruthy())
     expect(useMessage.getState().text).toMatch(/^Since .+ ET: 1 run\. WATCH <GO> lists them\.$/)
     expect(WATCH.news).toBe('{n} new')
