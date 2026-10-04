@@ -1,9 +1,12 @@
 """The owner-facing installer hash and size must come from the final build, never from a self-test build.
 
 Every rebuild changes the installer's SHA256 and size, and only the final build's SHA256SUMS in the default folder
-`D:\\dev\\release\\0.1.0` is what the owner checks. A value copied from another folder (a ReleaseDir self-test) makes
-the owner's check fail and reads as a tampered copy. So the owner-facing documents carry the final build's hash (filled after the tag on
-4 October 2026). The 0.1.0 build from `49229b9` is named as history and is the only other hash allowed in them.
+`D:\\dev\\release\\0.1.1` is what the owner checks. A value copied from another folder (a ReleaseDir self-test) makes
+the owner's check fail and reads as a tampered copy. So the owner-facing documents carry the final build's hash.
+
+Until the 0.1.1 installer is built the current value is the literal placeholder `{{0.1.1: installer SHA256}}` (and
+`{{0.1.1: installer bytes}}` for the size), which the manager fills in after the build. Once filled, the current value is
+one 64-digit hash that must be the same everywhere. The 0.1.0 hashes are history and are the only other hashes allowed.
 """
 from __future__ import annotations
 
@@ -11,12 +14,17 @@ import re
 from pathlib import Path
 
 DOCS = Path(__file__).resolve().parents[2] / "docs" / "desktop"
+README = Path(__file__).resolve().parents[2] / "README.md"
 HANDOVER = DOCS / "handover_windows.md"
 SMARTSCREEN = DOCS / "smartscreen.md"
-HISTORY_HASHES = {"c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58"}
-FINAL_SHA = "2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590"
-FINAL_BYTES = "3,253,432"
+HISTORY_HASHES = {
+    "c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58",  # the 0.1.0 build from 49229b9
+    "2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590",  # the final 0.1.0 installer
+}
+SHA_PLACEHOLDER = "{{0.1.1: installer SHA256}}"
+BYTES_PLACEHOLDER = "{{0.1.1: installer bytes}}"
 HEX64 = re.compile(r"\b[0-9a-fA-F]{64}\b")
+VALUE = re.escape(SHA_PLACEHOLDER) + r"|[0-9a-fA-F]{64}"
 
 
 def _owner_documents() -> list[Path]:
@@ -28,42 +36,63 @@ def _installer_lines(path: Path) -> list[str]:
     return [line for line in lines if "installer" in line.lower() or "Expected:" in line]
 
 
-def test_no_owner_document_carries_a_build_hash_other_than_the_history():
+def _verification_step() -> str:
+    text = HANDOVER.read_text(encoding="utf-8")
+    return text[text.index("2. Check the build folder") : text.index("3. For a copy that arrived")]
+
+
+def _current_value() -> str:
+    match = re.search(rf"Expected: `({VALUE})`", _verification_step())
+    assert match, "the verification step names no expected value"
+    return match.group(1)
+
+
+def test_no_owner_document_carries_a_build_hash_other_than_the_history_or_the_current():
+    allowed = HISTORY_HASHES | {_current_value().lower()}
     found = {
         f"{path.name}: {match}"
         for path in _owner_documents()
         for line in _installer_lines(path)
         for match in HEX64.findall(line)
-        if match.lower() not in HISTORY_HASHES | {FINAL_SHA}
+        if match.lower() not in allowed
     }
     assert not found, sorted(found)
 
 
-def test_owner_verification_step_expects_the_final_hash():
+def test_owner_verification_step_expects_the_current_value_for_the_current_version():
+    step = _verification_step()
+    assert "D:\\dev\\release\\0.1.1" in step
+    assert "nq-lab terminal_0.1.1_x64-setup.exe" in step
+    assert _current_value().lower() not in HISTORY_HASHES
+
+
+def test_tag_message_carries_the_current_value():
     text = HANDOVER.read_text(encoding="utf-8")
-    step = text[text.index("2. Check the build folder") : text.index("3. For a copy that arrived")]
-    assert f"Expected: `{FINAL_SHA}`" in step
+    tag_line = next(line for line in text.splitlines() if "tag -a desktop-v0.1.1" in line)
+    assert _current_value() in tag_line
 
 
-def test_tag_message_carries_the_final_hash():
-    text = HANDOVER.read_text(encoding="utf-8")
-    tag_line = next(line for line in text.splitlines() if "tag -a desktop-v0.1.0" in line)
-    assert FINAL_SHA in tag_line
-
-
-def test_smartscreen_carries_both_installer_values():
+def test_smartscreen_verification_expects_the_current_value():
     text = SMARTSCREEN.read_text(encoding="utf-8")
-    assert FINAL_SHA in text
-    assert FINAL_BYTES in text
+    assert _current_value() in text
+    assert "nq-lab terminal_0.1.1_x64-setup.exe" in text
 
 
-def test_every_owner_document_names_the_final_hash_wherever_it_names_one():
-    # The only 64-digit hash besides the history entry is the final build's.
+def test_readme_install_table_and_handover_name_the_same_current_value():
+    readme = README.read_text(encoding="utf-8")
+    row = next(line for line in readme.splitlines() if line.startswith("| `") and "0.1.1_x64-setup.exe" in line)
+    assert _current_value() in row
+    handover = HANDOVER.read_text(encoding="utf-8")
+    if _current_value() == SHA_PLACEHOLDER:
+        assert BYTES_PLACEHOLDER in row
+        assert BYTES_PLACEHOLDER in handover
+
+
+def test_every_owner_document_names_the_current_hash_wherever_it_names_one():
     found = {
         match.lower()
         for path in _owner_documents()
         for line in _installer_lines(path)
         for match in HEX64.findall(line)
     }
-    assert found <= HISTORY_HASHES | {FINAL_SHA}
-    assert FINAL_SHA in found
+    assert found <= HISTORY_HASHES | {_current_value().lower()}

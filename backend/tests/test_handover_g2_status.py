@@ -1,8 +1,11 @@
 """The documents may not state a G2 result that no results file supports.
 
 The G2 measurements are written to `g2_windows/results.md` and the verdict to `g2_windows/verdict.md`. The README
-status and the hand-over must not say that G2 passed or that the measuring was done in a quiet window, and they must
-point to those files. (The W5B wave filled the earlier G2 placeholders from them, so no placeholder is left.)
+status and the hand-over must not say that the measuring was done in a quiet window, and they must point to those
+files. They may say "AUTOMATED PASS" only as the verdict file's own line and only beside a pointer to that file; the
+0.1.1 re-measure of 4 October 2026 put every automated row inside its ceiling, so the earlier ban on the phrase (written
+while a row was over its ceiling) was stale. (The W5B wave filled the earlier G2 placeholders from them, so no
+placeholder is left.)
 """
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ README = DOCS / "README.md"
 HANDOVER = DOCS / "handover_windows.md"
 RESULTS = "g2_windows/results.md"
 VERDICT = "g2_windows/verdict.md"
-BANNED = ("automated pass", "done alone, in a quiet window", "was done alone")
+BANNED = ("done alone, in a quiet window", "was done alone")
 
 
 def _paragraph(path: Path, marker: str) -> str:
@@ -48,3 +51,17 @@ def test_handover_names_the_results_document_in_its_build_table():
     assert len(rows) == 1
     assert re.search(r"g2_windows/results\.md", rows[0])
     assert "{{G2" not in rows[0]
+
+
+def test_the_verdict_file_states_the_automated_verdict_in_its_own_words():
+    text = (DOCS / "g2_windows" / "verdict.md").read_text(encoding="utf-8")
+    assert "AUTOMATED PASS, OWNER ROWS PENDING" in text
+
+
+def test_a_document_that_repeats_automated_pass_points_to_the_verdict_on_the_same_line():
+    for path in (README, HANDOVER):
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if "automated pass" in line.lower()]
+        assert lines, path.name
+        for line in lines:
+            assert "AUTOMATED PASS" in line, line
+            assert VERDICT in line, line

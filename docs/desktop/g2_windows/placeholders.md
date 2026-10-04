@@ -1,5 +1,23 @@
 # G2 placeholder values for the hand-over documents
 
+## Release 0.1.1 (the 0.1.1 re-measure of 4 October 2026)
+
+The documents of release 0.1.1 carry three literal placeholders, which the manager fills after the 0.1.1 build in the default folder `D:\dev\release\0.1.1` and after the tag: `{{0.1.1: installer SHA256}}` (the hash in that folder's `SHA256SUMS`), `{{0.1.1: installer bytes}}` (the size of that file) and `{{0.1.1: tag}}` (the tag name, `desktop-v0.1.1`; the commit it names is added where the text asks for it). They stand in the README (status, install table), in `handover_windows.md` (sections 1, 2 and 7) and in `smartscreen.md` (the verification step), and nowhere else. A self-test build's hash or the measuring build's size (3,253,511 bytes, `D:/dev/w6/release-m/0.1.1`) is not a value to write: it would make the owner's check fail. The G2 values below are read from `results.md` (sections A1 to A7) and `verdict.md`.
+
+| Placeholder | Value to write (0.1.1) | 0.1.0 value, history only | Source in this folder |
+| --- | --- | --- | --- |
+| installer SHA256 | `{{0.1.1: installer SHA256}}`, from `SHA256SUMS` of the final build, written after the tag | `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` | `results.md` section A1 |
+| installer bytes | `{{0.1.1: installer bytes}}`, from the same file | 3,253,432 bytes | `results.md` section A1 |
+| idle memory | 477.3 MB (453.0 to 484.4 MB, median of 6 counted launches, smoke build, real data, desktop caps), inside the 500 MB ceiling, 77.3 MB above the 400 MB target | 505.4 MB (492.4 to 508.4 MB), over the ceiling | `results.md` sections A3 and A4 |
+| summary of the automated rows and the date | "4 October 2026 (0.1.1 re-measure): AUTOMATED PASS, OWNER ROWS PENDING. Every automated row measured on 0.1.1 is inside its ceiling, whole-app idle memory at HOME (477.3 MB against 500 MB) included. The soak, the simulated minimise and T8 are 0.1.0 readings that were not repeated; the measure-artefact rows and the owner-attended rows are pending." | "4 October 2026 (W5C re-measure): the automated part is not passed. One row is over its ceiling: whole-app idle memory at HOME, 505.4 MB against 500 MB." | `verdict.md` |
+| first launch | 3,192.5 ms in the app (smoke build, median of 6, empty state folder; first-launch mode alone 3,183 ms), against the 5,000 ms ceiling and the 4,500 ms first-launch target | 3,167 ms (3,172.5 ms pooled) | `results.md` section A3 |
+| usual launch | 2,797 ms in the app (median of 3, state filled) | 2,750 ms | `results.md` section A3 |
+| EQ and REG, second run of the line | 38.4 ms and 56.9 ms in the app (medians of 3) | 41.3 ms and 57 ms | `results.md` section A3 |
+| soak memory, soak length | not run on 0.1.1; the 0.1.0 reading stands as history | largest sample 705.8 MB, 2 h, PARTIAL | `verdict.md` |
+| pending measure-artefact real-lab rows | still pending: port 8765 was listening. The 0.1.1 measure installer is built at `D:/dev/w6/release-m/0.1.1` and is not installed | installed at `D:/dev/w5c/measure/app` | `results.md` section A5 |
+
+## Release 0.1.0 (the W5C re-measure of 4 October 2026), kept as history
+
 The W5B merge copied the first G2 values into the documents that carried the `G2` placeholders (none is left). The W5C re-measure of 4 October 2026 replaces those values: each row below gives the value to write now and keeps the W5B value as history, so the manager can update the documents that quote it. The installer SHA256 and size are not G2 values: they come from `SHA256SUMS` and the file of the final build in the default folder `D:/dev/release/0.1.0` (SHA256 `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`, 3,253,432 bytes), because a self-test build's hash would make the owner's check fail. The `W6` placeholders were filled on 4 October 2026. Each value is read from `results.md` or `verdict.md` in this folder. A value that depends on a row that was not measured says so; do not replace those with a number.
 
 | Placeholder | Value to write (W5C) | W5B value, history only | Source in this folder |

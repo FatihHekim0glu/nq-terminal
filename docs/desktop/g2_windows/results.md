@@ -1,6 +1,117 @@
-# G2 on Windows: measured results (wave W5C, the re-measure after W5B)
+# G2 on Windows: measured results (release 0.1.1 re-measure; the 0.1.0 and W5B records follow as history)
 
-Taken on the morning of 4 October 2026 on the owner's PC (host `DESKTOP-FM5O3JM`), after the W5C performance changes. This file is the evidence behind the verdict in `verdict.md` and replaces the W5B figures (the W5B version of this file is in commit `09a660d`; section 13 sets the two side by side). Every figure below was read back from a raw record under `D:/dev/w5c/measure-runs` (the folders are named in each section); the exploratory readings that are not rows sit apart in `D:/dev/w5c/explore-runs`. Nothing here was typed from memory.
+Taken on 4 October 2026, in a slot from 16:39 to 16:57 BST, on the owner's PC (host `DESKTOP-FM5O3JM`), after the thread-cap fix of release 0.1.1 (commit `519a3cb`, merged as `656a964`). Sections A1 to A7 are the 0.1.1 record, written from the raw records under `D:/dev/w6/measure-runs` (named in A7). Sections 1 to 14 below them are the 0.1.0 record of wave W5C, unchanged, and section 13 sets W5B beside W5C; they stay as history and are the evidence for every row that 0.1.1 did not re-run. The verdict is in `verdict.md`.
+
+## A1. Read this first
+
+- **What 0.1.1 is for.** On 0.1.0 the release row whole-app idle memory at HOME read 505.4 MB (median of six launches, ceiling 500 MB, target 400 MB) and varied from 487 to 513 MB between launches. 0.1.1 caps the maths thread pools of the desktop backend server, and this file records the official re-measure of that row and of the rows beside it.
+- **Result.** Idle memory at HOME reads **477.3 MB** (453.0 to 484.4 MB over six counted launches), inside the 500 MB ceiling with 15.6 MB of headroom at the worst launch, and still 77.3 MB above the 400 MB target. Every other row that was re-measured stayed inside its ceiling. The automated part of G2 is therefore passed; the owner-attended rows are pending (`verdict.md`).
+- **Tree and builds.** Head `656a964` plus the uncommitted version bump to 0.1.1 (tracked diff: `git diff HEAD` sha256 `2ee6d04a2a203f4e1fe725fdb5a685f65fd25561088ee1be6ae535f4a7211361`, plus the untracked `backend/tests/test_release_version.py`); the stamp was the same before and after the builds. The three GNU builds were made fresh from this tree before any measuring by `desktop/scripts/build-release.ps1 -Version 0.1.1 -TargetDir D:/dev/target/nqt/w5c -OutRoot D:/dev/w6/release-m -LogRoot D:/dev/w6/build-logs` (0 failures; the target folder is W5C's incremental one, and all three builds were rebuilt from this tree) and passed `artefact-check.mjs` (17 files, 2 installers). Smoke exe sha256 `88ff116fff5da5c814123f9677042f107d701bad73e3a7307e59613eeacacfdd`. The release installer of that folder is 3,253,511 bytes and the measure installer 3,219,784 bytes; the shipped installer is a rebuild after the manager's commit, so its size and hash are the placeholders of the hand-over and differ from these.
+- **The quiet slot.** `D:/dev/locks/QUIET` was created at 16:39:55 and deleted at 16:56:42, after the last launch; the QuantPad runners were not touched. Before starting there was no backend pytest, Playwright, cargo or other build running, and CPU read 2.0 to 3.3%. The slot was set by the manager, not named by the owner.
+- **The CPU gate.** Every counted launch sat behind the 60 second CPU gate at a 10% limit. Readings were 3.0 to 3.1% for the rows and first-launch series and 2.9 to 4.9% for the usual launches, so 0 runs were rejected. GPU load was 9 to 15%.
+- **Reproduction held.** The harness digest `7148ac0d...` is unchanged since the W5C reproduction, so the rows ran without `--allow-unreproduced` and no figure carries the UNREPRODUCED label.
+- **Launch conditions.** Rows ran on the smoke build with real data: `harness rows --build smoke --rows all --runs 3 --warmup 1 --real-data`, then `--first-launch --build smoke` three times, then `t4t5.mjs usual-app --runs 3`. Each launch had a fresh temporary state folder (except the usual launch, as designed), the shipped caps, hidden windows and the harness's clean PATH. The window watch showed 0 new windows and 0 foreground changes in every run, and every teardown left 0 survivors.
+- **Port 8765 was listening (pid 46084, the owner's terminal)**, so the harness's real-lab guard would refuse any measure-artefact real-lab launch. Measure-build rows were not run (they are not needed for the smoke rows) and nothing at that port or in that process was touched. A second backend, pid 39464 (`.venv` python, started 2 October), was already running and was left alone.
+- **Not run, as instructed.** Soak, minimise and T8. Their 0.1.0 figures stand as history and are not claimed for 0.1.1.
+- **Research gate and lab state.** The read-only lab check before and after: `jobs.json` sha256 `44CAE38A...` both times, 0 active jobs, `backtests/output` 229 entries unchanged, the `terminal/state` listing unchanged, and `ledger.csv`, `registry.csv` and `oos_openings.json` byte-equal. The gate log grew by 521 lines, all caller `terminal`, all ending at or before 2022-01-01, timestamped 15:43:29 to 15:56:26 UTC, so all inside the run. `backend.lock` read present-not-held before and after (W5C read it as absent); nothing here created it.
+- **Host.** Not freshly booted (up about 2,930 minutes), so the first-launch records say `firstAfterBoot` false, as in W5C.
+
+## A2. What changed in 0.1.1, and why
+
+numpy, scipy (OpenBLAS), OpenMP and Arrow size their worker pools to the logical CPU count when they load, and each worker holds its own private memory. On this 32-thread host the idle backend carried dozens of threads and a large committed arena that the server's small maths (one HOME page of tables and charts) never uses. `backend/nq_terminal/threadcaps.py` now sets `OPENBLAS_NUM_THREADS`, `OMP_NUM_THREADS`, `MKL_NUM_THREADS` and `NUMEXPR_MAX_THREADS` to 2, only where the name is absent so an explicit setting still wins, and `backend/nq_terminal/__main__.py` calls it before the app imports numpy, scipy or pyarrow. The caps stay in the server process: a backtest child gets the allow list of `desktop/envlist.py`, which does not carry these names, so a job still sizes its pools to every core. The change was measured first with an attach driver against a backend serving the real HOME page:
+
+| Backend reading (attach driver) | Before | After |
+| --- | ---: | ---: |
+| Threads | 68 | 13 |
+| Committed private bytes | 1,790 MB | 369 MB |
+| Working set, median | 262.6 MB | 246.1 MB |
+
+In short, the backend went from 68 to 13 threads, its committed private bytes from 1,790 to 369 MB and its median working set from 262.6 to 246.1 MB. The attach driver reads the backend alone, long after start-up. The official row below reads the whole app at the harness's reading point (HOME ready plus a 2.5 second idle check). The attach-driver projection for the official row was about 490 MB and had not been measured; the official reading, 477.3 MB, came out about 13 MB lower. The version bump to 0.1.1 is the only other change in the tree (backend `__version__`, the three Tauri configurations, `Cargo.toml` and `Cargo.lock`, the OpenAPI contract with its regenerated hash in `web/src/api`, and `backend/tests/test_release_version.py`).
+
+## A3. The rows, 0.1.1 against 0.1.0
+
+All readings are the whole-app smoke build, real lab, shipped desktop caps (512 MiB bars, 128 MiB files). "0.1.0" is the W5C reading of section 3 (the `report.mjs` pooled median where the row had more than one series, the rows series otherwise). Medians; the range or the counted values are in the next column.
+
+| Row | Target | Ceiling | 0.1.0 (W5C) | 0.1.1 median (counted values) | Verdict |
+| --- | ---: | ---: | ---: | --- | --- |
+| Whole-app idle at HOME, private working set (the release row) | 400 MB | 500 MB | 505.4 MB (492.4 to 508.4), over | **477.3 MB** (453.0 to 484.4; n = 6: rows series 484.4, 475.4, 482.6; first-launch series 453.0, 479.2, 470.8) | within ceiling, above target |
+| Cold HOME, first launch, empty state folder | 4,500 ms (usual 3,500) | 5,000 ms | 3,172.5 ms (3,148 to 3,225) | 3,192.5 ms (3,164 to 3,210; n = 6: rows 3,210, 3,194, 3,201; first-launch mode 3,164, 3,183, 3,191; first-launch mode alone 3,183 ms) | within target |
+| Cold HOME, usual launch (state filled) | 3,500 ms | 5,000 ms | 2,750 ms | 2,797 ms (2,829, 2,777, 2,797; one priming launch of 3,243 ms not counted; gate 3.1, 2.9, 4.9%) | within target |
+| `volmanaged_v0 EQ`, second run of the line | 1,000 ms | 1,500 ms | 41.3 ms | 38.4 ms (38.4, 33.3, 45.4) | within target |
+| Warm HOME | 1,000 ms | 1,500 ms | 537.2 ms | 537.6 ms (558.8, 537.6, 534.0) | within target |
+| `REG`, second run of the line | 1,000 ms | 1,500 ms | 57 ms | 56.9 ms (60.6, 56.9, 56.6) | within target |
+| Backend ready (informational) | 1,500 ms | 2,500 ms | 1,413.5 ms | 1,401.5 ms (1,412, 1,407, 1,396, 1,378, 1,395, 1,412) | within target |
+| Splash painted (informational) | 500 ms | 1,000 ms | 321.9 ms | 316.7 ms (301.2, 327.4, 314.8, 309.5, 324.3, 318.5) | within target |
+| Grid open (rows series, informational) | 100 ms | 500 ms | 63.3 ms | 65.9 ms (61.5, 65.9, 72.3) | within target |
+| GIP pan and zoom p95 (rows series, informational) | 16.7 ms | 25 ms | 6.0 ms | 6.2 ms (5.8, 6.2, 6.4) | within target |
+| Keystroke to paint p95 (rows series, informational) | 50 ms | 100 ms | 8.3 ms | 8.3 ms (8.2, 8.3, 8.3) | within target |
+
+`report.mjs` over the folder reports `idle_mem_home` on the smoke build as 477.3 MB (453 to 484.4) and marks it **within-ceiling ACCEPTED**; it reports cold HOME as 3,192.5 ms (3,164 to 3,210), within target. The first launch of the first-launch series reads the same process rows at the same points as the rows series; the warm-up launch of the rows run (idle 488.0 MB, cold HOME 3,413 ms, backend ready 1,533 ms) was not counted.
+
+## A4. Idle memory in detail
+
+The breakdown (informational, `idleBreakdown`), median of the six counted launches, against the 0.1.0 rows series:
+
+| Part of the tree | 0.1.0 (W5C) | 0.1.1 | Note |
+| --- | ---: | ---: | --- |
+| Backend interpreter | 297.3 MB | 275.6 MB | per launch 280.8, 273.8, 278.7, 253.1, 277.4, 271.1 MB |
+| UI tree (WebView2 and its helpers) | 198.2 MB | 195.4 MB | 194.6 to 198.3 MB; renderer 109.4, GPU process 37.9, browser 34.3, network 9.9, storage 3.1, crashpad 1.6 |
+| Shell | 4.2 MB | 4.3 MB | 4.1 to 4.3 MB |
+
+The fix moved the backend share, as designed (about 22 MB lower) and nothing else; the UI tree is unchanged and far below the 350 MB of the T4 canvas clause (`uiOver350` false in every run). The whole row is about 28 MB lower than on 0.1.0, and the spread between launches is narrower (453.0 to 484.4 MB against 492.4 to 508.4 MB), so the worst launch now has 15.6 MB of headroom where three of the six 0.1.0 launches were over the ceiling.
+
+**The thread count at the reading point is not the attach driver's 13.** The harness's sampler counts the backend interpreter's threads at the reading point (the median of its samples): 26, 25, 26, 24, 28 and 27 over the six counted launches (range 24 to 28), plus the three threads of the virtual-environment launcher process. That is well below the 68 of the uncapped backend, but it is not 13, because the prewarm workers are still alive at HOME ready plus 2.5 seconds; the attach driver reads long after start-up. The warm-up launch, followed longer, read 17 interpreter threads 33 s after spawn. Interpreter private bytes at the reading point were 398 to 642 MB, mostly 400 to 460 MB (committed, not working set). So the thread figure depends on when it is read, and the 13 should not be quoted as the figure of the official row.
+
+**Why the row is not at the 400 MB target.** The reading point catches the app while the prewarm's later tasks (ledger, deflated Sharpe, EQ bootstrap) are still running; the 0.1.0 record (section 9) showed the whole tree falling to 453.8 MB after an 8 second settle and 388.6 MB after five minutes. The caps lower the part the backend keeps at that moment but do not change when the prewarm runs. The row is reported as the harness reads it, the W0B reading point, unchanged since W5B.
+
+## A5. Not re-run in 0.1.1, and still pending
+
+| Item | State |
+| --- | --- |
+| Measure-artefact rows (backend ready, splash, cold HOME, idle memory) and the smoke against measure agreement | **Pending**: port 8765 was listening (pid 46084). The 0.1.1 measure installer is built at `D:/dev/w6/release-m/0.1.1` but is not installed. |
+| Soak | Not run. The 0.1.0 reading (2 h, PARTIAL, largest sample 705.8 MB, section 8) is history. |
+| Simulated minimise, T8 | Not run. The 0.1.0 readings (stream back 0 ms at engine level; 14 of 14 on WebView2 154.0.4258.53) are history. |
+| Stage 1 rows (EQ and REG Enter units, eight routes, 20,000-point hop) | Not re-run. The 0.1.0 readings (section 4) are history; the app's own second-run readings for EQ and REG are in A3. |
+| Installer row of the harness (`installer` mode) | Not run. The release installer built for the measuring is 3,253,511 bytes (3.1 MB against the 30 MB ceiling), from the build output. |
+| Owner-attended rows | Pending, as on 0.1.0 (`verdict.md`). |
+
+`node desktop/harness/report.mjs D:/dev/w6/measure-runs --check` exits 1 only on these missing readings (the four measure rows, the soak, the installer row and both minimise checks), none of them a defect of a measured row; the rows are in `D:/dev/w6/measure-runs/report-check.txt`.
+
+## A6. Checks of the 0.1.1 tree
+
+All release suites were green on their final runs, with no git write:
+
+| Check | Result |
+| --- | --- |
+| Backend pytest (`-n 16 --dist loadfile`) | 4,155 passed (first run 4,154 passed and 1 load timeout, see below) |
+| Crosscheck, strict | PASS 2,495, FAIL 0, SKIP 0 (INFO 104) |
+| QA tests | 333 passed |
+| Vitest (with the `gen-api --check` step) | 497 files, 7,394 passed, 47 skipped |
+| `test:types`, `test:e2e-types` | clean |
+| Web build | OK, all bundle budgets met |
+| `desktop/scripts/check.ps1` | 29 of 29 steps, 0 failed |
+| Harness node tests | 172 passed, 0 failed |
+| Playwright e2e, functional chromium | 539 passed |
+| e2e offline | 190 passed, 3 skipped (declared skips), 0 failed |
+| e2e desktop (one worker, smoke exe from `check.ps1`) | 42 passed |
+| e2e perf (one worker) | 3 passed |
+
+One real failure came out of the version bump: `web/src/api/schema.d.ts` and `web/src/api/openapi.sha256` are generated from `contract/openapi.json`, and the bump of `info.version` made the contract hash stale, so the `gen-api --check` step of `pnpm test` failed. It was fixed at the cause with `pnpm gen:api`, which rewrote only the sha256 line of both files. The same change left `web/dist` stale against its sources, which explains two more failures (the first `check.ps1` run failed `test-smoke` with "HOME never became ready", and the desktop e2e could not start, both because the supervisor refuses a stale page build); a fresh `pnpm build` cleared both. The remaining failures were load or invocation noise, not code defects: `test_result_cache_singleflight[seasonality]` timed out at 10 s while pytest ran beside vitest, Playwright and Rust builds and passed on the quiet rerun; one gallery-focus spec failed once under load and passed alone and in the full quiet rerun; and a desktop e2e run with `--workers=8` failed 14 of 42 because the desktop project shares one app window and must run with one worker.
+
+## A7. Findings for the manager, and the evidence
+
+1. **Idle at HOME passes its ceiling and misses its target.** 477.3 MB against 500 MB (target 400 MB). The row is within the ceiling by 22.7 MB at the median and 15.6 MB at the worst launch. Reaching the target needs the prewarm's working memory kept out of the reading window, or an owner decision on the reading point (A4).
+2. **The shipped installer is a rebuild.** The builds above used a measuring output folder (`D:/dev/w6/release-m`) and the uncommitted tree. A rebuild after the manager's commit changes the provenance stamp, because the `git diff HEAD` hash will differ, so the installer size and SHA256 of release 0.1.1 are the placeholders of the hand-over, filled after that build.
+3. **A cold result cache on the first run.** The version bump changes the backend code stamp, so the first 0.1.1 launch recomputes what 0.1.0 had cached.
+4. **Preconditions the commands do not state.** `e2e:desktop` needs a smoke exe in `NQT_SMOKE_EXE` and one worker, and `web/dist` must be rebuilt after any change to web sources; running `check.ps1` at the same time as `pnpm build` or `gen:api` can race on `web/dist`. A bare clone has no `web/dist`, so a CI job needs `pnpm build` first.
+5. **The singleflight test has a 10 s wait** that can time out when `-n 16` shares the machine with other heavy runs. It is a load flake, not a regression.
+6. **Documents.** The hand-over, the README and the 0.1.0 owner-check templates still name the 0.1.0 installer where they are dated records of 3 October; the current values are in the hand-over, section 2.
+
+Evidence (all under `D:/dev/w6`): `measure-runs/report-check.txt`, `measure-runs/report.json`, `measure-runs/facts.json`, `measure-runs/rows/rows-smoke-s01-a1-warmup.json`, `measure-runs/rows/rows-smoke-s02-a1-measure.json`, `measure-runs/rows/rows-smoke-s03-a1-measure.json`, `measure-runs/rows/rows-smoke-s04-a1-measure.json`, `measure-runs/rows/rows-summary.json`, `measure-runs/first-launch-smoke-1/first-launch-smoke-s01-a1-measure.json` (and `-2`, `-3`), `measure-runs/t4t5/2026-10-04T15-52-48-108Z-usual-app/usual-s1.json` (and `usual-s2.json`, `usual-s3.json`), `measure-runs/backend-threads.jsonl`, `measure-runs/precheck-before.json`, `measure-runs/precheck-after.json`, `measure-runs/gate-log-new-lines.jsonl`, `chain.log`, `build-release.log`, `artefact-check.log`, `release-m/0.1.1/PROVENANCE.json`, `release-m/0.1.1/SHA256SUMS`, `release-m/0.1.1/payload/smoke/nq-lab-terminal.exe`, and the tools `tools/chain.sh`, `tools/backend-sampler.ps1` and `tools/facts.mjs`. The read-only external sampler `backend-sampler.ps1` logged the smoke shell's python descendants once a second for the thread counts; it polls only `Get-Process` and was not running during the gates in any way that mattered.
+
+## The 0.1.0 record (wave W5C, the re-measure after W5B)
+
+Taken on the morning of 4 October 2026 on the owner's PC (host `DESKTOP-FM5O3JM`), after the W5C performance changes. Sections 1 to 14 are the evidence behind the 0.1.0 verdict, which the 0.1.1 verdict in `verdict.md` replaced; they replaced the W5B figures in their turn (the W5B version of this file is in commit `09a660d`; section 13 sets the two side by side). Words such as "this tree", "the verdict" and "the idle row" in sections 1 to 14 mean the 0.1.0 tree and its verdict. Every figure below was read back from a raw record under `D:/dev/w5c/measure-runs` (the folders are named in each section); the exploratory readings that are not rows sit apart in `D:/dev/w5c/explore-runs`. Nothing here was typed from memory.
 
 ## 1. Read this first
 

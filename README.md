@@ -15,7 +15,7 @@
 <p align="center">
   <a href="#safety-model"><img src="https://img.shields.io/badge/read%20only-no%20order%20path-870F1E?style=flat-square&labelColor=191919" alt="read only: no order path"></a>
   <a href="#try-the-demo"><img src="https://img.shields.io/badge/demo-runs%20in%20the%20browser-FFB000?style=flat-square&labelColor=191919" alt="demo: runs in the browser"></a>
-  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.1.0%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.1.0 for Windows, unsigned"></a>
+  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.1.1%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.1.1 for Windows, unsigned"></a>
   <a href="#how-it-is-built"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
 </p>
 
@@ -44,14 +44,16 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 As of 4 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 81 API paths.
-- **Windows desktop app, 0.1.0.** Released as the annotated tag `desktop-v0.1.0` (commit `8122c87`): an unsigned,
-  per-user installer of 3,253,432 bytes ([hand-over](docs/desktop/handover_windows.md), section 1).
-- **Gate G2 (speed and memory on Windows).** The automated part of G2 has **not** passed. One row is over its
-  ceiling: whole-app idle memory at HOME reads 505.4 MB against a 500 MB ceiling. Every other row measured
-  automatically is inside its ceiling, among them first-launch cold HOME at 3,167 ms and a 2-hour soak whose largest
-  sample was 705.8 MB (a partial run, not all day). The owner-attended checks (screen readers, real keyboard, visible run, SmartScreen first run and others) are
-  still pending. Source: [G2 verdict](docs/desktop/g2_windows/verdict.md).
-- **Next: 0.1.1.** A fix for the idle-memory row is in progress and will ship as 0.1.1. It is not part of 0.1.0.
+- **Windows desktop app, 0.1.1.** Released as the annotated tag {{0.1.1: tag}}: an unsigned, per-user installer of
+  {{0.1.1: installer bytes}} bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
+  pools of the backend server, which is what brought idle memory under its ceiling. The earlier 0.1.0 release
+  (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes) stays available.
+- **Gate G2 (speed and memory on Windows).** **AUTOMATED PASS, OWNER ROWS PENDING.** Whole-app idle memory at HOME
+  reads 477.3 MB against a 500 MB ceiling (it read 505.4 MB, over the ceiling, on 0.1.0), but it is still above the
+  400 MB target. Every other row measured on 0.1.1 is inside its ceiling too, among them first-launch cold HOME at
+  3,192.5 ms. The 2-hour soak (largest sample 705.8 MB, a partial run, not all day), the simulated minimise and the
+  drift run were taken on 0.1.0 and not repeated on 0.1.1. The owner-attended checks (screen readers, real keyboard,
+  visible run, SmartScreen first run and others) are still pending. Source: [G2 verdict](docs/desktop/g2_windows/verdict.md).
 - **macOS app.** Not built. It waits for its own gate (G1). On macOS and Linux, use the web terminal or the demo.
 
 ## Highlights
@@ -126,12 +128,13 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 
 | Release | File | Size | SHA256 |
 |---|---|---:|---|
+| `{{0.1.1: tag}}` | `nq-lab terminal_0.1.1_x64-setup.exe` | {{0.1.1: installer bytes}} bytes | `{{0.1.1: installer SHA256}}` |
 | `desktop-v0.1.0` | `nq-lab terminal_0.1.0_x64-setup.exe` | 3,253,432 bytes | `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` |
 
 **2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.1.0_x64-setup.exe' | Format-List Algorithm,Hash
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.1.1_x64-setup.exe' | Format-List Algorithm,Hash
 ```
 
 PowerShell prints the hash in capitals; compare it with the value above without regard to case. If it differs by one
@@ -527,10 +530,11 @@ annualise geometrically. Every chart names its return basis and unit.
 **The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2), from
 performance and drawdowns to research integrity and live paper monitoring.
 
-**Latest full run.** The release check of the 0.1.0 tree read: backend 4,147 passed and 1 skipped, and crosscheck strict
-PASS 2,495, FAIL 0 ([hand-over](docs/desktop/handover_windows.md), section 7); vitest 7,394 passed, Playwright e2e 538
-of 539 on its last full run (one environmental socket error, 36 of 36 on repeat), offline 190, desktop 42 and
-`check.ps1` 29 of 29 ([G2 verdict](docs/desktop/g2_windows/verdict.md)).
+**Latest full run.** The suites of the 0.1.1 tree read: backend 4,155 passed, crosscheck strict PASS 2,495, FAIL 0, QA
+333 passed, vitest 7,394 passed (47 skipped), Playwright e2e 539 passed, offline 190 (3 declared skips), desktop 42,
+perf 3 and `check.ps1` 29 of 29 ([G2 results](docs/desktop/g2_windows/results.md), section A6). The release check of the
+0.1.0 tree, for comparison, read backend 4,147 passed and 1 skipped and crosscheck strict PASS 2,495, FAIL 0
+([hand-over](docs/desktop/handover_windows.md), section 7).
 
 <br clear="right">
 
