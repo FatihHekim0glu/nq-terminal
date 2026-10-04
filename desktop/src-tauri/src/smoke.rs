@@ -147,6 +147,7 @@ fn apply_smoke_options(window: &WebviewWindow, launch: &Launch) {
     }
     log("smoke_window", window_record(window));
     watch_devtools_port(&launch.smoke.webview_data_dir);
+    watch_visibility(window, &launch.smoke.config_dir);
     if launch.smoke.screen2 {
         log("smoke_screen2", place_on_screen2(window));
         log("smoke_window", window_record(window));
@@ -210,6 +211,80 @@ fn watch_devtools_port(webview_data_dir: &std::path::Path) {
     if let Err(e) = spawned {
         crate::crash::log(
             "devtools_port_watch_failed",
+            serde_json::json!({ "error": e.to_string() }),
+        );
+    }
+}
+
+/// The file the harness writes ("hidden" or "visible") to hide and show the WebView2 controller, which is what a
+/// minimised window does to the engine, with no window on screen (04 D5: the simulated minimise).
+#[cfg(feature = "smoke")]
+pub const VISIBILITY_FILE: &str = "smoke-visibility.txt";
+#[cfg(feature = "smoke")]
+const VISIBILITY_POLL: std::time::Duration = std::time::Duration::from_millis(200);
+
+#[cfg(feature = "smoke")]
+pub fn visibility_file(config_dir: &std::path::Path) -> std::path::PathBuf {
+    config_dir.join(VISIBILITY_FILE)
+}
+
+/// `hidden` is false, `visible` is true (surrounding white space is ignored); anything else says nothing.
+#[cfg(feature = "smoke")]
+pub fn parse_visibility(text: &str) -> Option<bool> {
+    match text.trim() {
+        "hidden" => Some(false),
+        "visible" => Some(true),
+        _ => None,
+    }
+}
+
+/// The state to apply, or None when the file says nothing or says what is already so.
+#[cfg(feature = "smoke")]
+pub fn next_visibility(current: bool, wanted: Option<bool>) -> Option<bool> {
+    wanted.filter(|w| *w != current)
+}
+
+/// Applies one visibility to the controller on the UI thread and logs the outcome.
+#[cfg(feature = "smoke")]
+fn apply_visibility(window: &WebviewWindow, visible: bool) {
+    let queued = window.with_webview(move |webview| {
+        // SAFETY: a COM call on the controller Tauri hands to this closure on the UI thread, while it is alive.
+        let set = unsafe { webview.controller().SetIsVisible(visible) };
+        crate::crash::log(
+            "controller_visibility",
+            serde_json::json!({ "visible": visible, "ok": set.is_ok(), "error": set.err().map(|e| e.to_string()) }),
+        );
+    });
+    if let Err(e) = queued {
+        crate::crash::log(
+            "controller_visibility_failed",
+            serde_json::json!({ "visible": visible, "error": e.to_string() }),
+        );
+    }
+}
+
+/// Smoke only: follows `smoke-visibility.txt` in the config folder for the life of the process.
+#[cfg(feature = "smoke")]
+fn watch_visibility(window: &WebviewWindow, config_dir: &std::path::Path) {
+    let (window, file) = (window.clone(), visibility_file(config_dir));
+    let spawned = std::thread::Builder::new()
+        .name("nqt-visibility".into())
+        .spawn(move || {
+            let mut current = true; // after_build made the controller visible
+            loop {
+                let text = crate::reads::read_log_tail(&file, 32)
+                    .ok()
+                    .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+                if let Some(next) = next_visibility(current, text.as_deref().and_then(parse_visibility)) {
+                    apply_visibility(&window, next);
+                    current = next;
+                }
+                std::thread::sleep(VISIBILITY_POLL);
+            }
+        });
+    if let Err(e) = spawned {
+        crate::crash::log(
+            "visibility_watch_failed",
             serde_json::json!({ "error": e.to_string() }),
         );
     }
@@ -307,6 +382,34 @@ mod tests {
         assert!(
             browser_args(&launch).is_some_and(|a| a.starts_with("--remote-debugging-port=9352 "))
         );
+    }
+
+    #[test]
+    fn the_visibility_file_says_hidden_or_visible_and_nothing_else() {
+        assert_eq!(parse_visibility("hidden"), Some(false));
+        assert_eq!(parse_visibility("visible\r\n"), Some(true));
+        assert_eq!(parse_visibility("  hidden  "), Some(false));
+        for bad in ["", "Hidden", "hide", "1", "hidden visible", "\0\0"] {
+            assert_eq!(parse_visibility(bad), None, "accepted {bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_visibility_file_sits_in_the_config_folder() {
+        assert_eq!(
+            visibility_file(std::path::Path::new(r"D:\run\config")),
+            std::path::PathBuf::from(r"D:\run\config\smoke-visibility.txt")
+        );
+    }
+
+    #[test]
+    fn only_a_change_is_applied() {
+        // The controller starts visible (after_build), so "visible" first is not a change and a repeat is not either.
+        assert_eq!(next_visibility(true, None), None);
+        assert_eq!(next_visibility(true, Some(true)), None);
+        assert_eq!(next_visibility(true, Some(false)), Some(false));
+        assert_eq!(next_visibility(false, Some(false)), None);
+        assert_eq!(next_visibility(false, Some(true)), Some(true));
     }
 
     #[test]

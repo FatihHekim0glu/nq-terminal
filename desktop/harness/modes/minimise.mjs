@@ -73,8 +73,10 @@ async function openLive(session, result) {
  *    not exist in the shell yet (smoke.rs would need it; the merge step decides); this driver is ready for it.
  *  - wm-size: a WM_SIZE minimised message to the shell's hidden window. Tried on 3 October: the engine does not react to it.
  *  - page-override: the page's own visibility is overridden over CDP (visibilityState and hidden, then a visibilitychange event).
- *    It exercises the page's visibility logic (stream to polling and back) but NOT the engine's throttling of a hidden view, so a run
- *    that needed it is labelled engineLevel false and does not count as the engine-level proof.
+ *    It only changes what document.visibilityState reports. The web app has no visibility-driven stream logic (its one
+ *    visibilitychange listener flushes the store), so this driver cannot make the stream go to polling and back, and it does NOT
+ *    exercise the engine's throttling of a hidden view. A run that needed it is labelled engineLevel false, fails the verdict with
+ *    'NOT TESTED' and never counts as the simulated-minimise proof.
  */
 function drivers(session) {
   const pid = session.run.child.pid
@@ -149,10 +151,12 @@ async function real(session, result, holdS, everyS) {
   result.foreground = { before: fgBefore, after: fgAfter, unchanged: fgBefore.hwnd === fgAfter.hwnd }
 }
 
-const verdictOf = (result, realMode) => {
+export const verdictOf = (result, realMode) => {
   const problems = []
   if (result.fatal) problems.push(`fatal: ${result.fatal.slice(0, 160)}`)
   if (result.driverEffective === false) problems.push('simulated-minimise driver ineffective')
+  // A page-level override never hides the engine, so it cannot show how a hidden or minimised WebView2 behaves: NOT TESTED, never a pass.
+  if (!realMode && result.driverEffective !== false && result.engineLevel !== true) problems.push('NOT TESTED: no engine-level driver hid the view (page-level override only)')
   // A real minimise is judged on the stream and the window, not on visibilityState: whether the engine reports hidden for a
   // minimised window is an observation (the smoke build forces the controller visible), recorded as hiddenAfterMs.
   if (!realMode && result.hiddenAfterMs === null) problems.push('the page never became hidden')

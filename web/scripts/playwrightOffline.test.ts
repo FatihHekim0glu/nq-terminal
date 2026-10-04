@@ -459,3 +459,33 @@ describe('the perf watcher (e2e/perf/pages.ts)', () => {
     expect(w.errors).toEqual([expect.stringContaining(NOT_FOUND)])
   })
 })
+
+// The desktop walk's "no failed API answers" check (e2e/desktop/app.ts failedAnswers). In the T8 run the shell is attached to the
+// offline demo server, which declines the workspace store's routes with the refusal header (the page keeps its own copy): that is
+// the demo declining, as the console filter above already treats it. A 404 without the header, and every answer from the fixture
+// or real backend (which never sets it), still counts as a failure.
+describe('the desktop walk answer check (e2e/desktop/app.ts)', () => {
+  const ORIGIN = 'http://127.0.0.1:4373'
+  const APP = new URL('../e2e/desktop/app.ts', import.meta.url).href
+  const answer = (path: string, status: number, headers: Record<string, string> = {}) => ({ url: () => `${ORIGIN}${path}`, status: () => status, headers: () => headers })
+  const refusal = { [DEMO_REFUSAL_HEADER]: DEMO_REFUSAL_VALUE }
+
+  async function failed(responses: ReturnType<typeof answer>[]): Promise<string[]> {
+    const { failedAnswers } = (await import(/* @vite-ignore */ APP)) as { failedAnswers(w: never): string[] }
+    return failedAnswers({ responses } as never)
+  }
+
+  it('born failing: drops the demo refusal of a workspace store route', async () => {
+    expect(await failed([answer('/api/workspaces/prefs', 404, refusal), answer('/api/health', 200)])).toEqual([])
+  })
+
+  it('keeps a 404 without the refusal header, a refusal header with another value, and a server error', async () => {
+    const got = await failed([
+      answer('/api/runs/x', 404),
+      answer('/api/qa', 404, { [DEMO_REFUSAL_HEADER]: 'something-else' }),
+      answer('/api/bars?end=2022-06-30', 500),
+      answer('/api/workspaces/prefs', 404, refusal),
+    ])
+    expect(got).toEqual(['404 /api/runs/x', '404 /api/qa', '500 /api/bars?end=2022-06-30'])
+  })
+})

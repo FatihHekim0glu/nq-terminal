@@ -4,7 +4,7 @@ Result: [ ] PASS   [ ] FAIL   Status: NOT RUN
 
 ## Purpose
 
-G2 asks for the whole app to stay at or under 1.5 GB (target 1.0 GB) over an all-day soak at the shipped caps: 512 MiB for the bar cache and 128 MiB for the file cache in desktop mode (04, phase D5 exit table; owner decision O5). The overnight soak of the build night is partial by design. This check is the full one, and it is needed only if the overnight soak was labelled PARTIAL ({{G2: overnight soak length}}).
+G2 asks for the whole app to stay at or under 1.5 GB (target 1.0 GB) over an all-day soak at the shipped caps: 512 MiB for the bar cache and 128 MiB for the file cache in desktop mode (04, phase D5 exit table; owner decision O5). The overnight soak of the build night is partial by design. This check is the full one, and it is needed only if the overnight soak was labelled PARTIAL (3 hours, 36 to 37 samples, PARTIAL).
 
 The run opens the heavy screens in rounds (GP, GIP, `volmanaged_v0 EQ`, REG, MON, CORR, LEDG, OOS, LIVE, RUNS and MT) so that the caches fill the way a day of use fills them, and samples the whole tree's private working set every 5 minutes. The row is the largest sample. The window is hidden; nothing appears on screen. The harness runs the `smoke` build, because only it can be driven over the debugging protocol.
 
@@ -15,7 +15,7 @@ The run opens the heavy screens in rounds (GP, GIP, `volmanaged_v0 EQ`, REG, MON
 | Run date and start time | |
 | Length planned (hours) | |
 | Release commit | {{W6: final release commit}} |
-| Overnight soak of the build night | {{G2: overnight soak length}} and largest sample {{G2: overnight soak largest sample}} |
+| Overnight soak of the build night | 3 hours (36 to 37 samples, PARTIAL); largest sample 1,577.4 MB (the start-up peak; 1,292 MB at most after 15 minutes) |
 
 ## Preconditions
 

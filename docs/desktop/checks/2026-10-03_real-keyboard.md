@@ -15,7 +15,7 @@ The 16 keys: F1, F8, F9, F10, F11, Alt+1 to Alt+9 (nine keys), Alt+K and Ctrl+K.
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer SHA-256 | {{G2: installer SHA256}} |
+| Installer SHA-256 | {{W6: installer SHA256}} |
 | Release commit | {{W6: final release commit}} |
 | Keyboard (make, layout, for example UK) | |
 | Windows build | |

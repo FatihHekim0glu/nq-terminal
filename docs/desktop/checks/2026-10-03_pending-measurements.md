@@ -6,7 +6,7 @@ Result: [ ] PASS   [ ] FAIL   Status: NOT RUN
 
 Two kinds of G2 figure were not taken cleanly on the build night, and both need a quiet window of your choosing:
 
-- **Pending rows.** The `measure` build's real-lab rows are skipped whenever the browser terminal's backend on 8765 is listening, a live lock exists, or a job is queued or running. The harness records them as pending and takes the process rows on the `smoke` build instead.
+- **Pending rows.** The `measure` build's real-lab rows were not taken on the build night, because the browser terminal's backend on 8765 was listening (a live lock or a queued or running job would also rule them out). The harness checks the lab itself before each such launch (a listener on 8765, a live lock, a queued or running job; `jobs.json` and `backtests\output` are read before and after) and, when one fails, writes a pending record that names the reason and starts nothing. The commands below list the same checks so that you can read them by hand and write the values down before and after the run. On the build night the process rows were taken on the `smoke` build instead.
 - **Provisional rows.** A run whose 60-second CPU average stayed above 10% is kept and labelled PROVISIONAL with the load recorded. After five rejected readings in a row the harness takes the run anyway. Provisional figures are reported apart from accepted ones and are not accepted ones.
 
 This file lists them, and records the repeat of each in a quiet window. The two lists come from the G2 results (`docs/desktop/g2_windows/results.md`).
@@ -17,13 +17,13 @@ This file lists them, and records the repeat of each in a quiet window. The two 
 | --- | --- |
 | Run date | |
 | Release commit | {{W6: final release commit}} |
-| Pending rows to repeat | {{G2: pending measure-artefact real-lab rows}} |
-| Provisional rows to repeat | {{G2: provisional rows and their CPU load}} |
+| Pending rows to repeat | backend ready, splash, cold HOME and idle memory on the measure artefact (3 runs each) and the smoke against measure agreement test; skipped because port 8765 was listening (decision 11). The measure build is installed and checked at D:/dev/d5/measure/app; jobs.json sha256 before the repeat was 44CAE38ADB6F6E142C013AC988929B5E12F20363CB82C990A40E77C34B2172D4 and backtests/output was unchanged |
+| Provisional rows to repeat | none by the CPU gate (every counted run at 9.8% or lower, 3.4 to 9.8% across the series). Labelled all the same: no owner-named quiet window; every harness figure UNREPRODUCED (HOME ready +13.8% against W0B); the soak is partial |
 
 ## Preconditions
 
 - A quiet window: no build, no test run, no download, no scan, no game, for the length of the run. The harness reads the machine's CPU for 60 seconds before each run and refuses to count a run over 10%.
-- For the measure-artefact real-lab rows, the lab must be free. Check these, and stop if any fails:
+- For the measure-artefact real-lab rows, the lab must be free. The harness refuses to launch otherwise, and you can read the same facts yourself. Check these, and stop if any fails:
 
   ```powershell
   $Lab = Join-Path $env:USERPROFILE 'nq-lab'

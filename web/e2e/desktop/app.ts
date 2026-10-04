@@ -3,6 +3,7 @@
 import { expect, type Page } from '@playwright/test'
 import { ORIENTATION_DISMISSED, ORIENTATION_KEY } from '../orientation.ts'
 import { HOME_READY, offOriginOrNotGet, panel, runLine, settle, type Watch } from '../perf/pages.ts'
+import { DEMO_REFUSAL_HEADER, DEMO_REFUSAL_VALUE } from '../target.ts'
 
 export { commandLine, panel, runLine, settle, watch } from '../perf/pages.ts'
 export type { Watch } from '../perf/pages.ts'
@@ -97,9 +98,14 @@ export async function apiGet(page: Page, pathAndQuery: string): Promise<ApiAnswe
   }, pathAndQuery)
 }
 
-/** Every API answer that failed, as `<status> <path>`. */
+/**
+ * Every API answer that failed, as `<status> <path>`. An answer that carries the offline demo's refusal header is the demo
+ * declining a route it holds no body for (the T8 run attaches the shell to the demo server), not a failure; the fixture and
+ * real backends never set that header, so nothing is dropped from their runs.
+ */
 export function failedAnswers(w: Watch): string[] {
   return w.responses
+    .filter((r) => r.headers()[DEMO_REFUSAL_HEADER] !== DEMO_REFUSAL_VALUE)
     .filter((r) => new URL(r.url()).pathname.startsWith('/api/') && r.status() >= 400)
     .map((r) => `${r.status()} ${new URL(r.url()).pathname}${new URL(r.url()).search}`)
 }

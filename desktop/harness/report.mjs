@@ -44,11 +44,22 @@ function rowReport(row, figs, minRuns) {
 function checkReport(records, figs) {
   const out = {}
   for (const [id, c] of Object.entries(CHECKS)) {
-    const mine = figs.filter((f) => f.row === id)
+    const all = figs.filter((f) => f.row === id)
+    // A page-level driver only changes what the page reports, so its reading proves nothing about a hidden view: not tested.
+    const mine = all.filter((f) => f.engineLevel !== false)
     const worst = mine.length ? Math.max(...mine.map((f) => f.value)) : null
-    out[id] = { label: c.label, ceiling: c.ceiling, readings: mine.length, worstMs: worst, verdict: worst === null ? 'missing' : worst > c.ceiling ? 'over-ceiling' : 'within-ceiling' }
+    const verdict = worst === null ? (all.length ? 'not-tested' : 'missing') : worst > c.ceiling ? 'over-ceiling' : 'within-ceiling'
+    out[id] = { label: c.label, ceiling: c.ceiling, readings: mine.length, worstMs: worst, verdict }
   }
   return out
+}
+
+/** The reproduction verdict of a folder: the newest real (not dry) one, else the newest dry one, else null. A folder holds the
+ *  verdicts of every earlier attempt, and the first one found must not stand in for the run that counts. */
+export function newestReproduction(records) {
+  const verdicts = records.filter((r) => r.mode === 'reproduce' && r.reproduced !== undefined)
+  const newest = (list) => list.reduce((best, r) => (best === null || String(r.writtenAtIso ?? '') >= String(best.writtenAtIso ?? '') ? r : best), null)
+  return newest(verdicts.filter((r) => !r.dry)) ?? newest(verdicts)
 }
 
 export function buildReport(records, { minRuns = 3 } = {}) {
@@ -63,7 +74,7 @@ export function buildReport(records, { minRuns = 3 } = {}) {
   const counts = {}
   for (const r of records) { const k = `${r.build ?? '-'}:${r.mode ?? '-'}`; (counts[k] ??= {})[r.status] = ((counts[k][r.status]) ?? 0) + 1 }
   const rejected = records.filter((r) => r.status === 'rejected').map((r) => ({ file: r.file, avgPct: r.gate?.avgPct ?? null, build: r.build }))
-  const repro = records.find((r) => r.mode === 'reproduce' && r.reproduced !== undefined) ?? null
+  const repro = newestReproduction(records)
   return { rows, agreement, checks: checkReport(records, figs), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
     unreproducedRuns: records.filter((r) => COUNTED.includes(r.status) && r.unreproduced === true).length,
     provenanceHeads: [...new Set(records.map((r) => r.provenance?.head).filter(Boolean))], stampsAgree: new Set(records.filter((r) => r.provenance?.diffSha256).map((r) => `${r.provenance.diffSha256}/${r.provenance.untrackedSha256}`)).size <= 1 }
@@ -87,6 +98,7 @@ export function checkEvidence(records, report, { minRuns = 3, builds = ['smoke',
     if (!f.method || !f.unit || f.cpuLoadPct === undefined || !f.stamp?.head) problems.push(`figure ${f.row}/${f.build} in ${path.basename(f.file)} lacks its method, unit, CPU load or provenance stamp`)
   }
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'missing') problems.push(`check ${id} has no reading`)
+  for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'not-tested') problems.push(`check ${id} is not tested: only a page-level driver hid the view (no engine-level proof)`)
   return problems
 }
 

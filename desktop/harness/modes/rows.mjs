@@ -10,7 +10,8 @@ import { figure, writeRecord } from '../lib/record.mjs'
 import { ROWS, rowById, rowsForLaunch } from '../lib/rows.mjs'
 import { launchRun } from '../lib/launch-run.mjs'
 import { reproduceGate, harnessDigest } from '../lib/harness.mjs'
-import { isMainTree } from '../lib/paths.mjs'
+import { isMainTree, LAB } from '../lib/paths.mjs'
+import { launchBlock } from '../lib/lab-guard.mjs'
 import { cFreeMB } from '../lib/provenance.mjs'
 
 /** The row ids a launch of `build` is asked for: `all`, or a comma list checked against the build's own rows. */
@@ -71,6 +72,14 @@ async function slotsFor(ctx) {
   const { build, exe, slot, kind, args, outDir, meta, realData, rows } = ctx
   const pageRows = rows.some((id) => PAGE_ROWS.has(id))
   const done = []
+  // The measure build on the real lab: no queued job, no live lock, nothing on 8765, else the rows are pending and nothing starts (decision 11).
+  const block = launchBlock(build, realData, LAB)
+  if (block) {
+    const name = `rows-${build}-s${String(slot).padStart(2, '0')}-a1-${kind}`
+    writeRecord(outDir, name, { mode: 'rows', build, slot, attempt: 1, kind, ...meta, status: 'pending', reason: `real lab not quiet: ${block.problems.join('; ')}`, pending: block.problems, labCheck: { before: block.summary } })
+    console.log(JSON.stringify({ build, slot, kind, status: 'pending', pending: block.problems }))
+    return { build, slot, attempt: 1, status: 'pending' }
+  }
   for (let attempt = 1, rejects = 0; ; attempt++) {
     const runDir = path.join(outDir, 'launch', `${build}-s${slot}-a${attempt}`)
     const out = await executeSlot({ mode: 'rows', build, slot, attempt, kind, outDir, gateSeconds: ctx.gateSeconds, limitPct: ctx.limitPct, gateFn: readCpu, rejectsSoFar: rejects, provisionalAfter: ctx.provisionalAfter, meta, expected: rows,

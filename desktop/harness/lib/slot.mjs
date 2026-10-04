@@ -3,6 +3,7 @@
 // `provisionalAfter` rejections the run is taken anyway and labelled PROVISIONAL (manager decision 2: never wait for ever).
 import path from 'node:path'
 import { writeRecord } from './record.mjs'
+import { readGpu } from './gpu.mjs'
 import { startWatch, stopWatch } from './winwatch.mjs'
 
 export async function watchedRun(runFn, watchFile, allowFor = () => undefined) {
@@ -14,6 +15,7 @@ export async function watchedRun(runFn, watchFile, allowFor = () => undefined) {
 
 /** The status of an executed run. okStatus is what a clean complete run earns: 'accepted', 'provisional' or 'dry'. */
 export function classifyRun(okStatus, r, expected = []) {
+  if (r.pending?.length > 0) return 'pending'
   if (r.watch?.clean === false) return 'window-fail'
   const missing = expected.filter((id) => r.rows?.[id] === undefined || r.rows[id] === null)
   const reached = r.homeReady !== false && !r.fatal
@@ -23,10 +25,10 @@ export function classifyRun(okStatus, r, expected = []) {
 }
 
 /**
- * kind: 'measure' | 'dry' | 'warmup'. runFn({ gate }) runs the launch and returns the record body. gateFn(seconds, {limitPct, enforce}) reads the CPU. Options: gateSeconds, limitPct,
+ * kind: 'measure' | 'dry' | 'warmup'. runFn({ gate }) runs the launch and returns the record body. gateFn(seconds, {limitPct, enforce}) reads the CPU; gpuFn() reads the GPU (utilisation, memory), once after the gate and once after the run. Options: gateSeconds, limitPct,
  * provisionalAfter, rejectsSoFar, expected (row ids a complete run holds), allowFor(result) (the screen-2 mode's expected window).
  */
-export async function executeSlot({ mode, build, slot, attempt, kind, outDir, runFn, gateFn, gateSeconds = 60, limitPct = 10, provisionalAfter = null, rejectsSoFar = 0, expected = [], allowFor, meta = {} }) {
+export async function executeSlot({ mode, build, slot, attempt, kind, outDir, runFn, gateFn, gpuFn = readGpu, gateSeconds = 60, limitPct = 10, provisionalAfter = null, rejectsSoFar = 0, expected = [], allowFor, meta = {} }) {
   const name = `${mode}-${build}-s${String(slot).padStart(2, '0')}-a${attempt}-${kind}`
   const base = { mode, build, slot, attempt, kind, ...meta }
   const watchFile = path.join(outDir, `${name}.watch.jsonl`)
@@ -35,18 +37,21 @@ export async function executeSlot({ mode, build, slot, attempt, kind, outDir, ru
     return { status: 'warmup', file: writeRecord(outDir, name, { ...base, status: 'warmup', ...r }), result: r }
   }
   const gate = await gateFn(gateSeconds, { limitPct, enforce: kind === 'measure' })
+  const gpuAtGate = await gpuFn()
   if (kind === 'measure' && !gate.pass) {
     const forced = provisionalAfter !== null && rejectsSoFar + 1 >= provisionalAfter
     if (!forced) {
-      const file = writeRecord(outDir, name, { ...base, status: 'rejected', reason: `average CPU ${gate.avgPct}% over ${gate.seconds} s is above ${limitPct}%`, gate })
+      const file = writeRecord(outDir, name, { ...base, status: 'rejected', reason: `average CPU ${gate.avgPct}% over ${gate.seconds} s is above ${limitPct}%`, gate, gpu: { atGate: gpuAtGate } })
       return { status: 'rejected', file, gate }
     }
     const r = await watchedRun(() => runFn({ gate }), watchFile, allowFor)
+    const gpu = { atGate: gpuAtGate, afterRun: await gpuFn() }
     const status = classifyRun('provisional', r, expected)
     const label = status === 'provisional' ? 'PROVISIONAL' : undefined
-    return { status, file: writeRecord(outDir, name, { ...base, status, label, reason: `gate average ${gate.avgPct}% above ${limitPct}%; run anyway after ${rejectsSoFar + 1} rejected`, gate, ...r }), gate, result: r }
+    return { status, file: writeRecord(outDir, name, { ...base, status, label, reason: `gate average ${gate.avgPct}% above ${limitPct}%; run anyway after ${rejectsSoFar + 1} rejected`, gate, gpu, ...r }), gate, result: r }
   }
   const r = await watchedRun(() => runFn({ gate }), watchFile, allowFor)
+  const gpu = { atGate: gpuAtGate, afterRun: await gpuFn() }
   const status = classifyRun(kind === 'dry' ? 'dry' : 'accepted', r, expected)
-  return { status, file: writeRecord(outDir, name, { ...base, status, gate, ...r }), gate, result: r }
+  return { status, file: writeRecord(outDir, name, { ...base, status, gate, gpu, ...r }), gate, result: r }
 }

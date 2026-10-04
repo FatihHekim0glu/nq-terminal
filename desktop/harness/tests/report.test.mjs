@@ -123,3 +123,30 @@ test('runs taken without the reproduction are counted and fail a strict check', 
   assert.ok(overCeiling(report).some((b) => /UNREPRODUCED/.test(b)))
   assert.equal(buildReport(complete()).unreproducedRuns, 0)
 })
+
+test('the reproduction verdict is the newest real one, not the first record found (an older dry verdict never stands in for it)', () => {
+  const verdict = (file, over) => ({ schema: 'd5-run-1', mode: 'reproduce', status: 'accepted', provenance: STAMP, file, verdict: {}, ...over })
+  const older = verdict('D:/x/a-dry/reproduce-verdict.json', { dry: true, reproduced: true, writtenAtIso: '2026-10-03T02:00:00.000Z' })
+  const real1 = verdict('D:/x/b/reproduce-verdict.json', { dry: false, reproduced: true, writtenAtIso: '2026-10-03T12:00:00.000Z' })
+  const real2 = verdict('D:/x/c/reproduce-verdict.json', { dry: false, reproduced: false, writtenAtIso: '2026-10-03T21:00:00.000Z' })
+  const report = buildReport([older, real1, real2, ...complete()])
+  assert.equal(report.reproduction.dry, false)
+  assert.equal(report.reproduction.reproduced, false, 'the newest non-dry verdict')
+  assert.equal(buildReport([older, ...complete()]).reproduction.dry, true, 'a dry verdict is reported only when it is the only one')
+})
+
+test('a simulated minimise taken by a page-level driver reads NOT TESTED, never within ceiling (born failing)', () => {
+  const pageLevel = { schema: 'd5-run-1', mode: 'minimise-sim', build: 'smoke', status: 'accepted', provenance: STAMP, rows: { minimise_sim_stream_back_ms: 0 }, file: 'D:/x/p.json',
+    figures: [figure({ row: 'minimise_sim_stream_back_ms', build: 'smoke', value: 0, unit: 'ms', method: 'm', cpuLoadPct: 2, provenance: STAMP, extra: { driver: 'page-override', engineLevel: false } })] }
+  const recs = [...complete().filter((r) => r.mode !== 'minimise-sim' || r.rows.minimise_real_stream_back_ms !== undefined), pageLevel]
+  const report = buildReport(recs)
+  assert.equal(report.checks.minimise_sim_stream_back_ms.verdict, 'not-tested')
+  assert.ok(checkEvidence(recs, report).some((p) => /minimise_sim_stream_back_ms/.test(p) && /not tested/i.test(p)))
+})
+
+test('an engine-level simulated minimise still reads within ceiling', () => {
+  const engine = { schema: 'd5-run-1', mode: 'minimise-sim', build: 'smoke', status: 'accepted', provenance: STAMP, rows: { minimise_sim_stream_back_ms: 2500 }, file: 'D:/x/e.json',
+    figures: [figure({ row: 'minimise_sim_stream_back_ms', build: 'smoke', value: 2500, unit: 'ms', method: 'm', cpuLoadPct: 2, provenance: STAMP, extra: { driver: 'controller-file', engineLevel: true } })] }
+  const report = buildReport([engine])
+  assert.equal(report.checks.minimise_sim_stream_back_ms.verdict, 'within-ceiling')
+})

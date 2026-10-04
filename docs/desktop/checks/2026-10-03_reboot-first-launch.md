@@ -16,7 +16,7 @@ Decision 1.1 of the register (`docs/desktop/owner_decisions_windows.md`, "T3: co
 | Build read | the `measure` build (the default of the command) |
 | Release commit | {{W6: final release commit}} |
 | Machine up time at the run (the harness prints it) | |
-| Measure artefact median for cold HOME, for the "within noise" comparison | {{G2: measure cold HOME median}} |
+| Measure artefact median for cold HOME, for the "within noise" comparison | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch |
 
 ## Preconditions
 
@@ -64,7 +64,7 @@ PASS when all of these hold:
 - `firstAfterBoot` is true (the machine had been up 30 minutes or less). If it says false, the reading is a normal cold launch, not a post-boot one: file it as such and repeat after the next reboot.
 - `windows` is 0: no window appeared at any point.
 - Every row in the table is at or under its ceiling.
-- Cold start to HOME is within noise of the measure artefact's median {{G2: measure cold HOME median}}. Noise is 10% of the median, or inside the min to max range of the three accepted measure runs.
+- Cold start to HOME is within noise of the measure artefact's median pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 5,048 ms on a first launch and 3,321 ms on the usual launch. Noise is 10% of the median, or inside the min to max range of the three accepted measure runs.
 
 A reading the harness labels PROVISIONAL (it could not get a quiet CPU reading in ten minutes) does not fail the check, but it is not accepted either: list it in `2026-10-03_pending-measurements.md` and repeat it in a quiet window.
 

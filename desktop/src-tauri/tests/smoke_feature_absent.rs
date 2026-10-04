@@ -20,8 +20,8 @@ use std::process::{Command, Stdio};
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Strings that exist only in smoke builds: the debugging port and scale switches, every smoke switch of the frozen
-/// SmokeOptions, the forced-panic variable and the port file the harness reads.
-const SMOKE_ONLY: [&str; 12] = [
+/// SmokeOptions, the forced-panic variable, the port file the harness reads and the visibility file it writes.
+const SMOKE_ONLY: [&str; 13] = [
     "remote-debugging-port",
     "force-device-scale-factor",
     "--attach-url",
@@ -34,6 +34,7 @@ const SMOKE_ONLY: [&str; 12] = [
     "NQT_SMOKE_FORCE_PANIC",
     "DevToolsActivePort",
     "smoke switches refused",
+    "smoke-visibility.txt",
 ];
 const SMOKE_IDENTITY: &str = "dev.nqlab.terminal.smoke";
 const MEASURE_IDENTITY: &str = "dev.nqlab.terminal.measure";

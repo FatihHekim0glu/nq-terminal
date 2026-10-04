@@ -9,7 +9,8 @@ export const SCHEMA = 'd5-run-1'
 // provisional: gate failed, run executed anyway on request (label PROVISIONAL).  dry: a complete unmeasured run.
 // warmup: executed, never counted.  incomplete: a clean run that lacks an expected row.  failed: no HOME.
 // window-fail: a new visible window or a foreground change.  abandoned: too many rejections in a row.
-export const STATUSES = ['accepted', 'provisional', 'rejected', 'dry', 'dry-incomplete', 'warmup', 'incomplete', 'failed', 'window-fail', 'abandoned']
+// pending: the real-lab guard refused the launch (8765 listening, live lock or active job; lab-guard.mjs), nothing was started.
+export const STATUSES = ['accepted', 'provisional', 'rejected', 'dry', 'dry-incomplete', 'warmup', 'incomplete', 'failed', 'window-fail', 'abandoned', 'pending']
 export const COUNTED = ['accepted', 'provisional']
 
 export function writeRecord(outDir, name, body) {

@@ -35,12 +35,31 @@ export function registryWebView2Version() {
   return null
 }
 
+const TEST_RUN = /playwright|vitest/
+const TEST_RUN_NAMES = /node|chrome|msedge|headless/
+
+/**
+ * The process ids in `rows` ({pid, ppid, name, cmd}) that are another Playwright or vitest run: the pattern matches the words in any
+ * command line, so this harness (its own --playwright flag) and every parent of it are left out, which also keeps the documented
+ * command from refusing itself.
+ */
+export function testRunPids(rows, ownPid) {
+  const parentOf = new Map(rows.map((r) => [r.pid, r.ppid]))
+  const own = new Set([ownPid])
+  for (let pid = parentOf.get(ownPid); pid !== undefined && !own.has(pid); pid = parentOf.get(pid)) own.add(pid)
+  return rows.filter((r) => !own.has(r.pid) && TEST_RUN.test(r.cmd) && TEST_RUN_NAMES.test(r.name)).map((r) => r.pid)
+}
+
 /** Another Playwright or vitest browser run on this machine (command lines under any folder), as process ids. */
 export function otherTestRuns() {
-  const script = "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'playwright|vitest' -and $_.Name -match 'node|chrome|msedge|headless' } | ForEach-Object { $_.ProcessId }"
+  const script = "Get-CimInstance Win32_Process | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId, $_.ParentProcessId, $_.Name, ($_.CommandLine -replace '[\\r\\n|]', ' ') }"
   try {
-    const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 30_000 })
-    return out.split(/\s+/).filter(Boolean).map(Number)
+    const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, timeout: 30_000, maxBuffer: 32 * 1024 * 1024 })
+    const rows = out.split(/\r?\n/).filter(Boolean).map((line) => {
+      const [pid, ppid, name, ...cmd] = line.split('|')
+      return { pid: Number(pid), ppid: Number(ppid), name, cmd: cmd.join('|') }
+    })
+    return testRunPids(rows, process.pid)
   } catch { return [] }
 }
 

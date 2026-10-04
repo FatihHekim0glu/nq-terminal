@@ -14,8 +14,8 @@ This check proves that on the real installer, by hand, in the one case the autom
 | --- | --- |
 | Run date | |
 | Installer file | `nq-lab terminal_0.1.0_x64-setup.exe` |
-| Installer size (bytes) | {{G2: installer bytes}} |
-| Installer SHA-256 | {{G2: installer SHA256}} |
+| Installer size (bytes) | {{W6: installer bytes}} |
+| Installer SHA-256 | {{W6: installer SHA256}} |
 | Release commit | {{W6: final release commit}} |
 | Folder chosen | `D:\Apps\nq-lab terminal` (or your own) |
 

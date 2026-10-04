@@ -16,13 +16,13 @@ The terminal keeps its React page and the lab's own Python backend. A thin Tauri
 | D3 | The workspace store (seven documents under `terminal/state/workspaces`), the page bridge, the stage 1 release | `03_migration_plan.md` section 10 |
 | D4 | The Windows shell: supervisor in a Job Object; keys and app zoom; the allow-listed write module; downloads; crash handling; the lab picker | `desktop/README.md`, `d4_integration.md` |
 | D5 step 1 | The measurement harness, the desktop Playwright project, the served-JSON comparison, the supply-chain checks, the per-user NSIS package, the artefact check, the dated green records and the release check | `desktop/README.md`, `d5_integration.md` |
-| D5 step 2 | The G2 measurements `{{G2: summary of the automated rows and the date}}` | `{{G2: results document}}` |
+| D5 step 2 | The G2 measurements `4 October 2026 (night of 3 to 4): not yet passed. Within ceiling: backend ready, splash, usual-launch cold HOME, warm HOME, EQ and REG warm, grid, GIP pan and zoom, keystroke, installer, the eight routes, and the 20,000-point hop; the drift run (T8) passed 14 of 14 on its second run. Over ceiling: first-launch cold HOME (5,048 ms against 5,000 ms), idle memory (T4 fires) and the soak start-up peak. Not tested: the simulated minimise (no engine-level driver yet). Open: the measure-artefact rows. Owner-attended rows pending` | `docs/desktop/g2_windows/results.md (verdict in verdict.md)` |
 
 What the 0.1.0 build is and is not:
 
-- Built and checked: the installer, the shell, the backend handshake, the store, the write ban, the research gate and the supply-chain checks. The installer from `49229b9` was 3,246,693 bytes (measured on 3 October 2026; the ceiling is 30 MB). The final installer is `{{G2: installer bytes}}` bytes, SHA256 `{{G2: installer SHA256}}`.
-- Not measured by this document: start-up times, memory, and the soak. Whole-app idle memory at HOME is `{{G2: idle memory}}`, the all-day soak peak is `{{G2: soak memory}}`. State these plainly wherever the app is described (risk O01, `05_risks_costs.md`).
-- Owner-attended rows are still pending: the visible run, the real keyboard, the two screen readers (NVDA, Narrator), the reboot first launch, and the real minimise. G2 is therefore recorded as automated pass with owner rows pending until the dated files in `checks/` say otherwise.
+- Built and checked: the installer, the shell, the backend handshake, the store, the write ban, the research gate and the supply-chain checks. The installer from `49229b9` was 3,246,693 bytes (measured on 3 October 2026; the ceiling is 30 MB). The final installer is `{{W6: installer bytes}}` bytes, SHA256 `{{W6: installer SHA256}}`.
+- Not measured by this document: start-up times, memory, and the soak. Whole-app idle memory at HOME is `1,082 MB at HOME (median of 3, smoke build, real data, desktop caps, 4 October 2026); over the 500 MB ceiling; about 920 MB once the working set is trimmed after five minutes; the browser terminal in the same session reads 918 MB; T4 fires`, the all-day soak peak is `largest sample 1,577.4 MB (the start-up peak; 1,509.8 MB by a second sampler), at most 1,292 MB after 15 minutes and 749 MB after 45 minutes; 3 hours, PARTIAL`. State these plainly wherever the app is described (risk O01, `05_risks_costs.md`).
+- Owner-attended rows are still pending: the visible run, the real keyboard, the two screen readers (NVDA, Narrator), the reboot first launch, and the real minimise. G2 is therefore recorded as: automated part not yet passed (first-launch cold HOME 48 ms over its ceiling in the quiet series, idle memory over its ceiling with T4 firing, and the soak start-up peak over 1.5 GB), owner rows pending, until the dated files in `checks/` and a repeat measurement say otherwise.
 - Not built: macOS, the MSVC build leg and the three CI workflows, code signing, an updater (none by design), the four-week dual run.
 
 ### Commit list
@@ -68,7 +68,7 @@ Newest first, from `git log` of this tree. The final hand-over commits are added
    Get-Content 'D:\dev\release\0.1.0\SHA256SUMS'
    ```
 
-   Expected: `{{G2: installer SHA256}}`. The line in `SHA256SUMS` ends with the installer's name and must carry the same hash (compare without regard to case). `PROVENANCE.json` must name version 0.1.0 and the commit `{{W6: final release commit}}`; if the commit differs, the folder was built from another tree and must be rebuilt.
+   Expected: `{{W6: installer SHA256}}`. The line in `SHA256SUMS` ends with the installer's name and must carry the same hash (compare without regard to case). `PROVENANCE.json` must name version 0.1.0 and the commit `{{W6: final release commit}}`; if the commit differs, the folder was built from another tree and must be rebuilt.
 
 3. For a copy that arrived by download, read `smartscreen.md` first.
 
@@ -256,7 +256,7 @@ Order matters, because every record and every artefact carries a stamp of the ex
 7. **The annotated tag**, on the commit that `release_check.ps1` passed on (the release commit, which is HEAD while steps 2 to 6 run), only after step 6 passed on the same day. SemVer 0.x on purpose: the build is unsigned and the owner-attended rows are pending. The tag message names the version and the installer hash and nothing else:
 
    ```powershell
-   git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' tag -a desktop-v0.1.0 -m "desktop 0.1.0 unsigned per-user installer, SHA256 {{G2: installer SHA256}}"
+   git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' tag -a desktop-v0.1.0 -m "desktop 0.1.0 unsigned per-user installer, SHA256 {{W6: installer SHA256}}"
    ```
 
    The commands of step 7 were not taken from a run log, because the tag does not exist yet; `release_check.ps1` checks that the tag name is free and has the form `desktop-vX.Y.Z`. The push is the owner's: `git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' push origin desktop-v0.1.0`. Tag result: `{{W6: tag result with date and commit}}`.
@@ -303,7 +303,7 @@ Files recorded so far: `{{W6: list of dated files under checks/}}`. Open owner d
 
 ## 10. Placeholders to fill
 
-The merge step of W6 fills these from the final tree and the G2 and W6 runs, then removes this section. A placeholder is written in double curly brackets and starts with G2 or W6. After filling, this search must find none in the documents and templates the command searches, except the templates' own empty fields (which are blank cells, not placeholders):
+The G2 placeholders were filled in wave W5B from `docs/desktop/g2_windows/` (the rows for them are gone from the table below). The installer size and SHA256 are W6 placeholders on purpose: every rebuild changes them, and a value from a self-test build (another `ReleaseDir`) would make the owner's check in section 2 fail. The merge step of W6 fills them and the rest from the final tree and the W6 runs, then removes this section. A placeholder is written in double curly brackets and starts with G2 or W6. After filling, this search must find none in the documents and templates the command searches, except the templates' own empty fields (which are blank cells, not placeholders):
 
 ```powershell
 Select-String -Path 'docs\desktop\handover_windows.md','docs\desktop\smartscreen.md','docs\desktop\owner_decisions_windows.md','docs\desktop\checks\*.md' -Pattern '\{\{(G2|W6)'
@@ -311,11 +311,7 @@ Select-String -Path 'docs\desktop\handover_windows.md','docs\desktop\smartscreen
 
 | Placeholder | Where it appears | Source |
 | --- | --- | --- |
-| `{{G2: installer SHA256}}`, `{{G2: installer bytes}}` | this file, `smartscreen.md`, the templates with a build table | `SHA256SUMS` of the final build |
-| `{{G2: idle memory}}`, `{{G2: soak memory}}`, `{{G2: summary of the automated rows and the date}}`, `{{G2: results document}}` | this file | the G2 measurements (W5B) |
-| `{{G2: measure cold HOME median}}` | reboot and visible-run templates | the measure artefact's report |
-| `{{G2: first launch}}`, `{{G2: usual launch}}`, `{{G2: volmanaged_v0 EQ warm}}`, `{{G2: overnight soak length}}`, `{{G2: all-day soak largest sample}}` | `owner_decisions_windows.md`, soak template | the G2 measurements |
-| `{{G2: pending measure-artefact real-lab rows}}`, `{{G2: provisional rows and their CPU load}}` | pending-measurements template | the G2 results document |
+| `{{W6: installer SHA256}}`, `{{W6: installer bytes}}` | this file (sections 1 and 2, plus the tag in section 7); `smartscreen.md`; the templates with a build table | `SHA256SUMS` and the file size of the final build in the default folder `D:\dev\release\0.1.0`, never a self-test folder; until they are filled, read both from that folder |
 | `{{W6: final commits}}`, `{{W6: date}}` | this file, section 1 | `git log` of the final tree |
 | `{{W6: final release commit}}` | this file, `smartscreen.md`, every template that has a build table | the commit the tag is made on, filled in the follow-up docs-only commit (section 7) |
 | `{{W6: confirm this installer hook is in the final installer by running the permission check of section 6 on a fresh install}}` | this file, section 2 | the install test and the permission check on the final installer |

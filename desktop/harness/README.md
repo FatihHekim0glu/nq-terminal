@@ -8,7 +8,7 @@ Python scripts run by the lab's own interpreter. Everything it writes goes under
 ## What a number is
 
 Every figure is written with its build, its method, the CPU load of the gate before the run and the provenance stamp (head, sha256
-of `git diff HEAD`, sha256 of the sorted untracked files with their contents). A record is one JSON file (schema `d5-run-1`), and
+of `git diff HEAD`, sha256 of the sorted untracked files with their contents). Every slot record also carries the GPU reading (`gpu.atGate`, `gpu.afterRun`: utilisation and memory used, or unavailable). A record is one JSON file (schema `d5-run-1`), and
 `report.mjs` recomputes everything from those files. Medians are of 3 accepted runs. A run whose 60 second CPU average is above 10%
 is rejected and kept; after five rejections in a row a run is taken anyway and labelled PROVISIONAL, and the report keeps provisional
 figures apart from accepted ones.
@@ -104,8 +104,9 @@ and the real backend alone is read for reference (`informational`).
 `minimise-sim` hides the controller (put_IsVisible false) for the hold, with LIVE open and streaming, then shows it, and the stream must
 read "live, server events" again within 30 s. The page must really report `hidden`, or the driver is named ineffective. Three drivers
 are tried in turn: `controller-file` (a smoke-only hook in the shell that does not exist yet), `wm-size` (a WM_SIZE message; the engine
-does not react to it), and `page-override` (the page's own visibility overridden over CDP, which tests the page's logic and not the
-engine's throttling, and is recorded as `engineLevel: false`). `minimise-real` minimises and restores the shell's real window on
+does not react to it), and `page-override` (the page's own visibility overridden over CDP; it only changes `document.visibilityState`, the app has no
+visibility-driven stream logic and the engine is never hidden, so it is recorded as `engineLevel: false` and the run fails with
+`NOT TESTED`, never a pass). `minimise-real` minimises and restores the shell's real window on
 screen 2; the page stays `visible` while minimised in a smoke build, which is recorded as an observation.
 
 ## Files
@@ -116,7 +117,7 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 | `modes\` | `rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest` |
 | `lib\paths.mjs`, `build.mjs`, `lab.mjs`, `shell.mjs`, `launch-run.mjs` | folders and ports, build identity, derived labs, the launch, one launch and its rows |
 | `lib\cdp.mjs`, `page-rows.mjs`, `pagejs.mjs`, `probe.js`, `trace.mjs`, `bars.mjs`, `fills.mjs`, `dockwait.mjs`, `heavy.mjs` | the page-internal rows |
-| `lib\gate.mjs`, `slot.mjs`, `record.mjs`, `rows.mjs`, `stats.mjs`, `provenance.mjs`, `harness.mjs` | gate, slot, records, the G2 table, statistics, the stamp, the reproduction gate |
+| `lib\gate.mjs`, `gpu.mjs`, `slot.mjs`, `record.mjs`, `rows.mjs`, `stats.mjs`, `provenance.mjs`, `harness.mjs` | gate, slot, records, the G2 table, statistics, the stamp, the reproduction gate |
 | `lib\winwatch.*`, `winctl.*`, `screen2.mjs`, `plantwin.py` | the window watch, the window helper and the screen-2 guard |
 | `lib\mem.*`, `stop.mjs`, `survivors.mjs`, `proc.mjs`, `backend.mjs`, `shelllog.mjs` | memory counters, identity-checked teardown, processes, backends, the shell log (`shelllog.mjs` also reads `keys_installed` back: a measure run whose engine reads devtools, accelerator keys or zoom control as on is marked failed) |
 | `reference\w0b-tauri.json` | the W0B figures the reproduction is judged against |
@@ -131,3 +132,7 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 - The measure build has no debugging port, so its HOME ready is the shell's `home_painted` (first contentful paint of the backend's page, polled
   every 500 ms), not the moment the data is in. Its idle memory is read after a settle period.
 - The real-data rows (`eq_warm`, `reg_warm`, the real fills run) and the first-launch reading need the main tree and the owner's lab.
+
+## The real-lab guard (decision 11)
+
+The measure build with `--real-data` (and `--first-launch`, which defaults to it) runs the lab's own backend on `terminal\state` with the job queue on. `lib/lab-guard.mjs` therefore reads, before each such launch and read only: a listener on 8765, `backend.lock` (live when an open that allows delete fails), `jobs.json` (sha256 and any queued or running job) and the file list of `backtests\output`. If a listener, a live lock or an active job is found, nothing is launched and the slot is written as a `pending` record that names the reason (the measure rows stay pending and the process rows are taken on the smoke build). After a launch the shell log must show `supervise_spawned` and no `supervise_attached`, `jobs.json` must hash the same, `backtests\output` must list the same files and the lock must be gone; anything else makes the run `failed` with the problems in its record (`labCheck`).

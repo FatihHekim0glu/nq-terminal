@@ -10,7 +10,9 @@ import { waitQuiet } from '../lib/gate.mjs'
 import { executeSlot } from '../lib/slot.mjs'
 import { launchRun } from '../lib/launch-run.mjs'
 import { figuresOf, selectRows } from './rows.mjs'
-import { isMainTree } from '../lib/paths.mjs'
+import { isMainTree, LAB } from '../lib/paths.mjs'
+import { launchBlock } from '../lib/lab-guard.mjs'
+import { writeRecord } from '../lib/record.mjs'
 
 export const BOOT_WINDOW_S = 30 * 60
 
@@ -24,6 +26,13 @@ export async function run({ args, outDir, provenance }) {
   const firstAfterBoot = uptimeSeconds <= BOOT_WINDOW_S
   if (!dry && !firstAfterBoot) console.log(`note: the machine has been up ${Math.round(uptimeSeconds / 60)} minutes; this is not a first launch after a boot, and the record says so`)
   const exe = resolveBuild(build, args.opt('exe', null))
+  const block = launchBlock(build, realData, LAB)
+  if (block) {
+    const body = { mode: 'first-launch', build, slot: 1, attempt: 1, kind: 'measure', tag: 'FIRST-LAUNCH', provenance, uptimeSeconds, firstAfterBoot, status: 'pending', reason: `real lab not quiet: ${block.problems.join('; ')}`, pending: block.problems, labCheck: { before: block.summary } }
+    const file = writeRecord(outDir, `first-launch-${build}-s01-a1-measure`, body)
+    console.log(JSON.stringify({ mode: 'first-launch', build, status: 'pending', pending: block.problems }))
+    return { status: 'pending', file, result: body }
+  }
   const quiet = dry ? { quiet: true, readings: [], waitedSeconds: 0 } : await waitQuiet({ gateSeconds: Number(args.opt('gate-seconds', 60)), limitPct: Number(args.opt('cpu-limit', 10)), maxWaitSeconds: Number(args.opt('max-wait-seconds', 600)) })
   const last = quiet.readings.at(-1) ?? { avgPct: null, maxPct: null, seconds: 0, limitPct: 10, enforced: false, pass: true, samples: [] }
   const rows = selectRows(build, 'all', realData)

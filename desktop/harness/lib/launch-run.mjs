@@ -17,6 +17,7 @@ import { exeBytes } from './build.mjs'
 import { MB } from './rows.mjs'
 import { median, round } from './stats.mjs'
 import { fillsBody } from './fills.mjs'
+import { guardsMeasure, snapshotLab, precheckProblems, postcheckProblems, snapshotSummary } from './lab-guard.mjs'
 import { barsRule, BARS_TARGET } from './bars.mjs'
 import { HOME_EXPR, HOME_INFO, homeReadyMs, waitHomeReady, idleHealth, warmHomeReload, warmScreen, pickFillsRun, gridOpen, gipPanZoom, keystrokeToPaint } from './page-rows.mjs'
 
@@ -141,6 +142,14 @@ export async function launchRun({ build, exe, runDir, o = {} }) {
   const stateWatch = build === 'measure' ? path.join(labInfo.lab, 'terminal', 'state') : stateDir
   const stateBefore = stateWatch ? listState(stateWatch) : []
   const result = { build, exe, exeBytes: exeBytes(exe), terminal: TERMINAL, dataKind: opts.realData ? 'real' : build === 'smoke' ? 'fixture' : 'none', derivedLab: labInfo.derived, rows: {}, detail: {} }
+  // The measure build on the real lab runs the owner's backend on the real state folder with jobs on: check first, launch only when quiet.
+  const guarded = guardsMeasure(build, opts.realData)
+  const labBefore = guarded ? snapshotLab(labInfo.lab, opts.labProbes) : null
+  const pending = guarded ? precheckProblems(labBefore) : []
+  if (pending.length > 0) {
+    labInfo.remove()
+    return { ...result, pending, labCheck: { before: snapshotSummary(labBefore), problems: pending } }
+  }
   const run = startShell(spec)
   result.rootPid = run.child.pid
   result.startedAtIso = run.spawnedAtIso
@@ -168,6 +177,12 @@ export async function launchRun({ build, exe, runDir, o = {} }) {
     result.teardown = await teardown(run.child, treeRows)
     result.exitCode = run.exitCode
     fillProcessRows(result)
+    if (guarded) {
+      const after = snapshotLab(labInfo.lab, opts.labProbes)
+      const problems = postcheckProblems(labBefore, after, events)
+      result.labCheck = { before: snapshotSummary(labBefore), after: snapshotSummary(after), problems }
+      if (problems.length > 0 && !result.fatal) result.fatal = `real-lab post-check: ${problems.join('; ')}`
+    }
     if (stateWatch) { result.stateNew = newState(stateBefore, listState(stateWatch)); result.stateFolder = stateWatch }
     labInfo.remove()
   }

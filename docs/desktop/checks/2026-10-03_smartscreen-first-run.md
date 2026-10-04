@@ -17,8 +17,8 @@ The installer is unsigned, by decision (the register, "Still open": code signing
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, {{G2: installer bytes}} bytes |
-| Installer SHA-256 | {{G2: installer SHA256}} |
+| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, {{W6: installer bytes}} bytes |
+| Installer SHA-256 | {{W6: installer SHA256}} |
 | Release commit | {{W6: final release commit}} |
 | Windows build | |
 | Browser used for the real download in step 6 (if you do it) | |
