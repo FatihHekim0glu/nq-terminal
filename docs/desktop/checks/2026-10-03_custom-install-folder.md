@@ -45,18 +45,20 @@ This check proves that on the real installer, by hand, in the one case the autom
    Select-String -LiteralPath "$Release\SHA256SUMS" -SimpleMatch 'nq-lab terminal_0.1.0_x64-setup.exe'
    ```
 
-2. [ ] Double-click the installer. Expected: no UAC prompt, a wizard with a folder page. Write down the folder it offers: it must be under `%LOCALAPPDATA%\Programs` ({{W6: default folder text from the installer script}}).
-3. [ ] On the folder page, type each path below in turn and press Next. Expected for every one: the installer refuses it (a message, or Next stays disabled) and installs nothing. Write down the wording it uses ({{W6: refusal wording}}).
+2. [ ] Double-click the installer. Expected: no UAC prompt, a wizard with a folder page. Write down the folder it offers: it must be `%LOCALAPPDATA%\Programs\nq-lab terminal` (that is `C:\Users\<you>\AppData\Local\Programs\nq-lab terminal`, the product folder name of the installer script).
+3. [ ] On the folder page, type each path below in turn. Expected for every one: the installer's Install button stays greyed out and nothing is installed. The folder page shows no explanation for a refused folder, so write down only whether the button was greyed out. (The explanatory words appear on the console of a silent install and in a dialog if the guard stops an install after it began; they are listed in register entry 1.3.) If the button is enabled for any of these, that is a FAIL: do not press it unless you want the install.
 
-   | Path typed | Refused (tick) | Wording seen |
+   | Path typed | Install greyed out (tick) | Anything else you saw |
    | --- | --- | --- |
    | `D:\` (a drive root) | [ ] | |
    | `\\localhost\nq-lab-test\nq-lab terminal` (a network path) | [ ] | |
    | `C:\Program Files\nq-lab terminal` | [ ] | |
    | `C:\Windows\nq-lab terminal` | [ ] | |
 
+   The automated install test covers the same four cases silently (a drive root in three spellings, a network path, Program Files and the Windows folder, each with exit code 3) and a junction as well; this by-hand step is the check that the folder page itself refuses them.
+
    After this step, confirm nothing was written by any of them: `Test-Path 'C:\Program Files\nq-lab terminal'` and `Test-Path 'C:\Windows\nq-lab terminal'` must both print False.
-4. [ ] Type your custom folder (for example `D:\Apps\nq-lab terminal`) and install. Expected: it completes with no UAC prompt and no second window.
+4. [ ] Type your custom folder (for example `D:\Apps\nq-lab terminal`) and install. Expected: it completes with no UAC prompt and no second window. If Install is greyed out for your own folder, the folder is refused: its parent grants another account the right to rename or re-protect it, the folder already exists and holds files that are not this program's, or another account owns it. Read the parent's list with `icacls` (for `D:\Apps` that is `icacls 'D:\Apps'`), write what you find in the findings, and pick another folder; do not widen any permission. A parent that only lets Authenticated Users add and change files (Modify), as `D:\` does on this PC, is accepted by the installer, but Modify includes DELETE, so another account could rename that parent away and plant its own program folder. Write in the findings whether this PC has only your own account (then a `D:\` child folder is fine, a single-account PC); if it has others, use the profile default or protect the parent first.
 5. [ ] Read the folder's access list straight after the install.
 
    ```powershell
@@ -89,7 +91,7 @@ This check proves that on the real installer, by hand, in the one case the autom
    ```
 
    Expected after the clean start (the launch created the folder): `created : True` and `protected : True`. If the folder already existed, the app leaves it as it was and logs `created : False` and `protected : False`; that value says nothing about the access list, so do not record it as a failure. In both cases run the step 5 commands with `$Dir` set to the `path` it printed. That result decides the step: protected, and only the same three identities.
-9. [ ] Close the app, then uninstall it from Settings, Apps, or with the uninstaller in the install folder. Expected: no UAC prompt; the install folder is gone; the lab and its `terminal\state` folder are untouched (the uninstaller never touches them, 03 section 13.1). Then list what it left behind:
+9. [ ] Close the app, then uninstall it from Settings, Apps, or with the uninstaller in the install folder. Expected: no UAC prompt; the install folder is gone (it stays, with only your own file in it, if you added a file there: the uninstaller removes only what the installer wrote); the lab and its `terminal\state` folder are untouched (the uninstaller never touches them, 03 section 13.1). Then list what it left behind:
 
    ```powershell
    Test-Path 'D:\Apps\nq-lab terminal'
@@ -101,7 +103,7 @@ This check proves that on the real installer, by hand, in the one case the autom
 
 ## Pass rule
 
-PASS when steps 1 to 9 are all ticked, every refusal in step 3 happened, no UAC prompt appeared at any point, the folder and the WebView2 data folder have protected access lists with only the three identities, and the uninstall left the lab untouched. Any one miss is a FAIL.
+PASS when steps 1 to 9 are all ticked, every refused path in step 3 had its Install button greyed out, no UAC prompt appeared at any point, the folder and the WebView2 data folder have protected access lists with only the three identities, and the uninstall left the lab untouched. Any one miss is a FAIL.
 
 ## Evidence to keep
 

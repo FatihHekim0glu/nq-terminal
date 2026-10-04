@@ -1,6 +1,6 @@
 # Owner decisions for the Windows app: the register
 
-Status: written on 3 October 2026 for the hand-over (wave W6). It is a draft in one respect only: figures that the measuring step (G2) or the final regression (W6) produces appear as visible placeholders in double curly brackets that start with G2 or W6, and the merge step fills them from the final tree. Nothing here says that G2 has passed. G2 and milestone M4 stay provisional until the owner-attended checks in `docs/desktop/checks/` are filled in and ticked.
+Status: written on 3 October 2026 for the hand-over (wave W6) and brought in line with the tree at commit `f2e03bf`, where the four DEC1 decisions are built. It is a draft in one respect only: figures that the measuring step (G2) or the final regression (W6) produces appear as visible placeholders in double curly brackets that start with G2 or W6, and the merge step fills them from the final tree. Figures taken from the DEC1 wave, which was measured alone but not on a quiet machine, are written with the word PROVISIONAL and are not G2 figures. Nothing here says that G2 has passed. G2 and milestone M4 stay provisional until the owner-attended checks in `docs/desktop/checks/` are filled in and ticked.
 
 This register lists every decision the Windows build needed, what was taken, the standard it follows, and what is still open. It extends 04 ("Owner decisions, with the phase that needs each") and 03 section 23, and the owner decisions of the build plan. Where a decision was taken by default, it says so, and says that it is provisional: the owner can change it, and the cost of changing it is in the row.
 
@@ -17,7 +17,7 @@ Status words used below:
 
 ## 1. Decisions delegated by the owner on 3 October 2026
 
-The owner asked for the open decisions to be fixed to the best, industry-standard, current practice, and for the work to be sped up with parallel waves. Five decisions followed from that. They are being built in wave DEC1; each row records what the build must meet and the standard it follows, and the readings that prove it are placeholders for the merge step.
+The owner asked for the open decisions to be fixed to the best, industry-standard, current practice, and for the work to be sped up with parallel waves. Five decisions followed from that. Four were built in wave DEC1 (entries 1.1 to 1.4, on `main` at `2024d3b` and later) and the fifth, the tag, waits for the final release check. Each entry records what the build meets, the standard it follows, the evidence in `docs/desktop/d5_integration.md` (DEC1 sections) and the G2 reading still to come as a placeholder for the merge step. A sixth entry (1.6) records a later order of the owner, on the window watch.
 
 ### 1.1 T3: cold HOME, the strict reading
 
@@ -30,7 +30,7 @@ The owner asked for the open decisions to be fixed to the best, industry-standar
 | How | The ledger read starts in the backend prewarm instead of waiting for HOME to ask for it; the ledger read itself is faster and is stamped with the code that wrote it, so a stale answer cannot be reused; HOME's panels paint as their answers arrive instead of all at once |
 | Standard followed | Budget the slowest launch a person will see, not the best one; paint what is ready and fill the rest progressively; keep the figure a median of three runs on a quiet machine, with the load recorded |
 | Readings | First launch (empty state): 5,048 ms in the app (smoke build, quiet series; 5,583 ms in the first series), against the 5,000 ms G2 ceiling and the 6,000 ms first-launch cap; 4,260 ms (4,639 ms in the first record) in the stage 1 reading without the shell. Usual launch: 3,321 ms in the app (median of 3, state filled); 3,235 ms (3,413 ms) in the stage 1 reading |
-| Status | Delegated. Being built in wave DEC1. The by-hand reading after a reboot is in `docs/desktop/checks/2026-10-03_reboot-first-launch.md` |
+| Status | Delegated. Built in wave DEC1 (backend prewarm order, a faster ledger read stamped with the code that wrote it, panels that paint as their answers arrive). G2 re-measures it alone in a quiet window. The by-hand reading after a reboot is in `docs/desktop/checks/2026-10-03_reboot-first-launch.md` |
 
 ### 1.2 Zoom at 200% in small windows
 
@@ -39,18 +39,19 @@ The owner asked for the open decisions to be fixed to the best, industry-standar
 | Decision | At 200% zoom, in a 1366 by 768 window and in a 1024 by 640 window, every maximised panel keeps every control reachable: through an overflow menu, a scrolling body, or both, and never by clipping a control away |
 | Standard followed | WCAG 2.2 AA: success criterion 1.4.4 (Resize Text) and 1.4.10 (Reflow). The dense two-dimensional panels keep the data-table exception of 1.4.10 that 03 section 12 already relies on; the criterion applied here is reachability and no loss of function |
 | What it replaces | The two desktop specs that were expected failures (`test.fail`) in the D5 step 1 build, recorded as open in `docs/desktop/d5_integration.md`: a maximised GP panel left a body too short for its controls |
-| Readings | The two specs now pass: {{W6: result of the zoom specs of the desktop project}} |
-| Status | Delegated. Being built in wave DEC1. The by-eye check on the installed release is `docs/desktop/checks/2026-10-03_zoom-200-by-eye.md` |
+| Readings | The two specs are plain tests now and pass. In the desktop Playwright project, 41 passed against the rebuilt smoke build in the release check of 3 October 2026 (`docs/desktop/d5_integration.md`), and the 200% reflow survey of 44 panels in three windows passes 133 of 133 cases (it failed 75 of 89 before the fixes). The wide data grids (MON, REG, LIVE, JRNL, RUNS, JOBS) still scroll sideways inside the panel body, which is the data-table exception of 1.4.10. The final regression repeats the desktop project on the final tree |
+| Status | Delegated. Built in wave DEC1. The by-eye check on the installed release is `docs/desktop/checks/2026-10-03_zoom-200-by-eye.md` |
 
 ### 1.3 Install folders
 
 | | |
 | --- | --- |
-| Decision | Per-user install, with no elevation, in the pattern of the user installers of VS Code and Chrome. The default folder is under `%LOCALAPPDATA%\Programs` ({{W6: product folder name under Programs, from the installer script}}). Any folder the owner picks gets a protected access list (the current user plus SYSTEM and Administrators, nothing inherited) before any file is written. Drive roots, network paths, Program Files and the Windows folder are refused |
+| Decision | Per-user install, with no elevation, in the pattern of the user installers of VS Code and Chrome. The default folder is `%LOCALAPPDATA%\Programs\nq-lab terminal` (the product folder name of the installer script). Any folder the owner picks gets a protected access list (the current user plus SYSTEM and Administrators, nothing inherited) before any file is written, and the lists are read back after the install (the install is undone if they are wrong). Refused, with exit code 3 for a silent install and nothing written: drive roots, network paths, Program Files, the Windows folder, links and junctions, an existing file, an existing folder owned by another account or holding anything but the program's own files, and a folder inside a parent that another account could rename away or re-protect (delete-child, change-permissions, take-ownership or full control for another account). The guard does not test DELETE on the parent: a parent that grants another account Modify (as `D:\` does to its child folders) is accepted, and on a PC with more than one account that account could rename the parent away and plant its own folder. The recommended `D:\Apps` is safe on a single-account PC only; the profile default or a parent you protected first is the safe choice elsewhere. Exit code 4 is a permission list that could not be set and exit code 5 a wrong one at the read-back |
 | Standard followed | CWE-732 (incorrect permission assignment for a critical resource) and CWE-427 (uncontrolled search path element): a program folder that other local accounts can write lets them replace the executable or plant a library it loads. A per-user location plus a protected list closes both without needing administrator rights |
 | What it replaces | 03 section 13.1 proposed `D:\Apps\nq-lab terminal` for this PC, and the D5 step 1 install test covered the per-user default layout only; a folder picked on `D:\` inherits Authenticated Users Modify from the drive |
-| Readings | The silent install test result: {{W6: install test result}}. The by-hand check is `docs/desktop/checks/2026-10-03_custom-install-folder.md` |
-| Status | Delegated. Being built in wave DEC1 (the installer script and the artefact check). The runbook (`docs/desktop/handover_windows.md`) keeps the `icacls` command as the fallback for a folder already installed |
+| Words the installer uses | The folder page shows no text for a refused folder: its Install button stays greyed out. The words appear on the console of a silent install, and in a dialog if the guard stops an install after it began. Drive root: "The install folder cannot be the root of a drive. Choose a folder inside it." Network: "The install folder cannot be on a network location. Choose a folder on a local drive." Program Files or Windows: "The install folder cannot be under Program Files or Windows. Choose a folder in your own profile or on another drive." Link, junction or file: "The install folder cannot be a link, a junction or an existing file. Choose an ordinary folder." Not a full path: "Choose a full folder path on a local drive, such as C:\Users\you\AppData\Local\Programs\nq-lab terminal." The other messages are in `desktop/src-tauri/windows/nsis/hooks.nsh` |
+| Readings | The silent install test against the installer of `f2e03bf` (`D:\dev\release-b\0.1.0`), 3 October 2026: 52 steps, 0 failed (the default per-user layout, a custom folder under a parent that grants Users Modify and Everyone write, a user file and a lab stand-in surviving the uninstall, and seven refusals with exit code 3). With the opt-in default-folder case, 58 steps, 0 failed, on an earlier DEC1 build. On the final installer: see the runbook, section 2. The by-hand check is `docs/desktop/checks/2026-10-03_custom-install-folder.md` |
+| Status | Delegated. Built in wave DEC1 (`hooks.nsh`, the artefact check, the install test), tested born failing in `install-hooks.test.mjs`. The runbook (`docs/desktop/handover_windows.md`) keeps the `icacls` command as the fallback for a folder already installed |
 
 ### 1.4 `volmanaged_v0 EQ` at the desktop caps
 
@@ -58,8 +59,9 @@ The owner asked for the open decisions to be fixed to the best, industry-standar
 | --- | --- |
 | Decision | `volmanaged_v0 EQ` meets its 1,000 ms warm target at the desktop caps (512 MiB for bars, 128 MiB for files) without raising either cap |
 | Standard followed | Meet a performance budget by removing the cost, not by raising the resource ceiling that keeps the whole app inside its memory budget. The G2 soak is measured at the shipped caps, so a raised cap would also move the memory rows |
+| What changed | The bars cache was not the cause. The run index's file cache charged each run's small parsed head at its whole `result.json`, so one pass overflowed the cap and every call re-parsed all 72 files. The cache now charges an entry what it keeps; nothing served changes and no cap was raised |
 | Readings | `volmanaged_v0 EQ`, warm, real data, desktop caps: 628 ms, the Enter unit, median of 5, real data, desktop caps (512 MiB bars, 128 MiB files) (target 1,000 ms, ceiling 1,500 ms) |
-| Status | Delegated. Being built in wave DEC1 |
+| Status | Delegated. Built in wave DEC1. G2 takes the figure again alone in a quiet window |
 
 ### 1.5 The release tag
 
@@ -68,7 +70,16 @@ The owner asked for the open decisions to be fixed to the best, industry-standar
 | Decision | An annotated tag `desktop-v0.1.0` on the commit that `release_check.ps1` passed on (the release commit); the hash, the check result and the tag result are recorded in a follow-up docs-only commit after the tag, because they cannot be written into the stamped commit itself. The tag is created only after every automated gate passes: `release_check.ps1` passes with same-day records whose provenance stamps match the tree. The version is 0.x, because the build is unsigned and the owner-attended checks are still pending |
 | Standard followed | Semantic Versioning 2.0.0: versions 0.y.z are initial development, and the public surface may still change; the first 1.0.0 comes when the owner-attended rows have passed, the dual run has closed and the signing question is settled. An annotated tag (not a lightweight one) records who tagged and when, and why, which is what a release needs |
 | Who | Created by the build's lead, not by a build slice, and never before the gates. The plan reserved the push of the tag to the owner; creating the tag is delegated, and whether it has been pushed is recorded here: {{W6: tag created and pushed, with the release commit}} |
-| Status | Delegated. Done at the end of W6 |
+| Status | Delegated. Done at the end of W6, after the final release check |
+
+### 1.6 The window watch judges the run's own app
+
+| | |
+| --- | --- |
+| Decision | During every automated launch (the desktop Playwright project, the served crosscheck, the app-mode smoke, the harness) the watch over every window on the machine fails a run only on a drawn window, an unexpected undrawn window or a foreground change that comes from the app tree that run started. Windows and foreground changes of other programs are kept as notes in the run's record. An event whose owner could not be traced still fails, and so does every event of a watch that names no launched app |
+| Standard followed | Fail closed on what the run controls, and record what it does not: a check that fails because another program opened a window teaches nothing about the app |
+| What it narrows | The standing rule that any new visible window anywhere fails a run (plan decision 10 still governs where a window may be shown: hidden, or on screen 2). The install test (`install-test.ps1`) keeps the strict form unless `-AllowForeign` is given |
+| Status | Taken by the owner on 3 October 2026; built in `f2e03bf` (`desktop/harness/lib/winwatch.mjs`, `web/e2e/desktop/watch.ts`). The reboot check reads the app's own windows only; other programs' windows at sign-in are notes |
 
 ## 2. The decisions of the build plan
 
@@ -81,14 +92,14 @@ These are the fourteen owner decisions of `windows_build_plan.md`, in its order.
 | 3 | O16: quiet-machine windows | No named window. Measurements wait for a 60-second CPU average of at most 10%. If the load stays above that, the measurement is still taken, with the load recorded, and labelled PROVISIONAL, then listed for a re-measure in a quiet window | Provisional | `docs/desktop/checks/2026-10-03_pending-measurements.md` repeats them. G2 does not close on a provisional figure |
 | 4 | Accept a locally built, GNU-host, unsigned release for own use | Accepted, labelled "GNU local build"; the manifest fix and the absence of MinGW runtime imports are proven by the artefact check. Departs from 02 C3-13 and 03 section 13.1 (MSVC in CI). The G2 row that compares against an MSVC measure artefact uses the GNU measure artefact | Provisional | The alternative is to call it a pre-release until an MSVC build exists in CI |
 | 5 | Unsigned installer and SmartScreen | Unsigned accepted for own use. A locally built installer has no Mark of the Web, so SmartScreen is not invoked; a downloaded copy gets one Run anyway prompt per file; Smart App Control is off on this PC (`docs/desktop/smartscreen.md`, `docs/desktop/checks/2026-10-03_smartscreen-first-run.md`) | Provisional; still open in section 3 | A Certum OV certificate, from EUR 209 a year, is needed only if the app is shared |
-| 6 | Folder ACLs | The app creates its WebView2 data folder with a protected access list; decision 1.3 protects the install folder at install time; the runbook gives the `icacls` command for an installed folder. D:\ and D:\dev are not changed by any build run | Taken for what the app creates; D: left alone | Protecting `D:\dev` is machine configuration and stays with the owner (section 5) |
+| 6 | Folder ACLs | The app creates its WebView2 data folder (`D:\nq-terminal\webview`) with a protected access list, and leaves a folder that already exists as it was; decision 1.3 protects the install folder at install time and the install test proves it under a hostile parent; the runbook gives the `icacls` command for an installed folder. D:\ and D:\dev are not changed by any build run | Taken for what the app creates; D: left alone | Protecting `D:\dev` is machine configuration and stays with the owner (section 5) |
 | 7 | T2 branch: Electron or Tauri | T2 did not fire; the Windows shell stays Tauri 2 (`docs/desktop/d0_results.md`). O4 at its default | Settled by measurement | Changing it means replacing `desktop/`, 3 to 5 weeks (03 section 20) |
 | 8 | O5 caches; O7 drives | 512 MiB for bars and 128 MiB for files in desktop mode, 2 GiB in the browser door. The WebView2 data folder is `D:\nq-terminal\webview`. The install folder default is now the per-user one of decision 1.3; `D:\Apps\nq-lab terminal` remains a choice. Tests use `D:\dev` only | Taken | Raising a cap moves the memory rows of G2 (see 1.4) |
 | 9 | O10, O11, O12, O6 | The IB snapshot checkbox off by default (a `settings.json` key until a menu exists); closing with a running backtest asks to confirm, then stops it; minimum window 1,024 by 640; no resident backend. In the release the stale-dist rebuild runs only after an explicit click, because it runs package install scripts | Provisional | A resident backend (O6) is built only if the cold-HOME cap fails after decision 1.1 |
-| 10 | Screen 2 | Allowed: a window that a test needs may be shown on the second monitor only, inside its work area, with no activation and behind a guard; every other window is hidden. If the hidden route gives no frames, pan-and-zoom traces may use it | Taken | Without it the real minimise and restore stay owner-attended |
+| 10 | Screen 2 | Allowed: a window that a test needs may be shown on the second monitor only, inside its work area, with no activation and behind a guard; every other window is hidden. If the hidden route gives no frames, pan-and-zoom traces may use it. What the watch counts as a failure is narrowed by 1.6 | Taken | Without it the real minimise and restore stay owner-attended |
 | 11 | The 8765 browser backend | Not stopped by any build run, which never touches it. Consequence: the `measure` build's real-lab rows are recorded as pending whenever 8765 listens or a live lock exists, and the process rows are taken on the `smoke` build with a temporary state folder instead. Restarting the browser door with the new `start.ps1` is a hand-over step (`docs/desktop/handover_windows.md`) | Provisional | The pending rows are repeated in `docs/desktop/checks/2026-10-03_pending-measurements.md` |
 | 12 | The departures from 03 found by the security review | Accepted; listed in section 4 | Taken | Reverting one loses its protection |
-| 13 | Soak length | An overnight partial soak on the build night (3 hours, 36 to 37 samples, PARTIAL), labelled PARTIAL; the full soak is an owner check for a day when the PC can be left alone | Provisional | `docs/desktop/checks/2026-10-03_all-day-soak.md` |
+| 13 | Soak length | A partial soak on the build night (3 hours, 36 to 37 samples, a real-data run shorter than the 8-hour all-day rule), labelled PARTIAL; the full soak is an owner check for a day when the PC can be left alone | Provisional | `docs/desktop/checks/2026-10-03_all-day-soak.md` |
 | 14 | O8: the browser door after the dual run | Keep (the default), decided at the end of the dual run | Open until the run closes | Retiring it removes the fallback that costs nothing |
 
 ## 2.1 The identifiers of 03 section 23 and 04
@@ -115,7 +126,7 @@ These are the fourteen owner decisions of `windows_build_plan.md`, in its order.
 
 ## 3. Still open for the owner
 
-Six items wait for the owner. Each has a recommended default; none blocks the dual run.
+Seven items wait for the owner. Each has a recommended default; none blocks the dual run.
 
 | # | Open item | Why it matters | Recommended default |
 | ---: | --- | --- | --- |
@@ -125,6 +136,18 @@ Six items wait for the owner. Each has a recommended default; none blocks the du
 | 4 | One shared memory budget instead of per-cache caps | Today the bar cache holds 512 MiB and the file cache 128 MiB in desktop mode, and the browser door holds 2 GiB; each cache bounds itself, the rest of the app is not counted, and the caps add up | Keep the per-cache caps. Decide after the all-day soak: if its largest sample stays at or under 1.5 GB with a flat slope (not run: an owner check on a day the PC can be left alone), change nothing; if it keeps rising, replace the caps with one budget over both caches |
 | 5 | The Mac gate G1 | Deferred. G1 is recorded as pending, not run. D7, D8, the Mac dual run and decisions O1, O3, O9, O13, O17 wait with it | Keep it deferred until you choose a Mac session; the Windows dual run goes ahead meanwhile |
 | 6 | Deleting the `wip/v2` branch | On origin only, one commit (`875e22b`, "wip: v2 snapshot ... not release-checked") that main does not contain; main is 17 commits ahead of it, on the day of writing | Do not delete it yet. Read what it holds with `git -C "$env:USERPROFILE\nq-lab\terminal" diff --stat main origin/wip/v2`. If nothing in it is wanted, delete it after the tag is pushed (`git push origin --delete wip/v2`); the commit stays reachable by its id on the remote until the remote collects it. Deleting is a git write and stays with you |
+| 7 | Two torn lines in the lab's access log | `results/oos_access_log.jsonl` holds two lines that are a lone `}` (lines 17724 and 17858 when read on 3 October 2026), left by two seam-test runs before the log's append lock existed. They fail five tests of the lab's own `tests/test_sealed_pins.py` and show as "not JSON" on the OOS screen. The log is append-only and the terminal never writes under `results/`, so they were left alone. The weekly parity and JOBS check commands skip any line that does not start with `{`, so they are not disturbed | Delete those two lines yourself, after a copy of the log, when the lab is quiet. The entries they belonged to were already lost. The lab's gate now skips a torn fragment that cannot be a sealed line |
+
+### 3.1 Known defects carried into the dual run
+
+These are listed in `docs/desktop/d5_integration.md`, section "Open after DEC1". None is a decision; each is here so that the owner sees what the dual run starts with.
+
+| Defect | What it means | Treatment |
+| --- | --- | --- |
+| The 4.5 s first-launch target is not shown to be met (5,034 ms, PROVISIONAL) | The cap of 6 s holds; the target is not reached. The next costs are the uncached hypothesis panel request, the `/api/health` walk of `web/src` and the gated session sets of the ledger | G2 re-measures alone; a fix is a D6 defect run |
+| Three registered rows, `gotobi6j_v0`, `tsyauction_mid_v0` and `apieia_ho_v0`, are plain rows | The terminal has no series, no tear sheet figures and no place among the Deflated Sharpe trials for them (the N note names them). A registered row is never an error | Learning a row is a change of its own, with its own born-failing series checks |
+| `60-print.desktop.ts` is load dependent | Emulating print media on a live page left the engine unresponsive in some runs; the spec runs in an app of its own and is retried twice. A rare 412 on the store's link groups after a test reset passed on the next run | Contained, not understood to the root. A red run for that one spec alone is not a product failure |
+| The `/api/runs` index would thrash above about 500 runs by entry count (72 today) | The run file cache holds 512 entries | Raise the entry count when the lab approaches 500 runs |
 
 ## 4. Departures from 03 accepted under decision 12
 
@@ -149,6 +172,9 @@ The security review of the plan found four places where the safer design departs
 | The cold-HOME cap holds for the first launch too | 02 section 4.1 item 3 (usual launches only) | Decision 1.1 |
 | An overnight partial soak on the build night | 04 D5 (an all-day soak) | Plan decision 13; the full soak is an owner check |
 | A real minimise and restore only on screen 2 behind a guard | 04 D5 | Plan decision 10 |
+| The window watch fails a run only for the run's own app tree; other programs' windows are notes | The plan's rule that any new visible window anywhere fails a run | Entry 1.6 |
+| The backend record of the release check runs the suite in parallel when the venv has pytest-xdist, with the serial command named in the record | 04 D5 (one serial run) | Speed, under the owner's order of 3 October 2026; the same tests, 4,065 passed and 1 skipped in 1 minute 52 seconds against about 9 to 10 minutes |
+| A reference build of `f2e03bf` in `D:\dev\release-b\0.1.0` stands beside the default folder | 04 D5.4 (one release folder) | The default folder is rebuilt from the final merged tree by the merge step; `release_check.ps1` on a non-default folder reports a WARN and is not a release check |
 
 ## 5. Deferred
 
