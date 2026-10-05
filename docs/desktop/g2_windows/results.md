@@ -1,6 +1,115 @@
-# G2 on Windows: measured results (release 0.1.1 re-measure; the 0.1.0 and W5B records follow as history)
+# G2 on Windows: measured results (release 0.1.2 re-measure before its tag; the 0.1.1, 0.1.0 and W5B records follow as history)
 
-Taken on 4 October 2026, in a slot from 16:39 to 16:57 BST, on the owner's PC (host `DESKTOP-FM5O3JM`), after the thread-cap fix of release 0.1.1 (commit `519a3cb`, merged as `656a964`). Sections A1 to A7 are the 0.1.1 record, written from the raw records under `D:/dev/w6/measure-runs` (named in A7). Sections 1 to 14 below them are the 0.1.0 record of wave W5C, unchanged, and section 13 sets W5B beside W5C; they stay as history and are the evidence for every row that 0.1.1 did not re-run. The verdict is in `verdict.md`.
+Sections B1 to B7 are the 0.1.2 record: taken on 5 October 2026, in a quiet slot from 04:25 to 06:02 BST, on the owner's PC, on the 0.1.2 release commit before its tag, written from the raw records under `D:/dev/v012/measure-runs` (named in B7). Sections A1 to A7 are the 0.1.1 record: taken on 4 October 2026, in a slot from 16:39 to 16:57 BST, on the owner's PC (host `DESKTOP-FM5O3JM`), after the thread-cap fix of release 0.1.1 (commit `519a3cb`, merged as `656a964`), written from the raw records under `D:/dev/w6/measure-runs` (named in A7). Sections 1 to 14 below them are the 0.1.0 record of wave W5C, unchanged, and section 13 sets W5B beside W5C; they stay as history and are the evidence for every row that neither 0.1.1 nor 0.1.2 re-ran. The verdict is in `verdict.md`.
+
+## B1. Read this first (release 0.1.2)
+
+- **What 0.1.2 changes for G2.** On Windows the backend now trims its own working set (`backend/nq_terminal/memtrim.py`, `K32EmptyWorkingSet` on its own process). The trim runs once per quiet period, after 60 s in which the backend served no foreground request (it looks every 5 s, and never trims while a request is in flight, a job is queued or running, or the prewarm thread is working). In this tree it also runs when the prewarm's later stage ends, unless a request is in flight then (`TRIM_STAGES` in `backend/nq_terminal/api/home_prewarm.py`). `NQT_MEMTRIM=0` switches all of it off. A trim moves the pages the backend has not touched lately to the standby list: the working set falls and the committed memory (private bytes) does not. The 0.1.2 harness therefore reads the idle row once the backend's working set has dropped, and reads the private bytes beside it (B2).
+- **Result.** Idle memory at HOME reads **199.0 MB** (192.8 to 202.8 MB over eight counted launches), inside the 500 MB ceiling and, for the first time, inside the 400 MB target. The private bytes of the whole tree at the same samples are 693.8 MB (678.6 to 713.5 MB); the trim does not lower them. Read at the same point with the trim off (`--memtrim off`), the row is 404.4 MB (401.9 to 405.3 MB) and the private bytes 689.5 MB (683.2 to 715.7 MB). So the trim takes about 205 MB off the counted working set, all of it in the backend (233.5 MB down to 29.9 MB), and leaves the committed memory where it was. The warm rows are no slower with the trim on (B5). Every other re-measured row stayed inside its ceiling, so the automated part of G2 stays passed; the owner-attended rows are pending (`verdict.md`).
+- **Not the reading point of 0.1.1.** The 0.1.1 row (477.3 MB) was read at HOME ready plus a 2.5 second idle check. The 0.1.2 harness waits for the backend's working set to drop by at least 30 MB and 10% and to settle, looking from 66 s after HOME ready every 5 s up to a 120 s cap (`desktop/harness/lib/idle-trim.mjs`); every launch here was read at 73 s. The 0.1.1 and 0.1.2 figures are therefore not a like-for-like pair. The comparison that isolates the trim is the trim on against off at the same 73 s point (B4).
+- **Tree and builds.** HEAD `31baa144017b626b969dd259ba273d05379c3735`, version 0.1.2 in every file, a clean tree: `git diff HEAD` and the untracked files both hash to the empty sha256 (`e3b0c442...b855`) in every record. The four builds (release, measure, installtest and smoke) were made fresh from this tree by `desktop/scripts/build-release.ps1 -Version 0.1.2 -Force` into the default folder `D:/dev/release/0.1.2` (target folder `D:/dev/targets/release`, 0 failures, the stamp the same before and after) and passed `artefact-check.mjs` (23 files, 3 installers). The release installer of that build is 3,254,722 bytes. The shipped installer is a rebuild after the manager's docs commit, which changes the stamp, so its size and SHA256 are written after the tag.
+- **The quiet slot.** `D:/dev/locks/QUIET_MEASURE` and `D:/dev/locks/QUIET` (the second also pauses the QuantPad download runners, which a disk floor had already paused) were created at 04:25:15 BST and removed at 06:02:26, after the soak. Before the slot nothing was building and no backend pytest, Playwright or vitest run was alive; before each block the chain checked again for a pytest session and found none. The slot was set by the manager, not named by the owner.
+- **The CPU gate.** The 60 second CPU load read before each block: 5.2% (reproduction), 3.2% (rows, trim on), 3.2, 3.2 and 2.9% (the three first launches), 3.8% (usual launch), 2.9% (rows, trim off) and 3.9% (soak). Every counted launch also sat behind the harness's own 60 second gate at a 10% limit and read 2.9 to 3.4%, so 0 runs were rejected and no figure is PROVISIONAL. GPU load was 7 to 18%.
+- **Reproduction first.** The harness code changed in 0.1.2 (digest `1a050eb2...`), so the W0B anchor was reproduced before any row (`run.mjs --mode reproduce --runs 3`): private memory at HOME 167.6 MB (W0B 164.9 MB), after the heavy set 387.0 MB (W0B 369.5 MB, +4.7%), launch to HOME ready 873 ms (W0B 834.5 ms, +4.6%), all within 10%, verdict `reproduced: true`. No figure carries the UNREPRODUCED label. The breakdown's spawn to HOME document read 242 ms against 214 ms, outside its own reference by 28 ms; it is informational and does not gate.
+- **Launch conditions.** As in A1: the smoke build with real data, a fresh temporary state folder for every launch except the usual launch, the shipped caps, hidden windows and the harness's clean PATH. The commands, in order: `run.mjs --build smoke --rows all --runs 5 --warmup 1 --real-data --memtrim on`; `run.mjs --first-launch --build smoke` three times; `t4t5.mjs usual-app --runs 3`; `run.mjs --build smoke --rows idle_mem_home,warm_home,eq_warm,reg_warm --runs 3 --warmup 1 --real-data --memtrim off` (a launch reads every row whatever the list says); then the soak (B6). Every launch named the smoke exe of `D:/dev/release/0.1.2`. The window watch showed 0 new windows and 0 foreground changes in every launch, and every teardown left 0 survivors.
+- **Port 8765 was listening (pid 46084, the owner's terminal)**, so the measure-artefact real-lab rows were not run. Nothing at that port or in that process was touched.
+- **Research gate and lab state.** The read-only lab check before the slot (04:25) and after it (06:03): `jobs.json` sha256 `44CAE38A...` both times, `backtests/output` 139 entries both times, the `terminal/state` listing unchanged (`cache`, `desktop`, `logs`, `release`, `workspaces`, `backend.lock`, `jobs.json`), and `ledger.csv`, `registry.csv` and `oos_openings.json` byte-equal. The gate log grew by 864 lines, all caller `terminal`, all ending at or before 2022-01-01, timestamped 03:31:43 to 04:15:35 UTC, so all inside the run (`measure-runs/gate-log-new-lines.jsonl`). `backend.lock` read present before and after, as on 0.1.1; nothing here created it.
+- **Host.** Not freshly booted (up about 61 hours), so the first-launch records say `firstAfterBoot` false.
+
+## B2. How the idle row is read in 0.1.2
+
+The figure is unchanged in kind: the private working set of the whole process tree from the performance counters, the median of three samples two seconds apart, taken before any page row runs. What moved is the moment. The harness reads the backend's working set at HOME ready, then from 66 s (the 60 s quiet period, one 5 s poll and a second of margin) every 5 s, and takes the samples once the backend has dropped by at least 30 MB and 10% from its peak and the last two readings agree, or at the 120 s cap. Each figure carries `trimSeen`, `trimCapped` and `trimWaitedMs`.
+
+| Series | Backend working set at HOME ready | At 66 s | Waited | Capped |
+| --- | ---: | ---: | ---: | --- |
+| Trim on, rows and first launches (n = 8) | 252.3 to 294.9 MB | 23.4 to 30.1 MB | 73.06 to 73.10 s | never |
+| Trim off (n = 3) | 277.5 to 285.2 MB | 233.0 to 234.5 MB | 73.08 to 73.13 s | never |
+
+With the trim off the backend still falls by 44 to 52 MB within the first minute, as the 0.1.0 record showed (section 9: the prewarm's later tasks finish and hand their memory back). That fall clears the harness's 30 MB and 10% threshold, so the trim-off launches were read at the same 73 s as the trim-on launches and both records say `trimSeen` true. The flag means that a drop was seen, not that the trim ran; the trim-off figure is the backend after its own release, the trim-on figure the backend after `K32EmptyWorkingSet`.
+
+## B3. The rows, 0.1.2 against 0.1.1
+
+All readings are the whole-app smoke build, real lab, shipped desktop caps, trim on. "0.1.1" is the A3 reading. Medians, with the counted values or the range beside them.
+
+| Row | Target | Ceiling | 0.1.1 | 0.1.2 median (counted values) | Verdict |
+| --- | ---: | ---: | ---: | --- | --- |
+| Whole-app idle at HOME, private working set (the release row) | 400 MB | 500 MB | 477.3 MB (453.0 to 484.4), read at HOME ready plus 2.5 s | **199.0 MB** (192.8 to 202.8; n = 8: rows series 199.4, 202.8, 192.8, 194.9, 194.3; first-launch series 199.4, 199.6, 198.5), read 73 s after HOME ready | within target |
+| The tree's private bytes at the same samples (informational) | | | not recorded for the whole tree | 693.8 MB (678.6 to 713.5; rows 695.0, 707.6, 678.6, 689.2, 692.6; first launch 686.1, 696.1, 713.5) | not a row |
+| Cold HOME, first launch, empty state folder | 4,500 ms (usual 3,500) | 5,000 ms | 3,192.5 ms (3,164 to 3,210) | 3,186.5 ms (3,152 to 3,209; n = 8: rows 3,209, 3,196, 3,192, 3,169, 3,167; first-launch mode 3,181, 3,200, 3,152, median 3,181) | within target |
+| Cold HOME, usual launch (state filled) | 3,500 ms | 5,000 ms | 2,797 ms | 2,773 ms (2,773, 2,778, 2,753; one priming launch of 3,204 ms not counted; gate 3.2, 3.1, 3.3%) | within target |
+| `volmanaged_v0 EQ`, second run of the line | 1,000 ms | 1,500 ms | 38.4 ms | 32.1 ms (39.5, 40.6, 29.5, 29.9, 32.1) | within target |
+| Warm HOME | 1,000 ms | 1,500 ms | 537.6 ms | 543.1 ms (540.2, 565.7, 533.4, 551.6, 543.1) | within target |
+| `REG`, second run of the line | 1,000 ms | 1,500 ms | 56.9 ms | 53.5 ms (57.1, 56.7, 48.7, 52.9, 53.5) | within target |
+| Backend ready (informational) | 1,500 ms | 2,500 ms | 1,401.5 ms | 1,397.5 ms (1,376 to 1,410; n = 8) | within target |
+| Splash painted (informational) | 500 ms | 1,000 ms | 316.7 ms | 312.7 ms (300.6 to 328.9; n = 8) | within target |
+| Grid open (rows series, informational) | 100 ms | 500 ms | 65.9 ms | 63.3 ms (64.5, 62.9, 129.5, 63.3, 62.6) | within target |
+| GIP pan and zoom p95 (rows series, informational) | 16.7 ms | 25 ms | 6.2 ms | 6.0 ms (5.6, 6.2, 6.1, 6.0, 5.8) | within target |
+| Keystroke to paint p95 (rows series, informational) | 50 ms | 100 ms | 8.3 ms | 8.1 ms (8.1, 8.2, 8.0, 8.2, 8.0) | within target |
+
+`report.mjs` over the trim-on folder reports `idle_mem_home` on the smoke build as 199 MB (192.8 to 202.8, n = 8) and marks it **within-target ACCEPTED**, and cold HOME as 3,186.5 ms (3,152 to 3,209), within target. It prints the private bytes as 695.6 MB beside a working set of 199.3 MB, because it pools every sample of the eight launches; the figure above is the median of each launch's own figure. One grid reading, 129.5 ms in the fourth rows launch, is above the 100 ms target and inside the 500 ms ceiling; the trim-off series has one such reading too (192.4 ms), so it is not tied to the trim. The warm-up launch (idle 199.1 MB, cold HOME 3,254 ms) was not counted.
+
+## B4. Idle memory with the trim on and off
+
+The same build, method and reading point (73 s after HOME ready); only `NQT_MEMTRIM` differs. Breakdown medians are informational (`idleBreakdown`).
+
+| Reading | 0.1.2, trim on (n = 8) | 0.1.2, trim off (n = 3) | 0.1.1 at its own reading point (n = 6) |
+| --- | ---: | ---: | ---: |
+| Whole tree, private working set (the row) | **199.0 MB** (192.8 to 202.8) | 404.4 MB (401.9 to 405.3) | 477.3 MB (453.0 to 484.4) |
+| Whole tree, private bytes (committed) | 693.8 MB (678.6 to 713.5) | 689.5 MB (683.2 to 715.7) | not recorded |
+| Backend interpreter | 29.9 MB (23.7 to 30.1) | 233.5 MB (232.9 to 234.5) | 275.6 MB |
+| UI tree (WebView2 and its helpers) | 165.8 MB (160.1 to 169.8) | 166.7 MB (165.6 to 166.7) | 195.4 MB |
+| Shell | 4.1 MB | 4.1 MB | 4.3 MB |
+
+The trim lowers the counted working set by about 205 MB, and all of it is in the backend; the private bytes are equal within noise (693.8 against 689.5 MB), as the trim's design says they must be. Without the trim the row reads 404.4 MB at the late point, 4.4 MB above the 400 MB target and inside the ceiling. Against 0.1.1, the first 73 MB of the fall (477.3 to 404.4 MB) comes from reading later: the prewarm's memory is handed back (backend 275.6 to 233.5 MB) and the WebView2 tree settles (195.4 to 166.7 MB). The trim takes the next 205 MB. The UI tree is far below the 350 MB of the T4 canvas clause (`uiOver350` false in every launch); its largest parts are the renderer (81.1 MB), the GPU process (36.6 MB) and the browser process (33.6 MB).
+
+## B5. Warm rows with the trim on and off
+
+The page rows run after the idle samples, so with the trim on they start on a trimmed backend and pay for the pages they touch again.
+
+| Row | Ceiling | Trim on (n = 5) | Trim off (n = 3) | Slower with the trim? |
+| --- | ---: | --- | --- | --- |
+| Warm HOME | 1,500 ms | 543.1 ms (533.4 to 565.7) | 544.3 ms (540.3, 549.5, 544.3) | no |
+| `volmanaged_v0 EQ`, second run of the line | 1,500 ms | 32.1 ms (29.5 to 40.6) | 42.3 ms (42.3, 45.3, 40.8) | no |
+| `REG`, second run of the line | 1,500 ms | 53.5 ms (48.7 to 57.1) | 56.8 ms (56.8, 59.5, 52.5) | no |
+| Cold HOME (first launch, before any trim) | 5,000 ms | 3,192 ms (rows series) | 3,219 ms (3,219, 3,176, 3,231) | not affected |
+
+The trim does not make the warm rows slower: each trim-on median is equal to or below its trim-off median, and the ranges overlap. The rows that run before the idle reading (backend ready, splash, cold HOME) cannot see the trim at all; their trim-off readings (1,419 ms, 320.5 ms and 3,219 ms) sit inside the spread of the trim-on ones.
+
+## B6. The 45 min partial soak at 0.1.2
+
+The soak ran from 05:15:26 to 06:02:26 BST on the smoke build of `D:/dev/release/0.1.2`, real lab, shipped caps (512 and 128 MiB), trim on, through the harness's `soak` mode with `--hours 0.78`: the samples, one every 5 minutes straight after each workload round, run from 5 s to 45 min (2,702 s), which gives the private-bytes rule its 30 minute settled window. **Label: 45 min partial soak at 0.1.2.** It is not the G2 soak row of record: the 2 h soak of 0.1.0 (section 8) stays the G2 soak evidence, and the all-day soak stays an owner check. The harness wrote its record (`soak/soak-smoke-s01-a1-measure.json`): status accepted, 10 samples, 0 workload errors over the 11 lines of each round, 0 new windows, 0 foreground changes and 0 survivors. The CPU load before the block was 3.9%.
+
+| Reading (whole tree) | 0.1.2, 45 min, harness | 0.1.0, 2 h, external sampler (section 8) | Ceiling | Target |
+| --- | ---: | ---: | ---: | ---: |
+| Largest sample, private working set (the soak row) | **641.9 MB** (at 20 min) | 705.8 MB | 1,500 MB | 1,000 MB |
+| First sample | 545.9 MB (at 5 s) | 698.7 MB | | |
+| Last sample | 495.8 MB (at 45 min) | 705.8 MB | | |
+| Median of the samples | 510.4 MB | 674.8 MB | | |
+| Slope of the private working set | -104.5 MB per hour (all samples) | +25.9 MB per hour (last hour) | | |
+| Private bytes (committed), range | 1,147.7 to 1,355.0 MB | 2,363.6 to 2,476.2 MB | | |
+| Private bytes, leak rule (samples from 900 s) | **pass**: 24.3 MB an hour, 12.1 MB over the settled window (7 samples over 1,800 s; the rule fails a series only above both 30 MB an hour and 50 MB) | not judged | | |
+| Backend and UI tree, first and last sample | backend 277.2 and 325.2 MB; UI tree 285.2 and 318.1 MB | | | |
+
+The harness samples straight after each round, while the backend has just served the eleven screens, so the trim has not run at those moments: the soak row is the working set under use. A read-only outside sampler (`soak-outside.jsonl`: the same whole-tree counters, 9 samples, each about 150 s after a round, when the backend had been quiet for more than 60 s) read 230.7 to 286.1 MB of private working set, which is the trim at work between rounds. Its private bytes are lower than the harness's (907.6 to 1,007.3 MB; memory that a round uses is handed back after it) and they still climbed: 974.2 MB at 15 min to 1,007.3 MB at 40 min, in steps of 3.9, 18.6, 2.9, 6.5 and 1.2 MB, about 33 MB in 25 minutes and flattening. The harness's rule passes on its own samples; 45 minutes cannot say whether that climb stops, so the all-day soak stays the check that decides. Against the 0.1.0 soak the private bytes are about 1.1 GB lower, which is the thread caps of 0.1.1. The UI tree read 350.1 MB at 15 min under the workload; the T4 canvas clause is about idle and is not affected.
+
+## B7. Not re-run, findings and evidence
+
+| Item | State |
+| --- | --- |
+| Measure-artefact rows (backend ready, splash, cold HOME, idle memory) and the smoke against measure agreement | **Pending**: port 8765 was listening (pid 46084). The 0.1.2 measure installer is built in `D:/dev/release/0.1.2` and is not installed. |
+| All-day soak | An owner check. The 45 min soak of B6 is partial, and the 2 h soak of 0.1.0 (section 8) stays the G2 soak evidence. |
+| Simulated minimise, T8, the stage 1 rows, the 20,000-point hop | Not run on 0.1.2. The 0.1.0 readings are history. |
+| Installer row of the harness (`installer` mode) | Not run. The release installer of the measuring build is 3,254,722 bytes (3.1 MB against the 30 MB ceiling). |
+| Owner-attended rows | Pending, as on 0.1.1 (`verdict.md`). |
+
+Findings for the manager:
+
+1. **The release row meets its target by a trim of the working set, at a later reading point.** 199.0 MB against 400 MB, with the private bytes at 693.8 MB and unchanged by the trim. The reading point moved from HOME ready plus 2.5 s (0.1.1) to after the drop, 73 s here; read at that point without the trim the row is 404.4 MB. Both facts belong beside the figure wherever it is quoted. Task Manager's memory column shows the same private working set, so the owner will see the lower figure about a minute after the app goes quiet.
+2. **The post-prewarm trim stage is still in the tree.** The brief for this re-measure says only the quiet trim exists, but HEAD `31baa14` still names the later prewarm stage in `TRIM_STAGES` (`backend/nq_terminal/api/home_prewarm.py`, line 61) and the prewarm calls the stage hook after it (`services/prewarm.py`). The figures above cannot say which of the two trims ran first: both land before the 66 s look, and the backend log does not carry the memtrim module's INFO lines. If the stage is meant to be gone, the code and the module docstring of `memtrim.py` need the change; the measured figures would not move, because the quiet trim fires before the reading point either way.
+3. **`trimSeen` does not mean that the trim ran.** With `NQT_MEMTRIM=0` the backend's own release after the prewarm (44 to 52 MB) clears the harness's drop threshold, so the trim-off records also say `trimSeen` true (B2). The figure still carries `memtrim`, which is the field to read.
+4. **One slow grid reading in each series** (129.5 ms with the trim on, 192.4 ms with it off), both above the 100 ms target, inside the 500 ms ceiling and in a launch whose other rows were normal.
+
+Evidence (all under `D:/dev/v012`): `measure-runs/reproduce/`, `measure-runs/on/rows/rows-smoke-s01-a1-warmup.json` to `rows-smoke-s06-a1-measure.json`, `measure-runs/on/first-launch-smoke-1/first-launch-smoke-s01-a1-measure.json` (and `-2`, `-3`), `measure-runs/on/t4t5/2026-10-05T03-59-17-033Z-usual-app/usual-s1.json` (and `usual-s2.json`, `usual-s3.json`), `measure-runs/off/rows/rows-smoke-s01-a1-warmup.json` to `rows-smoke-s04-a1-measure.json`, `measure-runs/soak/soak-smoke-s01-a1-measure.json`, `measure-runs/soak-outside.jsonl`, `measure-runs/gate-log-new-lines.jsonl`, `measure-runs/report-on.txt`, `report-off.txt`, `report-soak.txt` and their `.json` forms, `measure-runs/cpu-before-blocks.jsonl`, `measure-runs/precheck-before.json`, `measure-runs/precheck-after.json`, `build-release.log`, `artefact-check.log`, and the tools `tools/measure.ps1`, `tools/cpu60.mjs`, `tools/labcheck.ps1`, `tools/gatecheck.mjs`, `tools/soak-outside.mjs` and `tools/facts.mjs`, with the build itself in `D:/dev/release/0.1.2` (`PROVENANCE.json`, `SHA256SUMS`).
 
 ## A1. Read this first
 
