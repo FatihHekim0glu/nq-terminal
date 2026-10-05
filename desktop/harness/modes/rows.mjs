@@ -13,6 +13,7 @@ import { reproduceGate, harnessDigest } from '../lib/harness.mjs'
 import { isMainTree, LAB } from '../lib/paths.mjs'
 import { launchBlock } from '../lib/lab-guard.mjs'
 import { cFreeMB } from '../lib/provenance.mjs'
+import { trimRan } from '../lib/idle-trim.mjs'
 
 /** The row ids a launch of `build` is asked for: `all`, or a comma list checked against the build's own rows. */
 export function selectRows(build, spec, realData) {
@@ -27,8 +28,11 @@ export function selectRows(build, spec, realData) {
 
 const PAGE_ROWS = new Set(['warm_home', 'eq_warm', 'reg_warm', 'grid_open', 'gip_pan_zoom_p95', 'keystroke_p95'])
 
-/** Whether a trim was seen before the idle samples: the figure of record is only comparable across builds when it was. */
-const trimNote = (t) => ({ trimSeen: t.seen, trimCapped: t.capped, trimWaitedMs: t.waitedMs })
+/**
+ * The trim fields of the idle figure. trimSeen is whether the backend's own trim ran (the memtrim state decides, see trimRan); trimDropSeen
+ * is the raw fall of the backend working set, which the backend's own release after start-up also causes with the trim off.
+ */
+const trimNote = (t, memtrim) => ({ trimSeen: trimRan(memtrim, t.seen), trimDropSeen: t.seen, trimCapped: t.capped, trimWaitedMs: t.waitedMs })
 
 /**
  * The backend's memory trim for the launches of this run (NQT_MEMTRIM reaches the backend through the shell, supervise_check.rs
@@ -46,7 +50,7 @@ export function figuresOf(build, result, gate, provenance, memtrim) {
   return Object.entries(result.rows ?? {}).map(([id, value]) => {
     const row = rowById(id)
     const method = id === 'cold_home' ? `${row?.method[build]} [read as: ${result.coldHomeMethod}]` : id === 'splash_painted' ? `${row?.method[build]} [read as: ${result.splashMethod}]` : row?.method[build]
-    return figure({ row: id, build, value: value, unit: row?.unit, method, cpuLoadPct: gate?.avgPct, provenance, extra: { dataKind: result.dataKind, ...(memtrim ? { memtrim } : {}), ...(id === 'idle_mem_home' && typeof result.idlePrivateBytesMB === 'number' ? { privateBytesMB: result.idlePrivateBytesMB } : {}), ...(id === 'idle_mem_home' && result.idleTrim ? trimNote(result.idleTrim) : {}) } })
+    return figure({ row: id, build, value: value, unit: row?.unit, method, cpuLoadPct: gate?.avgPct, provenance, extra: { dataKind: result.dataKind, ...(memtrim ? { memtrim } : {}), ...(id === 'idle_mem_home' && typeof result.idlePrivateBytesMB === 'number' ? { privateBytesMB: result.idlePrivateBytesMB } : {}), ...(id === 'idle_mem_home' && result.idleTrim ? trimNote(result.idleTrim, memtrim) : {}) } })
   })
 }
 

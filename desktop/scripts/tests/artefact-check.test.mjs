@@ -623,3 +623,26 @@ test('--tree checks an installed folder against the path rules only', () => {
 test('the command line exits 2 without a folder', () => {
   assert.equal(run([]).status, 2)
 })
+
+// ---- build-machine paths in the built binaries (the 0.2.0 exes held D:\dev\cargo\registry) ----------------------------------
+
+test('a release exe that holds a D:\\dev cargo path fails the whole check', () => {
+  const exe = Buffer.concat([buildPe(), Buffer.from('\0D:\\dev\\cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\tauri-2.12.1\\src\\lib.rs\0')])
+  const problems = checkRelease(cleanRelease(scratch('rel'), { exe }), OPTIONS).problems.join('\n')
+  assert.match(problems, /payload\/release\/nq-lab-terminal\.exe: .*D:\\dev\\cargo\\registry/)
+})
+
+test('an installer that holds a C:\\Users path (forward slashes) fails the whole check', () => {
+  const dir = cleanRelease(scratch('rel'))
+  writeFile(dir, 'nq-lab terminal_0.1.0_x64-setup.exe', Buffer.concat([buildPe({ imports: ['KERNEL32.dll', 'user32.dll'] }), Buffer.from('\0C:/Users/someone/AppData/x\0')]))
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /nq-lab terminal_0\.1\.0_x64-setup\.exe: .*C:\/Users\/someone/)
+})
+
+test('the installer script and the provenance may name build-machine paths (they are not shipped)', () => {
+  assert.deepEqual(checkRelease(cleanRelease(scratch('rel')), OPTIONS).problems, [])
+})
+
+test('a remapped exe (neutral prefixes) passes the whole check', () => {
+  const exe = Buffer.concat([buildPe(), Buffer.from('\0/cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\tauri-2.12.1\\src\\lib.rs\0/src\\desktop\\src-tauri\\src\\main.rs\0')])
+  assert.deepEqual(checkRelease(cleanRelease(scratch('rel'), { exe }), OPTIONS).problems, [])
+})

@@ -18,15 +18,20 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   never be served around the gate and FileCache.
 - `web/dist` is mounted at `/` only when it exists (after the API routes, so `/api` always wins).
 - Interactive docs are off (they load scripts from a CDN); the schema is at /api/openapi.json.
+- The lifespan runs one no-op on the worker thread pool before the server listens (V021), so anyio's asyncio backend
+  is imported and the first worker thread exists before `NQT-READY`: the first sync request after READY (the shell's
+  `/api/session`) no longer imports or starts a thread while the HOME prewarm imports scipy.
 - `create_app` first makes the system allocator Arrow's memory pool (`services/allocator.py`, W5C D2), so every form
   returns freed memory to the operating system.
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from anyio import to_thread
 from fastapi import FastAPI
 from fastapi.routing import iter_route_contexts
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -60,6 +65,7 @@ from nq_terminal.security import (
 from nq_terminal.settings import ALLOWED_HOSTS, Settings, load_settings
 
 READ_METHODS = frozenset({"GET", "HEAD"})
+LOG = logging.getLogger(__name__)
 
 
 class GetOnlyError(RuntimeError):
@@ -123,11 +129,27 @@ def _mount_web(app: FastAPI, web_dist: Path) -> None:
         app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
 
 
+def _nothing() -> None:
+    return None
+
+
+async def warm_worker_pool() -> bool:
+    """Run one no-op on anyio's worker thread pool: imports its asyncio backend and starts the first worker thread
+    (V021). True when it ran; a failure is logged and never raised."""
+    try:
+        await to_thread.run_sync(_nothing)
+    except Exception:  # noqa: BLE001 - a warm-up problem must never stop the app from starting
+        LOG.warning("the worker thread pool could not be warmed", exc_info=True)
+        return False
+    return True
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """On startup, begin the HOME prewarm in a desktop or launcher process (a daemon thread that waits for the bound
-    port; off in tests, fixture mode and the smoke). On shutdown, stop a running backtest child (on Windows it would
-    otherwise outlive the terminal)."""
+    """On startup, warm the worker thread pool (before READY, V021) and begin the HOME prewarm in a desktop or launcher
+    process (a daemon thread that waits for its start gate; off in tests, fixture mode and the smoke). On shutdown, stop
+    a running backtest child (on Windows it would otherwise outlive the terminal)."""
+    await warm_worker_pool()
     start_home_prewarm(app)
     yield
     jobs = getattr(app.state, jobs_api.STATE_KEY, None)
@@ -147,6 +169,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/api/openapi.json",
     )
     app.state.settings = settings
+    desktop_api.remember_identity(app)  # V021: the proof route answers from these, with no file read
     research_service.set_file_cache_cap(settings.file_cache_bytes)  # 03 2.6: the research reads share the cap
     # add_middleware puts each new layer outside the previous one: the last added runs first.
     app.add_middleware(SameOriginApiMiddleware, origins=lifecycle.origins(settings, settings.port))

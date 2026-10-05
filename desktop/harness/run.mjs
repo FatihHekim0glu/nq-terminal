@@ -10,6 +10,7 @@
 //   node run.mjs --mode soak [--hours 8] [--real-data]          the all-day soak at the shipped caps, sampled every 5 minutes
 //   node run.mjs --mode installer [--installer FILE]            the installer size row
 //   node run.mjs --mode parity [--runs 1] [--settle-s 6] [--shell-port N --plain-port N]     the fixture backend started as the shell starts it and the plain way (8792, 8791): fails above 5 MB or on a thread count
+//   node run.mjs --mode reliability --smoke-exe FILE [--runs 30] [--real-data] [--hold-ms 4000] [--proof-limit-ms 2000] [--dry]     N hidden launches of a smoke exe: refusals and the READY-to-proof distribution (fails on any refusal)
 //   node run.mjs --mode selftest                                the live self-tests (planted spin, planted window, PATH, DRY runs)
 //   node report.mjs DIR [--check]                               medians, verdicts and the read-back check of every figure
 //
@@ -34,6 +35,7 @@ const MODES = {
   installer: () => import('./modes/installer.mjs'),
   selftest: () => import('./modes/selftest.mjs'),
   parity: () => import('./modes/parity.mjs'),
+  reliability: () => import('./modes/reliability.mjs'),
 }
 
 export function modeOf(args) {

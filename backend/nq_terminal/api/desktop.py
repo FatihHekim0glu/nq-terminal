@@ -13,6 +13,13 @@ Only `/api/session` and `/api/session/code` read the token header. All four are 
 only; every answer is `Cache-Control: no-store`. The cookie is `nqt_s_<port>` with exactly HttpOnly, SameSite=Strict
 and Path=/api; `security.SessionMiddleware` requires it on every other /api path.
 
+The proof is an `async def` that does no blocking work (V021): the identity fields it returns (root, prefix, the
+contract number from `contract/desktop_version.json`) are read once when the app is built (`remember_identity`, called
+by `create_app`), so answering needs no worker thread, no lazy import and no file read. On a first start after a
+Windows Defender signature update the shell's first proof otherwise met a cold thread pool and the prewarm's imports
+and could take longer than the shell waits. Once an answer has been sent in full, the route marks the prewarm's start
+gate (`services/prewarm.StartGate`), which `python -m nq_terminal` installs.
+
 `shell_schema(openapi)` is the part of the contract the shell itself calls (these four routes and `/api/health`), in
 canonical form; `contract/desktop_version.json` pins its sha256 beside the desktop contract number (03 section 4.4,
 tests/test_desktop_contract_version.py).
@@ -25,11 +32,13 @@ import json
 import re
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, FastAPI, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
-from nq_terminal.desktop import lifecycle, sessions
-from nq_terminal.desktop.proof import NONCE_PATTERN, proof_body
+from nq_terminal.desktop import handshake, lifecycle, sessions
+from nq_terminal.desktop.proof import NONCE_PATTERN, valid_nonce
+from nq_terminal.services.prewarm import START_GATE_KEY
 
 router = APIRouter(prefix="/api", tags=["desktop"])
 
@@ -41,6 +50,8 @@ SAME_ORIGIN_FETCH = "same-origin"
 SHELL_ROUTES = ("/api/desktop/proof", "/api/session", "/api/session/code", "/api/session/redeem", "/api/health")
 PROSE_KEYS = frozenset({"description", "summary"})
 REF_PREFIX = "#/components/schemas/"
+IDENTITY_KEY = "desktop_identity"  # app.state attribute: (settings, the identity fields), read once at build time
+PROOF_IDENTITY = ("root", "prefix", "contract")  # the identity fields the proof answers with
 
 
 class DesktopProof(BaseModel):
@@ -84,11 +95,46 @@ def _with_cookie(request: Request, response: Response, value: str) -> SessionIss
     return SessionIssued(ok=True, cookie=name)
 
 
+def remember_identity(app: FastAPI) -> dict[str, Any]:
+    """Read the identity fields the proof returns (root, prefix, contract number) once, for `app.state.settings`.
+    `create_app` calls it, so the proof route never reads a file."""
+    settings = app.state.settings
+    identity = handshake.identity(settings)
+    fields = {name: identity[name] for name in PROOF_IDENTITY}
+    setattr(app.state, IDENTITY_KEY, (settings, fields))
+    return fields
+
+
+def _identity(app: FastAPI) -> dict[str, Any]:
+    """The fields read at build time; read again only when the app's settings were replaced after the build."""
+    remembered = getattr(app.state, IDENTITY_KEY, None)
+    if remembered is None or remembered[0] is not app.state.settings:
+        return remember_identity(app)
+    return remembered[1]
+
+
+def proof_answer(app: FastAPI, nonce: str) -> DesktopProof:
+    """The answer to one challenge: the MAC over `proof|nonce|port|pid`, then the identity fields. No blocking work."""
+    if not valid_nonce(nonce):
+        raise ValueError("the nonce must be 64 lowercase hex characters")
+    current = lifecycle.runtime(app)
+    return DesktopProof(proof=handshake.mac(current.token, handshake.PROOF, nonce, current.port, current.pid),
+                        **_identity(app), pid=current.pid)
+
+
+async def _proof_sent(app: FastAPI) -> None:
+    """After an answer has gone out in full: the prewarm's start gate learns that the first proof is answered."""
+    gate = getattr(app.state, START_GATE_KEY, None)
+    if gate is not None:
+        gate.mark_proof()
+
+
 @router.get("/desktop/proof", response_model=DesktopProof)
-def desktop_proof(request: Request, nonce: Annotated[str, Query(pattern=NONCE_PATTERN)]) -> Response:
+async def desktop_proof(request: Request, nonce: Annotated[str, Query(pattern=NONCE_PATTERN)]) -> Response:
     """The challenge-response proof: no Authorization header, no secret in or out."""
-    body = proof_body(request.app.state.settings, lifecycle.runtime(request.app), nonce)
-    return Response(content=DesktopProof(**body).model_dump_json(), media_type="application/json", headers=NO_STORE)
+    answer = proof_answer(request.app, nonce)
+    return Response(content=answer.model_dump_json(), media_type="application/json", headers=NO_STORE,
+                    background=BackgroundTask(_proof_sent, request.app))
 
 
 @router.get("/session", response_model=SessionIssued)

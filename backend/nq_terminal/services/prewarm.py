@@ -15,17 +15,22 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
 - Once per process: the first enabled start with at least one task wins; later starts return None and run nothing.
 - A daemon thread, so it never keeps the process alive; tasks run in order, one at a time.
 - Errors are logged, never raised: a failing task does not stop the others, the thread or the app.
-- `ready` (optional) is polled until it returns true before the first task, so the prewarm starts after the port is
-  bound (the lifespan hook runs before the listening socket exists). A check that never turns true, or that raises,
-  delays the start by at most `ready_timeout` seconds and the tasks then run anyway.
+- `ready` (optional) is polled until it returns true before the first task (the lifespan hook runs before the
+  listening socket exists). `python -m nq_terminal` hands it a `StartGate` (V021): the tasks begin only once the
+  `NQT-READY` line is printed and the first identity proof has been answered, so the shell's first proof never shares
+  the interpreter with the prewarm's imports; in launcher and browser modes, where no proof may come, the gate also
+  opens `PROOF_FALLBACK_S` seconds after READY. A check that never turns true, or that raises, delays the start by at
+  most `ready_timeout` seconds and the tasks then run anyway.
 - `later` (optional) are tasks the first screen never asks for. They run after `tasks`, once the process has been quiet
   for `quiet_windows` readings in a row (`quiet`, by default `process_quiet_probe`: the whole process used at most a
   quarter of one core over a half-second window), or after `quiet_timeout` seconds, whichever comes first. On a first
   launch (02 section 4.1 item 3, decided: the cold-HOME cap holds on the first launch) they would otherwise take the
   interpreter from HOME's own requests while HOME loads; like requestIdleCallback in a page, they wait for idle time.
 - `on_stage` (optional) is called with `STAGE_TASKS` once the tasks are done and with `STAGE_LATER` once the later
-  tasks are done (vnext perf-1: the app trims its working set there, `memtrim.py`). A failing hook is logged and the
-  thread goes on. `prewarm_running()` is true while the thread works, so the quiet-period trim waits for it.
+  tasks are done. The app's hook (`api/home_prewarm.py`) trims the working set after the stages its `TRIM_STAGES`
+  names, which is `STAGE_LATER` only (vnext perf-1, `memtrim.py`); after `STAGE_TASKS` it does nothing. A failing hook
+  is logged and the thread goes on. `prewarm_running()` is true while the thread works, so the quiet-period trim waits
+  for it.
 """
 from __future__ import annotations
 
@@ -42,6 +47,8 @@ ENV_PREWARM = "NQT_PREWARM"
 SWITCH_ON = "1"
 THREAD_NAME = "nqt-prewarm"
 PORT_BOUND_KEY = "port_bound"  # app.state attribute: a zero-argument callable, true once the socket is bound
+START_GATE_KEY = "prewarm_gate"  # app.state attribute: the StartGate `python -m nq_terminal` makes (V021)
+PROOF_FALLBACK_S = 3.0  # launcher and browser modes: the prewarm starts this long after READY when no proof came
 READY_TIMEOUT_S = 15.0
 READY_POLL_S = 0.05
 QUIET_WINDOW_S = 0.5  # one reading of the process CPU
@@ -81,6 +88,49 @@ def process_quiet_probe(window: float = QUIET_WINDOW_S, share: float = QUIET_CPU
         return cpu() - cpu_before <= share * (clock() - wall_before)
 
     return process_quiet
+
+
+class StartGate:
+    """When the prewarm may begin (V021): after the READY line is printed and the first identity proof has been
+    answered. With `fallback_s` (launcher and browser modes, where no proof may come) it also opens that many seconds
+    after READY; without it (desktop mode) only the proof opens it, and the prewarm's own `ready_timeout` is the net.
+
+    Calling the gate answers whether it is open. Thread safe: the event loop marks it, the prewarm thread asks."""
+
+    def __init__(self, *, fallback_s: float | None = None, clock: Callable[[], float] = time.monotonic) -> None:
+        self._fallback_s, self._clock = fallback_s, clock
+        self._lock = threading.Lock()
+        self._ready_at: float | None = None
+        self._proved = False
+
+    def mark_ready(self) -> None:
+        """The NQT-READY line has been printed (the first call counts)."""
+        with self._lock:
+            if self._ready_at is None:
+                self._ready_at = self._clock()
+
+    def mark_proof(self) -> None:
+        """An identity proof has been answered (sent in full)."""
+        with self._lock:
+            self._proved = True
+
+    @property
+    def fallback_s(self) -> float | None:
+        """Seconds after READY at which the gate opens without a proof; None: only a proof opens it."""
+        return self._fallback_s
+
+    @property
+    def proved(self) -> bool:
+        with self._lock:
+            return self._proved
+
+    def __call__(self) -> bool:
+        with self._lock:
+            if self._ready_at is None:
+                return False
+            if self._proved:
+                return True
+            return self._fallback_s is not None and self._clock() - self._ready_at >= self._fallback_s
 
 
 class Idle:
@@ -197,6 +247,7 @@ def _wait_until_ready(ready: Callable[[], bool] | None, timeout: float) -> None:
             LOG.exception("the prewarm ready check failed; starting anyway")
             return
         if time.monotonic() >= deadline:
-            LOG.warning("the listening port was not bound within %.1f s; the prewarm starts anyway", timeout)
+            LOG.warning("the port was not bound, or READY and the first proof not seen, within %.1f s; the prewarm "
+                        "starts anyway", timeout)
             return
         time.sleep(READY_POLL_S)

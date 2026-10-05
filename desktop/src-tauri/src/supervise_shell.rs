@@ -177,8 +177,14 @@ fn install_navigation_check<R: Runtime>(
                         std::thread::spawn(move || shared.retry_navigation(sink.as_ref(), &uri));
                     }
                     Verdict::Gone => {
-                        let sink = sink.clone();
-                        std::thread::spawn(move || sink.stopped("exited"));
+                        // No backend is left (a refusal ended the loop): Retry starts the supervised loop again.
+                        let (shared, sink) = (shared.clone(), sink.clone());
+                        let spawned = std::thread::Builder::new()
+                            .name("nqt-supervise".into())
+                            .spawn(move || run::retry_without_backend(shared, sink));
+                        if let Err(e) = spawned {
+                            crash::log("supervise_retry_failed", json!({ "error": e.to_string() }));
+                        }
                     }
                     Verdict::Allow | Verdict::Cancel => {}
                 }

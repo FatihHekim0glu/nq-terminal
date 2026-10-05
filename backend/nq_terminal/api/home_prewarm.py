@@ -4,7 +4,9 @@
 process is a desktop or launcher process, and never otherwise: pytest, the fixture backend (fixture mode) and the
 real-data smoke build apps that do not prewarm. A task is a zero-argument callable that resolves its services only when it
 runs on the prewarm thread, so building the list costs nothing at start-up and no price source is touched before the port
-is bound.
+is bound. Under `python -m nq_terminal` the thread waits for the start gate (V021, `services/prewarm.StartGate`): the
+`NQT-READY` line printed and the first identity proof answered, or, in launcher and browser modes where no proof may
+come, a few seconds after READY. Uvicorn started directly hands it the port-bound check only, or nothing.
 
 The tasks call the route callables the routes themselves call (`cached_*`), with the query the HOME page sends (for the
 two-day cells, one request per symbol, only for the rows MON shows at first paint), so they share the result cache's
@@ -43,7 +45,8 @@ from typing import Any, Callable
 from fastapi import FastAPI
 
 from nq_terminal import memtrim
-from nq_terminal.services.prewarm import ENV_PREWARM, PORT_BOUND_KEY, STAGE_LATER, Task, start_prewarm
+from nq_terminal.services.prewarm import (ENV_PREWARM, PORT_BOUND_KEY, STAGE_LATER, START_GATE_KEY, Task,
+                                          start_prewarm)
 
 LOG = logging.getLogger(__name__)
 
@@ -166,13 +169,20 @@ def _trim_after(app: Any) -> Callable[[str], None]:
     return after
 
 
+def start_check(state: Any) -> Callable[[], bool] | None:
+    """What the prewarm waits for before its first task: the start gate when `python -m nq_terminal` made one, else the
+    port-bound check, else nothing (start at once)."""
+    gate = getattr(state, START_GATE_KEY, None)
+    return gate if gate is not None else getattr(state, PORT_BOUND_KEY, None)
+
+
 def start_home_prewarm(app: FastAPI):
     """Start the prewarm thread for `app` when this is a desktop or launcher process; return it, or None. Never raises."""
     try:
         if not home_prewarm_allowed(app):
             return None
-        return start_prewarm(home_tasks(app.state), ready=getattr(app.state, PORT_BOUND_KEY, None),
-                             later=later_tasks(app.state), on_stage=_trim_after(app))
+        return start_prewarm(home_tasks(app.state), ready=start_check(app.state), later=later_tasks(app.state),
+                             on_stage=_trim_after(app))
     except Exception:  # noqa: BLE001 - the prewarm must never stop the app from starting
         LOG.exception("the HOME prewarm could not be started")
         return None

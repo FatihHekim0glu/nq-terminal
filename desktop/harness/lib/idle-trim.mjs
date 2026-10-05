@@ -52,3 +52,14 @@ export async function waitForIdleTrim({ read, now, sleep, floorMs, capMs, pollMs
     await sleep(pollMs)
   }
 }
+
+/**
+ * Whether the backend's own trim ran. The working-set series cannot say: with NQT_MEMTRIM=0 the backend's set still falls after
+ * start-up (the HOME prewarm releases what it imported) and that fall clears the drop threshold. So the memtrim state decides:
+ * 'off' means no trim ran; 'on' means it ran when its drop was seen (null while the series was not read); no state (an older
+ * caller) keeps the drop as the answer.
+ */
+export function trimRan(memtrim, dropSeen) {
+  if (memtrim === 'off') return false
+  return dropSeen === undefined ? null : dropSeen
+}

@@ -31,7 +31,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, mpsc};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{
     CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, HANDLE_FLAGS, SetHandleInformation, WAIT_OBJECT_0,
     WAIT_TIMEOUT,
@@ -57,7 +57,8 @@ use windows::core::{BOOL, PCWSTR, PWSTR};
 
 /// How long a closed stdin gets before the Job Object ends the tree (03 section 2.3).
 pub const STOP_GRACE_S: u64 = 5;
-/// Cold first start after a reboot included; the budget is 1.5 s with a 2.5 s ceiling (02 T3).
+/// Cold first start after a reboot included; the budget is 1.5 s with a 2.5 s ceiling (02 T3). The first proof and its
+/// retries also end inside it, counted from the spawn.
 pub const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
 /// The backend's exit code for a lock this user did not make (backend/nq_terminal/__main__.py, EXIT_UNTRUSTED_LOCK).
 const EXIT_UNTRUSTED_LOCK: u32 = 4;
@@ -608,19 +609,69 @@ fn handshake(
     check::parse_handshake(&line).map_err(Failure::Refused)
 }
 
+/// The first fresh proof after READY, retried while it is only late (desktop 0.2.1: on a slow first start the backend's
+/// first proof can take longer than the link budget). The first attempt keeps the link budget; each retry follows the
+/// navigation check's rules (supervise_retry.rs: RETRY_ATTEMPTS more, RETRY_BUDGET each, RETRY_PAUSE between), and
+/// every attempt has a fresh nonce and the same owner checks, all before `deadline`. A wrong answer or a foreign owner
+/// ends it at once as a refusal; a backend that ends meanwhile is an exit.
+fn prove_at_spawn(
+    job: &Arc<Owned>,
+    exits: [HANDLE; 2],
+    port: u16,
+    token: &str,
+    expect: &Expect,
+    deadline: Instant,
+) -> Result<(), Failure> {
+    let in_job = job.clone();
+    let owner_ok = move |pid| job_pids(in_job.raw()).contains(&pid);
+    let mut tried = 0u32;
+    let once = || {
+        let budget = if tried == 0 {
+            run::LINK_TIMEOUT
+        } else {
+            retry::RETRY_BUDGET
+        };
+        tried += 1;
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(Mismatch::Unverified("the handshake time is spent".into()));
+        }
+        let proved = run::verify_target_for(port, token, &owner_ok, expect, budget.min(left));
+        if let Err(Mismatch::Unverified(why)) = &proved {
+            crash::log(
+                "supervise_proof_late",
+                json!({ "attempt": tried, "why": why }),
+            );
+        }
+        proved
+    };
+    let pause = || signalled_within(&exits, retry::RETRY_PAUSE) || Instant::now() >= deadline;
+    let proved = retry::retry(1 + retry::RETRY_ATTEMPTS, once, pause);
+    match proved {
+        Ok(()) => Ok(()),
+        Err(Mismatch::Unverified(_)) if signalled_within(&exits, Duration::ZERO) => {
+            Err(Failure::Exited)
+        }
+        Err(m) => Err(Failure::Refused(m)),
+    }
+}
+
 /// Spawns the backend in its job and checks it through the session (03 section 2.2 steps 4 to 6): the READY MAC,
 /// ROOT, prefix, contract and page build, the reported pid in the job, the listener owned by a job pid, a fresh
-/// proof, and only then the token goes out for the session. Any failure drops the job handle, ending the tree.
+/// proof (retried while it is only late, `prove_at_spawn`), and only then the token goes out for the session. Any
+/// failure drops the job handle, ending the tree.
 pub fn spawn(spec: &Spec, expect: &Expect) -> Result<Spawned, Failure> {
+    let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
     crash::append_backend_log(&spec.log_path(), b"").map_err(|e| Failure::Spawn(e.to_string()))?;
     let (token, nonce) = (link::fresh_secret(), link::fresh_secret());
     let mut started = start_process(spec)?;
     let ready = handshake(&mut started, spec, &token, &nonce)?;
     check::check_ready(&ready, &token, &nonce, expect).map_err(Failure::Refused)?;
     let interpreter = admit(&started, &ready)?;
+    let exits = [started.launcher.raw(), interpreter.raw()];
+    prove_at_spawn(&started.job, exits, ready.port, &token, expect, deadline)?;
     let job = started.job.clone();
     let owner_ok = move |pid| job_pids(job.raw()).contains(&pid);
-    run::verify_target(ready.port, &token, &owner_ok, expect).map_err(Failure::Refused)?;
     let session = link::session(ready.port, &token, &owner_ok, run::LINK_TIMEOUT)
         .map_err(|e| Failure::Link(e.to_string()))?;
     let Started {

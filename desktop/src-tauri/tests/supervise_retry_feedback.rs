@@ -1,6 +1,6 @@
 //! The Retry link on the stopped page must never look dead (05 G08; review finding): a click shows "Checking the
 //! backend again" at once, a retry that fails again is announced in place (the page is not reloaded, so the link keeps
-//! its focus), and a click with no backend to check goes to the "exited" section instead of doing nothing.
+//! its focus), and a click with no backend left (Verdict::Gone) starts a new supervised backend instead of doing nothing.
 //!
 //! Born failing: before the fix the retry gave no feedback for the whole retry budget (about 16 s), a second failure
 //! navigated to the address already shown, and with no backend the click was cancelled and nothing happened.
@@ -69,7 +69,7 @@ fn shared_without_backend() -> Arc<Shared> {
 }
 
 #[test]
-fn the_retry_link_with_no_backend_goes_to_the_exited_section() {
+fn the_retry_link_with_no_backend_is_gone_and_starts_a_new_backend() {
     let shared = shared_without_backend();
     let verdict = shared.navigation_verdict(retry::RETRY_URI);
     assert_eq!(verdict, Verdict::Gone, "a dead click: {verdict:?}");

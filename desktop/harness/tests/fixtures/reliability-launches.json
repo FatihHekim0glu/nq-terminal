@@ -1,0 +1,27 @@
+{
+  "note": "Per-launch records in the shape modes/reliability.mjs writes. The checked launches are the spawnToReady, readyToProof and proofToSession figures of the first 20 smoke launches of the post-0.2.0 probe (D:/dev/research/vnext/launchprobe/shell-ab2, build v020). The refused launch and the launch with no outcome are synthetic: the shell gives the first identity proof 2000 ms, and a real refusal was not captured in the probe's 60 launches.",
+  "launches": [
+    { "i": 1, "outcome": "checked", "ms": { "spawnToReady": 1180.5, "readyToProof": 16.1, "proofToSession": 3.2 } },
+    { "i": 2, "outcome": "checked", "ms": { "spawnToReady": 1162.0, "readyToProof": 16.0, "proofToSession": 3.2 } },
+    { "i": 3, "outcome": "checked", "ms": { "spawnToReady": 1156.6, "readyToProof": 17.6, "proofToSession": 3.2 } },
+    { "i": 4, "outcome": "checked", "ms": { "spawnToReady": 1164.2, "readyToProof": 15.7, "proofToSession": 3.4 } },
+    { "i": 5, "outcome": "checked", "ms": { "spawnToReady": 1179.6, "readyToProof": 16.0, "proofToSession": 3.4 } },
+    { "i": 6, "outcome": "checked", "ms": { "spawnToReady": 1169.5, "readyToProof": 24.1, "proofToSession": 3.1 } },
+    { "i": 7, "outcome": "checked", "ms": { "spawnToReady": 1186.8, "readyToProof": 24.0, "proofToSession": 3.2 } },
+    { "i": 8, "outcome": "checked", "ms": { "spawnToReady": 1175.6, "readyToProof": 15.8, "proofToSession": 3.2 } },
+    { "i": 9, "outcome": "checked", "ms": { "spawnToReady": 1191.2, "readyToProof": 47.4, "proofToSession": 4.9 } },
+    { "i": 10, "outcome": "checked", "ms": { "spawnToReady": 1179.8, "readyToProof": 16.1, "proofToSession": 3.3 } },
+    { "i": 11, "outcome": "checked", "ms": { "spawnToReady": 1190.1, "readyToProof": 19.2, "proofToSession": 30.4 } },
+    { "i": 12, "outcome": "checked", "ms": { "spawnToReady": 1190.6, "readyToProof": 43.0, "proofToSession": 8.2 } },
+    { "i": 13, "outcome": "checked", "ms": { "spawnToReady": 1191.0, "readyToProof": 16.0, "proofToSession": 1.8 } },
+    { "i": 14, "outcome": "checked", "ms": { "spawnToReady": 1182.3, "readyToProof": 16.2, "proofToSession": 3.3 } },
+    { "i": 15, "outcome": "checked", "ms": { "spawnToReady": 1174.6, "readyToProof": 22.5, "proofToSession": 3.3 } },
+    { "i": 16, "outcome": "checked", "ms": { "spawnToReady": 1167.8, "readyToProof": 16.1, "proofToSession": 3.2 } },
+    { "i": 17, "outcome": "checked", "ms": { "spawnToReady": 1156.7, "readyToProof": 16.1, "proofToSession": 3.3 } },
+    { "i": 18, "outcome": "checked", "ms": { "spawnToReady": 1163.0, "readyToProof": 16.1, "proofToSession": 3.3 } },
+    { "i": 19, "outcome": "checked", "ms": { "spawnToReady": 1171.7, "readyToProof": 16.1, "proofToSession": 3.1 } },
+    { "i": 20, "outcome": "checked", "ms": { "spawnToReady": 1171.0, "readyToProof": 14.7, "proofToSession": 2.9 } },
+    { "i": 21, "outcome": "refused:unverified", "refusedMessage": "no identity proof within 2 s (synthetic)", "ms": { "spawnToReady": 1188.0, "readyToProof": 2410.0, "proofToSession": null } },
+    { "i": 22, "outcome": "none", "ms": { "spawnToReady": null, "readyToProof": null, "proofToSession": null } }
+  ]
+}

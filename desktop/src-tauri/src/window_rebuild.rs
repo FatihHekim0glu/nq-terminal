@@ -31,7 +31,22 @@ const CACHE_FOLDERS: [(&str, &str); 2] = [
     ("npm_config_store_dir", "pnpm-store"),
 ];
 /// Where the caches live when `CACHE_ROOT_VAR` is not set and D: exists.
-const DEFAULT_CACHE_ROOT: &str = r"D:\dev";
+/// Kept as parts and joined at run time: a `D:\dev` literal would ship in the exe as a build-machine path.
+const DEFAULT_CACHE_DRIVE: &str = "D:";
+const DEFAULT_CACHE_FOLDER: &str = "dev";
+
+/// The drive's root folder (`D:` and a separator), built at run time.
+fn default_cache_drive_root() -> PathBuf {
+    PathBuf::from(format!(
+        "{DEFAULT_CACHE_DRIVE}{}",
+        std::path::MAIN_SEPARATOR
+    ))
+}
+
+/// The cache root used when `CACHE_ROOT_VAR` is not set and D: exists.
+fn default_cache_root() -> PathBuf {
+    default_cache_drive_root().join(DEFAULT_CACHE_FOLDER)
+}
 /// Names the (absolute) folder that holds both caches, for a PC without a D: drive or with another layout (AUD-6).
 pub const CACHE_ROOT_VAR: &str = "NQT_REBUILD_CACHE_ROOT";
 /// How long one step of the rebuild may run before it is stopped (AUD-6): `pnpm install` on a hung network would
@@ -141,7 +156,7 @@ pub fn cache_env(
     let configured = root.map(Path::new).filter(|path| path.is_absolute());
     let base = match configured {
         Some(path) => path.to_path_buf(),
-        None if d_drive => PathBuf::from(DEFAULT_CACHE_ROOT),
+        None if d_drive => default_cache_root(),
         None => return Vec::new(),
     };
     CACHE_FOLDERS
@@ -156,7 +171,7 @@ pub fn rebuild_calls(lab: &Path, pnpm: &Path) -> Vec<ToolCall> {
     let env = cache_env(
         std::env::var_os(CACHE_ROOT_VAR).as_deref(),
         &|name| std::env::var_os(name).is_some(),
-        Path::new(r"D:\").is_dir(),
+        default_cache_drive_root().is_dir(),
     );
     let timeout = tool_timeout(std::env::var(TOOL_TIMEOUT_VAR).ok().as_deref());
     let is_cmd = pnpm

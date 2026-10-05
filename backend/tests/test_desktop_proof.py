@@ -56,7 +56,7 @@ def _code_words(source: str) -> set[str]:
     """Every name, attribute, argument and string constant in the code, docstrings left out."""
     tree = ast.parse(source)
     docstrings = {id(node.body[0].value) for node in ast.walk(tree)
-                  if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef)) and node.body
+                  if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.body
                   and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant)}
     words: set[str] = set()
     for node in ast.walk(tree):

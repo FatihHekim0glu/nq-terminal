@@ -10,6 +10,8 @@
 //!   500 ms; a backend swapped in behind the port is refused and the token never goes to it. A proof that is only
 //!   late is unverified, not swapped: the navigation is cancelled and retried off the UI thread (supervise_retry.rs).
 //! - Restarts at 1, 2 and 4 s; three crashes within 60 s stop the retries and ask Restart or Quit.
+//! - A refusal ends the loop and leaves no backend; the stopped page's Retry link then starts the loop again through
+//!   the same supervised spawn and checks (`retry_without_backend`), and one loop at most runs at a time.
 
 use super::check::{Expect, Failure, Mismatch, Spec};
 use super::retry::{self, Approval};
@@ -121,8 +123,19 @@ pub(super) fn verify_target(
     owner_ok: &dyn Fn(u32) -> bool,
     expect: &Expect,
 ) -> Result<(), Mismatch> {
+    verify_target_for(port, token, owner_ok, expect, LINK_TIMEOUT)
+}
+
+/// `verify_target` with its own link budget (a retried proof at spawn gets the retry's longer one).
+pub(super) fn verify_target_for(
+    port: u16,
+    token: &str,
+    owner_ok: &dyn Fn(u32) -> bool,
+    expect: &Expect,
+    budget: Duration,
+) -> Result<(), Mismatch> {
     let nonce = link::fresh_secret();
-    let body = link::proof(port, &nonce, owner_ok, LINK_TIMEOUT).map_err(retry::link_refusal)?;
+    let body = link::proof(port, &nonce, owner_ok, budget).map_err(retry::link_refusal)?;
     if !owner_ok(body.pid) {
         return Err(Mismatch::PidOutsideJob(body.pid));
     }
@@ -308,7 +321,8 @@ pub enum Verdict {
     /// The proof was only late (or the Retry link was followed): cancelled, the proof retried off the UI thread,
     /// and the window sent on to this address when it passes.
     Retry(String),
-    /// The Retry link was followed with no backend to check: cancelled, and the stopped page's "exited" section shown.
+    /// The Retry link was followed with no backend to check: cancelled, and a new supervised backend started when no
+    /// loop is running (`retry_without_backend`).
     Gone,
 }
 
@@ -319,7 +333,18 @@ pub struct Shared {
     current: Mutex<Option<Arc<Backend>>>,
     stop_event: Owned,
     stopping: AtomicBool,
+    /// Held by the one running supervision loop.
+    looping: AtomicBool,
     approved: Approval,
+}
+
+/// The running loop's hold on `Shared::looping`, let go when the loop ends however it ends.
+struct LoopHold<'a>(&'a AtomicBool);
+
+impl Drop for LoopHold<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl Shared {
@@ -333,6 +358,7 @@ impl Shared {
             current: Mutex::new(None),
             stop_event: Owned(event),
             stopping: AtomicBool::new(false),
+            looping: AtomicBool::new(false),
             approved: Approval::default(),
         }))
     }
@@ -356,6 +382,14 @@ impl Shared {
 
     pub fn stopping(&self) -> bool {
         self.stopping.load(Ordering::SeqCst)
+    }
+
+    /// The hold for a new loop, or None while one runs.
+    fn hold_loop(&self) -> Option<LoopHold<'_>> {
+        let free = self
+            .looping
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst);
+        free.ok().map(|_| LoopHold(&self.looping))
     }
 
     /// The top-level navigation rule (05 G08): the shell's own pages pass; the backend's origin passes after a
@@ -463,10 +497,12 @@ fn attempt(shared: &Shared, sink: &dyn Sink) -> Option<Duration> {
                 "supervise_refused",
                 json!({ "code": m.code(), "message": m.message() }),
             );
-            if let Mismatch::Dist(state) = &m {
-                return sink.stale_dist(state).then(|| began.elapsed());
+            match &m {
+                Mismatch::Dist(state) => return sink.stale_dist(state).then(|| began.elapsed()),
+                // Said in place when the unverified section already shows (after its Retry link).
+                Mismatch::Unverified(_) => sink.still_unverified(),
+                _ => sink.stopped(m.code()),
             }
-            sink.stopped(m.code());
             None
         }
         Err(other) => {
@@ -481,11 +517,38 @@ fn attempt(shared: &Shared, sink: &dyn Sink) -> Option<Duration> {
     }
 }
 
+/// The stopped page's Retry link with no backend left (a refusal at spawn ended the loop): show at once that the
+/// backend is being checked again, then start the loop again on this thread, so a new backend goes through the same
+/// supervised spawn, proof and owner checks, and a new refusal shows its own section. While a loop already runs (a
+/// restart under way) it only says so: that loop sends the window on.
+pub fn retry_without_backend(shared: Arc<Shared>, sink: Arc<dyn Sink>) {
+    if shared.stopping() {
+        return;
+    }
+    sink.checking();
+    let Some(hold) = shared.hold_loop() else {
+        crash::log("supervise_retry_loop_running", json!({}));
+        return;
+    };
+    crash::log("supervise_retry_spawn", json!({}));
+    run_held(&shared, sink.as_ref());
+    drop(hold);
+}
+
 /// The supervision loop (03 section 17): connect and serve; after an exit restart with back-off; a refusal ends it.
+/// One loop at most runs per `Shared`; a second start returns at once.
 pub fn run(shared: Arc<Shared>, sink: Arc<dyn Sink>) {
+    let Some(_hold) = shared.hold_loop() else {
+        crash::log("supervise_loop_running", json!({}));
+        return;
+    };
+    run_held(&shared, sink.as_ref());
+}
+
+fn run_held(shared: &Shared, sink: &dyn Sink) {
     let mut policy = RestartPolicy::default();
     while !shared.stopping() {
-        let Some(ran_for) = attempt(&shared, sink.as_ref()) else {
+        let Some(ran_for) = attempt(shared, sink) else {
             return;
         };
         match policy.crashed(Instant::now(), ran_for) {

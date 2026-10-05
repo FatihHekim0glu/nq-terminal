@@ -3,6 +3,7 @@
 //
 //   node desktop/scripts/artefact-check.mjs <release folder> [--json]   the full check, exit 1 on any problem
 //   node desktop/scripts/artefact-check.mjs --tree <folder>             the lab-data path rules over an installed folder
+//   node desktop/scripts/artefact-check.mjs --paths <file>...           the build-machine path scan over built binaries (exit 2: no file)
 //
 // The full check fails on:
 //   - any .parquet file, any path under data/, results/, live/ or backtests/output/, and any file named like a sealed
@@ -22,6 +23,10 @@
 //     a network path, Program Files or Windows, or a recursive folder removal (CWE-427, CWE-732; 03 section 13.1). The
 //     compiled installer is compressed, so the hooks are proved by the generated script's include of the hooks file
 //     (read from nsis/<build>/ beside the script, else from the include path) and by the configuration that asked for it;
+//   - a drive-letter path under D:\dev or C:\Users inside a built binary (payload\<build>\*.exe and *.dll, the *_x64-setup.exe
+//     installers), in either slash direction, doubled backslashes or not, as 8-bit or UTF-16 text: build-release.ps1 remaps
+//     the cargo home, the rustup home and the source folder to neutral prefixes (rustc --remap-path-prefix), and this scan
+//     fails the folder if one still shows (the 0.1.2 and 0.2.0 exes held D:\dev\cargo\registry Rust panic locations);
 //   - a PROVENANCE.json without a webview2_bootstrapper entry (sha256, validly signed by Microsoft Corporation) for the
 //     bootstrapper the installers embed and run silently, or whose path is not the one an installer script embeds.
 // Tauri 2 compiles its configuration into the exe as Rust data, not JSON, so the configuration is read from the files
@@ -313,6 +318,37 @@ function provenanceBootstrapper(dir, problems) {
   return entry ?? null
 }
 
+// ---- build-machine paths ---------------------------------------------------------------------------------------------------
+
+// The build machine's folders must not reach a shipped binary. Rust panic locations carry the path of the source file, so
+// an unremapped build holds D:\dev\cargo\registry\... (and, for crates built from the tree, the user's profile folder).
+const MACHINE_PATH_RULES = [
+  ['build-machine-path-dev', /[Dd]:[\\/]+dev(?![A-Za-z0-9_])[^\x00-\x20"'<>|*?\x7f-\uffff]{0,100}/g],
+  ['build-machine-path-users', /[Cc]:[\\/]+[Uu]sers(?![A-Za-z0-9_])[^\x00-\x20"'<>|*?\x7f-\uffff]{0,100}/g],
+]
+
+/** The build-machine paths in some bytes, as { rule, text, count } once per distinct path: 8-bit text and UTF-16 at both alignments. */
+export function machinePathFindings(bytes) {
+  const views = [bytes.toString('latin1'), bytes.toString('utf16le'), bytes.subarray(1).toString('utf16le')]
+  const seen = new Map()
+  for (const view of views) {
+    for (const [rule, pattern] of MACHINE_PATH_RULES) {
+      for (const match of view.matchAll(pattern)) {
+        const key = `${rule}\n${match[0]}`
+        const entry = seen.get(key) ?? { rule, text: match[0], count: 0 }
+        entry.count += 1
+        seen.set(key, entry)
+      }
+    }
+  }
+  return [...seen.values()]
+}
+
+/** One problem per distinct build-machine path of a file. `name` is how the report names the file. */
+export function machinePathProblems(file, name = file) {
+  return machinePathFindings(fs.readFileSync(file)).map((f) => `${name}: build-machine path ${f.text} (${f.rule}, ${f.count}x): remap it with rustc --remap-path-prefix`)
+}
+
 // ---- the whole folder ------------------------------------------------------------------------------------------------------
 
 function checkBuild(dir, build, options, problems) {
@@ -345,6 +381,8 @@ export function checkRelease(dir, options = {}) {
   if (installers.length === 0) problems.push('no *_x64-setup.exe installer in the folder')
   for (const installer of installers) problems.push(...installerProblems(path.join(dir, installer)).map((p) => `${installer}: ${p}`))
   const checked = BUILDS.filter((build) => checkBuild(dir, build, opts, problems))
+  const binaries = files.filter((f) => /^payload\/[^/]+\/[^/]+\.(exe|dll)$/i.test(f) || installers.includes(f))
+  for (const binary of binaries) problems.push(...machinePathProblems(path.join(dir, binary), binary))
   const entry = provenanceBootstrapper(dir, problems)
   for (const build of ['release', 'measure', 'installtest']) {
     const script = path.join(dir, 'nsis', build, 'installer.nsi')
@@ -354,7 +392,23 @@ export function checkRelease(dir, options = {}) {
   return { problems, notes }
 }
 
+function pathsMain(files) {
+  if (files.length === 0 || files.some((f) => !fs.existsSync(f) || !fs.statSync(f).isFile())) {
+    console.error('usage: node artefact-check.mjs --paths <built binary>... (every file must exist)')
+    return 2
+  }
+  const problems = files.flatMap((f) => machinePathProblems(f, f))
+  if (problems.length > 0) {
+    console.error('build-machine path scan FAILED:\n  ' + problems.join('\n  '))
+    return 1
+  }
+  console.log(`build-machine path scan passed: no D:\\dev or C:\\Users path in ${files.length} file(s)`)
+  return 0
+}
+
 function main(argv) {
+  const pathsAt = argv.indexOf('--paths')
+  if (pathsAt >= 0) return pathsMain(argv.slice(pathsAt + 1))
   const json = argv.includes('--json')
   const treeAt = argv.indexOf('--tree')
   const target = treeAt >= 0 ? argv[treeAt + 1] : argv.find((a) => !a.startsWith('--'))

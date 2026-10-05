@@ -1,7 +1,7 @@
 # The local release build (04 D5.4, 03 section 13.1; the Windows stand-in for desktop-release.yml): four builds from
 # one tree, with the checks the roadmap names, into one folder with its checksums and provenance.
 #
-#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.2.0 [-TargetDir D:\dev\targets\release] [-Force]
+#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.2.1 [-TargetDir D:\dev\targets\release] [-Force]
 #
 # Builds, all with cargo-tauri on the GNU host and --locked:
 #   release  cargo tauri build --bundles nsis -- --locked                                  (no smoke, no measure)
@@ -36,6 +36,14 @@
 # and in the measure one after the measure build, is the same file each time, and is recorded in PROVENANCE.json
 # (webview2_bootstrapper); the installer is under the 30 MB ceiling (a note above 15 MB). It prints every size.
 #
+# Build-machine paths: Rust panic locations and debug info carry source paths (the earlier release exes held
+# D:\dev\cargo\registry\...). Every build of this script runs with CARGO_ENCODED_RUSTFLAGS holding rustc
+# --remap-path-prefix flags that map D:\dev, the user profile, the cargo home, the rustup home, the source folder (terminal\) and
+# the target folder to neutral prefixes (/dev, /home/user, /cargo, /rustup, /src, /target); flags already in the environment
+# are kept, and there is no rustflags setting in src-tauri\.cargo\config.toml to replace. Afterwards artefact-check.mjs --paths
+# fails the build if any D:\dev or C:\Users path (either slash direction) is still in an exe, a dll or an installer, and
+# artefact-check.mjs runs the same scan over the whole folder.
+#
 # Toolchain, caches and output stay under D:\dev; the owner's PATH is not changed; nothing is written under the tree.
 [CmdletBinding()]
 param(
@@ -58,10 +66,38 @@ $LogDir = Join-Path $LogRoot (Get-Date -Format 'yyyyMMdd-HHmmss')
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $InstallerCeilingMb = 30
 $InstallerNoteMb = 15
+$BuildRoot = 'D:\dev'
 $ManifestWarning = 'multiple non-default manifests|\.rsrc merge failure'
 $Failures = New-Object System.Collections.Generic.List[string]
 $BootstrapperCache = Join-Path $env:LOCALAPPDATA 'tauri\MicrosoftEdgeWebview2Setup.exe'
 . (Join-Path $PSScriptRoot 'webview2-bootstrapper.ps1')
+
+function Get-RemapFlags {
+    # rustc --remap-path-prefix flags that hide the build machine from the binaries (Rust panic locations and debug info carry
+    # source paths): the catch-all folders first, then the specific ones, because rustc applies the LAST matching remap.
+    # The targets are neutral and name no drive, user or host. Used for every build of this script: release, measure,
+    # installtest and smoke.
+    $pairs = @(
+        @($BuildRoot, '/dev'),
+        @($env:USERPROFILE, '/home/user'),
+        @($env:CARGO_HOME, '/cargo'),
+        @($env:RUSTUP_HOME, '/rustup'),
+        @($Terminal, '/src'),
+        @($TargetDir, '/target')
+    )
+    foreach ($pair in $pairs) {
+        if ($pair[0]) { "--remap-path-prefix=$($pair[0].TrimEnd('\'))=$($pair[1])" }
+    }
+}
+
+function Get-BuildRustFlags {
+    # The rust flags already in the environment (CARGO_ENCODED_RUSTFLAGS wins over RUSTFLAGS, as cargo reads them; none today),
+    # then the remaps, so a flag set elsewhere is kept rather than replaced.
+    $existing = @()
+    if ($env:CARGO_ENCODED_RUSTFLAGS) { $existing = @($env:CARGO_ENCODED_RUSTFLAGS -split [char]0x1f | Where-Object { $_ }) }
+    elseif ($env:RUSTFLAGS) { $existing = @($env:RUSTFLAGS -split '\s+' | Where-Object { $_ }) }
+    return @($existing) + @(Get-RemapFlags)
+}
 
 function Set-BuildEnvironment {
     $env:RUSTUP_HOME = 'D:\dev\rustup'
@@ -70,6 +106,10 @@ function Set-BuildEnvironment {
     $env:TEMP = 'D:\dev\tmp'
     $env:TMP = 'D:\dev\tmp'
     $env:CARGO_TARGET_DIR = $TargetDir
+    # The encoded form joins the flags by the unit separator, so the source folder may contain a space (a user name does).
+    $flags = Get-BuildRustFlags
+    Remove-Item env:RUSTFLAGS -ErrorAction SilentlyContinue
+    $env:CARGO_ENCODED_RUSTFLAGS = $flags -join [string][char]0x1f
     if (-not $env:CARGO_BUILD_JOBS) { $env:CARGO_BUILD_JOBS = '8' }
     Get-ChildItem env: | Where-Object { $_.Name -like 'WEBVIEW2_*' } | ForEach-Object { Remove-Item "env:$($_.Name)" }
 }
@@ -150,6 +190,22 @@ function Invoke-Build {
     return $true
 }
 
+function Test-MachinePaths {
+    # The built binaries hold no D:\dev or C:\Users path (either slash direction): artefact-check.mjs --paths, the scan the
+    # release folder gets again as a whole. The remap flags of Set-BuildEnvironment are what keep them out.
+    param([string]$Name, [string[]]$Files)
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) { Add-Failure "node is not on PATH, so the $Name binaries cannot be scanned for build-machine paths"; return }
+    $existing = @($Files | Where-Object { Test-Path -LiteralPath $_ })
+    if ($existing.Count -eq 0) { return }
+    $ErrorActionPreference = 'Continue'
+    $text = & $node.Source (Join-Path $PSScriptRoot 'artefact-check.mjs') '--paths' @existing 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = 'Stop'
+    if ($code -ne 0) { Add-Failure "the $Name binaries hold build-machine paths (D:\dev or C:\Users): $($text.Trim())" }
+    else { Write-Host "paths ($Name): $($text.Trim())" }
+}
+
 function Copy-Payload {
     param([string]$Name, [switch]$WithInstaller)
     $release = Join-Path $TargetDir 'release'
@@ -159,11 +215,13 @@ function Copy-Payload {
         $source = Join-Path $release $file
         if (Test-Path -LiteralPath $source) { Copy-Item -LiteralPath $source -Destination $dest } else { Add-Failure "the $Name build left no $file in $release" }
     }
+    Test-MachinePaths $Name @((Join-Path $dest 'nq-lab-terminal.exe'), (Join-Path $dest 'WebView2Loader.dll'))
     if (-not $WithInstaller) { return }
     $installers = @(Get-ChildItem (Join-Path $release 'bundle\nsis') -Filter "*_${Version}_x64-setup.exe" -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -gt $script:BuildStart })
     if ($installers.Count -ne 1) { Add-Failure "the $Name build left $($installers.Count) fresh installers, expected 1"; return }
     Copy-Item -LiteralPath $installers[0].FullName -Destination $OutDir
+    Test-MachinePaths "$Name installer" @((Join-Path $OutDir $installers[0].Name))
     $nsiDest = Join-Path $OutDir "nsis\$Name"
     New-Item -ItemType Directory -Force -Path $nsiDest | Out-Null
     Copy-Item -LiteralPath (Join-Path $release 'nsis\x64\installer.nsi') -Destination $nsiDest

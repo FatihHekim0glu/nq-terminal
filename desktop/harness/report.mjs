@@ -63,6 +63,26 @@ export function newestReproduction(records) {
   return newest(verdicts.filter((r) => !r.dry)) ?? newest(verdicts)
 }
 
+/** Whether the backend's own trim ran for one idle figure, read from its memtrim field: a record written when the working-set drop alone
+ *  stood for it (trimSeen true beside memtrim off) reads as not seen. Null when the series was not read. */
+export function trimSeenOf(fig) {
+  if (fig.memtrim === 'off') return false
+  const v = fig.trimDropSeen !== undefined ? fig.trimDropSeen : fig.trimSeen
+  return typeof v === 'boolean' ? v : null
+}
+
+/** Per build and memtrim state: the counted idle readings, how many saw the backend's trim run, how many waited out the cap. */
+export function idleTrimSummary(records) {
+  const out = {}
+  for (const f of collectFigures(records).filter((x) => x.row === 'idle_mem_home' && 'trimSeen' in x)) {
+    const cell = ((out[f.build] ??= {})[f.memtrim ?? 'unrecorded'] ??= { n: 0, trimSeen: 0, capped: 0 })
+    cell.n += 1
+    if (trimSeenOf(f) === true) cell.trimSeen += 1
+    if (f.trimCapped === true) cell.capped += 1
+  }
+  return out
+}
+
 /** The private-bytes verdict of every counted soak record, recomputed from its raw samples (a record without the summary still gets one). */
 export function soakLeaks(records) {
   return records.filter((r) => COUNTED.includes(r.status) && (r.soak || r.mode === 'soak') && Array.isArray(r.samples))
@@ -82,7 +102,7 @@ export function buildReport(records, { minRuns = 3 } = {}) {
   for (const r of records) { const k = `${r.build ?? '-'}:${r.mode ?? '-'}`; (counts[k] ??= {})[r.status] = ((counts[k][r.status]) ?? 0) + 1 }
   const rejected = records.filter((r) => r.status === 'rejected').map((r) => ({ file: r.file, avgPct: r.gate?.avgPct ?? null, build: r.build }))
   const repro = newestReproduction(records)
-  return { rows, agreement, checks: checkReport(records, figs), soakLeaks: soakLeaks(records).map(({ rule, ...l }) => l), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
+  return { rows, agreement, checks: checkReport(records, figs), soakLeaks: soakLeaks(records).map(({ rule, ...l }) => l), idleTrim: idleTrimSummary(records), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
     unreproducedRuns: records.filter((r) => COUNTED.includes(r.status) && r.unreproduced === true).length,
     provenanceHeads: [...new Set(records.map((r) => r.provenance?.head).filter(Boolean))], stampsAgree: new Set(records.filter((r) => r.provenance?.diffSha256).map((r) => `${r.provenance.diffSha256}/${r.provenance.untrackedSha256}`)).size <= 1 }
 }
@@ -152,6 +172,13 @@ export function informationalLines(records) {
     const mine = counted.filter((r) => r.build === build && Array.isArray(r.memSamples) && r.memSamples.length)
     const med = (key) => median(mine.flatMap((r) => r.memSamples.map((m) => m[key])).filter((v) => typeof v === 'number'))
     if (mine.length && med('privateBytesMB') !== null) lines.push(`${INFO}: idle private bytes, ${build} build, median of ${mine.length}: ${fmt(med('privateBytesMB'))} MB beside the private working set ${fmt(med('wsPrivateMB'))} MB (a trim lowers the working set, not the private bytes)`)
+  }
+  for (const [build, states] of Object.entries(idleTrimSummary(records))) {
+    for (const [state, c] of Object.entries(states)) {
+      const capped = c.capped ? `, wait capped in ${c.capped}` : ''
+      const note = state === 'off' ? ' (a working-set fall with the trim off is the backend\'s own release after start-up, not the trim)' : ''
+      lines.push(`${INFO}: idle trim, ${build} build, memtrim ${state}: trim ran in ${c.trimSeen} of ${c.n} counted idle reading(s)${capped}${note}`)
+    }
   }
   const unread = idleBreakdownUnread(records)
   if (unread.unread > 0) lines.push(`${INFO}: idle breakdown not read in ${unread.unread} of ${unread.taken} runs: ${unread.reason}; T4 canvas clause not evaluated for those runs`)

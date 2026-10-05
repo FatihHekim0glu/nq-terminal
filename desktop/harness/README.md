@@ -47,7 +47,7 @@ budgets), and the GIP series is the real response tiled out to 20,000 bars with 
 
 ## The leak signal
 
-The soak row is the largest whole-tree private working set, which a trim of the backend working set can lower without releasing committed memory. So the soak also judges the whole-tree private bytes on their own (`LEAK_RULE` in `lib/rows.mjs`): over the settled samples (from 900 s, at least 4 samples over at least 30 minutes) a straight-line fit must not climb faster than 30 MB an hour while growing 50 MB or more across the window. A series that grows fails the soak (exit 1, and `report.mjs --check --strict` exits 4) even when the working set is flat; a series too short to judge is `not-evaluated`, never a pass. The limits are provisional until the first all-day soak. The idle sample waits on evidence, not on a fixed offset (`lib/idle-trim.mjs`): the backend's private working set is read at HOME ready and from 66 s on (`idleQuietMs`, the floor) every 5 s, and the sample is taken once it has dropped by at least 30 MB and 10 % and the last two readings agree, or at the cap (`idleCapMs`, 120 s, which covers the record watch's last foreground request 16 s after it mounts). The `idle_mem_home` figure carries `trimSeen`, `trimCapped` and `trimWaitedMs`; a capped wait with no trim seen is a reading to distrust, not a pass. The floor: the backend trims its working set 60 s after the last foreground request and looks every 5 s (`backend/nq_terminal/memtrim.py`), and a sample taken sooner reads the untrimmed set. The background polls (`/api/health`, `/api/commands`, `/api/audit/oos-log`) do not delay the trim; an open `/api/live/stream` or a queued or running job holds it off by design. Idle figures carry the tree's private bytes beside the working set (`privateBytesMB` on the `idle_mem_home` figure; the report prints both).
+The soak row is the largest whole-tree private working set, which a trim of the backend working set can lower without releasing committed memory. So the soak also judges the whole-tree private bytes on their own (`LEAK_RULE` in `lib/rows.mjs`): over the settled samples (from 900 s, at least 4 samples over at least 30 minutes) a straight-line fit must not climb faster than 30 MB an hour while growing 50 MB or more across the window. A series that grows fails the soak (exit 1, and `report.mjs --check --strict` exits 4) even when the working set is flat; a series too short to judge is `not-evaluated`, never a pass. The limits are provisional until the first all-day soak. The idle sample waits on evidence, not on a fixed offset (`lib/idle-trim.mjs`): the backend's private working set is read at HOME ready and from 66 s on (`idleQuietMs`, the floor) every 5 s, and the sample is taken once it has dropped by at least 30 MB and 10 % and the last two readings agree, or at the cap (`idleCapMs`, 120 s, which covers the record watch's last foreground request 16 s after it mounts). The `idle_mem_home` figure carries `trimSeen`, `trimDropSeen`, `trimCapped` and `trimWaitedMs`; a capped wait with no trim seen is a reading to distrust, not a pass. `trimSeen` means the backend's own trim ran, so the `memtrim` field decides it: false with `--memtrim off`, and with the trim on true when the working-set fall was seen. `trimDropSeen` is the raw fall, which the backend's own release after start-up also causes with the trim off (the working-set series alone cannot tell a trim from that release). `report.mjs` reads the `memtrim` field, so an older record with `trimSeen` true beside `memtrim` off reads as not seen, and it prints how many readings per build and memtrim state saw the trim run (`idleTrim` in the JSON report). The floor: the backend trims its working set 60 s after the last foreground request and looks every 5 s (`backend/nq_terminal/memtrim.py`), and a sample taken sooner reads the untrimmed set. The background polls (`/api/health`, `/api/commands`, `/api/audit/oos-log`) do not delay the trim; an open `/api/live/stream` or a queued or running job holds it off by design. Idle figures carry the tree's private bytes beside the working set (`privateBytesMB` on the `idle_mem_home` figure; the report prints both).
 
 ## Commands
 
@@ -61,6 +61,7 @@ node run.mjs --mode t8 [--playwright]
 node run.mjs --mode soak [--hours 8] [--real-data]
 node run.mjs --mode installer [--installer FILE]
 node run.mjs --mode parity [--runs 1] [--settle-s 6]   (fixture backend started as the shell starts it and the plain way, ports 8792 and 8791; fails above 5 MB private working set or on a thread count; no window)
+node run.mjs --mode reliability --smoke-exe FILE [--runs 30] [--real-data] [--hold-ms 4000] [--proof-limit-ms 2000] [--dry]   (N hidden launches of a smoke exe: refusals and the READY-to-proof distribution)
 node run.mjs --mode selftest [--only spin,screen2,planted,path] [--dry-modes | --dry-only a,b]
 node report.mjs DIR [--min-runs 3] [--json] [--check [--strict]]
 node --test "tests/*.test.mjs"
@@ -75,6 +76,12 @@ that is another build (the smoke exe carries the `--attach-url` switch text, the
 Measurements run from the main tree only (`--real-data` and every non-dry run refuse to start elsewhere). From a worktree only
 `--dry` runs, on a derived lab (`lab.mjs`): the owner's venv launcher, a copy of the research package sources and junctions to the
 tree under test, never to its `state` folder and never to a data folder.
+
+## Launch reliability
+
+`--mode reliability` runs N hidden launches of one smoke exe, one after the other, each with a fresh temporary state folder, and reports the refusals and the distribution of READY to the first identity proof. It exists for the start-up race of 0.2.0: the shell gives the backend's first identity proof `LINK_TIMEOUT` (2 s, `supervise_run.rs`) and refuses with `unverified` past it, so READY to proof is the margin against that refusal. Per launch it reads the shell log events (`supervise_spawned`, `supervise_checked`, `supervise_refused`, `supervise_failed`) and a 1 ms read-only tail of the backend log (`lib/tailog.py`: `NQT-READY`, the proof request, the first session read), and writes one record per launch plus `reliability-summary.json` under `--out`.
+
+`--real-data` runs the real backend (the prewarm and scipy are what race the first proof; main tree only); without it the fixture backend runs, which has no prewarm, so its proof times say nothing about the race. `--dry` is one launch, from any tree. `--runs` defaults to 30; one start in 240 was refused on 0.1.2 and 0.2.0, so a refusal rate needs a few hundred launches (the median, p95 and max of READY to proof and the count at or over the limit say how close a short run came). `--proof-limit-ms` moves the limit the report counts against, for a shell that waits longer. The run exits 1 on any refusal or failure, any launch without an outcome, a window or foreground change the watch did not allow, a survivor after teardown, or a stop before the requested count. It takes no CPU gate: the figures are a distribution of a start-up race and the machine load is part of what is measured, so note the load beside the run. No launch starts while `D:/dev/locks/RECORDS_RUNNING` exists.
 
 ## Reproduction first
 
@@ -121,12 +128,13 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 | Path | Holds |
 |---|---|
 | `run.mjs`, `report.mjs` | the commands and the report with `--check` |
-| `modes\` | `rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `selftest` |
+| `modes\` | `rows`, `reproduce`, `minimise`, `first-launch`, `t8`, `soak`, `installer`, `parity`, `reliability`, `selftest` |
 | `lib\paths.mjs`, `build.mjs`, `lab.mjs`, `shell.mjs`, `launch-run.mjs` | folders and ports, build identity, derived labs, the launch, one launch and its rows |
 | `lib\cdp.mjs`, `page-rows.mjs`, `pagejs.mjs`, `probe.js`, `trace.mjs`, `bars.mjs`, `fills.mjs`, `dockwait.mjs`, `heavy.mjs` | the page-internal rows |
 | `lib\gate.mjs`, `gpu.mjs`, `slot.mjs`, `record.mjs`, `rows.mjs`, `stats.mjs`, `provenance.mjs`, `harness.mjs` | gate, slot, records, the G2 table, statistics, the stamp, the reproduction gate |
 | `lib\winwatch.*`, `winctl.*`, `screen2.mjs`, `plantwin.py` | the window watch, the window helper and the screen-2 guard |
 | `lib\mem.*`, `stop.mjs`, `survivors.mjs`, `proc.mjs`, `backend.mjs`, `shelllog.mjs` | memory counters, identity-checked teardown, processes, backends, the shell log (`shelllog.mjs` also reads `keys_installed` back: a measure run whose engine reads devtools, accelerator keys or zoom control as on is marked failed) |
+| `lib\reliability.mjs`, `tailog.mjs`, `tailog.py` | the launch-reliability figures (outcome, READY to proof, summary) and the backend log tail |
 | `reference\w0b-tauri.json` | the W0B figures the reproduction is judged against |
 | `tests\` | `node --test` unit tests, each guard with a born-failing case |
 

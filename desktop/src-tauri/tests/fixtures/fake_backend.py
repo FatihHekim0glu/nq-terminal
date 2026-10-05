@@ -19,6 +19,9 @@ taking `Authorization: NQT <token>` and `X-NQT-Origin` for the cookie `nqt_s_<po
 pid_outside, listener), `outside_pid`, `report_port`, `noise_before` and `noise_after` (bytes of stray output around
 the READY line), `late_nqt` (a later fake NQT- line), `grandchild` (a sleeping worker process started with
 multiprocessing, standing in for a JOBS run), `exit_after_ready_s`, `exit_before_handshake` (an exit code, taken before stdin is read), `attach_line`, `running_jobs` and `contract`.
+`proof_delay_s` holds back the answer to the first `proof_delay_count` proofs (1 when absent) by that many seconds, as a
+backend whose first proof meets a slow first start does; `proof_lie` makes the proof route alone answer wrongly (`mac`:
+a proof under another key; `foreign_pid`: the pid `outside_pid`) while the READY line stays honest.
 
 Started by a test as `python -E -s <this file> --swapped <port>`, it is the G08 impostor: it binds the port of a
 backend that has ended and reports every header it receives, without knowing any token.
@@ -93,6 +96,15 @@ class Fake:
         self.mode, self.token = mode, token
         self.port, self.pid, self.session = 0, os.getpid(), None
         self.lab = Path.cwd().parent.parent
+        self.proofs, self.proofs_lock = 0, threading.Lock()
+
+    def proof_delay(self) -> float:
+        """How long this proof's answer is held back: `proof_delay_s` for the first `proof_delay_count` proofs."""
+        with self.proofs_lock:
+            self.proofs += 1
+            seen = self.proofs
+        late = seen <= int(self.mode.get("proof_delay_count", 1))
+        return float(self.mode.get("proof_delay_s", 0)) if late else 0.0
 
     def reported_pid(self) -> int:
         return int(self.mode.get("outside_pid", 0)) if self.mode.get("lie") == "pid_outside" else self.pid
@@ -130,6 +142,7 @@ def handler_for(fake: Fake, swapped: bool) -> type:
             url = urlsplit(self.path)
             if url.path == "/api/desktop/proof":
                 nonce = (parse_qs(url.query).get("nonce") or [""])[0]
+                time.sleep(fake.proof_delay())
                 self._json(200, proof_body(fake, nonce, swapped))
             elif url.path == "/api/session":
                 self._session(swapped)
@@ -168,8 +181,10 @@ def handler_for(fake: Fake, swapped: bool) -> type:
 
 
 def proof_body(fake: Fake, nonce: str, swapped: bool) -> dict:
-    pid = fake.reported_pid()
-    proof = secrets.token_hex(32) if swapped else mac(fake.token, "proof", nonce, fake.port, pid)
+    lie = fake.mode.get("proof_lie")
+    pid = int(fake.mode.get("outside_pid", 0)) if lie == "foreign_pid" else fake.reported_pid()
+    key = secrets.token_hex(32) if swapped or lie == "mac" else fake.token
+    proof = mac(key, "proof", nonce, fake.port, pid)
     return {"proof": proof, **fake.identity(), "pid": pid}
 
 
