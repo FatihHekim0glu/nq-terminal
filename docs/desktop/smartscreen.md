@@ -6,11 +6,11 @@ Status: brought in line with the tree at commit `f2e03bf` on 3 October 2026, for
 
 SmartScreen is Windows' reputation check for downloaded programs. It only looks at a file that carries the Mark of the Web, a hidden `Zone.Identifier` stream that a browser, a mail client or an unpacking tool adds to files that came from another place. A file with no mark is never judged by SmartScreen.
 
-The installer is `nq-lab terminal_0.2.0_x64-setup.exe` (0.1.0, 0.1.1 and 0.1.2 behaved the same way). It has no Authenticode signature, so Windows has no publisher name and no certificate to build a reputation on. What you see depends on how the file reached the PC:
+The installer is `nq-lab terminal_0.2.1_x64-setup.exe` (0.1.0, 0.1.1, 0.1.2 and 0.2.0 behaved the same way). It has no Authenticode signature, so Windows has no publisher name and no certificate to build a reputation on. What you see depends on how the file reached the PC:
 
 | How the file reached this PC | Mark of the Web | What Windows shows |
 |---|---|---|
-| Built here and copied from `D:\dev\release\0.2.0` | none | Nothing from SmartScreen. The installer runs per user and asks for no administrator rights, so there is no permission prompt either. |
+| Built here and copied from `D:\dev\release\0.2.1` | none | Nothing from SmartScreen. The installer runs per user and asks for no administrator rights, so there is no permission prompt either. |
 | Downloaded through a browser, for example a CI artefact or a release page | yes | One blue dialog, "Windows protected your PC", with "Unknown publisher". |
 | Copied from a USB stick or a network share that the browser or archive tool marked | depends on the tool | As the row above if the mark survived. |
 
@@ -18,7 +18,7 @@ A downloaded copy shows the prompt once per file. A new build is a new file, so 
 
 ### State on this PC at review time
 
-The table below is the record of 3 October 2026, made on the 0.1.0 builds. The commands work unchanged on the 0.2.0 installer once the path names `D:\dev\release\0.2.0` and the 0.2.0 file name.
+The table below is the record of 3 October 2026, made on the 0.1.0 builds. The commands work unchanged on the 0.2.1 installer once the path names `D:\dev\release\0.2.1` and the 0.2.1 file name.
 
 | Question | Command (read-only) | Result on 3 October 2026 |
 |---|---|---|
@@ -29,7 +29,7 @@ The table below is the record of 3 October 2026, made on the 0.1.0 builds. The c
 
 Smart App Control matters more than SmartScreen. When it is on it can refuse an unsigned program outright, with no "Run anyway" button, and it judges every program, not only downloads. It is off here. If a later Windows update or a reset turns it on, the unsigned installer and the unsigned app will not run, and the only fixes are to turn Smart App Control off or to sign the build (see below). Re-read the registry value at the start of every dual-run week: it costs one command.
 
-The readings above were made on two builds. `D:\dev\release\0.1.0` held a build from `e0834c1`, and `D:\dev\release-b\0.1.0` holds the reference build of `f2e03bf`. The default folder holds the final build, made from the release commit `8122c87`, so the 0.1.0 installer you verified was that one: `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`, size `3,253,432` bytes. The 0.1.1 installer was 3,253,307 bytes, SHA256 `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` (history). The 0.1.2 installer was 3,254,474 bytes, SHA256 `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377` (history). The 0.2.0 installer is 3,256,246 bytes, SHA256 `ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51`. A rebuild changes the hash every time. The mark reading does not depend on the build: a file made on this PC and copied by this PC carries no mark, whichever build it is.
+The readings above were made on two builds. `D:\dev\release\0.1.0` held a build from `e0834c1`, and `D:\dev\release-b\0.1.0` holds the reference build of `f2e03bf`. The default folder holds the final build, made from the release commit `8122c87`, so the 0.1.0 installer you verified was that one: `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590`, size `3,253,432` bytes. The 0.1.1 installer was 3,253,307 bytes, SHA256 `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` (history). The 0.1.2 installer was 3,254,474 bytes, SHA256 `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377` (history). The 0.2.0 installer was 3,256,246 bytes, SHA256 `ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51` (history). The 0.2.1 installer is 3,257,242 bytes, SHA256 `34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20`. A rebuild changes the hash every time. The mark reading does not depend on the build: a file made on this PC and copied by this PC carries no mark, whichever build it is.
 
 ## Verify the installer before you run it
 
@@ -38,16 +38,16 @@ Do this for any copy that did not come straight from the build folder on this PC
 1. Compute the hash of the file you hold:
 
    ```powershell
-   Get-FileHash -Algorithm SHA256 -LiteralPath 'D:\dev\release\0.2.0\nq-lab terminal_0.2.0_x64-setup.exe' | Format-List Algorithm,Hash
+   Get-FileHash -Algorithm SHA256 -LiteralPath 'D:\dev\release\0.2.1\nq-lab terminal_0.2.1_x64-setup.exe' | Format-List Algorithm,Hash
    ```
 
    Change the path to wherever your copy is. PowerShell prints the hash in capitals; the checksum file uses lower case. Compare without regard to case.
 
 2. Compare it with the expected value, which must come from a place other than the copy itself:
-   - `SHA256SUMS` in the build folder (`D:\dev\release\0.2.0\SHA256SUMS`), read on the PC that built it;
-   - the value in the hand-over note, `ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51` (the 0.1.2 installer gave `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377`, the 0.1.1 installer gave `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`, the final 0.1.0 installer gave `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` and the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
-   - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the commit that the tag desktop-v0.2.0 names (for 0.1.0 it was `8122c877bb00e4f07ce505d5ba0468d6a9858f41`).
-   - the release page of the public repository. GitHub turns the space of an uploaded file name into a dot, so the asset is `nq-lab.terminal_0.2.0_x64-setup.exe`, and the published `SHA256SUMS` lists that dotted name with the same hash. A copy saved under the dotted name is the same file; compare the hash, not the name. `desktop\scripts\upgrade-owner.ps1` reads `SHA256SUMS` either way.
+   - `SHA256SUMS` in the build folder (`D:\dev\release\0.2.1\SHA256SUMS`), read on the PC that built it;
+   - the value in the hand-over note, `34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20` (the 0.2.0 installer gave `ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51`, the 0.1.2 installer gave `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377`, the 0.1.1 installer gave `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`, the final 0.1.0 installer gave `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` and the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
+   - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the commit that the tag desktop-v0.2.1 names (for 0.1.0 it was `8122c877bb00e4f07ce505d5ba0468d6a9858f41`).
+   - the release page of the public repository. GitHub turns the space of an uploaded file name into a dot, so the asset is `nq-lab.terminal_0.2.1_x64-setup.exe`, and the published `SHA256SUMS` lists that dotted name with the same hash. A copy saved under the dotted name is the same file; compare the hash, not the name. `desktop\scripts\upgrade-owner.ps1` reads `SHA256SUMS` either way.
 
 3. If the two hashes differ by even one character, stop. Delete the copy and fetch it again from the build folder. Do not click through the prompt.
 
@@ -110,7 +110,7 @@ Recommendation: stay unsigned while the owner is the only user and Smart App Con
 
 ## The owner's unsigned decision
 
-- The 0.1.0 release is unsigned, and so are 0.1.1 and 0.1.2; 0.2.0 stays unsigned too, on the recommended default taken as a provisional owner decision. This is a choice made for the first build, recorded here, and not an oversight.
+- The 0.1.0 release is unsigned, and so are 0.1.1, 0.1.2 and 0.2.0; 0.2.1 stays unsigned too, on the recommended default taken as a provisional owner decision. This is a choice made for the first build, recorded here, and not an oversight.
 - Its reasons: one user on a PC where the build is made, no reputation to gain from a certificate with one user, and a cost and an identity process that give nothing yet.
 - What it costs: a prompt on every downloaded installer, and a hard stop if Smart App Control is ever switched on.
 - What it does not change: the installer is per user, needs no administrator rights, writes nothing under the lab, and is covered by the same checks as a signed build (artefact check, silent install test, release check).

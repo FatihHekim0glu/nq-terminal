@@ -1,6 +1,6 @@
-# G2 on Windows: automated verdict (the release 0.2.1 re-measure of 5 October 2026, taken before its tag; release 0.2.0, the published release, and releases 0.1.2 and 0.1.1 below)
+# G2 on Windows: automated verdict (the release 0.2.1 re-measure of 5 October 2026, taken before its tag; release 0.2.0, the previous release, and releases 0.1.2 and 0.1.1 below)
 
-The 0.2.1 re-measure comes first. Until 0.2.1 is published, the 0.2.0 verdict that follows it is the verdict of the published release, and the 0.1.2 verdict after that is the verdict of the release before it. The 0.1.1 verdict follows unchanged, with the 0.1.0 and W5B verdicts as history.
+The 0.2.1 re-measure comes first. Now that 0.2.1 is published, the 0.2.0 verdict that follows it is the verdict of the previous release, and the 0.1.2 verdict after that is the verdict of the release before it. The 0.1.1 verdict follows unchanged, with the 0.1.0 and W5B verdicts as history.
 
 ## Release 0.2.1: the re-measure of 5 October 2026, before the tag
 
@@ -34,7 +34,7 @@ Evidence: `results.md` in this folder (sections D1 to D6), built from raw record
 
 The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.2.1 measure installer is built and not installed). No soak was run, because 0.2.1 does not change how memory behaves: the 30 min partial soak of 0.2.0 and the 45 min partial soak of 0.1.2 stand, the 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The minimise and hidden readings of 0.2.0 (the memory target), the trim-off series of 0.1.2, T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.2.1. The owner-attended rows are pending, as listed under the 0.1.1 verdict, and a real JOBS backtest started from the launcher is among them. The installer size of the release is written after the tag; the measuring build's release installer is 3,257,677 bytes, 3.1 MB against the 30 MB ceiling.
 
-## Release 0.2.0 (the published release): the re-measure of 5 October 2026, before the tag
+## Release 0.2.0 (the previous release): the re-measure of 5 October 2026, before the tag
 
 Evidence: `results.md` in this folder (sections C1 to C7), built from raw records under `D:/dev/v020/measure-runs`. Tree: `d1abef7`, clean, which is the 0.2.0 commit `6cac154` plus three commits for the hosted CI runner that landed during the slot and change no backend, shell, contract or page source (`results.md` C1); fresh GNU builds of that tree in the default folder `D:/dev/release/0.2.0`; the GNU smoke build against the real lab for every app row. The harness code is that of 0.1.2 (digest unchanged) and the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 874 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.8 to 5.0%; the minimise launches 4.3 to 5.2%; 0 rejected) with its GPU reading recorded (9 to 16%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Until the 0.2.0 tag exists, the 0.1.2 verdict below is the verdict of the published release.
 
@@ -68,7 +68,7 @@ Evidence: `results.md` in this folder (sections C1 to C7), built from raw record
 
 The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.2.0 measure installer is built and not installed). The trim-off series of 0.1.2 (B4, B5) was not repeated, because the trim is unchanged; T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.2.0. The 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The owner-attended rows are pending, as listed under the 0.1.1 verdict, and a real JOBS backtest started from the launcher is among them. The installer size of the release is written after the tag; the measuring build's release installer is 3,256,218 bytes, 3.1 MB against the 30 MB ceiling.
 
-## Release 0.1.2 (the previous release): the re-measure of 5 October 2026, before the tag
+## Release 0.1.2: the re-measure of 5 October 2026, before the tag
 
 Evidence: `results.md` in this folder (sections B1 to B7), built from raw records under `D:/dev/v012/measure-runs`. Tree: the 0.1.2 release commit `31baa14`, clean (the `git diff HEAD` and untracked hashes are the empty sha256 in every record), fresh GNU builds of that tree in the default folder `D:/dev/release/0.1.2`, the GNU smoke build against the real lab for every app row. The harness code changed in 0.1.2, so the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 873 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.9 to 3.4%, 0 rejected) with its GPU reading recorded (7 to 18%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal).
 

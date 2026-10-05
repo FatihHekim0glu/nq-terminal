@@ -1,8 +1,8 @@
 # G2 placeholder values for the hand-over documents
 
-## Release 0.2.1 (the 0.2.1 re-measure), measured values for the documents written after the tag
+## Release 0.2.1 (the 0.2.1 re-measure), values written after the tag
 
-The 0.2.1 documents carry no visible placeholder. The measured values below come from `results.md` (sections D1 to D6) and `verdict.md`; the README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` keep 0.2.0 as the latest release until the 0.2.1 tag exists, and then take these values. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.2.1` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+The 0.2.1 documents carry no visible placeholder. The measured values below come from `results.md` (sections D1 to D6) and `verdict.md`; the build-dependent values were written on 5 October 2026, after the tag, from the release folder `D:\dev\release\0.2.1` built on the release commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` take these values. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
 
 | Value | Measured (0.2.1) | Source |
 | --- | --- | --- |
@@ -11,7 +11,13 @@ The 0.2.1 documents carry no visible placeholder. The measured values below come
 | warm rows | warm HOME 550.7 ms, EQ second run of the line 41.3 ms, REG second run of the line 56.7 ms (medians of 5); 0.2.0 read 548.6, 38.2 and 56.9 ms | `results.md` section D2 |
 | launch reliability (new in 0.2.1) | 120 hidden launches of the smoke build on the real backend: 120 checked, 0 refused, 0 late-proof retries; READY to the first identity proof 3.1 ms median, 3.2 ms p95, 4.7 ms largest, against the 2,000 ms of the first try (the 0.2.0 launch probe: 16.1, 58.7 and 59.8 ms over 30 launches). 120 launches cannot show a 1 in 240 rate gone by counting alone, and none was a first start after a Defender signature update | `results.md` section D5 |
 | soak | not run on 0.2.1 (memory behaviour unchanged): the 30 min partial soak of 0.2.0 and the 45 min partial soak of 0.1.2 stand, and the 2 h soak of 0.1.0 stays the G2 soak evidence | `results.md` section D6 |
-| installer bytes, SHA256, tag and commit, commits and date, install and upgrade records, release check result | written after the tag, as for 0.2.0 below | the release folder and the release check |
+| installer SHA256 | `34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20`, the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.2.1\SHA256SUMS` |
+| installer bytes | 3,257,242 bytes, the size of that file (the released asset is `nq-lab.terminal_0.2.1_x64-setup.exe`) | the same file |
+| tag and commit | `desktop-v0.2.1`, an annotated tag on `3b22af0`, pushed; the GitHub Release is published and marked latest, and the re-downloaded asset hash matches | `PROVENANCE.json`, `git rev-parse desktop-v0.2.1^{commit}` |
+| commits and date | `f67d86e, 56d8eb9, 3b22af0` and `2026-10-05`, in the commit list of `handover_windows.md` | `git log` |
+| install and upgrade records | 5 October 2026: install test on the renamed product 54 of 54, upgrade 0.2.0 to 0.2.1 on the renamed product 105 of 105, the owner's real install unchanged | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
+| release check result | 5 October 2026: `release_check.ps1 -Tag desktop-v0.2.1 -RequireSmokeApp -RequireInstall` PASS, no WARN, two NOTEs about the renamed-product records; backend 4,377 passed, crosscheck PASS 2,495, FAIL 0, smoke 18 and smoke-app 5 passed, QA package 333 passed | the release check |
+| known limitation of 0.2.0 | fixed in 0.2.1: about 1 start in 240 stopped on the shell's identity check; 120 of 120 hidden launches checked on 0.2.1, none refused | `handover_windows.md`, section 8 |
 
 ## Release 0.2.0 (the 0.2.0 re-measure), values written after the tag
 
