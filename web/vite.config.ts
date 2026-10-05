@@ -207,5 +207,8 @@ export default defineConfig(({ mode }) => ({
     // One fork per hardware thread (32 here) ran the machine out of memory once the bundle test
     // added two real Vite builds; eight forks keep the whole suite at about the same wall time.
     maxWorkers: 8,
+    // The hosted CI runner has 4 slow cores: match the forks to them and allow every test and hook more time than the
+    // 5 s default (CI is set by GitHub Actions; the lab PC keeps the defaults). Tests that set their own timeout keep it.
+    ...(process.env.CI ? { maxWorkers: 4, testTimeout: 30_000, hookTimeout: 30_000 } : {}),
   },
 }))

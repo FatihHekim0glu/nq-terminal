@@ -166,8 +166,9 @@ describe('JRNL over 5,000 rows keeps the grid mounted (D28)', () => {
   const STATUS = status()
   // A 5,000-row page takes a while to reach the DOM in jsdom, so these waits allow for it instead of
   // the 1 s default (which made the second case fail at random, before the corrected GET was even sent).
-  const SLOW = { timeout: 10_000 }
-  const TEST_MS = 20_000
+  // The hosted CI runner (CI is set) is several times slower than the lab PC, so its waits and test limit are longer.
+  const SLOW = { timeout: process.env.CI ? 40_000 : 10_000 }
+  const TEST_MS = process.env.CI ? 80_000 : 20_000
 
   let total = TOTAL_START
   const calls: string[] = []
