@@ -85,8 +85,11 @@ jobs:
         working-directory: terminal/web
         run: pnpm build
 
+      # cmd, not the default pwsh: pwsh hands its PowerShell 7 module path to the Windows PowerShell 5.1
+      # processes these tests start, and 5.1 then cannot load Get-FileHash or Get-AuthenticodeSignature.
       - name: Desktop script tests
         working-directory: terminal
+        shell: cmd
         run: node --test desktop/scripts/tests/*.test.mjs
 
       # The harness starts the lab's interpreter for its window watch (a standard-library script), at NQT_LAB's
