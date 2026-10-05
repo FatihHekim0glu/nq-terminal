@@ -7,7 +7,9 @@ check reads it from there: when a new release is published its version, tag and 
 the figures it quotes. The build that is not yet published is not read here (test_release_version.py holds that one
 together).
 
-0.1.1 caps the maths thread pools of the desktop backend server (`nq_terminal/threadcaps.py`). The G2 files record the
+0.2.0 is published as `desktop-v0.2.0` (research launcher, job indicator, memory target); 0.1.2 is the previous release and
+its values stay as history. 0.2.0 is published as `desktop-v0.2.0` (research launcher, job indicator, memory target); 0.1.2 is the previous release and
+its values stay as history. 0.1.1 caps the maths thread pools of the desktop backend server (`nq_terminal/threadcaps.py`). The G2 files record the
 0.1.1 re-measure of 4 October 2026 next to the 0.1.0 (W5C) and W5B figures. The three build-dependent values (installer SHA256, installer bytes and tag) were filled in after the build and the
 tag. They sit in the README and in sections 1, 2 and 7 of the hand-over, never in section 10
 (test_handover_release_procedure.py).
@@ -17,12 +19,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-PUBLISHED_VERSION = "0.1.2"
+PUBLISHED_VERSION = "0.2.0"
 PUBLISHED_TAG = f"desktop-v{PUBLISHED_VERSION}"
-PUBLISHED_SHA256 = "3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377"
-PUBLISHED_BYTES = "3,254,474"
-PREVIOUS_VERSION = "0.1.1"
-PREVIOUS_SHA256 = "3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc"
+PUBLISHED_SHA256 = "ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51"
+PUBLISHED_BYTES = "3,256,246"
+PREVIOUS_VERSION = "0.1.2"
+PREVIOUS_SHA256 = "3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377"
 INSTALLER = f"nq-lab terminal_{PUBLISHED_VERSION}_x64-setup.exe"
 
 TERMINAL = Path(__file__).resolve().parents[2]
@@ -81,6 +83,35 @@ def test_the_finisher_placeholders_of_the_0_1_2_wave_were_all_filled():
     for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
         assert needle not in _text(path), path.name
     assert "59c83ce, 31baa14, 5153496" in _text(HANDOVER), "the 0.1.2 commit list is filled"
+
+
+def test_the_finisher_placeholders_of_the_0_2_0_wave_were_all_filled():
+    needle = "{{" + "V020"
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
+        assert needle not in _text(path), path.name
+    commits = "b650f75, dd57054, 4b5831c, 5a8b9d5, 6cac154, b1adfe2, 5038663, c5bf39f, d1abef7, 19658fe"
+    assert commits in _text(HANDOVER), "the 0.2.0 commit list is filled"
+
+
+def test_handover_troubleshooting_names_the_identity_check_limitation():
+    troubleshooting = _text(HANDOVER).split("## 8. Troubleshooting")[1].split("## 9. ")[0]
+    assert "supervise_refused" in troubleshooting
+    assert "1 start in 240" in troubleshooting
+    assert "0.2.1 fixes it" in troubleshooting
+
+
+def test_the_finisher_placeholders_of_the_0_2_0_wave_were_all_filled():
+    needle = "{{" + "V020"
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
+        assert needle not in _text(path), path.name
+    assert "b650f75, dd57054, 4b5831c, 5a8b9d5, 6cac154, b1adfe2, 5038663, c5bf39f, d1abef7, 19658fe" in _text(HANDOVER), "the 0.2.0 commit list is filled"
+
+
+def test_handover_troubleshooting_names_the_identity_check_limitation():
+    troubleshooting = _text(HANDOVER).split("## 8. Troubleshooting")[1].split("## 9. ")[0]
+    assert "supervise_refused" in troubleshooting
+    assert "1 start in 240" in troubleshooting
+    assert "0.2.1 fixes it" in troubleshooting
 
 
 def test_verdict_is_an_automated_pass_with_every_row_inside_its_ceiling():

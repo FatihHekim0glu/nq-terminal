@@ -1,8 +1,8 @@
 # G2 placeholder values for the hand-over documents
 
-## Release 0.2.0 (the 0.2.0 re-measure), measured values for the documents written after the tag
+## Release 0.2.0 (the 0.2.0 re-measure), values written after the tag
 
-The 0.2.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections C1 to C7) and `verdict.md`; the README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` keep 0.1.2 as the latest release until the 0.2.0 tag exists, and then take these values. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.2.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+The 0.2.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections C1 to C7) and `verdict.md`. The build-dependent values were written on 5 October 2026, after the tag, from the release folder `D:\dev\release\0.2.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` now name 0.2.0 as the latest release and keep 0.1.2 as history. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
 
 | Value | Measured (0.2.0) | Source |
 | --- | --- | --- |
@@ -11,7 +11,13 @@ The 0.2.0 documents carry no visible placeholder. The measured values below come
 | warm rows | warm HOME 548.6 ms, EQ second run of the line 38.2 ms, REG second run of the line 56.9 ms (medians of 5); 0.1.2 read 543.1, 32.1 and 53.5 ms | `results.md` section C2 |
 | minimised or hidden (new in 0.2.0) | 60 s after the hide or minimise, the UI tree's private working set reads 42.7 MB (simulated hide) and 83.5 MB (real minimise on screen 2) on the 0.2.0 shell, against 149.6 MB and 148.9 MB on the 0.1.2 shell; the UI tree's private bytes unchanged (260.9 against 260.4 MB, 250.6 against 252.4 MB); single launches, no ceiling of its own | `results.md` section C4 |
 | soak | 30 min partial soak at 0.2.0: largest sample 619.9 MB (the first), last 458.6 MB, private bytes 1,116.5 to 1,324.0 MB, leak rule not evaluated (30 minutes is too short); the 2 h soak of 0.1.0 stays the G2 soak evidence | `results.md` section C6 |
-| installer bytes, SHA256, tag and commit, commits and date, install and upgrade records, release check result | written after the tag, as for 0.1.2 above | the release folder and the release check |
+| installer SHA256 | `ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51`, the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.2.0\SHA256SUMS` |
+| installer bytes | 3,256,246 bytes, the size of that file (the released asset is `nq-lab.terminal_0.2.0_x64-setup.exe`) | the same file |
+| tag and commit | `desktop-v0.2.0`, an annotated tag on `19658fe`, pushed; the GitHub Release is published and marked latest, and the re-downloaded asset hash matches | `PROVENANCE.json`, `git rev-parse desktop-v0.2.0^{commit}` |
+| commits and date | `b650f75, dd57054, 4b5831c, 5a8b9d5, 6cac154, b1adfe2, 5038663, c5bf39f, d1abef7, 19658fe` and `2026-10-05`, in the commit list of `handover_windows.md` | `git log` |
+| install and upgrade records | 5 October 2026: install test on the renamed product 54 of 54, upgrade 0.1.2 to 0.2.0 on the renamed product 105 of 105, the owner's real install unchanged | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
+| release check result | 5 October 2026: `release_check.ps1 -Tag desktop-v0.2.0 -RequireSmokeApp -RequireInstall` PASS, no WARN, two NOTEs about the renamed-product records; backend 4,357 passed, crosscheck PASS 2,495, FAIL 0, smoke 18 and smoke-app 5 passed, QA package 333 passed | the release check |
+| known limitation | about 1 start in 240 stops on the shell's identity check (the first start after a Windows Defender signature update can exceed the shell's 2 s link budget); present since 0.1.x; 0.2.1 fixes it | `handover_windows.md`, section 8 |
 
 ## Release 0.1.2 (the 0.1.2 re-measure), values the finisher fills in
 
