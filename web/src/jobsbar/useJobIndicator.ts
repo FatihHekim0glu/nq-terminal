@@ -17,7 +17,7 @@ export const JOBS_LIST_KEY = ['jobs', 'list'] as const
 export const POLL_ERROR_MS = 60_000
 const TICK_MS = 1000
 
-function feedInterval(data: JobsList | undefined, failed: boolean): number | false {
+export function feedInterval(data: JobsList | undefined, failed: boolean): number | false {
   if (data !== undefined && !data.enabled) return false
   if (failed && data === undefined) return POLL_ERROR_MS
   return data === undefined ? POLL_IDLE_MS : pollMs(data.jobs)

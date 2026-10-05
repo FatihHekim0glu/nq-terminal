@@ -75,6 +75,7 @@ Two test variables sit beside the switches, both compiled only into smoke builds
 | `writes.rs` | the allow-listed, handle-checked write module (`append`, `write_new`, `rotate`, `choose`) and the `DownloadStarting` handler |
 | `reads.rs` | `read_lock` (owner and DACL checked on the handle it reads through, as the backend's lock.py does), `read_settings`, `read_log_tail`, each with a size cap |
 | `crash.rs` (with `crash/`) | the shell log, the panic report, backend.log rotation, the renderer recovery, the hung-page offer and the diagnostics zip |
+| `memory_target.rs` | release 0.2.0: asks WebView2 for its low memory usage target while the main window is minimised or hidden and for the normal one when it comes back (focus alone changes nothing; a window never shown counts as visible; a runtime without the setting is logged once); in the smoke build `smoke.rs` tells it about the harness's simulated minimise, so the minimise mode of the harness exercises it |
 | `smoke.rs` (with `smoke_screen2.rs`) | the debugging port with Tauri's default switches re-added in one list; the controller made visible; the `--screen2` placement guard |
 
 ## Static bans

@@ -158,7 +158,7 @@ def test_born_failing_the_trim_never_runs_before_home_is_served_only_after_the_l
 # ---------------------------------------------------------------- never during a request or a job
 
 
-def run_asgi(app, path: str = "/api/runs") -> list[dict]:
+def run_asgi(app, path: str = "/api/runs", method: str = "GET") -> list[dict]:
     sent: list[dict] = []
 
     async def receive() -> dict:
@@ -167,7 +167,7 @@ def run_asgi(app, path: str = "/api/runs") -> list[dict]:
     async def send(message: dict) -> None:
         sent.append(message)
 
-    asyncio.run(app({"type": "http", "path": path, "method": "GET", "headers": []}, receive, send))
+    asyncio.run(app({"type": "http", "path": path, "method": method, "headers": []}, receive, send))
     return sent
 
 
@@ -407,3 +407,59 @@ def escaped_none(monkeypatch: pytest.MonkeyPatch) -> list[BaseException]:
     seen: list[BaseException] = []
     monkeypatch.setattr(threading, "excepthook", lambda args: seen.append(args.exc_value))
     return seen
+
+
+# ---------------------------------------------------------------- the 0.2.0 job indicator beside the 0.1.2 trim
+
+JOBS_LIST = "/api/jobs"
+INDICATOR_IDLE_S = 15.0  # web/src/screens/jobs/model.ts POLL_IDLE_MS: the indicator's read while no job is active
+
+
+def served(trim: memtrim.MemTrim, path: str, method: str = "GET") -> None:
+    async def endpoint(scope, receive, send) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"{}", "more_body": False})
+
+    run_asgi(memtrim.ActivityMiddleware(endpoint, activity=trim.activity), path, method)
+
+
+def test_born_failing_the_job_indicators_idle_list_polls_do_not_keep_the_quiet_trim_away(calls):
+    clock = Clock()
+    trim = trimmer(clock)
+    served(trim, "/api/runs")  # the last real request at HOME
+    for _ in range(int((memtrim.QUIET_S * 2) / INDICATOR_IDLE_S)):  # the indicator reads the list every 15 s, HOME mounted
+        clock.advance(INDICATOR_IDLE_S)
+        served(trim, JOBS_LIST)
+        served(trim, "/api/health")
+    assert trim.quiet_check() is True and calls == ["trim"], "the trim fires with the indicator mounted"
+    clock.advance(INDICATOR_IDLE_S)
+    served(trim, JOBS_LIST)
+    clock.advance(memtrim.QUIET_S * 2)
+    assert trim.quiet_check() is False and calls == ["trim"], "an idle list poll does not open a new quiet period"
+
+
+def test_a_queued_or_running_job_still_holds_the_trim_off_while_the_indicator_polls_every_2_s(calls):
+    clock = Clock()
+    jobs = SimpleNamespace(running=1, queued=0)
+    trim = trimmer(clock, busy=[lambda: jobs.running + jobs.queued > 0])
+    served(trim, "/api/runs")
+    for _ in range(int(memtrim.QUIET_S * 2 / 2)):
+        clock.advance(2)
+        served(trim, JOBS_LIST)
+        assert trim.quiet_check() is False
+    assert calls == []
+    jobs.running = 0
+    assert trim.quiet_check() is True and calls == ["trim"], "the job ended: the quiet period it spanned is over"
+
+
+def test_only_reading_the_job_list_is_a_background_poll(calls):
+    clock = Clock()
+    trim = trimmer(clock)
+    for path, method in (("/api/jobs", "POST"), ("/api/jobs/actions", "POST"), ("/api/jobs/a1b2", "GET"),
+                         ("/api/jobs/a1b2", "DELETE"), ("/api/jobs", "DELETE")):
+        generation = trim.activity.generation
+        served(trim, path, method)
+        assert trim.activity.generation != generation, f"{method} {path} is a foreground request"
+    generation = trim.activity.generation
+    served(trim, JOBS_LIST, "GET")
+    assert trim.activity.generation == generation, "GET /api/jobs is a background poll"

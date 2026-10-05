@@ -14,8 +14,9 @@ When it runs (`MemTrim`):
   request is being served at that moment;
 - once per quiet period: after `QUIET_S` seconds in which the backend served no foreground request, never while a
   request is in flight, a job is queued or running, or the prewarm thread is working. The page's background polls
-  (`BACKGROUND_PATHS`: health every 2 s, commands, the event tape) are cheap and constant, so they neither start nor end
-  a quiet period, but a poll in flight still holds the trim off. A request that streams (the live stream) is in flight
+  (`BACKGROUND_PATHS`: health every 2 s, commands, the event tape, and a read of the job list, which the global job
+  indicator makes every 15 s with no job active and every 2 s with one) are cheap and constant, so they neither start
+  nor end a quiet period, but a poll in flight still holds the trim off. A request that streams (the live stream) is in flight
   for as long as it is open, so a live screen is never trimmed under.
 
 Off Windows every call is a no-op. `NQT_MEMTRIM=0` switches all of it off. The quiet thread starts only in a desktop or
@@ -44,8 +45,11 @@ POLL_S = 5.0  # how often the quiet thread looks
 THREAD_NAME = "nqt-memtrim"
 STATE_KEY = "memtrim"  # app.state attribute holding the app's MemTrim
 JOBS_STATE_KEY = "jobs"  # api/jobs.py STATE_KEY: the app's one JobService, created on first use
-# Polls the page sends on every screen, HOME included; they keep the backend from ever being "quiet" otherwise.
-BACKGROUND_PATHS = frozenset({"/api/health", "/api/commands", "/api/audit/oos-log"})
+# Polls the page sends on every screen, HOME included; they keep the backend from ever being "quiet" otherwise. The
+# global job indicator (web/src/jobsbar) reads the job list every 15 s while no job is active, every 2 s while one is.
+# Only a read of the list counts (`BACKGROUND_METHODS`): queueing, stopping or reading one job is a foreground request.
+BACKGROUND_PATHS = frozenset({"/api/health", "/api/commands", "/api/audit/oos-log", "/api/jobs"})
+BACKGROUND_METHODS = frozenset({"GET", "HEAD"})
 
 BusyCheck = Callable[[], bool]
 
@@ -128,19 +132,19 @@ class Activity:
         self._generation = 0  # counts foreground requests begun and ended: a new value is a new quiet period
         self._last = clock()
 
-    def _foreground(self, path: str) -> bool:
-        return path not in self._background
+    def _foreground(self, path: str, method: str) -> bool:
+        return not (path in self._background and method.upper() in BACKGROUND_METHODS)
 
-    def begin(self, path: str = "") -> None:
+    def begin(self, path: str = "", method: str = "GET") -> None:
         with self._lock:
             self._in_flight += 1
-            if self._foreground(path):
+            if self._foreground(path, method):
                 self._generation += 1
 
-    def end(self, path: str = "") -> None:
+    def end(self, path: str = "", method: str = "GET") -> None:
         with self._lock:
             self._in_flight = max(0, self._in_flight - 1)
-            if self._foreground(path):
+            if self._foreground(path, method):
                 self._generation += 1
                 self._last = self._clock()
 
@@ -173,12 +177,12 @@ class ActivityMiddleware:
         if scope.get("type") != "http":
             await self.app(scope, receive, send)
             return
-        path = scope.get("path", "")
-        self.activity.begin(path)
+        path, method = scope.get("path", ""), scope.get("method", "GET")
+        self.activity.begin(path, method)
         try:
             await self.app(scope, receive, send)
         finally:
-            self.activity.end(path)
+            self.activity.end(path, method)
 
 
 class MemTrim:

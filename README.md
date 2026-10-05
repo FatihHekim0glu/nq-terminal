@@ -48,6 +48,13 @@ As of 4 October 2026:
   3,253,307 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
   pools of the backend server, which is what brought idle memory under its ceiling. The earlier 0.1.0 release
   (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes) stays available.
+- **Next release, 0.2.0 (in the tree, not yet built or tagged; the release rows stay at 0.1.1 until the tag exists).**
+  It adds the research launcher ([`docs/research_launcher.md`](docs/research_launcher.md)): a Start from form on LEDG
+  and RUN that queues a backtest of a registered strategy (`POST /api/jobs/actions`), a job indicator in the chrome
+  that reads the job list quietly (every 15 s while idle, every 2 s while a job is active) and announces a finished
+  job, an anchor badge with a one-click re-run, and a low WebView2 memory target while the window is minimised or
+  hidden. It sits on 0.1.2 (the idle memory trim, the install and upgrade tests): the job indicator's reads of the
+  job list count as background polls, so the quiet-period trim still fires at HOME.
 - **Gate G2 (speed and memory on Windows).** **AUTOMATED PASS, OWNER ROWS PENDING.** Whole-app idle memory at HOME
   reads 477.3 MB against a 500 MB ceiling (it read 505.4 MB, over the ceiling, on 0.1.0), but it is still above the
   400 MB target. Every other row measured on 0.1.1 is inside its ceiling too, among them first-launch cold HOME at
