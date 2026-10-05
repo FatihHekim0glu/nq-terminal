@@ -1,5 +1,18 @@
 # G2 placeholder values for the hand-over documents
 
+## Release 0.2.1 (the 0.2.1 re-measure), measured values for the documents written after the tag
+
+The 0.2.1 documents carry no visible placeholder. The measured values below come from `results.md` (sections D1 to D6) and `verdict.md`; the README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` keep 0.2.0 as the latest release until the 0.2.1 tag exists, and then take these values. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.2.1` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+
+| Value | Measured (0.2.1) | Source |
+| --- | --- | --- |
+| idle memory | 196.1 MB (179.8 to 199.9 MB, median of 8 counted launches, smoke build, real data, desktop caps, trim on): the private working set of the whole tree, read 73 s after HOME ready once the backend's working set had dropped, as on 0.2.0; the private bytes beside it 692.8 MB (689.4 to 722.9 MB); inside the 400 MB target and the 500 MB ceiling; not PROVISIONAL (every counted launch at a 60 s CPU load of 2.9 to 4.4%, 0 rejected). 0.2.0 read 197.1 MB at the same point | `results.md` sections D1, D2 and D4; `verdict.md` |
+| first launch and usual launch | first launch 3,304 ms (3,133 to 3,354 ms, median of 8, every launch inside the 3,500 ms target); usual launch 2,845 ms (median of 3); 0.2.0 read 3,257 ms (one launch of nine at 5,084 ms) and 2,818 ms. The start order changed: backend ready 1,407.5 ms against 1,447 ms, HOME's first paint earlier, HOME's data about 120 ms later from the backend's page | `results.md` sections D2 and D3 |
+| warm rows | warm HOME 550.7 ms, EQ second run of the line 41.3 ms, REG second run of the line 56.7 ms (medians of 5); 0.2.0 read 548.6, 38.2 and 56.9 ms | `results.md` section D2 |
+| launch reliability (new in 0.2.1) | 120 hidden launches of the smoke build on the real backend: 120 checked, 0 refused, 0 late-proof retries; READY to the first identity proof 3.1 ms median, 3.2 ms p95, 4.7 ms largest, against the 2,000 ms of the first try (the 0.2.0 launch probe: 16.1, 58.7 and 59.8 ms over 30 launches). 120 launches cannot show a 1 in 240 rate gone by counting alone, and none was a first start after a Defender signature update | `results.md` section D5 |
+| soak | not run on 0.2.1 (memory behaviour unchanged): the 30 min partial soak of 0.2.0 and the 45 min partial soak of 0.1.2 stand, and the 2 h soak of 0.1.0 stays the G2 soak evidence | `results.md` section D6 |
+| installer bytes, SHA256, tag and commit, commits and date, install and upgrade records, release check result | written after the tag, as for 0.2.0 below | the release folder and the release check |
+
 ## Release 0.2.0 (the 0.2.0 re-measure), values written after the tag
 
 The 0.2.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections C1 to C7) and `verdict.md`. The build-dependent values were written on 5 October 2026, after the tag, from the release folder `D:\dev\release\0.2.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` now name 0.2.0 as the latest release and keep 0.1.2 as history. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.

@@ -1,8 +1,40 @@
-# G2 on Windows: automated verdict (the release 0.2.0 re-measure of 5 October 2026, taken before its tag; release 0.1.2, the previous release, and release 0.1.1 below)
+# G2 on Windows: automated verdict (the release 0.2.1 re-measure of 5 October 2026, taken before its tag; release 0.2.0, the published release, and releases 0.1.2 and 0.1.1 below)
 
-The 0.2.0 re-measure comes first. Now that 0.2.0 is published, the 0.1.2 verdict that follows it is the verdict of the previous release. The 0.1.1 verdict, the verdict of the release before it, follows unchanged, with the 0.1.0 and W5B verdicts as history.
+The 0.2.1 re-measure comes first. Until 0.2.1 is published, the 0.2.0 verdict that follows it is the verdict of the published release, and the 0.1.2 verdict after that is the verdict of the release before it. The 0.1.1 verdict follows unchanged, with the 0.1.0 and W5B verdicts as history.
 
-## Release 0.2.0: the re-measure of 5 October 2026, before the tag
+## Release 0.2.1: the re-measure of 5 October 2026, before the tag
+
+Evidence: `results.md` in this folder (sections D1 to D6), built from raw records under `D:/dev/v021/measure-runs`. Tree: the 0.2.1 release commit `56d8eb9`, clean (the `git diff HEAD` and untracked hashes are the empty sha256 in every record, and no commit landed during the slot); fresh GNU builds of that tree in the default folder `D:/dev/release/0.2.1`, which passed the artefact check with its new build-machine path scan; the GNU smoke build against the real lab for every app row. The harness code changed in 0.2.1 (the reliability mode, and `trimSeen` read from the backend's trim), so the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 876 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.9 to 4.4%; 0 rejected) with its GPU reading recorded (9 to 17%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Until the 0.2.1 tag exists, the 0.2.0 verdict below is the verdict of the published release.
+
+### The 0.2.1 reading
+
+**AUTOMATED PASS, OWNER ROWS PENDING.** Every automated row re-measured on 0.2.1 is inside its ceiling at the median and in every single launch. The release row, whole-app idle memory at HOME, reads 196.1 MB (179.8 to 199.9 MB over eight counted launches) (`report.mjs` within-target ACCEPTED), against 197.1 MB on 0.2.0, at the same reading point (73 s after HOME ready, once the backend's working set has dropped) and by the same method; the private bytes at the same samples are 692.8 MB (686.6 MB on 0.2.0). 0.2.1 changes the order of the start to end the stop on the shell's identity check that about 1 start in 240 met on 0.2.0, and the start rows moved with it: the shell checks the backend sooner (backend ready 1,407.5 ms against 1,447 ms) and HOME paints sooner, while HOME's data is in a little later, so cold HOME on a first launch reads 3,304 ms (3,133 to 3,354 ms) against 3,257 ms and the usual launch 2,845 ms against 2,818 ms, all inside their targets. In 120 hidden launches of the new reliability mode on the real backend none was refused and none needed the shell's new retry: the first proof came 3.1 ms after READY at the median and 4.7 ms at most, against 16.1 and 59.8 ms in 30 launches of 0.2.0 and the 2,000 ms the shell allows for the first try. A run of 120 cannot show a 1 in 240 rate gone by counting alone, and it held no first start after a Defender signature update; the margin and the retry behind it are the evidence. No soak was run, because 0.2.1 does not change how memory behaves: the partial soaks of 0.2.0 and 0.1.2 stand and the 2 h soak of 0.1.0 stays the G2 soak evidence. M4 stays provisional, for the reasons given under the 0.1.1 verdict below.
+
+### The 0.2.1 rows
+
+"App harness" is the harness `rows` mode and its first-launch mode on the GNU smoke build of `D:/dev/release/0.2.1`, real lab, app-launched, trim on. n is the number of counted launches behind the figure.
+
+| Row | 0.2.1 reading | 0.2.0 reading | Target | Ceiling | Source | n |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| Whole app idle at HOME, private working set | **196.1 MB** (179.8 to 199.9), read 73 s after HOME ready | 197.1 MB (190.0 to 199.4), read at the same point | 400 MB (met) | 500 MB | App harness, rows and first-launch series | 5 plus 3 launches |
+| The same tree's private bytes (informational, not a row) | 692.8 MB (689.4 to 722.9) | 686.6 MB (680.0 to 711.5) | n/a | n/a | The same samples | 8 launches |
+| Cold HOME, first launch (empty state folder) | 3,304 ms (3,133 to 3,354) | 3,257 ms (3,168 to 5,084; one launch of nine above the ceiling) | 3,500 ms (met; first-launch target 4,500 ms met) | 5,000 ms | App harness, rows and first-launch series | 5 plus 3 launches |
+| Cold HOME, usual launch (state filled) | 2,845 ms (2,831 to 2,856) | 2,818 ms | 3,500 ms (met) | 5,000 ms | Tool `t4t5.mjs usual-app`, after one priming launch | 3 launches |
+| Warm HOME | 550.7 ms (538.3 to 563.1) | 548.6 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| `volmanaged_v0 EQ`, second run of the line | 41.3 ms (37.9 to 49.0) | 38.2 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| `REG`, second run of the line | 56.7 ms (53.4 to 57.4) | 56.9 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| Backend ready | 1,407.5 ms (1,361 to 1,439) | 1,447 ms | 1,500 ms (met) | 2,500 ms | App harness | 8 launches |
+| Splash | 311.3 ms (307.1 to 338.8) | 317.8 ms | 500 ms (met) | 1,000 ms | App harness | 8 launches |
+| Grid open, 8,411 fills | 64.8 ms (62.7 to 67.1) | 65.8 ms | 100 ms (met) | 500 ms | App harness | 5 launches |
+| GIP pan and zoom p95, 20,000 bars | 5.9 ms (5.7 to 6.1) | 5.9 ms | 16.7 ms (met) | 25 ms | App harness | 5 launches |
+| Keystroke to paint, p95 | 8.2 ms (8.1 to 8.2) | 8.2 ms | 50 ms (met) | 100 ms | App harness | 5 launches |
+| Launch reliability, READY to the first identity proof (new, informational) | 3.1 ms median, 3.2 ms p95, 4.7 ms largest; 120 checked, 0 refused, 0 late-proof retries | the 0.2.0 launch probe: 16.1, 58.7 and 59.8 ms; 30 checked, 0 refused | n/a | 2,000 ms for the first try, then three more tries of 5 s | Harness `reliability` mode, real backend (`results.md` D5) | 120 launches |
+
+### Not re-measured on 0.2.1
+
+The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.2.1 measure installer is built and not installed). No soak was run, because 0.2.1 does not change how memory behaves: the 30 min partial soak of 0.2.0 and the 45 min partial soak of 0.1.2 stand, the 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The minimise and hidden readings of 0.2.0 (the memory target), the trim-off series of 0.1.2, T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.2.1. The owner-attended rows are pending, as listed under the 0.1.1 verdict, and a real JOBS backtest started from the launcher is among them. The installer size of the release is written after the tag; the measuring build's release installer is 3,257,677 bytes, 3.1 MB against the 30 MB ceiling.
+
+## Release 0.2.0 (the published release): the re-measure of 5 October 2026, before the tag
 
 Evidence: `results.md` in this folder (sections C1 to C7), built from raw records under `D:/dev/v020/measure-runs`. Tree: `d1abef7`, clean, which is the 0.2.0 commit `6cac154` plus three commits for the hosted CI runner that landed during the slot and change no backend, shell, contract or page source (`results.md` C1); fresh GNU builds of that tree in the default folder `D:/dev/release/0.2.0`; the GNU smoke build against the real lab for every app row. The harness code is that of 0.1.2 (digest unchanged) and the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 874 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.8 to 5.0%; the minimise launches 4.3 to 5.2%; 0 rejected) with its GPU reading recorded (9 to 16%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Until the 0.2.0 tag exists, the 0.1.2 verdict below is the verdict of the published release.
 
