@@ -1,8 +1,43 @@
-# G2 on Windows: automated verdict (release 0.1.1, the re-measure of 4 October 2026)
+# G2 on Windows: automated verdict (the release 0.1.2 re-measure of 5 October 2026, before its tag; release 0.1.1 below)
+
+The 0.1.2 re-measure comes first. The 0.1.1 verdict, the verdict of the published release until the 0.1.2 tag exists, follows unchanged, with the 0.1.0 and W5B verdicts as history.
+
+## Release 0.1.2: the re-measure of 5 October 2026, before the tag
+
+Evidence: `results.md` in this folder (sections B1 to B7), built from raw records under `D:/dev/v012/measure-runs`. Tree: the 0.1.2 release commit `31baa14`, clean (the `git diff HEAD` and untracked hashes are the empty sha256 in every record), fresh GNU builds of that tree in the default folder `D:/dev/release/0.1.2`, the GNU smoke build against the real lab for every app row. The harness code changed in 0.1.2, so the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 873 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.9 to 3.4%, 0 rejected) with its GPU reading recorded (7 to 18%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal).
+
+### The 0.1.2 reading
+
+**AUTOMATED PASS, OWNER ROWS PENDING.** Every automated row re-measured on 0.1.2 is inside its ceiling. The release row, whole-app idle memory at HOME, reads 199.0 MB (192.8 to 202.8 MB over eight counted launches; `report.mjs` within-target ACCEPTED) against the 400 MB target and the 500 MB ceiling, the first reading inside the target. Two facts go with that figure wherever it is quoted. It is read 73 s after HOME ready, once the backend's working set has dropped, not at the 0.1.1 point (HOME ready plus 2.5 s, where 0.1.1 read 477.3 MB). And it is a working-set figure: the backend's trim (`memtrim.py`) moves untouched pages to the standby list, so the whole tree's private bytes at the same samples stay at 693.8 MB (678.6 to 713.5 MB). With the trim off, at the same 73 s point, the row reads 404.4 MB (401.9 to 405.3 MB) and the private bytes 689.5 MB. The trim makes no warm row slower: warm HOME 543.1 ms with it against 544.3 ms without, EQ 32.1 against 42.3 ms, REG 53.5 against 56.8 ms. The 45 min partial soak at 0.1.2 peaked at 641.9 MB (target 1,000 MB, ceiling 1,500 MB) and its private bytes passed the leak rule (24.3 MB an hour and 12.1 MB over the settled window); an outside sampler read between rounds saw the private bytes still climbing slowly (about 33 MB from 15 to 40 minutes, flattening), so the all-day soak decides. It is partial, and the 2 h soak of 0.1.0 stays the G2 soak evidence. M4 stays provisional, for the reasons given under the 0.1.1 verdict below.
+
+### The 0.1.2 rows
+
+"App harness" is the harness `rows` mode and its first-launch mode on the GNU smoke build of `D:/dev/release/0.1.2`, real lab, app-launched, with the trim on unless the row says off. n is the number of counted launches behind the figure.
+
+| Row | 0.1.2 reading | 0.1.1 reading | Target | Ceiling | Source | n |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| Whole app idle at HOME, private working set | **199.0 MB** (192.8 to 202.8), read 73 s after HOME ready | 477.3 MB (453.0 to 484.4), read at HOME ready plus 2.5 s | 400 MB (met) | 500 MB | App harness, rows and first-launch series | 5 plus 3 launches |
+| The same tree's private bytes (informational, not a row) | 693.8 MB (678.6 to 713.5) | not recorded | n/a | n/a | The same samples | 8 launches |
+| Whole app idle at HOME with the trim off (`NQT_MEMTRIM=0`), same point | 404.4 MB (401.9 to 405.3); private bytes 689.5 MB | n/a | 400 MB (not met) | 500 MB | App harness, `--memtrim off` | 3 launches |
+| Cold HOME, first launch (empty state folder) | 3,186.5 ms (3,152 to 3,209) | 3,192.5 ms | 3,500 ms (met; first-launch target 4,500 ms met) | 5,000 ms | App harness, rows and first-launch series | 5 plus 3 launches |
+| Cold HOME, usual launch (state filled) | 2,773 ms (2,753 to 2,778) | 2,797 ms | 3,500 ms (met) | 5,000 ms | Tool `t4t5.mjs usual-app`, after one priming launch | 3 launches |
+| Warm HOME | 543.1 ms (533.4 to 565.7); trim off 544.3 ms | 537.6 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches (off: 3) |
+| `volmanaged_v0 EQ`, second run of the line | 32.1 ms (29.5 to 40.6); trim off 42.3 ms | 38.4 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches (off: 3) |
+| `REG`, second run of the line | 53.5 ms (48.7 to 57.1); trim off 56.8 ms | 56.9 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches (off: 3) |
+| Backend ready | 1,397.5 ms (1,376 to 1,410) | 1,401.5 ms | 1,500 ms (met) | 2,500 ms | App harness | 8 launches |
+| Splash | 312.7 ms (300.6 to 328.9) | 316.7 ms | 500 ms (met) | 1,000 ms | App harness | 8 launches |
+| Grid open, 8,411 fills | 63.3 ms (62.6 to 129.5) | 65.9 ms | 100 ms (met) | 500 ms | App harness | 5 launches |
+| GIP pan and zoom p95, 20,000 bars | 6.0 ms (5.6 to 6.2) | 6.2 ms | 16.7 ms (met) | 25 ms | App harness | 5 launches |
+| Keystroke to paint, p95 | 8.1 ms (8.0 to 8.2) | 8.3 ms | 50 ms (met) | 100 ms | App harness | 5 launches |
+| 45 min partial soak at 0.1.2, largest sample | 641.9 MB (first 545.9, last 495.8 MB); private bytes 1,147.7 to 1,355.0 MB, leak rule pass (24.3 MB an hour); PARTIAL, 45 min | not run on 0.1.1 (0.1.0, 2 h: 705.8 MB) | 1,000 MB (met) | 1,500 MB | Harness `soak` mode, trim on | 10 samples, 1 run |
+
+### Not re-measured on 0.1.2
+
+The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.1.2 measure installer is built and not installed). The simulated minimise, T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.1.2; their 0.1.0 readings below are history. The 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The owner-attended rows are pending, as listed under the 0.1.1 verdict. The installer size of the release is written after the tag; the measuring build's release installer is 3,254,722 bytes, 3.1 MB against the 30 MB ceiling.
+
+## Verdict (release 0.1.1, the published release)
 
 Evidence: `results.md` in this folder (sections A1 to A7), built from raw records under `D:/dev/w6/measure-runs`. Tree `656a964` (which merges `519a3cb`, the thread-cap fix) plus the uncommitted version bump to 0.1.1 (the tracked diff hashes to the stamp of every record; `results.md` section A1), fresh GNU builds of that tree, the GNU smoke build against the real lab for every app row. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Every counted run passed the 60 second CPU gate (2.9 to 4.9%, 0 rejected) with its GPU reading recorded (9 to 15%), the W0B anchor held (the harness digest is unchanged since the W5C reproduction), and the slot was quiet by the manager's lock, not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. Targets are not recalibrated here; ceilings are as in 04 D5. This verdict replaces the 0.1.0 one (W5C, kept below as history) and the W5B one before it.
-
-## Verdict
 
 **AUTOMATED PASS, OWNER ROWS PENDING.** Every automated row of G2 that was measured on 0.1.1 is inside its ceiling, the release row included: whole-app idle memory at HOME reads 477.3 MB (453.0 to 484.4 MB over the six counted launches, `report.mjs` within-ceiling ACCEPTED) against the 500 MB ceiling, with 15.6 MB of headroom at the worst launch; it was 505.4 MB, over the ceiling, on 0.1.0. It is still above the 400 MB target (by 77.3 MB). The fix is the thread caps of release 0.1.1 (`threadcaps.py`: OpenBLAS, OpenMP, MKL and NumExpr pools capped at 2 in the backend server); measured with an attach driver it took the backend from 68 threads to 13, committed private bytes from 1,790 to 369 MB and its working set from 262.6 to 246.1 MB. At the official reading point the interpreter still holds 24 to 28 threads, because the prewarm workers are alive then (17 threads 33 s after spawn in the warm-up run), so the attach driver's 13 is not the figure of the row. The rows that were not re-run in 0.1.1 (the soak, the simulated minimise, T8, the stage 1 rows) stand on their 0.1.0 readings, which are history and were all inside their ceilings; the measure-artefact rows and the owner-attended rows are pending.
 
