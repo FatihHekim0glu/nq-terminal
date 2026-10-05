@@ -61,6 +61,79 @@
         "title": "AcceptedAmendment",
         "type": "object"
       },
+      "ActionResult": {
+        "description": "The queued job and the action as the server resolved it (the params, window and run id it used).",
+        "properties": {
+          "action": {
+            "discriminator": {
+              "mapping": {
+                "anchor": "#/components/schemas/AnchorAction",
+                "backtest": "#/components/schemas/BacktestAction"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/BacktestAction"
+              },
+              {
+                "$ref": "#/components/schemas/AnchorAction"
+              }
+            ],
+            "title": "Action"
+          },
+          "base_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Run Id"
+          },
+          "changed_params": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Params",
+            "type": "array"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          },
+          "kind": {
+            "enum": [
+              "backtest",
+              "anchor"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "preset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Id"
+          }
+        },
+        "required": [
+          "kind",
+          "job",
+          "action",
+          "preset_id",
+          "base_run_id",
+          "changed_params"
+        ],
+        "title": "ActionResult",
+        "type": "object"
+      },
       "AlphaFit": {
         "description": "BR1 fit, `sizing_stats.spanning_alpha`: r = a + b * r_b + e; t by Newey-West lag; t_min gates.",
         "properties": {
@@ -380,6 +453,107 @@
         "title": "Analytics",
         "type": "object"
       },
+      "AnchorAction": {
+        "additionalProperties": false,
+        "description": "Re-run a finished run as a regression anchor: its own config, a fresh run id chosen by the server.",
+        "properties": {
+          "base_run_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,199}$",
+            "title": "Base Run Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "anchor",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "base_run_id"
+        ],
+        "title": "AnchorAction",
+        "type": "object"
+      },
+      "AnchorCheck": {
+        "description": "Rule 3 for a re-run started here: every field equal is MATCH; the first field that differs decides MISMATCH,\nthe first that is missing NOT COMPARABLE; PENDING while the re-run's job has not left a result yet.",
+        "properties": {
+          "anchor": {
+            "title": "Anchor",
+            "type": "string"
+          },
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "base_found": {
+            "title": "Base Found",
+            "type": "boolean"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/FieldCheck"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "first_difference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Difference"
+          },
+          "job_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job State"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "MATCH",
+              "MISMATCH",
+              "PENDING",
+              "NOT COMPARABLE"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "anchor",
+          "base",
+          "base_found",
+          "verdict",
+          "first_difference",
+          "checks",
+          "job_state",
+          "note"
+        ],
+        "title": "AnchorCheck",
+        "type": "object"
+      },
       "AnchorComparison": {
         "description": "An anchor run against its base: exact equality on trades, P&L, fees and Sharpe (rule 3).\n\nNOT COMPARABLE when the base is missing, either run is unusable (no Sharpe, rule 4) or a count is absent:\na value missing on both sides is never a match.",
         "properties": {
@@ -492,6 +666,74 @@
           "regress_check_identical"
         ],
         "title": "AnchorComparison",
+        "type": "object"
+      },
+      "BacktestAction": {
+        "additionalProperties": false,
+        "description": "Start a backtest from a preset: its config with the named parameters changed and, optionally, a narrower\nwindow and a chosen run id (the server suggests a free one when it is left out).",
+        "properties": {
+          "end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "kind": {
+            "const": "backtest",
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": true,
+            "maxProperties": 16,
+            "title": "Params",
+            "type": "object"
+          },
+          "preset_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,199}$",
+            "title": "Preset Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "pattern": "^t_[A-Za-z0-9_.-]{1,80}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "kind",
+          "preset_id",
+          "params",
+          "start",
+          "end",
+          "run_id"
+        ],
+        "title": "BacktestAction",
         "type": "object"
       },
       "Bars": {
@@ -5621,6 +5863,40 @@
         "title": "Fence",
         "type": "object"
       },
+      "FieldCheck": {
+        "description": "One compared field. `equal` is None when a value is missing on either side (never a match).",
+        "properties": {
+          "anchor": {
+            "title": "Anchor"
+          },
+          "base": {
+            "title": "Base"
+          },
+          "equal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Equal"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "equal",
+          "anchor",
+          "base"
+        ],
+        "title": "FieldCheck",
+        "type": "object"
+      },
       "FillRow": {
         "additionalProperties": true,
         "properties": {
@@ -8272,6 +8548,100 @@
           "expires_in_s"
         ],
         "title": "LaunchCode",
+        "type": "object"
+      },
+      "LaunchPreset": {
+        "description": "A ledger row offered as a starting point. `launchable` is false (with the reasons) when the job spec would\nrefuse its params as they stand.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "exp_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exp Id"
+          },
+          "launchable": {
+            "title": "Launchable",
+            "type": "boolean"
+          },
+          "params": {
+            "additionalProperties": true,
+            "title": "Params",
+            "type": "object"
+          },
+          "preset_id": {
+            "title": "Preset Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "run_found": {
+            "title": "Run Found",
+            "type": "boolean"
+          },
+          "runtime_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime S"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "ts_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts Utc"
+          },
+          "variant": {
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preset_id",
+          "exp_id",
+          "ts_utc",
+          "strategy",
+          "variant",
+          "start",
+          "end",
+          "params",
+          "runtime_s",
+          "run_found",
+          "launchable",
+          "reasons"
+        ],
+        "title": "LaunchPreset",
         "type": "object"
       },
       "LedgerCommand": {
@@ -10943,6 +11313,88 @@
         "title": "PaperTracking",
         "type": "object"
       },
+      "ParamField": {
+        "description": "One named parameter of a registered strategy: its type, default and allowed range or choices.",
+        "properties": {
+          "choices": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "exclusive_minimum": {
+            "title": "Exclusive Minimum",
+            "type": "boolean"
+          },
+          "feed_key": {
+            "title": "Feed Key",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "int",
+              "float",
+              "str",
+              "month",
+              "date"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "default",
+          "required",
+          "minimum",
+          "maximum",
+          "exclusive_minimum",
+          "choices",
+          "feed_key"
+        ],
+        "title": "ParamField",
+        "type": "object"
+      },
       "PassCheck": {
         "description": "One entry of a screen's `pass_checks`: `passed` for a boolean, else the recorded value.",
         "properties": {
@@ -11388,6 +11840,36 @@
           "nautilus"
         ],
         "title": "Pins",
+        "type": "object"
+      },
+      "PresetList": {
+        "description": "Newest first; `strategies` holds the parameter schema of every strategy offered.",
+        "properties": {
+          "ledger_found": {
+            "title": "Ledger Found",
+            "type": "boolean"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/LaunchPreset"
+            },
+            "title": "Presets",
+            "type": "array"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyParams"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ledger_found",
+          "presets",
+          "strategies"
+        ],
+        "title": "PresetList",
         "type": "object"
       },
       "PsrView": {
@@ -16135,6 +16617,27 @@
           "t_pnl_usd"
         ],
         "title": "StoredTradeSummary",
+        "type": "object"
+      },
+      "StrategyParams": {
+        "properties": {
+          "params": {
+            "items": {
+              "$ref": "#/components/schemas/ParamField"
+            },
+            "title": "Params",
+            "type": "array"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy",
+          "params"
+        ],
+        "title": "StrategyParams",
         "type": "object"
       },
       "StreakView": {
@@ -22061,6 +22564,248 @@
           }
         },
         "summary": "Queue Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/jobs/actions": {
+      "post": {
+        "description": "Queue a backtest from a preset, or an anchor re-run of a finished run; the worker runs `run_base.py`.",
+        "operationId": "start_action_api_jobs_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "anchor": "#/components/schemas/AnchorAction",
+                    "backtest": "#/components/schemas/BacktestAction"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/BacktestAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AnchorAction"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "not a loopback peer, the X-NQT: 1 header is missing, or the request is cross-site"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown preset, base run or re-run"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the run id is already used by a job or an output folder"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the body is larger than 8 KB"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the content type is not application/json"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the action was refused (the detail lists each reason)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the queue is full (10 jobs waiting)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off in this backend, or a result file could not be read"
+          }
+        },
+        "summary": "Start Action",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/jobs/actions/anchors/{run_id}": {
+      "get": {
+        "description": "The exact comparison of a re-run with its base (rule 3).",
+        "operationId": "read_anchor_api_jobs_actions_anchors__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.\\-]{0,199}$",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown preset, base run or re-run"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the action was refused (the detail lists each reason)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off in this backend, or a result file could not be read"
+          }
+        },
+        "summary": "Read Anchor",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/jobs/actions/presets": {
+      "get": {
+        "description": "The ledger rows of registered strategies as launch presets, with each strategy's named parameters.",
+        "operationId": "list_presets_api_jobs_actions_presets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown preset, base run or re-run"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the action was refused (the detail lists each reason)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "the job runner is off in this backend, or a result file could not be read"
+          }
+        },
+        "summary": "List Presets",
         "tags": [
           "jobs"
         ]

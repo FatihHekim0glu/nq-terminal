@@ -41,7 +41,7 @@ const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
  * else out first, or raise this number in the same change as the feature that needs it, with the reason in the commit.
  * A change that cuts the shell further can lower both.
  */
-const PINNED_SHELL_CEILING = 114_900
+const PINNED_SHELL_CEILING = 115_000
 /**
  * Shell diet 4 (v2.1 polish): the shell was 114,480 B before it and is 109,658 B after (the key actions, the command line's
  * menus and suggestion sheet load on demand; Radix's Slot, TanStack's infinite-query paging, useMutation and the module
@@ -60,8 +60,12 @@ const PINNED_SHELL_CEILING = 114_900
  * the reader's own chunk, and F2 and F4's lines moved from copy/chrome.ts to copy/navKeys.ts beside F3 and F5 to F7, which
  * only the on-demand key actions read. The shell measures 109,827 B. A change to any lazy chunk renames it, and the new
  * hashes in the shell's import list move its gzip size by a few bytes either way (7 B measured), so keep a margin.
+ *
+ * Release 0.2.0 raised the target and the ceiling by 100 B each (109,900 to 110,000; 114,900 to 115,000) for the global job
+ * indicator, mounted from App.tsx after the first idle moment through a lazy import (45 B gzip in the shell; the indicator,
+ * its model and its copy are a chunk of their own). The shell measures 109,939 B. The 5 kB of room under the ceiling is kept.
  */
-const SHELL_TARGET_AFTER_DIET_4 = 109_900
+const SHELL_TARGET_AFTER_DIET_4 = 110_000
 /** The gallery build's shell, which is about 0.9 kB larger (113,738 B measured), plus the same 2 kB. */
 const PINNED_GALLERY_SHELL_CEILING = 115_800
 

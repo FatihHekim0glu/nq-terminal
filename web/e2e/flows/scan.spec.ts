@@ -136,6 +136,11 @@ test.describe("the queue's two writes (PRD U3)", () => {
   test('says what a job write is by method, origin and path', () => {
     expect(isJobWrite('POST', `${ORIGIN}/api/jobs`, ORIGIN)).toBe(true)
     expect(isJobWrite('DELETE', `${ORIGIN}/api/jobs/${JOB}`, ORIGIN)).toBe(true)
+    expect(isJobWrite('POST', `${ORIGIN}/api/jobs/actions`, ORIGIN)).toBe(true)
+    expect(isJobWrite('GET', `${ORIGIN}/api/jobs/actions`, ORIGIN)).toBe(false)
+    expect(isJobWrite('POST', `${ORIGIN}/api/jobs/actions/presets`, ORIGIN)).toBe(false)
+    expect(isJobWrite('POST', `${ORIGIN}/api/jobs/actions?x=1`, ORIGIN)).toBe(false)
+    expect(isJobWrite('DELETE', `${ORIGIN}/api/jobs/actions`, ORIGIN)).toBe(false)
     expect(isJobWrite('GET', `${ORIGIN}/api/jobs`, ORIGIN)).toBe(false)
     expect(isJobWrite('POST', 'http://evil.example/api/jobs', ORIGIN)).toBe(false)
   })
@@ -158,12 +163,17 @@ test.describe("the queue's two writes (PRD U3)", () => {
     expect(writeOperations(third).sort()).not.toEqual(JOB_WRITES)
   })
 
-  test('lists the three writes of an OpenAPI document, and finds a fourth', () => {
+  test('lists the four writes of an OpenAPI document, and finds a fifth', () => {
     const doc: OpenApiDoc = {
-      paths: { '/api/jobs': { get: {}, post: {} }, '/api/jobs/{job_id}': { get: {}, delete: {} }, '/api/workspaces/{doc}': { get: {}, put: {} } },
+      paths: {
+        '/api/jobs': { get: {}, post: {} },
+        '/api/jobs/{job_id}': { get: {}, delete: {} },
+        '/api/jobs/actions': { post: {} },
+        '/api/workspaces/{doc}': { get: {}, put: {} },
+      },
     }
     expect(writeOperations(doc).sort()).toEqual(ALLOWED_WRITES)
-    expect(ALLOWED_WRITES).toHaveLength(3)
+    expect(ALLOWED_WRITES).toHaveLength(4)
     const fourth: OpenApiDoc = { paths: { ...doc.paths, '/api/workspaces': { get: {}, post: {} } } }
     expect(writeOperations(fourth).sort()).not.toEqual(ALLOWED_WRITES)
     const widened: OpenApiDoc = { paths: { ...doc.paths, '/api/workspaces/{doc}': { get: {}, put: {}, delete: {} } } }

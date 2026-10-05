@@ -64,6 +64,7 @@ let previewer: typeof previewText | null = null
 // cannot be fetched is caught by a LazyBoundary and reported on the message line; the terminal stays up, and
 // a saved "tape on" is left alone so it works after a reload.
 const LiveEventTape = lazy(() => import('./chrome/EventTape.live').then((m) => ({ default: m.LiveEventTape })))
+const JobIndicator = lazy(() => import('./jobsbar/JobIndicator'))
 const KeyMapOverlay = lazy(() => import('./chrome/KeyToolbar.overlay').then((m) => ({ default: m.KeyMapOverlay })))
 // The first-run orientation line (N03) shows under the connection strip while HOME owns the layout, and loads with
 // its own chunk beside the Workspace: the shell carries none of its words. A chunk that cannot be fetched is dropped
@@ -370,6 +371,13 @@ function Terminal() {
       <h1 className="sr-only">{CHROME.appTitle}</h1>
       <ChromeHeader shown={shown} focused={focused} panel={panel} refs={refs} chrome={chrome} watch={watch} />
       <ConnectionStrip />
+      {idle ? (
+        <LazyBoundary onError={() => {}}>
+          <Suspense fallback={null}>
+            <JobIndicator />
+          </Suspense>
+        </LazyBoundary>
+      ) : null}
       {shown.code === 'HOME' && shown.workspace === null ? (
         <LazyBoundary onError={() => {}}>
           <Suspense fallback={null}>

@@ -35,7 +35,7 @@ RUN_ID_PATTERN = r"^t_[A-Za-z0-9_.-]{1,80}$"
 JOB_ID_PATTERN = r"^j_[0-9a-f]{12}$"
 # The keys a feed consumes before the strategy sees the rest (sizing_nt, dtsmom_nt, eomtsy_nt): not struct fields.
 FEED_PARAM_KEYS: dict[str, tuple[str, ...]] = {
-    "volmanaged": ("ticks",), "volmanaged_bh": ("ticks",),
+    "volmanaged": ("ticks",), "volmanaged_bh": ("ticks", "t0"),
     "tsmom": ("ticks", "first_month", "last_month", "end_date"),
     "dtsmom": ("ticks", "first_month", "last_month", "end_date", "book"),
     "eomtsy": ("ticks", "first_month", "last_month"),
@@ -47,6 +47,7 @@ TICK_LEVELS = (0, 1, 2)  # the specs' cost levels (sizing_nt.TICK_LEVELS)
 RUNNER_SET_PARAMS = ("instrument_id", "bar_type", "instrument_ids", "bar_types", "sessions", "end_ns", "t0_ns",
                      "formations", "days", "mult", "roots")
 MONTH_KEYS = ("first_month", "last_month")
+DATE_KEYS = ("end_date", "t0")  # ISO dates a feed reads (tsmom and dtsmom end_date, volmanaged_bh t0)
 FIRST_MONTH = (IN_SAMPLE_START.year, IN_SAMPLE_START.month)
 LAST_MONTH = (IN_SAMPLE_END.year - 1, 12)  # data through 2021-12-31
 MAX_PARAMS = 16
@@ -122,15 +123,15 @@ def _check_ticks(strategy: str, params: dict[str, Any]) -> None:
         raise ValueError(f"{strategy} needs params.ticks, one of {TICK_LEVELS}")
 
 
-def _check_end_date(value: Any) -> None:
+def _check_date(key: str, value: Any) -> None:
     if not isinstance(value, str) or not ISO_DATE.fullmatch(value):
-        raise ValueError("end_date is written YYYY-MM-DD")
+        raise ValueError(f"{key} is written YYYY-MM-DD")
     try:
         day = date.fromisoformat(value)
     except ValueError:
-        raise ValueError("end_date is not a calendar date") from None
+        raise ValueError(f"{key} is not a calendar date") from None
     if not IN_SAMPLE_START <= day < IN_SAMPLE_END:
-        raise ValueError(f"end_date must lie in the in-sample window ({IN_SAMPLE_START.isoformat()} to 2021-12-31)")
+        raise ValueError(f"{key} must lie in the in-sample window ({IN_SAMPLE_START.isoformat()} to 2021-12-31)")
 
 
 def _check_month(key: str, value: Any) -> None:
@@ -141,8 +142,9 @@ def _check_month(key: str, value: Any) -> None:
 
 def _check_calendar(params: dict[str, Any]) -> None:
     """The calendar keys a feed reads are inside the in-sample fence, so no child is started that the OOS gate would stop."""
-    if "end_date" in params:
-        _check_end_date(params["end_date"])
+    for key in DATE_KEYS:
+        if key in params:
+            _check_date(key, params[key])
     for key in MONTH_KEYS:
         if key in params:
             _check_month(key, params[key])

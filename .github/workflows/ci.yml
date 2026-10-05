@@ -1,0 +1,114 @@
+# First CI workflow (REL-03): the checks of this repository that need no private lab data, on a hosted Windows runner.
+# What runs, and what deliberately does not, is written in docs/desktop/ci.md.
+#
+# Rules this file keeps (docs/desktop/02_decision.md, C3-2): a read-only token, no secrets, every action pinned by its
+# full commit SHA, nothing signed or published, and a newer push cancels the run it supersedes.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: web checks and script tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      # The folder is named terminal because a QA test expects its folder's parent to carry that name, and the lab
+      # holds this tree as nq-lab/terminal.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: terminal/web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: terminal/web/pnpm-lock.yaml
+
+      # Some tests write scratch files under D:\dev\tmp, the lab PC's layout. The hosted image has a D: drive; if it
+      # ever has none, the runner's temp folder stands in for it.
+      - name: Prepare scratch folder
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'D:\')) { subst D: $env:RUNNER_TEMP; if ($LASTEXITCODE -ne 0) { throw 'subst failed' } }
+          New-Item -ItemType Directory -Force -Path 'D:\dev\tmp' | Out-Null
+
+      - name: Install web dependencies
+        working-directory: terminal/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Web type checks
+        working-directory: terminal/web
+        run: pnpm test:types
+
+      - name: Web end-to-end type checks
+        working-directory: terminal/web
+        run: pnpm test:e2e-types
+
+      - name: Contract hash
+        working-directory: terminal/web
+        run: pnpm check:api
+
+      # Three tests need the private lab and are left out here (docs/desktop/ci.md, "What does not run"): the two
+      # launcher tests start the lab's backend, and one test reads the lab's Python source for a copy constant. The
+      # exclusion is by file and by name pattern, so every other test still runs. Run through node, not the pnpm shim,
+      # so that the name pattern reaches vitest unchanged.
+      - name: Vitest
+        working-directory: terminal/web
+        run: >-
+          node node_modules/vitest/vitest.mjs run
+          --exclude scripts/start/startPs1.test.ts
+          --exclude scripts/start/sessionPage.browser.test.ts
+          --testNamePattern "^(?!the banner copy matches the Python constant)"
+
+      - name: Web build
+        working-directory: terminal/web
+        run: pnpm build
+
+      - name: Desktop script tests
+        working-directory: terminal
+        run: node --test desktop/scripts/tests/*.test.mjs
+
+      # The harness starts the lab's interpreter for its window watch (a standard-library script), at NQT_LAB's
+      # .venv. A plain virtual environment under the runner's temp folder stands in; it holds no lab data.
+      - name: Stand-in lab for the harness tests
+        shell: pwsh
+        run: |
+          $lab = Join-Path $env:RUNNER_TEMP 'standin-lab'
+          python -m venv (Join-Path $lab '.venv')
+          if ($LASTEXITCODE -ne 0) { throw "python -m venv exit $LASTEXITCODE" }
+          "NQT_LAB=$lab" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Desktop harness tests
+        working-directory: terminal
+        run: node --test desktop/harness/tests/*.test.mjs
+
+      - name: Release script self-tests
+        working-directory: terminal
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\release_check.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "release_check.tests.ps1 exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "install-test.ps1 -SelfTest exit $LASTEXITCODE" }

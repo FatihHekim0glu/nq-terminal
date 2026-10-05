@@ -31,6 +31,7 @@ The plan to turn the nq-lab terminal from a local web app into native apps for W
 | [d0_results.md](d0_results.md) | The Windows part of D0: the WebView2 probes, the T2 comparison (it does not fire, so the shell stays Tauri 2) and the backend ready baseline. |
 | [d4_integration.md](d4_integration.md) | Integration wave INT1: what was wired between the backend and page (D1 to D3) and the Windows shell (D4), and the check counts of the merged tree. |
 | [d5_integration.md](d5_integration.md) | Integration wave INT2: what was reconciled when the D5 step 1 branch (harness, app checks, supply chain, NSIS package) met the main tree, and the check counts of the merged tree. |
+| [ci.md](ci.md) | The first CI workflow (`.github/workflows/ci.yml`): what runs on a hosted Windows runner, what does not, and why. |
 | [05_risks_costs.md](05_risks_costs.md) | What can go wrong, as a risk register with an owner for each risk, and what the plan costs in money and in the owner's time, one-off and yearly. |
 
 ## Supporting folders

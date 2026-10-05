@@ -1,0 +1,4 @@
+/* Screenshot baselines are taken without the global job strip (release 0.2.0). The strip shows while a backtest waits or
+   runs and for a finished one, and the main run's specs share one fixture backend with one queue, so a job another spec left
+   running would push the whole screen down in a baseline. The strip has its own spec (jobsbar.spec.ts). */
+[data-chrome="jobs"] { display: none !important; }

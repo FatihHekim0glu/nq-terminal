@@ -1,0 +1,24 @@
+/* The global job indicator (release 0.2.0): rows of the chrome, 22px like the connection strip, drawn only while a job
+   is active or a finish notice is showing. Tokens only. State is always in words; colour only sits on top of them. */
+.jobbar { flex: 0 0 auto; }
+.jobbar-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
+  min-height: 22px; padding: 2px 8px;
+  background: var(--chrome); box-shadow: inset 0 -1px 0 var(--chrome-rule);
+  color: var(--text); font-family: var(--font-sans); font-size: var(--fs-nav);
+}
+.jobbar-state { font-weight: 700; color: var(--text); }
+.jobbar-run { color: var(--data); }
+.jobbar-typical, .jobbar-more { color: var(--muted); }
+.jobbar-notice[data-kind="finished"] .jobbar-text { color: var(--c-up); }
+.jobbar-notice[data-kind="failed"] .jobbar-text { color: var(--warn); font-weight: 700; }
+.jobbar-btn {
+  flex: 0 0 auto; height: 20px; padding: 0 8px;
+  background: transparent; border: 1px solid var(--border-int); border-radius: 0;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.jobbar-btn:hover { background: var(--hover-menu); }
+.jobbar-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (max-width: 700px) {
+  .jobbar-row { height: auto; }
+}

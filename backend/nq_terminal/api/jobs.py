@@ -1,6 +1,7 @@
 """JOBS endpoints (ARCHITECTURE sections 8 and 9, PRD U3): the backtest queue. With `PUT /api/workspaces/{doc}` (the
 workspace store, `api/workspaces.py`, D3.1) the only routes in the terminal that are not GET, which is why `app.py` must
-let exactly `ALLOWED_WRITE_ROUTES` (the two below and that one) through its GET-only check.
+let exactly `ALLOWED_WRITE_ROUTES` (the two below, `POST /api/jobs/actions` of `api/actions.py` and that one) through
+its GET-only check.
 
 - `GET /api/jobs`: every job, newest first, with the queue counts. `GET /api/jobs/{job_id}`: one job.
 - `POST /api/jobs` (201): queue one backtest (`JobSpec`, see `models/jobs.py`). The worker runs `backtests/run_base.py`
@@ -40,9 +41,12 @@ from nq_terminal.services.jobs import (
     UnknownJob,
     service_for,
 )
+from nq_terminal.services.runs import ANCHOR_RE
 from nq_terminal.settings import ALLOWED_HOSTS, DEV_PORT, Settings
 
-ALLOWED_WRITE_ROUTES = ("POST /api/jobs", "DELETE /api/jobs/{job_id}", "PUT /api/workspaces/{doc}")
+ALLOWED_WRITE_ROUTES = (
+    "POST /api/jobs", "DELETE /api/jobs/{job_id}", "POST /api/jobs/actions", "PUT /api/workspaces/{doc}",
+)
 MAX_BODY_BYTES = 8192
 NQT_HEADER = "x-nqt"
 JSON_MEDIA_TYPE = "application/json"
@@ -121,7 +125,7 @@ def require_jobs_on(request: Request, _guard: None = Depends(write_guard)) -> No
         raise _refuse(503, service.off_reason or OFF_DETAIL)
 
 
-async def _body(request: Request) -> bytes:
+async def read_body(request: Request) -> bytes:
     declared = request.headers.get("content-length", "")
     if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
         raise _refuse(413, "the body is larger than 8 KB")
@@ -136,14 +140,18 @@ async def _body(request: Request) -> bytes:
 
 
 async def read_spec(request: Request, _on: None = Depends(require_jobs_on)) -> JobSpec:
-    body = await _body(request)
+    body = await read_body(request)
     try:
-        return JobSpec.model_validate_json(body)
+        spec = JobSpec.model_validate_json(body)
     except ValidationError as exc:
         raise _refuse(422, [{"type": e["type"], "loc": list(e["loc"]), "msg": e["msg"]}
                             for e in exc.errors(include_url=False, include_context=False, include_input=False)])
     except ValueError:
         raise _refuse(422, [{"type": "json_invalid", "loc": [], "msg": "the body is not valid JSON"}]) from None
+    if ANCHOR_RE.fullmatch(spec.run_id):  # only an anchor re-run (POST /api/jobs/actions) mints a rule 3 id
+        raise _refuse(422, [{"type": "value_error", "loc": ["run_id"],
+                             "msg": "a regression-anchor id is only given by an anchor re-run"}])
+    return spec
 
 
 @contextmanager

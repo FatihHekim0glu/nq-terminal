@@ -4,6 +4,7 @@
 // other workers never decides them; `pnpm e2e` runs the main project only.
 // Born failing: a layout that lets the budgets share the run with the other specs, or that makes them wait
 // on the main project, is caught.
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import config from '../playwright.config.ts'
 import pkg from '../package.json' with { type: 'json' }
@@ -52,7 +53,7 @@ export function screenshotsReadPinnedData(servers: readonly Server[]): boolean {
   if (backends.length !== 1) return false
   const [backend] = backends
   const dir = (backend!.env?.NQT_FIXTURE_DIR ?? '').replace(/\\/g, '/')
-  return /fixture_app:app/.test(backend!.command ?? '') && /\/terminal\/backend\/tests\/fixtures$/.test(dir)
+  return /fixture_app:app/.test(backend!.command ?? '') && /\/backend\/tests\/fixtures$/.test(dir)
 }
 
 describe('Playwright data', () => {
@@ -118,5 +119,21 @@ describe('Playwright projects', () => {
     for (const file of ['e2e/runs.spec.ts', 'e2e/perf/trace.spec.ts', 'e2e/visual/screens.spec.ts']) {
       expect(projectsRunning(projects, file).map((p) => p.name)).toEqual(['chromium'])
     }
+  })
+})
+
+describe('Screenshots and the global job indicator (release 0.2.0)', () => {
+  /** The stylesheet every screenshot of the main run is taken with, or null when none is set. */
+  const sheet = (): string | null => {
+    const style = (config.expect?.toHaveScreenshot as { stylePath?: string | string[] } | undefined)?.stylePath
+    const first = Array.isArray(style) ? style[0] : style
+    return typeof first === 'string' ? first : null
+  }
+
+  it('takes every screenshot without the job strip, so a job another spec left running cannot move a baseline', () => {
+    const file = sheet()
+    expect(file, 'expect.toHaveScreenshot.stylePath is not set').not.toBeNull()
+    const css = readFileSync(file ?? '', 'utf8')
+    expect(css).toMatch(/\[data-chrome="jobs"\]\s*\{[^}]*display:\s*none\s*!important/)
   })
 })

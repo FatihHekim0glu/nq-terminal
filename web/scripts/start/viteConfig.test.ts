@@ -4,7 +4,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import { DEMO_MODE, GALLERY_MODE, buildInputs, devApiOrigin, devPortOf, stateDirOf } from '../../vite.config.ts'
@@ -42,8 +42,9 @@ describe('the dev proxy target', () => {
     expect(devApiOrigin({ NQT_STATE_DIR: dir })).toBe('http://127.0.0.1:8765')
   })
 
-  it('reads terminal/state when NQT_STATE_DIR is not set', () => {
-    expect(slashes(stateDirOf({}))).toMatch(/\/terminal\/state$/)
+  it('reads state beside the web folder, whatever the checkout folder is called, when NQT_STATE_DIR is not set', () => {
+    expect(slashes(stateDirOf({}))).toBe(slashes(resolve(WEB, '..', 'state')))
+    expect(slashes(stateDirOf({ NQT_STATE_DIR: '  ' }))).toBe(slashes(resolve(WEB, '..', 'state')))
   })
 })
 

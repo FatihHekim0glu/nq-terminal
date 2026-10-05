@@ -84,7 +84,9 @@ export default defineConfig({
   reporter: [['list']],
   expect: {
     timeout: 10_000,
-    toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide', scale: 'css' },
+    // The stylesheet hides the global job strip (e2e/hideJobsBar.css): the specs share one queue, and a job another spec left
+    // running would move every baseline.
+    toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide', scale: 'css', stylePath: path.join(WEB_DIR, 'e2e', 'hideJobsBar.css') },
   },
   use: {
     ...devices['Desktop Chrome'],

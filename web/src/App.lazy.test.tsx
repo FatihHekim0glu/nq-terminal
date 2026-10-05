@@ -104,6 +104,29 @@ describe('the key map overlay (Alt+K, the wrench on the key toolbar)', { timeout
   })
 })
 
+describe('the global job indicator (release 0.2.0)', { timeout: 15_000 }, () => {
+  const JOB = {
+    id: 'j_000000000001', run_id: 't_exp_1', state: 'running', exit_code: null, created: '2026-09-26T11:59:00Z', started: '2026-09-26T11:59:10Z', finished: null,
+    message: '', log_tail: [], spec: { strategy: 'za_orb', params: {}, variant: 'repaired', start: '2010-09-28', end: '2022-01-01', run_id: 't_exp_1' },
+  }
+
+  it('mounts after the first idle moment, says a backtest is running in words, and draws nothing when none is', async () => {
+    const jobs = { jobs: [JOB], queue_cap: 10, queued: 0, running: 1, enabled: true }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => (String(input) === '/api/jobs' ? new Response(JSON.stringify(jobs), { status: 200, headers: { 'content-type': 'application/json' } }) : reply(String(input)))))
+    render(<App />)
+    const row = await screen.findByRole('group', { name: 'Backtest jobs' })
+    expect(row.textContent).toContain('RUNNING')
+    expect(row.textContent).toContain('t_exp_1 (za_orb)')
+  })
+
+  it('is silent while the runner is off (a fixture or demo server)', async () => {
+    render(<App />)
+    await screen.findByRole('combobox', { name: COMMAND_LINE.label })
+    await waitFor(() => expect(document.querySelector('[data-chrome="jobs"]')).not.toBeNull())
+    expect(screen.queryByRole('group', { name: 'Backtest jobs' })).toBeNull()
+  })
+})
+
 describe('App does not import the on-demand chunks statically', () => {
   const sources = import.meta.glob<string>('/src/App.tsx', { query: '?raw', import: 'default', eager: true })
   const app = sources['/src/App.tsx'] ?? ''
@@ -114,6 +137,12 @@ describe('App does not import the on-demand chunks statically', () => {
     expect(app.length).toBeGreaterThan(0)
     expect(staticImport(name), `${name} is imported statically`).toBe(false)
     expect(app.includes(`import('./chrome/${name}')`), `${name} has no dynamic import`).toBe(true)
+  })
+
+  it('loads the job indicator through a dynamic import, after the first idle moment', () => {
+    expect(staticImport('JobIndicator'), 'JobIndicator is imported statically').toBe(false)
+    expect(app.includes("import('./jobsbar/JobIndicator')")).toBe(true)
+    expect(app).toMatch(/\{idle \? \(\s*<LazyBoundary onError=\{\(\) => \{\}\}>\s*<Suspense fallback=\{null\}>\s*<JobIndicator \/>/)
   })
 
   /** The module specifier of every static import in App.tsx, side-effect and multi-line ones too; type-only imports leave no code. */

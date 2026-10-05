@@ -70,8 +70,9 @@ In scope:
   live session cookie, and a write needs a same-origin `Origin` as well. The cookie is `HttpOnly` and
   `SameSite=Strict`. The one-time launch code lives 60 seconds and works once. See the safety section of the
   [README](README.md) and `backend/nq_terminal/app.py`.
-- **What the backend can write.** Every route is GET except three: queue a backtest and stop one (`JOBS`), and the
-  workspace store. A test pins the route set. Anything that adds another write, or reads a price past the in-sample
+- **What the backend can write.** Every route is GET except four: queue a backtest and stop one (`JOBS`), start a run of a registered
+  strategy from a ledger row or re-run an anchor (`POST /api/jobs/actions`, which names a preset or a base run and
+  named parameters, never a configuration, a path or a command, and ends in the same queue), and the workspace store. A test pins the route set. Anything that adds another write, or reads a price past the in-sample
   end date, or reaches an order call, is a vulnerability here.
 - **The desktop shell and its IPC.** The shell is a Tauri 2 app. The page it shows gets no shell command and no
   plugin permission (`desktop/src-tauri/capabilities/main.json` lists none). The test `ipc_refusal.rs` calls every

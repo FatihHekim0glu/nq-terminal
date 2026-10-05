@@ -12,6 +12,9 @@
 //!    build;
 //! 9. `smoke::after_build` last.
 //!
+//! Every window event first passes through `memory_target::on_window_event` (the WebView2 memory target: Low while
+//! the window is minimised or hidden, Normal otherwise).
+//!
 //! Build identities: the release (`dev.nqlab.terminal`), the smoke test build (`--no-default-features --features
 //! smoke`, `dev.nqlab.terminal.smoke`) and the measure build (`--no-default-features --features measure`,
 //! `dev.nqlab.terminal.measure`). build.rs merges the test identity's file over tauri.conf.json, so a plain
@@ -28,6 +31,7 @@ mod flush;
 mod guard;
 mod keys;
 mod link;
+mod memory_target;
 mod reads;
 mod save_outcome;
 mod smoke;
@@ -268,6 +272,7 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            memory_target::on_window_event(window, event);
             if let tauri::WindowEvent::CloseRequested { api, .. } = event
                 && window.label() == MAIN_LABEL
                 && !close_may_go_on(window.app_handle())

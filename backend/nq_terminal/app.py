@@ -1,4 +1,4 @@
-"""FastAPI app for the nq-lab terminal: read-only, GET only (bar three writes), loopback only, one origin.
+"""FastAPI app for the nq-lab terminal: read-only, GET only (bar four writes), loopback only, one origin.
 
 Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see `__main__.py`).
 
@@ -9,9 +9,10 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   cross-site GET under /api). There is no CORS
   middleware, because the built SPA is served from the same origin (PRD DL13). See `security.py`.
 - Every registered route must be GET; `create_app` refuses to build an app that registers anything else, except
-  exactly three writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3, and
+  exactly four writes (`jobs.ALLOWED_WRITE_ROUTES`: POST /api/jobs and DELETE /api/jobs/{job_id}, PRD U3,
+  POST /api/jobs/actions, which launches a registered strategy from a ledger preset through the same queue, and
   PUT /api/workspaces/{doc}, the workspace store, 03 10.3), which carry their own header, origin and content-type
-  checks (`api/jobs.py`, `api/workspaces.py`). Any other non-GET route is refused.
+  checks (`api/jobs.py`, `api/actions.py`, `api/workspaces.py`). Any other non-GET route is refused.
   The one mount allowed is a plain `StaticFiles` at `/` serving exactly `settings.web_dist`; any other
   mount (a sub-app, a StaticFiles subclass, another path or folder) is refused, so data/ or results/ can
   never be served around the gate and FileCache.
@@ -44,7 +45,8 @@ from nq_terminal.services import research as research_service
 from nq_terminal.api import runs  # 2.1
 from nq_terminal.api import data  # 2.3
 from nq_terminal.api import ib as ib_api  # 12 (U3: read-only IB snapshot)
-from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, two of the three writes)
+from nq_terminal.api import actions as actions_api  # V020 (launch research from the terminal, the fourth write)
+from nq_terminal.api import jobs as jobs_api  # 12 (U3: the backtest queue, two of the four writes)
 from nq_terminal.api import workspaces as workspaces_api  # 03 10.3 (D3.1: the workspace store, the third write)
 from nq_terminal.api import regimes_capacity_term, risk_extras  # 12 (RK4, PF11, BR5, RG2, EX5, MV6)
 from nq_terminal.api import spa as spa_api  # 12 (SV8)
@@ -165,7 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from nq_terminal.api import live_stream; app.include_router(live_stream.router)  # noqa: E702  9.2 (SSE)
     from nq_terminal.api import dq, events, roll, seasonality, vcone  # 11: DQ, EVT, ROLL, SEAS, VCONE
     for p11 in (vcone, seasonality, events, roll, dq): app.include_router(p11.router)  # noqa: E701  before the mount
-    for p12 in (spa_api, risk_extras, regimes_capacity_term, ib_api, jobs_api, expectation_api):  # 12: P2, before the mount
+    for p12 in (spa_api, risk_extras, regimes_capacity_term, ib_api, jobs_api, actions_api, expectation_api):  # 12: P2, before the mount
         app.include_router(p12.router)
     _mount_web(app, settings.web_dist)
     assert_get_only(app, jobs_api.ALLOWED_WRITE_ROUTES)

@@ -43,7 +43,7 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 
 As of 4 October 2026:
 
-- **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 81 API paths.
+- **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 84 API paths.
 - **Windows desktop app, 0.1.1.** Released as the annotated tag desktop-v0.1.1: an unsigned, per-user installer of
   3,253,307 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
   pools of the backend server, which is what brought idle memory under its ceiling. The earlier 0.1.0 release
@@ -58,9 +58,10 @@ As of 4 October 2026:
 
 ## Highlights
 
-- **Read only by construction.** All 81 API paths are GET, bar three writes: queueing and stopping a backtest on the
-  `JOBS` screen (`POST /api/jobs`, `DELETE /api/jobs/{job_id}`) and saving a workspace (`PUT /api/workspaces/{doc}`).
-  Tests fail on any other method.
+- **Read only by construction.** All 84 API paths are GET, bar four writes: queueing and stopping a backtest on the
+  `JOBS` screen (`POST /api/jobs`, `DELETE /api/jobs/{job_id}`), starting a run of a registered strategy from a ledger
+  row or re-running an anchor (`POST /api/jobs/actions`, see [the research launcher](docs/research_launcher.md)) and
+  saving a workspace (`PUT /api/workspaces/{doc}`). Tests fail on any other method.
 - **One gated door to prices.** Every price read goes through nq-lab's out-of-sample gate, which decides and logs it.
 - **Honest labels.** `[PRE-REG]` marks a value read from a registered result and `[POST HOC]` one the terminal
   computed. Sealed windows show as spent. The terminal adds no pass or fail of its own.
@@ -456,7 +457,7 @@ flowchart TB
   `/api` from one origin. One backend runs per lab, guarded by a lock file and a challenge-response handshake.
 - **The data gate.** Every price read goes through nq-lab's `nq_lab.data.serve` with caller `terminal`, so the gate
   decides and logs each read and serves nothing after 2021-12-31. Prices are cached in memory only, never on disk.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 81 paths. pytest compares the app with it, and
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 84 paths. pytest compares the app with it, and
   `pnpm gen:api` generates the page's types from it; `pnpm test` fails first when they have drifted.
 - **Web page.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1, with dockview panels under a cmdk command line, zustand
   and TanStack Query. Charts use uPlot, TradingView Lightweight Charts and Apache ECharts; grids use TanStack Table and
@@ -496,7 +497,7 @@ nq-lab's research rules bind the backend, and the terminal is built so that it c
 <p align="center"><img src="docs/media/status-line.webp" width="725" alt="Part of the status line: the served data window 2010-01-01..2021-12-31, FIXTURE DATA, TWS not monitored, KILL off, gate reads 0, READ ONLY and NO ORDER PATH"></p>
 <p align="center"><em>The status line on every screen: the served window, the data source, gate reads, READ ONLY and NO ORDER PATH.</em></p>
 
-- **Read only.** A test pins the route set to GET plus the three writes and fails on anything else. A syntax-tree scan
+- **Read only.** A test pins the route set to GET plus the four writes and fails on anything else. A syntax-tree scan
   bans write calls anywhere in the backend. The ledger is never written: for an eligible run, `RUN` shows the command
   for you to copy and run yourself. Tests: [`test_app.py`](backend/tests/test_app.py),
   [`test_safety_ast.py`](backend/tests/test_safety_ast.py).
@@ -618,10 +619,11 @@ for em and en dashes and US spellings.
 | Document | What it covers |
 |---|---|
 | [`docs/PRD.md`](docs/PRD.md) | What the terminal is for, its scope by priority, the non-goals and the decision log |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack and versions, folder layout, data contracts, the endpoint index of all 81 paths, the gate, security, run and test commands |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack and versions, folder layout, data contracts, the endpoint index of all 84 paths, the gate, security, run and test commands |
 | [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | The frame, design tokens, command line and keys, honesty labels, screens, components and copy rules |
 | [`docs/BLOOMBERG_LOOK.md`](docs/BLOOMBERG_LOOK.md) | The look and behaviour spec: palette, type, chrome, keyboard, charts and screens |
 | [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) | Every metric with its priority, definition, inputs and QA reference |
+| [`docs/research_launcher.md`](docs/research_launcher.md) | Starting a backtest from LEDG or RUN, the job indicator, anchor re-runs and what they will not do |
 | [`docs/TESTING.md`](docs/TESTING.md) | Which suites run where, the session token in tests, and what the offline suite skips |
 | [`docs/media/README.md`](docs/media/README.md) | Where each image on this page came from and how it was captured |
 | [`docs/desktop/README.md`](docs/desktop/README.md) | Index of the desktop documents, in reading order, with the build status |

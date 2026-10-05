@@ -255,11 +255,13 @@ fn apply_visibility(window: &WebviewWindow, visible: bool) {
             serde_json::json!({ "visible": visible, "ok": set.is_ok(), "error": set.err().map(|e| e.to_string()) }),
         );
     });
-    if let Err(e) = queued {
-        crate::crash::log(
+    match queued {
+        // The simulated minimise hides the controller, not the window, so the memory target is told here (memory_target.rs).
+        Ok(()) => crate::memory_target::on_simulated_visibility(window, visible),
+        Err(e) => crate::crash::log(
             "controller_visibility_failed",
             serde_json::json!({ "visible": visible, "error": e.to_string() }),
-        );
+        ),
     }
 }
 

@@ -23,7 +23,7 @@ LOOPBACK = ("127.0.0.1", 50000)  # TestClient's default client ("testclient") is
 
 
 def extra_routes(app: FastAPI) -> list[str]:
-    """The non-GET routes beyond the three allowed writes (the two JOBS writes and the workspace PUT)."""
+    """The non-GET routes beyond the four allowed writes (the two JOBS writes, the launch action and the workspace PUT)."""
     return [problem for problem in non_get_routes(app) if problem not in ALLOWED_WRITE_ROUTES]
 
 
@@ -78,21 +78,22 @@ def test_no_cors(no_dist):
 
 
 @pytest.mark.parametrize("settings_name", ["no_dist", "with_dist"])
-def test_every_registered_route_is_get_bar_the_three_writes(settings_name, request):
+def test_every_registered_route_is_get_bar_the_four_writes(settings_name, request):
     app = create_app(request.getfixturevalue(settings_name))
     assert sorted(non_get_routes(app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
-def test_module_level_app_is_get_only_bar_the_three_writes():
+def test_module_level_app_is_get_only_bar_the_four_writes():
     assert sorted(non_get_routes(app_module.app)) == sorted(ALLOWED_WRITE_ROUTES)
 
 
-def test_the_write_allowance_is_exactly_three_routes():
-    assert sorted(ALLOWED_WRITE_ROUTES) == ["DELETE /api/jobs/{job_id}", "POST /api/jobs", "PUT /api/workspaces/{doc}"]
-    assert len(ALLOWED_WRITE_ROUTES) == 3
+def test_the_write_allowance_is_exactly_four_routes():
+    assert sorted(ALLOWED_WRITE_ROUTES) == [
+        "DELETE /api/jobs/{job_id}", "POST /api/jobs", "POST /api/jobs/actions", "PUT /api/workspaces/{doc}"]
+    assert len(ALLOWED_WRITE_ROUTES) == 4
 
 
-def test_a_fourth_write_route_fails_even_beside_the_three_born_failing(no_dist):
+def test_a_fifth_write_route_fails_even_beside_the_four_born_failing(no_dist):
     app = create_app(no_dist)
     app.add_api_route("/api/workspaces/{doc}", lambda doc: {"ok": True}, methods=["DELETE"], name="fourth")
     app.add_api_route("/api/workspaces", lambda: {"ok": True}, methods=["POST"], name="fifth")
@@ -114,7 +115,7 @@ def test_a_post_route_is_caught_born_failing(no_dist):
     with pytest.raises(GetOnlyError):
         assert_get_only(app)
     with pytest.raises(GetOnlyError, match="POST /api/sneaky"):
-        assert_get_only(app, ALLOWED_WRITE_ROUTES)  # the allow list names three routes and nothing else
+        assert_get_only(app, ALLOWED_WRITE_ROUTES)  # the allow list names four routes and nothing else
 
 
 @pytest.mark.parametrize("route", [
@@ -134,7 +135,7 @@ def test_any_other_non_get_route_is_caught_even_beside_the_job_writes_born_faili
 def test_the_write_allowance_does_not_cover_a_get_only_app_check(no_dist):
     app = create_app(no_dist)
     with pytest.raises(GetOnlyError):
-        assert_get_only(app)  # without the allow list the three writes are refused too
+        assert_get_only(app)  # without the allow list the four writes are refused too
 
 
 def test_a_post_inside_an_included_router_is_caught_born_failing(no_dist):
@@ -189,7 +190,8 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/dq/symbols", "/api/dq/calendar/{symbol}", "/api/dq/guards",
     "/api/market/term-structure/{root}",  # P2 (MV6)
     "/api/ib/snapshot",  # P2 (U3, read only)
-    "/api/jobs", "/api/jobs/{job_id}",  # P2 (U3, two of the three writes)
+    "/api/jobs", "/api/jobs/{job_id}",  # P2 (U3, two of the four writes)
+    "/api/jobs/actions", "/api/jobs/actions/presets", "/api/jobs/actions/anchors/{run_id}",  # V020 (the fourth write)
     "/api/workspaces", "/api/workspaces/{doc}",  # D3.1 (03 10.3, the third write)
     "/api/desktop/proof", "/api/session", "/api/session/code", "/api/session/redeem",  # W2A (03 2.2, 4.2)
 }
@@ -202,7 +204,7 @@ def test_openapi_is_served_under_api(no_dist):
     paths = r.json()["paths"]
     assert {p for p in paths if not p.startswith(PHASE_3_PREFIX)} == EXPECTED_PATHS
     writes = {p: sorted(ops) for p, ops in paths.items() if set(ops) != {"get"}}
-    assert writes == {"/api/jobs": ["get", "post"], "/api/jobs/{job_id}": ["delete", "get"],
+    assert writes == {"/api/jobs": ["get", "post"], "/api/jobs/actions": ["post"], "/api/jobs/{job_id}": ["delete", "get"],
                       "/api/workspaces/{doc}": ["get", "put"]}, writes
 
 

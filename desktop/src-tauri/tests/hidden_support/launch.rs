@@ -117,8 +117,10 @@ const R = [['NQ GP 1d', ['[role="img"][aria-label^="NQ1 Index: "]']], ['27F MON'
 const expr = `(() => { const R = ${JSON.stringify(R)}; const ok = (p) => { const el = document.querySelector('[data-nqt-title="' + p[0] + '"]'); return el !== null && p[1].every((s) => el.querySelector(s) !== null) };
   const quiet = document.querySelector('p.ws-empty') === null && document.querySelector('[aria-busy="true"]:not(td):not([role="gridcell"])') === null;
   return JSON.stringify({ ready: quiet && R.every(ok), panels: document.querySelectorAll('[data-nqt-title]').length, visibility: document.visibilityState, url: location.href }) })()`;
-const evaluate = (url) => new Promise((res, rej) => { const ws = new WebSocket(url); ws.onerror = rej;
-  ws.onmessage = (ev) => { ws.close(); res(JSON.parse(JSON.parse(ev.data).result.result.value)) };
+const evaluate = (url) => new Promise((res, rej) => { const ws = new WebSocket(url);
+  ws.onerror = () => rej(new Error('debugging socket error')); ws.onclose = () => rej(new Error('debugging socket closed'));
+  ws.onmessage = (ev) => { try { const m = JSON.parse(ev.data); if (m.id !== 1) return; ws.close();
+    const v = m.result?.result?.value; if (typeof v !== 'string') throw new Error(JSON.stringify(m.error ?? m.result?.exceptionDetails ?? m)); res(JSON.parse(v)) } catch (e) { ws.close(); rej(e) } };
   ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } })) });
 let last = { ready: false, reason: 'no page target' };
 for (const end = Date.now() + Number(timeoutMs); Date.now() < end && !last.ready; await new Promise((r) => setTimeout(r, 250))) {

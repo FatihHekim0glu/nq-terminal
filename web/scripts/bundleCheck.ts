@@ -32,8 +32,12 @@ export const BUNDLE_BUDGET = {
    * scripts/shellBudget.test.ts names each piece and pins this ceiling. The ceiling is that size plus 2 kB, so a
    * later wave cannot grow the shell back unnoticed: to grow it on purpose, move something else out first, or raise
    * this number together with PINNED_SHELL_CEILING in shellBudget.test.ts and say why.
+   *
+   * Release 0.2.0 raised it by 100 B (114,900 to 115,000) for the global job indicator: its mount in App.tsx (a lazy
+   * import, a boundary and a suspense, after the first idle moment) costs about 45 B gzip in the shell, and the indicator
+   * itself is a chunk of its own. The 5 kB of room under the target is kept.
    */
-  shellGzip: 114_900,
+  shellGzip: 115_000,
   /**
    * The gallery build's shell (the E2E build, `--gallery`) is about 0.9 kB larger: its entry loads the API client
    * and the connection state eagerly, so those two split out of index. Measured 113.7 kB after shell diet 3, plus 2 kB.

@@ -667,6 +667,8 @@ class RunService:
                 sibling = self._regress_old(other)
                 if sibling is not None:
                     return sibling, "sibling_regress_check"
+        if name_base and name_base not in entries and name_base.startswith("t_") and name_base[2:] in entries:
+            name_base = name_base[2:]  # a terminal re-run is `t_<base>_regress_r<N>` (services/actions.anchor_run_id)
         return (name_base, "name") if name_base else (None, None)
 
     def _regress_identical(self, entry: RunEntry) -> bool | None:

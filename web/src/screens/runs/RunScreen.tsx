@@ -2,7 +2,8 @@
 // analysis screen): the red function bar with the run id in an amber field, `96) Actions` and `99) Help`;
 // the tabs `1) Chart 2) Trades 3) Fills 4) Decisions 5) Closes 6) Rolls 7) Config 8) Notes`; the facts
 // row, the check strip and the ledger row; then the chosen tab. `98) Export` saves the tab on screen as
-// CSV (the chart's series, the loaded page of a table, or the configuration). The context is a run id (from the
+// CSV (the chart's series, the loaded page of a table, or the configuration). 96) Actions also starts a run from this run
+// (screens/launch: the Start from form queues a backtest in JOBS). The context is a run id (from the
 // command line, a RUNS row or the panel's link group). Every request is a GET on the run's own routes.
 import { useId, useState } from 'react'
 import { useRun } from '../../api/queries'
@@ -11,11 +12,17 @@ import { ExportSlotProvider, useExportSlot } from '../../chrome/exportSource'
 import { AmberField } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
+import { postMessage } from '../../chrome/MessageLine.store'
 import TabStrip from '../../chrome/TabStrip'
 import type { ScreenProps } from '../../chrome/WorkspaceScreens'
 import type { LinkGroup } from '../../chrome/WorkspaceLayouts'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
+import { LAUNCH } from '../../copy/launch'
 import { HELP_LINES, RUN } from '../../copy/runs'
+import { useAnchorPanel } from '../../jobsbar/AnchorPanel'
+import { JOBS_BAR } from '../../copy/jobsBar'
+import { seedFromRun } from '../launch/model'
+import { useStartFrom } from '../launch/StartFrom'
 import RunChart from './RunChart'
 import RunConfig from './RunConfig'
 import { LedgerRow, RunChecks, RunFacts, copyCommand } from './RunHeader'
@@ -27,9 +34,13 @@ interface RunBarProps {
   readonly run: string
   readonly detail: RunDetail | undefined
   readonly onExport?: () => void
+  /** Opens the Start from form for this run; absent until the run has loaded. */
+  readonly onStartFrom?: () => void
+  /** Opens the anchor re-run region for this run; absent until the run has loaded. */
+  readonly onAnchor?: () => void
 }
 
-function RunBar({ run, detail, onExport }: RunBarProps) {
+function RunBar({ run, detail, onExport, onStartFrom, onAnchor }: RunBarProps) {
   const actions = usePanelActions()
   const [text, setText] = useState(run)
   const command = detail?.ledger_command.eligible ? detail.ledger_command.command : null
@@ -58,6 +69,8 @@ function RunBar({ run, detail, onExport }: RunBarProps) {
             ...(run ? [{ label: RUN.actions.tearSheet, onSelect: () => requestLine(`${run} EQ`) }] : []),
             { label: RUN.actions.runs, onSelect: () => requestLine('RUNS') },
             ...(command ? [{ label: RUN.actions.copyLedger, onSelect: () => copyCommand(command) }] : []),
+            ...(onStartFrom ? [{ label: LAUNCH.menu.run, onSelect: onStartFrom }] : []),
+            ...(onAnchor ? [{ label: JOBS_BAR.panel.menuRun, onSelect: onAnchor }] : []),
           ],
         },
         ...(onExport ? [{ n: FUNCTION_NUMBERS.export, label: FUNCTION_BAR.export, onRun: onExport }] : []),
@@ -91,10 +104,19 @@ function RunView({ run, link }: { readonly run: string; readonly link: LinkGroup
   const query = useRun(run)
   const detail = query.data
   const slot = useExportSlot()
+  const startFrom = useStartFrom()
+  const anchor = useAnchorPanel()
+  const onStartFrom = detail === undefined ? undefined : () => {
+    const seed = seedFromRun(detail)
+    if (seed === null) postMessage(LAUNCH.noSeed, 'error')
+    else startFrom.open(seed)
+  }
   return (
     <ExportSlotProvider slot={slot}>
       <div className="run-screen" data-screen="RUN" data-run={run}>
-        <RunBar key={run} run={run} detail={detail} onExport={() => slot.run()} />
+        <RunBar key={run} run={run} detail={detail} onExport={() => slot.run()} onStartFrom={onStartFrom} onAnchor={detail === undefined ? undefined : () => anchor.open(detail.summary.run_id)} />
+        {startFrom.panel}
+        {anchor.panel}
         <TabStrip
           panelId={actions.panelId}
           label={RUN.tabsLabel}

@@ -235,3 +235,21 @@ def test_runner_derived_fields_are_refused(strategy: str) -> None:
 @pytest.mark.parametrize("key", ENGINE_BASE)
 def test_nautilus_base_config_fields_are_refused(strategy: str, key: str) -> None:
     refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], key: 1})
+
+
+# volmanaged_bh buys at t0 (sizing_nt reads it before the strategy sees the rest): a date inside the in-sample fence.
+@pytest.mark.parametrize("value", ["2022-01-01", "2026-01-01", "2009-12-31", "2021-13-01", "2011-4-21", "soon", 20110421,
+                                   [2011, 4, 21], True, None])
+def test_t0_of_volmanaged_bh_must_be_an_iso_date_inside_the_fence(value) -> None:
+    refused(strategy="volmanaged_bh", params={**TICKS, "t0": value})
+
+
+@pytest.mark.parametrize("value", ["2010-01-01", "2011-04-21", "2021-12-31"])
+def test_t0_of_volmanaged_bh_inside_the_fence_is_allowed(value) -> None:
+    params = {**TICKS, "t0": value}
+    assert JobSpec.model_validate(spec_dict(strategy="volmanaged_bh", params=params)).params == params
+
+
+@pytest.mark.parametrize("strategy", ["volmanaged", "tsmom", "dtsmom", "eomtsy", "za_orb", "overnight"])
+def test_t0_is_not_a_parameter_of_the_other_strategies(strategy) -> None:
+    refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], "t0": "2011-04-21"})

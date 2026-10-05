@@ -70,17 +70,18 @@ def test_contract_file_is_canonical():
     assert text == render(json.loads(text))
 
 
-JOB_WRITES = {"/api/jobs": {"post"}, "/api/jobs/{job_id}": {"delete"},  # PRD U3 (two of the three writes)
-              "/api/workspaces/{doc}": {"put"}}  # 03 10.3 (the third): the only writes in the contract
+JOB_WRITES = {"/api/jobs": {"post"}, "/api/jobs/{job_id}": {"delete"},  # PRD U3 (two of the four writes)
+              "/api/jobs/actions": {"post"},  # V020 (the launch action, the third)
+              "/api/workspaces/{doc}": {"put"}}  # 03 10.3 (the fourth): the only writes in the contract
 
 
 def non_get_operations(schema: dict) -> dict[str, set[str]]:
-    """Every path with a method other than get, minus the three writes (which must be exactly those methods)."""
+    """Every path with a method other than get, minus the four writes (which must be exactly those methods)."""
     found = {path: {m for m in ops if m in METHODS and m != "get"} for path, ops in schema["paths"].items()}
     return {path: methods for path, methods in found.items() if methods and methods != JOB_WRITES.get(path)}
 
 
-def test_contract_is_get_only_bar_the_three_writes():
+def test_contract_is_get_only_bar_the_four_writes():
     saved = json.loads(CONTRACT.read_text(encoding="utf-8")) if CONTRACT.exists() else current_schema()
     assert non_get_operations(saved) == {}
     for path, methods in JOB_WRITES.items():

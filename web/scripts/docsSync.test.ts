@@ -40,6 +40,8 @@ const PACKAGE = JSON.parse(readFileSync(path.join(WEB, 'package.json'), 'utf8'))
 }
 const OPENAPI = JSON.parse(read('contract', 'openapi.json')) as { readonly paths: Readonly<Record<string, Readonly<Record<string, unknown>>>> }
 const CONTRACT_PATHS = Object.keys(OPENAPI.paths)
+// A path with no GET (POST /api/jobs/actions, release 0.2.0) is listed by its write, as a POST line.
+const WRITE_ONLY_PATHS = CONTRACT_PATHS.filter((p) => !('get' in (OPENAPI.paths[p] ?? {})))
 
 const INDEX_START = '<!-- endpoint-index:start -->'
 const INDEX_END = '<!-- endpoint-index:end -->'
@@ -75,7 +77,7 @@ function indexLines(block: string): IndexLine[] {
 }
 
 /** What is wrong with an index, as readable problems; an empty list means it matches the contract path for path. */
-function indexProblems(lines: readonly IndexLine[], contractPaths: readonly string[]): string[] {
+function indexProblems(lines: readonly IndexLine[], contractPaths: readonly string[], writeOnly: readonly string[] = WRITE_ONLY_PATHS): string[] {
   const problems: string[] = []
   const listed = lines.map((l) => l.path)
   const seen = new Set<string>()
@@ -83,7 +85,7 @@ function indexProblems(lines: readonly IndexLine[], contractPaths: readonly stri
   for (const p of listed) (seen.has(p) ? repeated : seen).add(p)
   const missing = contractPaths.filter((p) => !seen.has(p))
   const extra = [...seen].filter((p) => !contractPaths.includes(p))
-  const notGet = lines.filter((l) => l.method !== 'GET').map((l) => `${l.method} ${l.path}`)
+  const notGet = lines.filter((l) => l.method !== 'GET' && !writeOnly.includes(l.path)).map((l) => `${l.method} ${l.path}`)
   const bare = lines.filter((l) => l.consumers === '').map((l) => l.path)
   if (missing.length > 0) problems.push(`missing from the endpoint index: ${missing.join(', ')}`)
   if (extra.length > 0) problems.push(`in the endpoint index but not in contract/openapi.json: ${extra.join(', ')}`)
@@ -93,7 +95,7 @@ function indexProblems(lines: readonly IndexLine[], contractPaths: readonly stri
   return problems.length === 0 ? [] : [...problems, `Fix: ${INDEX_HINT}`]
 }
 
-const CONTRACT_INDEX: IndexLine[] = CONTRACT_PATHS.map((p) => ({ method: 'GET', path: p, consumers: 'HOME' }))
+const CONTRACT_INDEX: IndexLine[] = CONTRACT_PATHS.map((p) => ({ method: WRITE_ONLY_PATHS.includes(p) ? 'POST' : 'GET', path: p, consumers: 'HOME' }))
 
 describe('the endpoint index checker (born failing on a planted drift)', () => {
   it('accepts an index that lists every contract path once', () => {
@@ -134,10 +136,10 @@ describe('the endpoint index checker (born failing on a planted drift)', () => {
 })
 
 describe('docs/ARCHITECTURE.md section 4.1 endpoint index', () => {
-  it('pins the contract to the 81 paths the docs quote, all GET but the three writes', () => {
-    expect(CONTRACT_PATHS, 'contract/openapi.json changed: update docs/ARCHITECTURE.md section 4.1 and the README path count').toHaveLength(81)
-    // PRD U3 and 03 10.3: the queue's POST and DELETE and the workspace PUT are the only writes; every other path is GET and nothing else.
-    const writes: Readonly<Record<string, readonly string[]>> = { '/api/jobs': ['get', 'post'], '/api/jobs/{job_id}': ['get', 'delete'], '/api/workspaces/{doc}': ['get', 'put'] }
+  it('pins the contract to the 84 paths the docs quote, all GET but the four writes', () => {
+    expect(CONTRACT_PATHS, 'contract/openapi.json changed: update docs/ARCHITECTURE.md section 4.1 and the README path count').toHaveLength(84)
+    // PRD U3, 03 10.3 and release 0.2.0: the queue's POST and DELETE, the launch action's POST and the workspace PUT are the only writes; every other path is GET and nothing else.
+    const writes: Readonly<Record<string, readonly string[]>> = { '/api/jobs': ['get', 'post'], '/api/jobs/{job_id}': ['get', 'delete'], '/api/jobs/actions': ['post'], '/api/workspaces/{doc}': ['get', 'put'] }
     for (const [route, methods] of Object.entries(OPENAPI.paths)) expect({ route, methods: Object.keys(methods).sort() }).toEqual({ route, methods: [...(writes[route] ?? ['get'])].sort() })
   })
 
@@ -145,6 +147,7 @@ describe('docs/ARCHITECTURE.md section 4.1 endpoint index', () => {
     const lines = indexLines(indexBlock(ARCHITECTURE))
     expect(indexProblems(lines, CONTRACT_PATHS)).toEqual([])
     expect(lines).toHaveLength(CONTRACT_PATHS.length)
+    expect(lines.filter((l) => l.method !== 'GET').map((l) => `${l.method} ${l.path}`)).toEqual(WRITE_ONLY_PATHS.map((p) => `POST ${p}`))
   })
 
   it('has its own heading, above the block, and says the consumers are best effort', () => {

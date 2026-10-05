@@ -57,11 +57,12 @@ def count_jobs(client: TestClient) -> int:
     return len(client.get("/api/jobs").json()["jobs"])
 
 
-def test_the_only_non_get_routes_are_the_two_job_writes_and_the_workspace_put(tmp_path) -> None:
+def test_the_only_non_get_routes_are_the_job_writes_the_launch_action_and_the_workspace_put(tmp_path) -> None:
     app = with_jobs(create_app(load_settings({})))
-    assert jobs_api.ALLOWED_WRITE_ROUTES == ("POST /api/jobs", "DELETE /api/jobs/{job_id}", "PUT /api/workspaces/{doc}")
+    assert jobs_api.ALLOWED_WRITE_ROUTES == (
+        "POST /api/jobs", "DELETE /api/jobs/{job_id}", "POST /api/jobs/actions", "PUT /api/workspaces/{doc}")
     assert sorted(non_get_routes(app)) == sorted(jobs_api.ALLOWED_WRITE_ROUTES)
-    # the app registers exactly those three writes; without the allow list the GET-only check refuses it
+    # the app registers exactly those four writes; without the allow list the GET-only check refuses it
     assert sorted(non_get_routes(create_app(load_settings({})))) == sorted(jobs_api.ALLOWED_WRITE_ROUTES)
     with pytest.raises(GetOnlyError):
         assert_get_only(app)
@@ -200,6 +201,13 @@ def test_an_invalid_spec_is_422_and_queues_nothing(client, popen, mutation) -> N
     assert count_jobs(client) == 0 and popen.calls == []
 
 
+@pytest.mark.parametrize("run_id", ["t_x_regress_r1", "t_x_haltfix_r2"])
+def test_a_hand_queued_job_cannot_take_an_anchor_run_id(client, popen, run_id) -> None:
+    response = post(client, spec_dict(run_id=run_id))
+    assert response.status_code == 422 and isinstance(response.json()["detail"], list)
+    assert count_jobs(client) == 0 and popen.calls == []
+
+
 @pytest.mark.parametrize("body", [b"", b"{", b"[]", b"null", b'"x"', b"\xff\xfe", b"NaN"])
 def test_a_malformed_body_is_422(client, body: bytes) -> None:
     assert post(client, body).status_code == 422
@@ -306,8 +314,11 @@ def test_the_schema_has_the_job_models_and_no_order_words() -> None:
     schema = with_jobs(create_app(load_settings({}))).openapi()
     assert {"Job", "JobList", "JobSpec"} <= set(schema["components"]["schemas"])
     ours = {p: ops for p, ops in schema["paths"].items() if p.startswith("/api/jobs")}
-    assert set(ours) == {"/api/jobs", "/api/jobs/{job_id}"}
+    launch = {"/api/jobs/actions", "/api/jobs/actions/presets", "/api/jobs/actions/anchors/{run_id}"}  # V020 (api/actions.py)
+    assert set(ours) == {"/api/jobs", "/api/jobs/{job_id}"} | launch
     assert set(ours["/api/jobs"]) == {"get", "post"} and set(ours["/api/jobs/{job_id}"]) == {"get", "delete"}
+    assert set(ours["/api/jobs/actions"]) == {"post"} and set(ours["/api/jobs/actions/presets"]) == {"get"}
+    assert set(ours["/api/jobs/actions/anchors/{run_id}"]) == {"get"}
     words = re.compile(r"order|submit|cancel|modify", re.IGNORECASE)
     names = list(ours) + [op["operationId"] for ops in ours.values() for op in ops.values()]
     assert not [n for n in names if words.search(n)]

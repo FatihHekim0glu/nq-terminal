@@ -1,0 +1,25 @@
+/* The anchor result badge and the re-run control. Tokens only; the words carry the meaning, colour sits on top. */
+.anchor-badge { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+.anchor-badge-word { font-weight: 700; }
+.anchor-badge .muted { color: var(--muted); }
+.anchor-badge-detail { color: var(--text); }
+.anchor-rerun { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: var(--font-sans); font-size: var(--fs-nav); }
+.anchor-rerun-status { color: var(--text); }
+.anchor-rerun-refused { color: var(--warn); font-weight: 700; margin: 0; }
+.anchor-rerun-btn {
+  flex: 0 0 auto; height: 20px; padding: 0 8px;
+  background: transparent; border: 1px solid var(--border-int); border-radius: 0;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.anchor-rerun-btn:hover:not(:disabled) { background: var(--hover-menu); }
+.anchor-rerun-btn:disabled { color: var(--muted); cursor: default; }
+.anchor-rerun-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* The anchor re-run region of RUN and LEDG: a bordered block that wraps at any width (reflow at 200% zoom). */
+.anchor-panel {
+  flex: 0 0 auto; box-sizing: border-box; margin: 4px 6px; padding: 4px 6px 6px; min-width: 0; max-height: 60%; overflow: auto;
+  border: 1px solid var(--border-int); background: var(--bg); color: var(--text);
+  font-family: var(--font-sans); font-size: var(--fs-data);
+}
+.anchor-panel-heading { margin: 0; color: var(--data); font-size: var(--fs-data); font-weight: 700; overflow-wrap: anywhere; }
+.anchor-panel-note { margin: 2px 0; color: var(--muted); overflow-wrap: anywhere; }
+.anchor-panel-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

@@ -44,19 +44,23 @@ function gapped(answer: { status: number; body: unknown }) {
   expect(detail.startsWith(`${DEMO_DETAIL.notInDemo}. ${GAP_TEXT.lead} `)).toBe(true)
 }
 
-const CONTRACT_PATHS = Object.keys((JSON.parse(contract) as { paths: Record<string, unknown> }).paths).sort()
+const CONTRACT = (JSON.parse(contract) as { paths: Record<string, Record<string, unknown>> }).paths
+const CONTRACT_PATHS = Object.keys(CONTRACT).sort()
+// The demo answers reads: a path that has only a write (POST /api/jobs/actions) has no body to serve.
+const READ_PATHS = CONTRACT_PATHS.filter((path) => 'get' in (CONTRACT[path] ?? {}))
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 81 paths of contract/openapi.json, the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(81)
-    expect(Object.keys(DEMO_ROUTES).sort()).toEqual(CONTRACT_PATHS)
+  it('has exactly the 83 readable paths of contract/openapi.json (84 with the write-only launch action), the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(84)
+    expect(READ_PATHS).toHaveLength(83)
+    expect(Object.keys(DEMO_ROUTES).sort()).toEqual(READ_PATHS)
   })
 
   it('is typed so that a table missing any one path does not compile', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(80)
+    expect(Object.keys(incomplete)).toHaveLength(82)
   })
 })
 
@@ -536,6 +540,8 @@ describe('the P2 paths in the demo: the queue and the IB snapshot are off, the r
     refused(get('/api/analytics/run/{run_id}/capacity', { path: { run_id: 'nt_dtsmom_v0_ts1' } }), 404)
     refused(get('/api/market/term-structure/{root}', { path: { root: 'NQ' } }), 404)
     refused(get('/api/jobs/{job_id}', { path: { job_id: 'j_000000000000' } }), 404)
+    refused(get('/api/jobs/actions/presets'), 404)
+    refused(get('/api/jobs/actions/anchors/{run_id}', { path: { run_id: 't_a_regress_r1' } }), 404)
   })
 })
 

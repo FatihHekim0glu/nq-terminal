@@ -21,8 +21,8 @@ These rules are the project's own, and a pull request that breaks one will not b
 
 1. **It is read only.** The terminal never places, modifies or cancels an order and never connects to a real broker.
    There is no order path and none may be added, not behind a flag, not "for later". The only writes the backend
-   serves are three: the two backtest queue routes, `POST /api/jobs` and `DELETE /api/jobs/{job_id}`, and the workspace
-   store, `PUT /api/workspaces/{doc}`. A syntax-tree test
+   serves are four: the two backtest queue routes, `POST /api/jobs` and `DELETE /api/jobs/{job_id}`, the launch action,
+   `POST /api/jobs/actions`, and the workspace store, `PUT /api/workspaces/{doc}`. A syntax-tree test
    ([`backend/tests/test_safety_ast.py`](backend/tests/test_safety_ast.py)) scans the code for write calls, order-style
    names and direct file reads of prices, and the browser safety spec
    ([`web/e2e/flows/safety.spec.ts`](web/e2e/flows/safety.spec.ts)) checks that every request is a GET apart from those

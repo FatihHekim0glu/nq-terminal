@@ -1,13 +1,16 @@
 // The job queue's client (ARCHITECTURE section 8; PRD U3, DL5): the ONLY module of the web app that sends anything
 // but a GET, and the only one besides client.ts that calls fetch. It speaks to /api/jobs and nothing else:
 // - reads: GET /api/jobs (the list) and GET /api/jobs/{job_id} (one job with its log tail);
-// - writes: one POST to queue a run and one DELETE to stop a job, both with the X-NQT: 1 header and the JSON content
+// - launch (release 0.2.0): GET /api/jobs/actions/presets and POST /api/jobs/actions (a backtest from a ledger preset, or an
+//   anchor re-run), which end in the same queue;
+// - writes: one POST to queue a run, one POST to launch an action and one DELETE to stop a job, both with the X-NQT: 1 header and the JSON content
 //   type the server requires (the DELETE has no body), same origin only, redirects refused, no credentials elsewhere.
 // Nothing here can place or change a broker order: the queue runs in-sample backtests (run_base.py) and no more.
 // The GET-only source scan (client.test.ts, findWriteRequests) must allow exactly this file and exactly these
 // methods (see the wiring notes of the JOBS slice); every other module keeps the scan.
 import type { JobDetail, JobSpec, JobView, JobsList } from '../screens/jobs/types'
 import { ApiError, CLIENT_HEADER, CLIENT_ID } from './client'
+import type { Schemas } from './types'
 
 export const JOBS_PATH = '/api/jobs'
 /** The header the server requires on a write (a cross-site page cannot set it without a pre-flight the server refuses). */
@@ -112,3 +115,17 @@ export const queueJob = (spec: JobSpec, options: CallOptions = {}): Promise<JobV
 export async function stopJob(jobId: string, options: CallOptions = {}): Promise<JobView> {
   return call<JobView>({ method: 'DELETE', url: jobUrl(jobId), write: true, signal: options.signal })
 }
+
+export const PRESETS_PATH = `${JOBS_PATH}/actions/presets`
+export const ACTIONS_PATH = `${JOBS_PATH}/actions`
+
+/** GET /api/jobs/actions/presets: the ledger rows that can start a run and the parameters of each strategy. Price free. */
+export const getPresets = (options: CallOptions = {}): Promise<Schemas['PresetList']> =>
+  call<Schemas['PresetList']>({ method: 'GET', url: PRESETS_PATH, write: false, signal: options.signal })
+
+/** One action of the launch route: a backtest from a preset, or a re-run of a finished run as an anchor. */
+export type ActionRequest = Schemas['BacktestAction'] | Schemas['AnchorAction']
+
+/** POST /api/jobs/actions: queues the action in the JOBS queue. The server answers the job and the action as it resolved it, or 404, 409, 422, 429 or 503 in words. */
+export const postAction = (request: ActionRequest, options: CallOptions = {}): Promise<Schemas['ActionResult']> =>
+  call<Schemas['ActionResult']>({ method: 'POST', url: ACTIONS_PATH, body: request, write: true, signal: options.signal })

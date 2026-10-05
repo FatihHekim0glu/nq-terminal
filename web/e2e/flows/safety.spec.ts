@@ -6,7 +6,7 @@
 //   ids and schemas (the served OpenAPI document and contract/openapi.json), and on the front end the
 //   API routes it calls, the built chunks it loads (named after their modules), the mnemonics and the
 //   screen and panel names in the page. The matcher's born-failing cases are in scan.spec.ts;
-// - the backend answers every write method with 405 except the three writes (the two JOBS writes and the workspace PUT), which refuse a request without the
+// - the backend answers every write method with 405 except the four writes (the two JOBS writes, the launch action and the workspace PUT), which refuse a request without the
 //   X-NQT header, with another content type or from another origin, and the proof and session routes, which refuse a
 //   write with 403; it refuses a cross-site read with 403 too (these requests come from the test, not the page, which
 //   only ever sends GET on a tour). A write carries the page's origin, as a page would send it; without one the session
@@ -154,7 +154,7 @@ test.describe('safety flows', () => {
     expect(actionNames(named)).toEqual([])
   })
 
-  test('no backend route, operation or schema name matches order|submit|cancel|modify, and every route is GET but the three writes', async ({ page }) => {
+  test('no backend route, operation or schema name matches order|submit|cancel|modify, and every route is GET but the four writes', async ({ page }) => {
     const served = await apiJson<OpenApiDoc>(page, '/api/openapi.json')
     const contract = JSON.parse(fs.readFileSync(CONTRACT, { encoding: 'utf-8' })) as OpenApiDoc
     expect(Object.keys(served.paths).sort()).toEqual(Object.keys(contract.paths).sort())
@@ -165,7 +165,7 @@ test.describe('safety flows', () => {
     expect(actionNames(openApiNames(contract))).toEqual([])
   })
 
-  test('the backend answers every write method with 405 on every route but the three writes, and refuses a cross-site read', async ({ page, baseURL }) => {
+  test('the backend answers every write method with 405 on every route but the four writes, and refuses a cross-site read', async ({ page, baseURL }) => {
     const served = await apiJson<OpenApiDoc>(page, '/api/openapi.json')
     const origin = new URL(String(baseURL)).origin // a page sends its own origin with a write; the session check passes it on
     const answers: string[] = []
@@ -176,8 +176,12 @@ test.describe('safety flows', () => {
         if (ALLOWED_WRITES.includes(`${method} ${route}`)) continue
         const response = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json', origin } })
         // The proof and the three session routes take no cookie, so a write to them is refused outright (403) instead.
+        // DELETE /api/jobs/actions is read as DELETE /api/jobs/{job_id} with a malformed id: the write guard refuses it (403, no
+        // X-NQT header here), or the id check does (422, 503 with the runner off). Nothing is deleted either way.
+        const jobIdRefusal = method === 'DELETE' && route === '/api/jobs/actions'
         const expected = SESSION_ROUTES.has(route) ? 403 : 405
-        if (response.status() !== expected) answers.push(`${method} ${url}: ${response.status()}`)
+        const ok = jobIdRefusal && !OFFLINE ? [403, 422, 503].includes(response.status()) : response.status() === expected
+        if (!ok) answers.push(`${method} ${url}: ${response.status()}`)
         if (OFFLINE) continue // the demo has no session: it answers every write with 405
         // The same write with no Origin at all is refused by the session check before the router is asked (03 4.2).
         const bare = await page.request.fetch(url, { method, data: '{}', headers: { 'content-type': 'application/json' } })

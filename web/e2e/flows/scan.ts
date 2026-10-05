@@ -78,21 +78,24 @@ export const JOB_WRITES: readonly string[] = ['DELETE /api/jobs/{job_id}', 'POST
 /** The third write (03 10.3, D3.1): the workspace store's versioned PUT. */
 export const WORKSPACE_WRITE = 'PUT /api/workspaces/{doc}'
 
-/** Every write the terminal has: the two JOBS writes and the workspace PUT, sorted. */
-export const ALLOWED_WRITES: readonly string[] = [...JOB_WRITES, WORKSPACE_WRITE].sort()
+/** The fourth write (V020): launch a registered strategy from a ledger preset, or re-run an anchor, through the queue. */
+export const ACTION_WRITE = 'POST /api/jobs/actions'
+
+/** Every write the terminal has: the two JOBS writes, the launch action and the workspace PUT, sorted. */
+export const ALLOWED_WRITES: readonly string[] = [...JOB_WRITES, ACTION_WRITE, WORKSPACE_WRITE].sort()
 
 const JOB_ID_SEGMENT = /^\/api\/jobs\/j_[0-9a-f]{12}$/
 
-/** True for exactly `POST /api/jobs` and `DELETE /api/jobs/<job id>`, on the page's own origin. */
+/** True for exactly `POST /api/jobs`, `POST /api/jobs/actions` and `DELETE /api/jobs/<job id>`, on the page's own origin. */
 export function isJobWrite(method: string, url: string, origin: string): boolean {
   const parsed = new URL(url)
   if (parsed.origin !== origin || parsed.search !== '') return false
-  if (method === 'POST') return parsed.pathname === '/api/jobs'
+  if (method === 'POST') return parsed.pathname === '/api/jobs' || parsed.pathname === '/api/jobs/actions'
   return method === 'DELETE' && JOB_ID_SEGMENT.test(parsed.pathname)
 }
 
 /**
- * Requests that are not a GET to the page's own origin. `allowJobWrites` lets exactly the queue's two writes through
+ * Requests that are not a GET to the page's own origin. `allowJobWrites` lets exactly the queue's writes through
  * (isJobWrite): a PUT or PATCH there, a POST to any other path and a DELETE of a nested path are still reported.
  */
 export function nonGetRequests(requests: readonly RequestRecord[], origin: string, allowJobWrites = false): string[] {

@@ -1,0 +1,78 @@
+/* The Start from form (look spec: amber input fields, grey buttons, hard cuts). Tokens only, square corners, no
+   transitions. Every state is in words as well as colour; every control is at least 24px (WCAG 2.5.8). The form wraps
+   at any width, so it reflows at 200% zoom without a sideways scroll (WCAG 1.4.10). */
+.launch {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  margin: 4px 6px;
+  padding: 4px 6px 6px;
+  min-width: 0;
+  max-height: 60%;
+  overflow: auto;
+  border: 1px solid var(--border-int);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.launch-heading { margin: 0; color: var(--data); font-size: var(--fs-data); font-weight: 700; overflow-wrap: anywhere; }
+.launch-note,
+.launch-summary,
+.launch-badge,
+.launch-hint,
+.launch-error-line { margin: 2px 0; overflow-wrap: anywhere; }
+.launch-note { color: var(--text); }
+.launch-live { margin: 0 6px; color: var(--text); font-family: var(--font-sans); font-size: var(--fs-data); overflow-wrap: anywhere; }
+.launch-hint { color: var(--muted); }
+.launch-summary { color: var(--white); font-weight: 700; }
+.launch-badge { color: var(--muted); }
+.launch-badge.launch-off { color: var(--warn); font-weight: 700; }
+.launch-error-line { color: var(--c-down); font-weight: 700; }
+.launch-mono { font-family: var(--font-mono); }
+
+.launch-fields { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.launch-field { display: flex; flex-direction: column; gap: 2px; min-width: 150px; max-width: 280px; margin-bottom: 4px; }
+.launch-label { color: var(--data); overflow-wrap: anywhere; }
+.launch-value { min-height: 24px; line-height: 24px; color: var(--white); }
+.launch-error { color: var(--c-down); overflow-wrap: anywhere; }
+.launch-error b { color: var(--c-down); }
+.launch-changed { color: var(--warn); font-weight: 700; overflow-wrap: anywhere; }
+
+.launch-params { margin: 4px 0 0; padding: 2px 6px 4px; min-width: 0; border: 1px solid var(--border-int); }
+.launch-legend { padding: 0 4px; color: var(--data); font-weight: 700; }
+
+.launch-input {
+  min-height: 24px;
+  padding: 0 4px;
+  background: var(--field-bg);
+  color: var(--field-fg);
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+.launch-input.launch-mono { font-family: var(--font-mono); }
+.launch-input[aria-invalid="true"] { outline: 2px solid var(--c-down); outline-offset: 0; }
+.launch-input:focus-visible,
+.launch-check:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.launch-check { width: 24px; height: 24px; margin: 0; accent-color: var(--data); }
+.launch-check[aria-invalid="true"] { outline: 2px solid var(--c-down); outline-offset: 0; }
+
+.launch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.launch-button {
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 10px;
+  background: var(--btn-grey);
+  color: var(--text);
+  border: 1px solid var(--border-int);
+  border-radius: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+  cursor: pointer;
+}
+.launch-button.launch-primary { font-weight: 700; }
+.launch-button:hover { background: var(--hover-menu); }
+.launch-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.launch-button:disabled,
+.launch-button[aria-disabled="true"] { color: var(--muted); cursor: default; }
