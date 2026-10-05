@@ -1,6 +1,6 @@
-# G2 on Windows: automated verdict (the release 0.1.2 re-measure of 5 October 2026, before its tag; release 0.1.1 below)
+# G2 on Windows: automated verdict (the release 0.1.2 re-measure of 5 October 2026, taken before its tag; release 0.1.1 below)
 
-The 0.1.2 re-measure comes first. The 0.1.1 verdict, the verdict of the published release until the 0.1.2 tag exists, follows unchanged, with the 0.1.0 and W5B verdicts as history.
+The 0.1.2 re-measure comes first. The 0.1.1 verdict, the verdict of the previous release now that 0.1.2 is published, follows unchanged, with the 0.1.0 and W5B verdicts as history.
 
 ## Release 0.1.2: the re-measure of 5 October 2026, before the tag
 
@@ -35,7 +35,7 @@ Evidence: `results.md` in this folder (sections B1 to B7), built from raw record
 
 The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.1.2 measure installer is built and not installed). The simulated minimise, T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.1.2; their 0.1.0 readings below are history. The 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The owner-attended rows are pending, as listed under the 0.1.1 verdict. The installer size of the release is written after the tag; the measuring build's release installer is 3,254,722 bytes, 3.1 MB against the 30 MB ceiling.
 
-## Verdict (release 0.1.1, the published release)
+## Verdict (release 0.1.1, the previous release)
 
 Evidence: `results.md` in this folder (sections A1 to A7), built from raw records under `D:/dev/w6/measure-runs`. Tree `656a964` (which merges `519a3cb`, the thread-cap fix) plus the uncommitted version bump to 0.1.1 (the tracked diff hashes to the stamp of every record; `results.md` section A1), fresh GNU builds of that tree, the GNU smoke build against the real lab for every app row. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Every counted run passed the 60 second CPU gate (2.9 to 4.9%, 0 rejected) with its GPU reading recorded (9 to 15%), the W0B anchor held (the harness digest is unchanged since the W5C reproduction), and the slot was quiet by the manager's lock, not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. Targets are not recalibrated here; ceilings are as in 04 D5. This verdict replaces the 0.1.0 one (W5C, kept below as history) and the W5B one before it.
 

@@ -17,12 +17,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-PUBLISHED_VERSION = "0.1.1"
+PUBLISHED_VERSION = "0.1.2"
 PUBLISHED_TAG = f"desktop-v{PUBLISHED_VERSION}"
-PUBLISHED_SHA256 = "3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc"
-PUBLISHED_BYTES = "3,253,307"
-PREVIOUS_VERSION = "0.1.0"
-PREVIOUS_SHA256 = "2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590"
+PUBLISHED_SHA256 = "3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377"
+PUBLISHED_BYTES = "3,254,474"
+PREVIOUS_VERSION = "0.1.1"
+PREVIOUS_SHA256 = "3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc"
 INSTALLER = f"nq-lab terminal_{PUBLISHED_VERSION}_x64-setup.exe"
 
 TERMINAL = Path(__file__).resolve().parents[2]
@@ -67,30 +67,20 @@ def test_handover_makes_the_published_release_current_and_keeps_the_previous_val
     assert PREVIOUS_SHA256 in text, f"the {PREVIOUS_VERSION} hash stays as history"
 
 
-# The 0.1.2 wave leaves V012 placeholders (double braces, V012, a colon and a name) where release values go: the commit list of the
-# hand-over and the G2 placeholder table. The finisher fills them after the tag and then deletes this allowance. Anywhere else a
-# placeholder still fails.
-FINISHER_PATTERN = re.compile(r"\{\{V012[^}]*\}\}")
-
-
 def _unfilled(path):
-    text = _text(path)
-    if path == HANDOVER:
-        text = FINISHER_PATTERN.sub("", text)
-    return PLACEHOLDER_PATTERN.findall(text)
+    return PLACEHOLDER_PATTERN.findall(_text(path))
 
 
 def test_no_placeholder_is_left_in_the_documents():
-    for path in (README, HANDOVER, DOCS / "smartscreen.md", RESULTS, VERDICT):
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
         assert not _unfilled(path), path.name
 
 
-def test_a_finisher_placeholder_is_allowed_only_in_the_handover_commit_list():
-    assert FINISHER_PATTERN.findall(_text(HANDOVER)), "the commit list carries the V012 placeholders until the finisher fills them"
-    for path in (README, DOCS / "smartscreen.md", RESULTS, VERDICT):
-        assert not FINISHER_PATTERN.findall(_text(path)), path.name
-    assert not PLACEHOLDER_PATTERN.findall(FINISHER_PATTERN.sub("", "{{V012: x}}"))
-    assert PLACEHOLDER_PATTERN.findall(FINISHER_PATTERN.sub("", "{{G2: x}}")), "another placeholder is still refused"
+def test_the_finisher_placeholders_of_the_0_1_2_wave_were_all_filled():
+    needle = "{{" + "V012"
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
+        assert needle not in _text(path), path.name
+    assert "59c83ce, 31baa14, 5153496" in _text(HANDOVER), "the 0.1.2 commit list is filled"
 
 
 def test_verdict_is_an_automated_pass_with_every_row_inside_its_ceiling():

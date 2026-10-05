@@ -2,18 +2,18 @@
 
 ## Release 0.1.2 (the 0.1.2 re-measure), values the finisher fills in
 
-The 0.1.2 documents carry the build-dependent values below as visible `{{V012: ...}}` placeholders. The finisher fills them after the 0.1.2 build in the default folder `D:\dev\release\0.1.2` and after the tag, from that folder's `SHA256SUMS` and `PROVENANCE.json`, from `results.md` and `verdict.md` in this folder, and from the install records of the release check. The README release rows keep saying that 0.1.1 is the latest release until the tag exists. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+The 0.1.2 documents carried the build-dependent values below as visible placeholders. They were filled on 5 October 2026, after the 0.1.2 build in the default folder `D:\dev\release\0.1.2` and after the tag, from that folder's `SHA256SUMS`, from `results.md` and `verdict.md` in this folder, and from the install records of the release check. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` now name 0.1.2 as the latest release and keep 0.1.1 as history. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
 
-| Placeholder | Value to write (0.1.2) | Source |
+| Value | Written (0.1.2) | Source |
 | --- | --- | --- |
-| {{V012: installer SHA256}} | the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.1.2\SHA256SUMS` |
-| {{V012: installer bytes}} | the size of that file | the same file |
-| {{V012: tag and commit}} | `desktop-v0.1.2` and the release commit it names | `PROVENANCE.json`, `git rev-parse desktop-v0.1.2^{commit}` |
-| {{V012: commits}} and {{V012: date}} | the commits of this wave and their date, for the commit list of `handover_windows.md` | `git log` |
+| installer SHA256 | `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377`, the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.1.2\SHA256SUMS` |
+| installer bytes | 3,254,474 bytes, the size of that file (the released asset is `nq-lab.terminal_0.1.2_x64-setup.exe`) | the same file |
+| tag and commit | `desktop-v0.1.2`, an annotated tag on `5153496`, pushed | `PROVENANCE.json`, `git rev-parse desktop-v0.1.2^{commit}` |
+| commits and date | `59c83ce, 31baa14, 5153496` and `2026-10-05`, in the commit list of `handover_windows.md` | `git log` |
 | idle memory (filled on 5 October 2026 from the 0.1.2 re-measure) | 199.0 MB (192.8 to 202.8 MB, median of 8 counted launches, smoke build, real data, desktop caps, trim on): the private working set of the whole tree, read 73 s after HOME ready once the backend's working set had dropped; the private bytes beside it 693.8 MB (678.6 to 713.5 MB), which the trim does not lower; inside the 400 MB target and the 500 MB ceiling; not PROVISIONAL (every counted launch at a 60 s CPU load of 2.9 to 3.4%, 0 rejected). With the trim off at the same point: 404.4 MB (401.9 to 405.3 MB), private bytes 689.5 MB. 0.1.1 read 477.3 MB at HOME ready plus 2.5 s, another reading point | `results.md` sections B1, B3 and B4; `verdict.md` |
 | warm rows with and without the trim (filled on 5 October 2026 from the 0.1.2 re-measure) | warm HOME 543.1 ms with the trim and 544.3 ms without; EQ, second run of the line, 32.1 ms and 42.3 ms; REG, second run of the line, 53.5 ms and 56.8 ms (medians of 5 and of 3 launches); the trim makes none of them slower | `results.md` section B5; `verdict.md` |
-| {{V012: install and upgrade records}} | the dates and step counts of the renamed-product install test and the upgrade scenario, and the `release_check.ps1 -RequireInstall` result | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
-| {{V012: release check result}} | the `release_check.ps1` result with its date | the release check |
+| install and upgrade records | 5 October 2026: install test on the renamed product 54 of 54, upgrade 0.1.1 to 0.1.2 on the renamed product 105 of 105, the owner's real install unchanged | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
+| release check result | 5 October 2026: `release_check.ps1 -Tag desktop-v0.1.2 -RequireSmokeApp -RequireInstall` PASS, no WARN, two NOTEs about the renamed-product records; backend 4,201 passed, crosscheck PASS 2,495, FAIL 0, smoke and smoke-app passed | the release check |
 
 ## Release 0.1.1 (the 0.1.1 re-measure of 4 October 2026)
 
