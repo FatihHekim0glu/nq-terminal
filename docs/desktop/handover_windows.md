@@ -1,6 +1,6 @@
 # Windows hand-over: install, run, update, roll back, release
 
-Status: brought in line with the tree at commit `f2e03bf` (main, D0 to D4, D5 step 1 and the DEC1 owner decisions) on 3 October 2026, for D6. It is still a hand-over draft in one respect: everything that gate G2 or the final regression will measure, and the last commit list, the tag line and the soak result, was a visible placeholder until the follow-up commit after the tag of 4 October 2026 filled them (section 10). Nothing in this document is a measured figure unless it says so and names where it was read. Release 0.1.1 (4 October 2026) is the current version and the text below is written for it; the 0.1.0 figures are kept as history. Its three build-dependent values (the installer SHA256, the installer size and the tag) are the visible placeholders of sections 1, 2 and 7 until the build and the tag exist. Paths with a space are quoted in every command.
+Status: brought in line with the tree at commit `f2e03bf` (main, D0 to D4, D5 step 1 and the DEC1 owner decisions) on 3 October 2026, for D6. It is still a hand-over draft in one respect: everything that gate G2 or the final regression will measure, and the last commit list, the tag line and the soak result, was a visible placeholder until the follow-up commit after the tag of 4 October 2026 filled them (section 10). Nothing in this document is a measured figure unless it says so and names where it was read. Release 0.1.1 (4 October 2026) is the current version and the text below is written for it; the 0.1.0 figures are kept as history. Its three build-dependent values (the installer SHA256, the installer size and the tag) are the visible placeholders of sections 1, 2 and 7 until the build and the tag exist. Paths with a space are quoted in every command. On 5 October 2026, for 0.1.2, sections 4 and 7 were changed to the owner upgrade script (`desktop\scripts\upgrade-owner.ps1`) and the install test's limits on a PC with the app installed were written down.
 
 The app is a per-user Windows installer, unsigned (see [smartscreen.md](smartscreen.md)), built on the GNU host. The decisions behind it are in [owner_decisions_windows.md](owner_decisions_windows.md) and the owner checks are in [checks/](checks/README.md). No MSVC build, no CI run and no macOS build exist yet. Everything below is Windows only.
 
@@ -36,6 +36,7 @@ Newest first, from `git log` of this tree up to `f2e03bf`. The final hand-over c
 
 | Commit | Date | Subject (shortened where needed) |
 |---|---|---|
+| `{{V012: commits}}` | `{{V012: date}}` | desktop 0.1.2: idle memory trim after the HOME prewarm and in quiet periods (`memtrim.py`), private bytes beside the working set as the leak signal, the renamed-product install test and the 0.1.1 to 0.1.2 upgrade scenario, `upgrade-owner.ps1`, `bump-version.ps1`, `publish-release.ps1`, and the audit fixes; the version bump to 0.1.2 and these documents follow in the manager's commit |
 | `656a964, 519a3cb` | `2026-10-04` | perf: cap maths thread pools in the desktop backend server (release 0.1.1), merged by `656a964`; the version bump to 0.1.1 and these documents follow in the manager's commit |
 | `8122c87, dd286fd, 09a660d, 6b0ddaf` | `2026-10-04` | the final hand-over documents, the merge and the final regression, one commit per seam |
 | `f2e03bf` | 2026-10-03 | fix: desktop window watch judges only the run's own app tree; backend record in parallel |
@@ -131,43 +132,52 @@ The app's own files are elsewhere: `%APPDATA%\dev.nqlab.terminal` holds `setting
 
 ## 4. Update and roll back
 
-There is no updater by design. An update is a new installer, installed by hand after the checks of section 2.
+There is no updater by design (for 0.1.2 too: the recommended default, taken as a provisional owner decision). An update is a new installer, checked as in section 2 and installed by the owner through `desktop\scripts\upgrade-owner.ps1`, which takes the backup, runs the installer silently, verifies the result and rolls back on any failure. The script never starts the app: the first launch after an upgrade is yours.
 
 ### Before an upgrade
 
-The upgrade replaces the install folder only. It never touches the lab, `terminal\state`, `settings.json` or the WebView2 folder. There is no automatic backup, so take one yourself, with the app closed:
+1. Check the new build folder as in section 2: the installer, `SHA256SUMS` and `PROVENANCE.json` naming the new version and the commit of its tag.
+2. Keep the installer of the version you have now, with its checksums: it is the rollback installer, and the script refuses to act without it. Keep the copy outside the build folder, because a rebuild with `-Force` empties that folder. For the upgrade from 0.1.1 to 0.1.2:
 
-```powershell
-$stamp = Get-Date -Format 'yyyy-MM-dd_HHmm'
-$dest = "D:\Backups\nq-terminal\$stamp"
-New-Item -ItemType Directory -Force -Path $dest | Out-Null
-Copy-Item -Recurse -LiteralPath 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\state\workspaces' -Destination "$dest\workspaces"
-Copy-Item -LiteralPath 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\state\jobs.json' -Destination $dest
-Copy-Item -LiteralPath "$env:APPDATA\dev.nqlab.terminal\settings.json" -Destination $dest
-```
+   ```powershell
+   $keep = 'D:\Apps\installers\0.1.1'
+   New-Item -ItemType Directory -Force -Path $keep | Out-Null
+   Copy-Item -LiteralPath 'D:\dev\release\0.1.1\nq-lab terminal_0.1.1_x64-setup.exe', 'D:\dev\release\0.1.1\SHA256SUMS', 'D:\dev\release\0.1.1\PROVENANCE.json' -Destination $keep
+   ```
 
-These backup commands use plain `Copy-Item` and were not taken from a run log; check the destination folder holds the files before you go on. The lock file is deliberately left out. Keep the previous installer and its checksums too (when you upgrade from 0.1.0 to 0.1.1 the previous installer is the 0.1.0 one, as in the commands below; for a later upgrade change the version in the three paths):
-
-```powershell
-$keep = 'D:\Apps\installers\0.1.0'
-New-Item -ItemType Directory -Force -Path $keep | Out-Null
-Copy-Item -LiteralPath 'D:\dev\release\0.1.0\nq-lab terminal_0.1.0_x64-setup.exe', 'D:\dev\release\0.1.0\SHA256SUMS', 'D:\dev\release\0.1.0\PROVENANCE.json' -Destination $keep
-```
+   The script checks the kept installer against that `SHA256SUMS` (for 0.1.1, `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`) and against the version `PROVENANCE.json` names, and refuses one that is not the installed version.
+3. Close the app and every browser door window. The script refuses while the app runs, while any `python -m nq_terminal` backend runs (the browser door's included, with or without a lock file) and while `backend.lock` names a live process, because it compares the state folder before and after the install.
 
 ### Upgrade
 
-1. Close the app (and any browser door window if it attached to the app's backend).
-2. Run the new installer. It finds the existing install, offers "uninstall before installing" or "do not uninstall", and proposes the folder used last time. Keep the same folder. The protected permission list is applied again before files are written, and the folder is accepted because it holds only this program's own files. If you added a file of your own to the install folder the installer refuses it (exit code 3): move the file out first. The upgrade path itself was not exercised by the install test, which always installs into a fresh folder, so run the permission check of section 6 after the first upgrade.
-3. Start the app and run the first three rows of the weekly parity list (HOME with data, a workspace LOAD, the amber-classic look).
+First the dry run. It reads the install, runs every check, prints the plan and anything it would refuse, and changes nothing:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\desktop\scripts\upgrade-owner.ps1' -Installer 'D:\dev\release\0.1.2\nq-lab terminal_0.1.2_x64-setup.exe' -RollbackInstaller 'D:\Apps\installers\0.1.1\nq-lab terminal_0.1.1_x64-setup.exe'
+```
+
+When it ends with "dry run: every check passed", run the same line with `-Go` added. With `-Go` the script:
+
+1. **Refuses** on any problem, with nothing changed: no install for this user, or an install whose remembered folder (`HKCU\Software\nqlab\nq-lab terminal`) is not its `InstallLocation`; the app or a backend running (step 3 above); an installer that is not this product's release installer (a measure or smoke installer is refused by its name), or whose SHA256 matches neither `-Sha256` nor its line in `SHA256SUMS`; a missing rollback installer, or one of another version; too little free space on the install drive or on D:.
+2. **Backs up** to `D:\dev\backup\nqt-<installed version>-<time>`: a copy of the install folder, of `terminal\state` (never `backend.lock`, which holds a secret) and of `%APPDATA%\dev.nqlab.terminal`, the two HKCU keys as `registry.json`, and `manifest.json` with the size and SHA256 of every file. It hashes every copy again and refuses if one differs.
+3. **Installs** the new version silently for your account (`/S /NS`, no `/D=`), so it goes into the remembered folder and adds no shortcut. The installer runs hidden, with its temporary files on D:.
+4. **Verifies**: exit code 0; `DisplayVersion` is the new version; `InstallLocation` and the remembered folder are unchanged; the install folder's permission list is the one of section 6 (inheritance removed, exactly you, SYSTEM and Administrators, nothing inherited, and no broad writer on `nq-lab-terminal.exe`, `WebView2Loader.dll` or `uninstall.exe`); the app was not started; no new shortcut; every state and config file hashes as in the manifest.
+5. **Rolls back** on any failed check, and says so: if the install changed, the new version's uninstaller runs silently (app data kept) and the kept installer is installed with `/S /NS /D=<the same folder>` and verified the same way; any state or config file that differs from the manifest is copied back from the backup and hashed again.
+
+Exit codes: 0 upgraded (or, without `-Go`, every check passed); 1 refused, nothing changed; 2 no installer given; 4 the upgrade failed and the old version is back; 5 the upgrade failed and the rollback did not complete. The report is `upgrade-report.json` in the backup folder; on exit code 5 restore by hand from that folder (`manifest.json` lists every file). The WebView2 folder `D:\nq-terminal\webview` is not backed up: no installer or uninstaller touches it.
+
+After exit code 0, start the app yourself and run the first three rows of the weekly parity list (HOME with data, a workspace LOAD, the amber-classic look). The first launch after an upgrade starts with a cold result cache.
+
+Evidence: the script's self-test (`upgrade-owner.ps1 -SelfTest`: 50 born-failing checks against fake registry keys under `HKCU\Software\nqt-upgrade-selftest-<id>`, fake folders under `D:\dev\tmp` and fake installers, among them a running app, a running backend, a hash mismatch, a missing rollback installer, a changed backup copy, and four failed installs that each end rolled back) and its tests (`desktop\scripts\tests\upgrade-owner.tests.ps1`: a dry run against the real 0.1.1 install left the HKCU keys, the install folder and its permission list unchanged) passed on 5 October 2026. `-Go` has not been run against the owner's install: the owner's first `-Go` is its first run there. The installer's own upgrade path that step 3 uses (`/S /NS` with no `/D=`) passed the install test's upgrade scenario on a renamed-product build on the same day (section 7, step 4).
 
 ### Roll back
 
-The installer allows downgrades (the Tauri default, `allowDowngrades` true in the generated script): an installer of an older version may be run over a newer install, its reinstall page offers both "uninstall before installing" and "do not uninstall", and a silent run is not stopped. Running over the top keeps the existing folder and re-checks it, but that path was not exercised by the install test. The recommended rollback is therefore uninstall then install:
+The script rolls back by itself when its checks fail (above). To go back later by hand, for example when the first launch shows a fault: the installer allows downgrades (the Tauri default, `allowDowngrades` true in the generated script): an installer of an older version may be run over a newer install, its reinstall page offers both "uninstall before installing" and "do not uninstall", and a silent run is not stopped. Running over the top keeps the existing folder and re-checks it; on 5 October 2026 the install test's upgrade scenario ran that downgrade, and the upgrades with `/S /NS`, `/S /NS /UPDATE` and no `/D=`, on a renamed-product build ([checks/2026-10-05_install-upgrade-test.md](checks/2026-10-05_install-upgrade-test.md)), not on the shipped installer. The recommended rollback is still uninstall then install, the order the script uses too:
 
 1. Close the app.
 2. Uninstall: Settings, Apps, "nq-lab terminal", or run `uninstall.exe` from the install folder. The silent form is `& '<install folder>\uninstall.exe' /S`. Leave the "delete app data" box unticked unless you mean to reset the app: ticked, it removes `%APPDATA%\dev.nqlab.terminal` and `%LOCALAPPDATA%\dev.nqlab.terminal`. It does not remove `D:\nq-terminal\webview` (the folder the app chose), so delete that one by hand if you want it gone. The uninstaller removes only the files the installer wrote: a file you added to the install folder stays, and so does the folder around it (the install test left `notes-from-the-user.txt` in place on purpose). The silent uninstaller also leaves the registry key `HKCU\Software\nqlab\nq-lab terminal` (the folder it remembers for the next install); that is expected.
-3. Install the kept installer (`D:\Apps\installers\<version>`), after checking its hash against the kept `SHA256SUMS`.
-4. If the workspace seems wrong, close every door (the app and any browser door), copy the backed-up files back into `terminal\state\workspaces`, then start again and check HOME and a workspace LOAD.
+3. Install the kept installer (`D:\Apps\installers\<version>`), after checking its hash against the kept `SHA256SUMS`. The silent form is the one the script uses: `/S /NS /D=<install folder>`, started and waited for as in section 2.
+4. If the workspace seems wrong, close every door (the app and any browser door), copy the backed-up files back from the script's backup folder (`D:\dev\backup\nqt-<version>-<time>\state\workspaces` into `terminal\state\workspaces`, and `config\settings.json` into `%APPDATA%\dev.nqlab.terminal`), check them against the SHA256 values in its `manifest.json`, then start again and check HOME and a workspace LOAD.
 
 What a rollback never costs: the lab, the research files and `terminal\state` are untouched by the uninstaller. The browser door, `start.ps1`, works at every moment and is the fallback (03 section 19). Other rollback rows (a seam, the token, the store, Tauri for Electron, a WebView2 update) are in `03_migration_plan.md` section 20.
 
@@ -232,7 +242,7 @@ The install test of the repository makes the same assertion twice on a silent in
 Order matters, because every record and every artefact carries a stamp of the exact tree (head, hash of `git diff HEAD`, hash of the untracked files). Change one file after a step and the later steps refuse. Run from the terminal folder (`C:\Users\Fatih Hekimoglu\nq-lab\terminal`), with the toolchain on D: as the scripts set it up themselves.
 
 1. **Commit** the tree. `release_check.ps1` needs a clean commit.
-2. **Build** the release build plus the measure build and the smoke build from that commit (output under `D:\dev\release\0.1.1`). The script refuses a folder that already holds files, so add `-Force` when the folder holds an earlier build (it empties the folder first). `-TargetDir` names the cargo target folder (the default is `D:\dev\targets\release`). The reference build of `f2e03bf` was made with `-TargetDir D:\dev\targets\int1 -Force` into `D:\dev\release-b`. For 0.1.0, the folder `D:\dev\release\0.1.0` held an older build on 3 October 2026 (an installer of 3,253,317 bytes, built from `e0834c1`); its `PROVENANCE.json` names that commit, not the tree being released, so `release_check.ps1` refuses it until it is rebuilt:
+2. **Build** the release build plus the measure build, the install-test build (the release feature set under the product name `nq-lab terminal installtest`) and the smoke build from that commit (output under `D:\dev\release\0.1.1`). The script refuses a folder that already holds files, so add `-Force` when the folder holds an earlier build (it empties the folder first). `-TargetDir` names the cargo target folder (the default is `D:\dev\targets\release`). The reference build of `f2e03bf` was made with `-TargetDir D:\dev\targets\int1 -Force` into `D:\dev\release-b`. For 0.1.0, the folder `D:\dev\release\0.1.0` held an older build on 3 October 2026 (an installer of 3,253,317 bytes, built from `e0834c1`); its `PROVENANCE.json` names that commit, not the tree being released, so `release_check.ps1` refuses it until it is rebuilt:
 
    ```powershell
    powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.1.1 -Force
@@ -250,6 +260,21 @@ Order matters, because every record and every artefact carries a stamp of the ex
    powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer 'D:\dev\release\0.1.1\nq-lab terminal_0.1.1_x64-setup.exe'
    ```
 
+   The install test refuses to run at all while any registry entry of the product exists (the HKCU or HKLM uninstall entry, or `HKCU\Software\nqlab\nq-lab terminal`), with or without `-DefaultFolder`. That refusal is right and stays: the entries belong to the product name, not to a folder, so a test install would take over the owner's uninstall entry and the test's uninstall would delete it, and an install without `/D=` would go over the owner's copy. On this PC, where the owner's 0.1.1 is installed, the install test of a new release therefore needs a renamed-product build (its own product name, identifier, registry entries and folders) or an account or PC with no copy installed. That route, its upgrade scenario and the install record that `release_check.ps1 -RequireInstall` reads are described in [checks/2026-10-05_install-upgrade-test.md](checks/2026-10-05_install-upgrade-test.md). `release_check.ps1` itself installs nothing and runs with the owner's copy installed.
+
+   The procedure for 0.1.2 and later is run after the bump commit and the build of step 2, so that the stamp of each record equals the clean tree. The records are new files in `terminal\state\release`, written only on a pass:
+
+   ```powershell
+   # (a) the renamed-product install test on this release folder's install-test installer
+   powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -Installer 'D:\dev\release\0.1.2\nq-lab terminal installtest_0.1.2_x64-setup.exe' -AllowForeign
+   # (b) the renamed build of the previous tag (D:\dev\release-installtest keeps it between runs)
+   powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -BuildRenamed desktop-v0.1.1
+   # (c) the upgrade scenario, the previous renamed installer to this one
+   powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -Upgrade -FromInstaller 'D:\dev\release-installtest\0.1.1-777c162915\nq-lab terminal installtest_0.1.1_x64-setup.exe' -Installer 'D:\dev\release\0.1.2\nq-lab terminal installtest_0.1.2_x64-setup.exe' -AllowForeign
+   ```
+
+   Step (d) is the `-RequireInstall` release check of step 6. Every install, upgrade and uninstall in these runs uses the renamed product, so the owner's copy is never touched: the script compares the real uninstall key, remembered folder and install folder before and after, and fails if any differ. The shipped installer's own bytes are not installed on this PC by these runs; the owner's real upgrade is step 8.
+
 5. **Green records.** Each runs its check and writes a dated, stamped record under `terminal\state\release` only on a pass. The backend record runs the suite in parallel (`-n 16 --dist loadfile`) when the lab's venv has pytest-xdist and serially otherwise: 4,065 tests passed and 1 was skipped in 1 minute 52 seconds in parallel on 3 October 2026, where the serial run took about 9 to 10 minutes. The record always names the serial command, whichever way it ran, because `release_check.ps1` compares it with the check's own command. The crosscheck and the app smoke must use the release folder's smoke exe:
 
    ```powershell
@@ -265,6 +290,12 @@ Order matters, because every record and every artefact carries a stamp of the ex
    powershell -NoProfile -File scripts\release_check.ps1 -Tag desktop-v0.1.1 -RequireSmokeApp
    ```
 
+   From 0.1.2 on it also takes `-RequireInstall`, which needs the two install records of step 4 (the install test and the upgrade scenario on this release folder's install-test installer, stamped with this tree, from this PC, with no failed step and the real install unchanged):
+
+   ```powershell
+   powershell -NoProfile -File scripts\release_check.ps1 -Tag desktop-v0.1.2 -RequireSmokeApp -RequireInstall
+   ```
+
    Do not write the result into any tracked file yet: that would change `git diff HEAD` and a rerun would be refused. It is recorded after the tag (see the end of this section). Result for 0.1.0, as history: `PASS with no WARN on 4 October 2026 (`release_check.ps1 -Tag desktop-v0.1.0 -RequireSmokeApp`; same-day records on `8122c87`: backend 4,147 passed and 1 skipped, crosscheck PASS 2,495, FAIL 0, SKIP 0, INFO 104, smoke and smoke-app passed)`. The result for 0.1.1 is not written here; like the 0.1.0 one, it is recorded in the follow-up docs-only commit after the tag.
 
 7. **The annotated tag**, on the commit that `release_check.ps1` passed on (the release commit, which is HEAD while steps 2 to 6 run), only after step 6 passed on the same day. SemVer 0.x on purpose: the build is unsigned and the owner-attended rows are pending. The tag message names the version and the installer hash and nothing else:
@@ -274,6 +305,8 @@ Order matters, because every record and every artefact carries a stamp of the ex
    ```
 
    The tag message carries the installer's hash exactly as `SHA256SUMS` in the release folder lists it; the hash was not written into any tracked file before the tag. `release_check.ps1` checks that the tag name is free and has the form `desktop-vX.Y.Z`. The push is the owner's: `git -C 'C:\Users\Fatih Hekimoglu\nq-lab\terminal' push origin desktop-v0.1.1`. Tag result for 0.1.0, as history: `annotated tag `desktop-v0.1.0` on `8122c87`, created 4 October 2026 at 13:33 and pushed`. Tag result for 0.1.1: annotated tag desktop-v0.1.1 on the release commit, created and pushed after step 6 passed (the manager writes the commit and the time here).
+
+8. **Owner upgrade**, after the tag and the push: the owner upgrades the installed copy with `desktop\scripts\upgrade-owner.ps1` (section 4), the dry run first and then `-Go`, with this release folder's installer as `-Installer` and the kept installer of the installed version as `-RollbackInstaller`. It is the owner's step: no scripted check runs `-Go`, because it changes the owner's install. It writes under `D:\dev\backup`, the install folder and, on a rollback, the git-ignored state folder, so nothing that the stamps of steps 1 to 6 read.
 
 A record made on the uncommitted tree is refused after the commit, by design. If anything is committed after step 1, run steps 2 to 6 again on the new HEAD; they are scripted and take no choices.
 
@@ -295,6 +328,7 @@ A record made on the uncommitted tree is refused after the commit, by design. If
 | The installer's Install button stays greyed out, or a silent install ends with exit code 3 and one of the messages of register entry 1.3 | The folder is one the installer refuses (section 2): a drive root, a network path, Program Files or Windows, a link, a folder that holds something other than this program's files, a folder owned by another account, or a folder inside a parent that another account could replace | Choose a new, empty folder you own, in your own profile or in a folder you created. A planted file next to the program would load into it on every launch, so the refusal is not to be bypassed. Do not make the parent writable to Everyone or Users to get past it |
 | A silent install ends with exit code 4 or 5 | 4: the permission list could not be set. 5: the read-back after the install found a list that is not the protected one, and the installer removed what it wrote | Nothing is left installed. Run the install again from a normal (not elevated) shell. If it repeats, keep the exact exit code and run the permission check of section 6 on the folder before you change anything |
 | Windows shows "Windows protected your PC" | The installer is unsigned and arrived with a Mark of the Web | `smartscreen.md`. |
+| The app's memory in Task Manager is much lower a minute after you stop using it, or the first click after that is a moment slower | From 0.1.2 the backend trims its working set once the HOME prewarm is done and when it has been quiet for 60 seconds (`NQT_MEMTRIM=0` turns it off). This lowers the working set only, not the committed (private) bytes, which stay the leak signal. The first request afterwards pays for a few pages to be brought back, about 13 ms in the fixture measurement | Nothing to do. An open live stream or a queued or running job holds the trim off by design |
 
 ## 9. Owner checks
 

@@ -33,7 +33,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.routing import BaseRoute, Mount, Route, WebSocketRoute
 from starlette.staticfiles import StaticFiles
 
-from nq_terminal import __version__
+from nq_terminal import __version__, memtrim
 from nq_terminal.api import desktop as desktop_api  # 03 2.2, 4.2 (the proof and the session routes)
 from nq_terminal.api import system
 from nq_terminal.api.home_prewarm import start_home_prewarm
@@ -154,6 +154,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(ALLOWED_HOSTS), www_redirect=False)
     app.add_middleware(LoopbackOnlyMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    memtrim.install(app)  # vnext perf-1: outermost, so every request counts; the working-set trim after the prewarm and in quiet periods
     lifecycle.install(app, settings)  # the lock, taken in the start-up (03 2.1)
     app.include_router(system.router)
     app.include_router(desktop_api.router)

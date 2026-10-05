@@ -139,6 +139,18 @@ These are the fourteen owner decisions of `windows_build_plan.md`, in its order.
 | O16 | Quiet-machine windows | Provisional (plan decision 3) |
 | O17 | How the kit reaches the Mac | Deferred with the Mac |
 
+## 2.2 Provisional defaults taken for release 0.1.2
+
+The 0.1.2 wave needed an answer to each of these before the owner could give one, so the recommended default was taken and is marked Provisional. The owner may still change any of them.
+
+| Decision | Taken for 0.1.2 | Status | What changing it costs |
+| --- | --- | --- | --- |
+| An in-app updater | None. An update is a new installer, installed with `desktop\scripts\upgrade-owner.ps1` (`handover_windows.md`, section 4) | Provisional | An updater is a new network door and a signing key to keep; 03 section 14 bans it for now |
+| Code signing | The installer stays unsigned (`smartscreen.md`); the cheapest route to a signature is an individual OV or IV certificate | Provisional | A certificate costs about 129 to 139 US dollars a year and changes the release build |
+| The 8765 guard | Unchanged: no build run touches the owner's backend on 8765, and the measure build's real-lab rows stay pending while it listens (decision 11) | Provisional | Stopping the owner's terminal for a measurement is the owner's act |
+| `scipy.stats` import work | Deferred to a later release | Provisional | Cold HOME is already inside its ceiling |
+| Memory trim of the backend | The backend trims its working set after the HOME prewarm and in quiet periods (`NQT_MEMTRIM=0` turns it off); the private bytes, not the working set, are the leak signal | Provisional | Off, idle at HOME reads the untrimmed set |
+
 ## 3. Still open for the owner
 
 Seven items wait for the owner. Each has a recommended default; none blocks the dual run.

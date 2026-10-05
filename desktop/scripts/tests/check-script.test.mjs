@@ -55,3 +55,10 @@ test('every pnpm step runs from the web folder (from the terminal folder this pn
   assert.match(step, /-WorkDir \$web\b/)
   assert.doesNotMatch(step, /-WorkDir \$Terminal/)
 })
+
+test('the release-script tests, the owner upgrade tests and the start-path parity run are steps of check.ps1', () => {
+  for (const step of ['install-test-tests', 'upgrade-owner-tests', 'parity']) assert.ok(check.includes(`'${step}'`), `step ${step} is declared`)
+  assert.match(check, /install-test\.tests\.ps1/)
+  assert.match(check, /upgrade-owner\.tests\.ps1/)
+  assert.match(check, /--mode['", ]+parity/)
+})

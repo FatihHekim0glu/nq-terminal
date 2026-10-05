@@ -19,6 +19,9 @@ pub mod folders;
 pub mod policy;
 #[path = "window_rebuild.rs"]
 pub mod rebuild;
+#[cfg(not(feature = "smoke"))]
+#[path = "window_settings.rs"]
+pub mod settings_file;
 
 #[cfg(any(test, feature = "measure"))]
 use folders::check_test_folder;
@@ -166,26 +169,6 @@ fn save_settings() {
     crate::crash::log("settings_saved", detail);
 }
 
-#[cfg(not(feature = "smoke"))]
-fn backup_of(file: &Path) -> PathBuf {
-    let mut name = file.as_os_str().to_owned();
-    name.push(".1");
-    PathBuf::from(name)
-}
-
-/// The settings file, or its backup when the last save stopped between rotate and write; None on first run. A file
-/// that does not parse counts as absent (the owner is asked again), never as a default lab.
-#[cfg(not(feature = "smoke"))]
-fn load_settings(file: &Path) -> Result<Option<Settings>, ShellError> {
-    for path in [file.to_path_buf(), backup_of(file)] {
-        let text = crate::reads::read_settings(&path).map_err(|e| ShellError::Io(e.to_string()))?;
-        if let Some(parsed) = text.and_then(|t| serde_json::from_str::<Settings>(&t).ok()) {
-            return Ok(Some(parsed));
-        }
-    }
-    Ok(None)
-}
-
 /// Removes every `WEBVIEW2_*` variable from this process, so only the builder's settings reach the engine and
 /// none is inherited by the backend child (05 X04). Returns the names removed.
 ///
@@ -225,7 +208,7 @@ pub fn resolve(app: &AppHandle, launch: &Launch) -> Result<WindowOptions, ShellE
     {
         let _ = launch;
         let (wv, config) = measure_paths(std::env::var_os(MEASURE_DIR_VAR))?;
-        let stored = load_settings(&config.join(SETTINGS_FILE))?.unwrap_or_default();
+        let stored = settings_file::load(&config.join(SETTINGS_FILE))?.unwrap_or_default();
         let settings = Settings {
             webview_data_dir: Some(wv),
             ..stored
@@ -268,7 +251,7 @@ fn measure_paths(dir: Option<std::ffi::OsString>) -> Result<(PathBuf, PathBuf), 
 #[cfg(not(any(feature = "smoke", feature = "measure")))]
 fn release_options(app: &AppHandle, product: &str) -> Result<WindowOptions, ShellError> {
     let config_dir = app.path().app_config_dir().map_err(ShellError::from)?;
-    let stored = load_settings(&config_dir.join(SETTINGS_FILE))?;
+    let stored = settings_file::load(&config_dir.join(SETTINGS_FILE))?;
     let mut settings = stored.clone().unwrap_or_default();
     let tools = Tools::from_env();
     if settings
@@ -411,6 +394,9 @@ fn check_lab_setting(lab: Option<&Path>, needed: bool) -> Result<(), ShellError>
 /// Window setup once the window exists: the lab check, the environment check, first-run settings, and the webview
 /// hooks (bridge script, new windows, browser update).
 pub fn setup(window: &WebviewWindow, launch: &Launch) -> Result<(), ShellError> {
+    // The settings were read before the log folder was known: write what that read found (AUD-7).
+    #[cfg(not(feature = "smoke"))]
+    settings_file::log_notes();
     let settings = settings();
     check_lab_setting(settings.lab.as_deref(), lab_needed(launch))?;
     let left = webview2_names();

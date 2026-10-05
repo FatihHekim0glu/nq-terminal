@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 import { attach, sleep } from './cdp.mjs'
 import { shellSpec, startShell, readDevToolsPort, teardown, identityRows, listState, newState } from './shell.mjs'
 import { readShellLog, milestones, engineSettingsProblems, waitForMilestone } from './shelllog.mjs'
-import { memTree, memTreeBreakdown, errorText, T4_UI_TREE_MB } from './mem.mjs'
+import { memTree, memTreeBreakdown, classifyTree, errorText, T4_UI_TREE_MB } from './mem.mjs'
+import { waitForIdleTrim, IDLE_CAP_MS, IDLE_POLL_MS } from './idle-trim.mjs'
 import { mergeRecorded } from './survivors.mjs'
 import { makeLab } from './lab.mjs'
 import { isMainTree, LAB, TERMINAL } from './paths.mjs'
@@ -26,9 +27,20 @@ export const PROBE_SOURCE = fs.readFileSync(path.join(here, 'probe.js'), 'utf8')
 const FIXTURE_RUN = 'nt_dtsmom_v0_fixture_ts1'
 const GIP_DATE = { fixture: '2011-01-20', real: '2019-03-14' }
 const FIXTURE_FILLS_PATTERN = `/api/runs/${FIXTURE_RUN}/fills`
+/**
+ * The floor of the wait after HOME is ready before the idle sample: more than the quiet period plus one poll, and never less than the
+ * settle period. It is only a floor: foreground requests can still arrive after HOME is ready, so the sample waits on the backend's
+ * working set actually dropping and settling (waitForIdleTrim, up to idleCapMs). idleQuietMs 0 switches the quiet wait off for tests.
+ */
+export const idleWaitMs = (o) => Math.max(o.settleMs ?? 0, o.idleQuietMs ?? 0)
+
 const mb = (b) => (typeof b === 'number' ? b / MB : null)
 
-export const defaultOptions = Object.freeze({ homeTimeoutMs: 90_000, settleMs: 8000, memSamples: 3, warmReloads: 3, pageRows: true, size: '1920x1080', realData: false })
+/** The backend's working-set trim (backend/nq_terminal/memtrim.py): quiet period and poll interval, in seconds. */
+export const BACKEND_QUIET_S = 60
+export const BACKEND_POLL_S = 5
+
+export const defaultOptions = Object.freeze({ homeTimeoutMs: 90_000, settleMs: 8000, idleQuietMs: (BACKEND_QUIET_S + BACKEND_POLL_S + 1) * 1000, idleCapMs: IDLE_CAP_MS, memSamples: 3, warmReloads: 3, pageRows: true, size: '1920x1080', realData: false })
 
 /** The lab for the launch: the owner's lab for real data (main tree only), else the lab of a fixture or dataless run. */
 export function labFor(runDir, build, { realData }) {
@@ -40,6 +52,19 @@ export function labFor(runDir, build, { realData }) {
 }
 
 const round1 = (v) => round(v, 1)
+
+/** The backend's private working set in MB (python, its launcher and console host), read from the tree's counters. */
+function backendWsMB(pid) {
+  const tree = memTree(pid)
+  const procs = Array.isArray(tree?.procs) ? tree.procs : tree?.procs ? [tree.procs] : []
+  return classifyTree(procs.map((p) => ({ name: p.exe ?? p.name, wsPrivate: p.wsPrivate }))).backendMB
+}
+
+/** The wait before the idle sample (see waitForIdleTrim); with the quiet wait switched off it is the settle period alone. */
+async function waitIdle(pid, o) {
+  if (!(o.idleQuietMs > 0)) { await sleep(idleWaitMs(o)); return { checked: false, seen: null, capped: false, waitedMs: idleWaitMs(o), series: [] } }
+  return waitForIdleTrim({ read: async () => backendWsMB(pid), now: Date.now, sleep, floorMs: idleWaitMs(o), capMs: o.idleCapMs ?? IDLE_CAP_MS, pollMs: IDLE_POLL_MS })
+}
 
 /** The page served by --attach-url (the offline demo): its root has content and its address is the one asked for. */
 async function waitRoot(cdp, url, ms) {
@@ -71,6 +96,12 @@ async function memSamples(pid, n, gapMs) {
 }
 
 const memRow = (samples) => round1(median(samples.map((s) => mb(s.wsPrivate))))
+
+/** The whole tree's private bytes at idle (median of the samples, MB), read beside the working set: a trim lowers the working set only. null when no sample carries it. */
+export function idlePrivateBytesOf(samples) {
+  const v = median(samples.map((s) => mb(s.privateBytes)).filter((x) => typeof x === 'number'))
+  return v === null ? null : round1(v)
+}
 
 /**
  * Where the idle reading sits: backend, UI tree (WebView2) and shell in MB, and the UI tree by process type. Information beside
@@ -141,7 +172,7 @@ async function measureLaunch(run, spec, result, o) {
   result.homeReady = got.reached
   result.milestonesAtReady = got.milestones
   if (!got.reached) throw new Error(alive() ? 'no home_painted in the shell log' : `the shell exited early with code ${run.exitCode}`)
-  await sleep(o.settleMs)
+  result.idleTrim = await waitIdle(run.child.pid, o)
 }
 
 /**
@@ -171,10 +202,12 @@ export async function launchRun({ build, exe, runDir, o = {} }) {
   let session = null
   try {
     session = build === 'smoke' ? await smokeLaunch(run, spec, result, opts) : (await measureLaunch(run, spec, result, opts), null)
+    if (build === 'smoke') result.idleTrim = await waitIdle(run.child.pid, opts)
     const samples = await memSamples(run.child.pid, opts.memSamples, 2000)
     result.memSamples = samples.map((s) => ({ n: s.n, wsPrivateMB: round1(mb(s.wsPrivate)), privateBytesMB: round1(mb(s.privateBytes)), wsMB: round1(mb(s.ws)), cpuTotalPct: s.cpuTotalPct }))
     treeRows = mergeRecorded(...samples.map(identityRows))
     result.rows.idle_mem_home = memRow(samples)
+    result.idlePrivateBytesMB = idlePrivateBytesOf(samples)
     result.idleBreakdown = idleBreakdownOf(run.child.pid, undefined, (why) => { result.idleBreakdownError = why; console.error(`idle breakdown not read: ${why}`) })
     result.uiOver350 = uiOver350Of(result.idleBreakdown)
     result.processCount = samples.at(-1).n

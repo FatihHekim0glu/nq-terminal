@@ -37,7 +37,7 @@ pub const BASE_ENV: [&str; 20] = [
     "PATH",
 ];
 /// NQT_ names passed on when set; every other NQT_ name the backend gets is the shell's own decision.
-pub const PASSED_NQT: [&str; 1] = ["NQT_CACHE_BYTES"];
+pub const PASSED_NQT: [&str; 2] = ["NQT_CACHE_BYTES", "NQT_MEMTRIM"];
 /// The contract range when tauri.conf.json carries none (`plugins.nqt-shell.contract_min` and `contract_max`).
 pub const CONTRACT_RANGE: (i64, i64) = (1, 1);
 pub const CONFIG_KEY: &str = "nqt-shell";
@@ -125,7 +125,7 @@ pub fn command_line(python: &Path, module: &str) -> String {
 }
 
 /// The backend's environment, built from nothing: the base names, PATH with the venv's Scripts folder first, the
-/// two Python settings, NQT_CACHE_BYTES when set, NQT_DESKTOP=1, NQT_PORT=0 and the spec's test names. Names are
+/// two Python settings, NQT_CACHE_BYTES and NQT_MEMTRIM when set, NQT_DESKTOP=1, NQT_PORT=0 and the spec's test names. Names are
 /// upper case and sorted; a secret-shaped name, a PYTHON*, a WEBVIEW2_* or an IB_* name can never arrive.
 pub fn backend_env(
     parent: impl IntoIterator<Item = (OsString, OsString)>,
@@ -539,6 +539,25 @@ mod tests {
         assert!(
             env.iter()
                 .all(|(n, _)| !n.starts_with("IB_") && n != IB_SWITCH)
+        );
+    }
+
+    #[test]
+    fn the_memory_trim_switch_reaches_the_backend() {
+        let spec = Spec {
+            lab: PathBuf::from(r"D:\lab"),
+            state_dir: PathBuf::from(r"D:\lab\terminal\state"),
+            module: BACKEND_MODULE,
+            extra_env: Vec::new(),
+        };
+        let off = backend_env(os(&[("NQT_MEMTRIM", "0")]), &spec);
+        let found = off.iter().find(|(n, _)| n == "NQT_MEMTRIM");
+        assert_eq!(found.map(|(_, v)| v.to_str()), Some(Some("0")));
+        let other = backend_env(os(&[("NQT_OTHER", "0")]), &spec);
+        assert!(
+            other
+                .iter()
+                .all(|(n, _)| n != "NQT_MEMTRIM" && n != "NQT_OTHER")
         );
     }
 }

@@ -181,7 +181,7 @@ def test_it_starts_for_either_switch_with_the_task_list_and_the_ready_check(monk
     ready = lambda: True  # noqa: E731
     assert home_prewarm.start_home_prewarm(app_stub(fixture_mode=False, ready=ready)) == "thread"
     assert [t.__name__ for t in seen["tasks"]] == HOME_FIRST and seen["ready"] is ready
-    assert [t.__name__ for t in seen["later"]] == AFTER_HOME and seen["options"] == {}, "the process CPU probe decides"
+    assert [t.__name__ for t in seen["later"]] == AFTER_HOME and set(seen["options"]) == {"on_stage"} and callable(seen["options"]["on_stage"]), "the process CPU probe decides; the stage hook is the working-set trim"
 
 
 def test_born_failing_fixture_mode_never_prewarms_even_in_desktop_mode(monkeypatch):

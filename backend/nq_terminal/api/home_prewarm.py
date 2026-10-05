@@ -27,6 +27,11 @@ Sharpe (no HOME panel asks for it; 1.2 s cold) and EQ's bootstrap (HOME's EQ pan
 for the bootstrap, and the EQ Enter unit of DEC1 depends on it being warm). On a first launch they would otherwise take
 the interpreter from HOME's own requests while HOME loads. On a usual launch the deflated Sharpe and the ledger come
 from disk at once.
+
+After each stage (the HOME tasks, then the later tasks) the prewarm calls `memtrim.stage_hook(app)`; only the later stage
+trims the backend's working set (unless a request is in flight; vnext perf-1; `memtrim.py`), because it starts once the
+process is quiet, that is after HOME is served. The HOME-tasks stage does not trim: HOME's requests arrive just then.
+`TRIM_STAGES` names the stages that trim; the quiet-period trim in `memtrim.py` runs either way.
 """
 from __future__ import annotations
 
@@ -37,7 +42,8 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 
-from nq_terminal.services.prewarm import ENV_PREWARM, PORT_BOUND_KEY, Task, start_prewarm
+from nq_terminal import memtrim
+from nq_terminal.services.prewarm import ENV_PREWARM, PORT_BOUND_KEY, STAGE_LATER, Task, start_prewarm
 
 LOG = logging.getLogger(__name__)
 
@@ -49,6 +55,10 @@ HOME_EQ_COST = 1
 HOME_UNIVERSE_WINDOW = 252  # the universe route's own default, which MON asks for
 HOME_MON_ROWS = 19  # grid rows MON shows at first paint on the 2x2 HOME at 1920x1080 (MonHome.gallery.tsx)
 OFF_VALUE = "0"  # NQT_PREWARM=0 is an explicit off even when NQT_DESKTOP=1
+# The prewarm stages after which the working set is trimmed. Not STAGE_TASKS: the HOME tasks end a few seconds after the
+# port binds, when the page's own HOME requests arrive, and a trim there pages out what the prewarm just warmed (vnext
+# perf.md: the trim must not run before HOME is served). The later stage starts only once the process is quiet.
+TRIM_STAGES = frozenset({STAGE_LATER})
 
 
 def _named(name: str, fn: Callable[[], object]) -> Task:
@@ -146,13 +156,23 @@ def home_prewarm_allowed(app: FastAPI, environ: dict[str, str] | None = None) ->
     return env.get(ENV_PREWARM) != OFF_VALUE
 
 
+def _trim_after(app: Any) -> Callable[[str], None]:
+    """The prewarm's stage hook: trim the working set after the stages in `TRIM_STAGES` (read when the stage ends)."""
+    trim = memtrim.stage_hook(app)
+
+    def after(stage: str) -> None:
+        if stage in TRIM_STAGES:
+            trim(stage)
+    return after
+
+
 def start_home_prewarm(app: FastAPI):
     """Start the prewarm thread for `app` when this is a desktop or launcher process; return it, or None. Never raises."""
     try:
         if not home_prewarm_allowed(app):
             return None
         return start_prewarm(home_tasks(app.state), ready=getattr(app.state, PORT_BOUND_KEY, None),
-                             later=later_tasks(app.state))
+                             later=later_tasks(app.state), on_stage=_trim_after(app))
     except Exception:  # noqa: BLE001 - the prewarm must never stop the app from starting
         LOG.exception("the HOME prewarm could not be started")
         return None

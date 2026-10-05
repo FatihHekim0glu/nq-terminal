@@ -3,7 +3,7 @@
   Refuses a release tag unless the day's green records and the artefacts all describe the tree as it is now.
 
 .DESCRIPTION
-  powershell -NoProfile -File terminal\scripts\release_check.ps1 -Tag desktop-v0.1.1 [-ReleaseDir D:\dev\release\0.1.1]
+  powershell -NoProfile -File terminal\scripts\release_check.ps1 -Tag desktop-v0.2.0 [-ReleaseDir D:\dev\release\0.2.0]
 
   It never creates the tag and never pushes: the owner does that after it passes (04 D5.4; 05 S08, G07).
 
@@ -23,7 +23,14 @@
       exe), and web\dist must hash as it did for the record; for crosscheck the dump folder must hash as it did and
       be newer than the start of the same day's backend run;
     - SHA256SUMS lists every file of the release folder (but itself) and every hash is right;
-    - desktop\scripts\artefact-check.mjs passes on the release folder (no lab data, manifests, imports, updater).
+    - desktop\scripts\artefact-check.mjs passes on the release folder (no lab data, manifests, imports, updater);
+    - with -RequireInstall: for each of the scenarios install and upgrade, a record <date>_install.json and
+      <date>_upgrade.json in the records folder (written by desktop\scripts\install-test.ps1, never by hand) that says
+      self_test = false, exit code 0, at least one step and none failed, this PC, the tag's version (for an upgrade an
+      old version below it), the real install untouched, the same provenance stamp as the current tree, and an
+      installer sha256 equal to the sha256 of an installer at the top of the release folder, hashed now. A record of
+      the renamed-product build (tauri.installtest.conf.json) is accepted with a NOTE: it runs the same NSIS script and
+      hooks, not the shipped bytes. Any number of records may be present; one passing record per scenario is enough.
 .PARAMETER Tag
   The tag the owner wants to push, desktop-vX.Y.Z.
 .PARAMETER ReleaseDir
@@ -32,6 +39,8 @@
   Where the records are (default terminal\state\release).
 .PARAMETER RequireSmokeApp
   Also require the smoke-app record.
+.PARAMETER RequireInstall
+  Also require a passing install-test record of both scenarios (install, upgrade) for an installer of the release folder.
 .PARAMETER TreeRoot, Today, Pc, ArtefactCheckScript
   Self-test hooks (scripts\tests\release_check.tests.ps1): another git tree, another date, another PC name, another
   artefact check. A run that uses any of them, or -RecordsDir or -ReleaseDir, says so (WARN) and is not a release
@@ -45,6 +54,7 @@ param(
     [string]$ReleaseDir = '',
     [string]$RecordsDir = '',
     [switch]$RequireSmokeApp,
+    [switch]$RequireInstall,
     [string]$TreeRoot = '',
     [string]$Today = '',
     [string]$Pc = '',
@@ -271,6 +281,65 @@ function Test-Artefacts {
     Add-Check 'artefact check' ($code -eq 0) (($output | Select-Object -Last 3) -join ' | ')
 }
 
+function Get-ReleaseInstallers {
+    # The installers at the top of the release folder, hashed now: sha256 -> file name.
+    param([string]$Dir)
+    $map = @{}
+    if (-not (Test-Path -LiteralPath $Dir)) { return $map }
+    foreach ($f in @(Get-ChildItem -LiteralPath $Dir -File -Filter '*_x64-setup.exe')) { $map[(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()] = $f.Name }
+    return $map
+}
+
+function Get-InstallRecordProblems {
+    # Everything wrong with one install-test record for this tag, tree and release folder, as a list.
+    param($Record, [string]$Scenario, $Stamp, [string]$Version, [string]$Computer, $Installers)
+    $out = @()
+    if ((Get-Prop $Record 'check') -ne $Scenario) { $out += "the record is for '$(Get-Prop $Record 'check')', not $Scenario" }
+    if ((Get-Prop $Record 'self_test') -ne $false) { $out += 'the record does not say self_test = false' }
+    if ((Get-Prop $Record 'exit_code') -ne 0) { $out += "the run's exit code is $(Get-Prop $Record 'exit_code')" }
+    $total = Get-Prop $Record 'steps_total'
+    $failed = Get-Prop $Record 'steps_failed'
+    if ($null -eq $total -or [int]$total -le 0 -or $null -eq $failed -or [int]$failed -ne 0) { $out += "steps: $total run, $failed failed" }
+    if ((Get-Prop $Record 'pc') -ne $Computer) { $out += "the record is from PC '$(Get-Prop $Record 'pc')', not '$Computer'" }
+    if ((Get-Prop $Record 'version') -ne $Version) { $out += "the record tested version '$(Get-Prop $Record 'version')', the tag is $Version" }
+    if ((Get-Prop (Get-Prop $Record 'real_install') 'unchanged') -ne $true) { $out += 'the record does not show the real install untouched' }
+    $sha = "$(Get-Prop (Get-Prop $Record 'installer') 'sha256')".ToLowerInvariant()
+    if (-not $sha) { $out += 'the record names no installer sha256' }
+    elseif (-not $Installers.ContainsKey($sha)) { $out += "the installer the record tested (sha256 $sha) is not an installer of the release folder" }
+    if ($Scenario -eq 'upgrade') {
+        $old = "$(Get-Prop (Get-Prop $Record 'from_installer') 'version')"
+        $a = $null
+        $b = $null
+        if (-not ([version]::TryParse($old, [ref]$a) -and [version]::TryParse($Version, [ref]$b) -and $a -lt $b)) { $out += "the upgrade started from version '$old', not one below $Version" }
+    }
+    $recordStamp = Get-Prop $Record 'stamp'
+    if ($null -eq $recordStamp) { $out += 'the record has no provenance stamp' } else { $out += Get-StampDifferences $recordStamp $Stamp }
+    return ,@($out)
+}
+
+function Test-InstallRecords {
+    # One passing record per scenario (install, upgrade); otherwise the problems of the newest record are printed.
+    param([string]$Dir, [string]$ReleaseFolder, $Stamp, [string]$Version, [string]$Computer)
+    $installers = Get-ReleaseInstallers $ReleaseFolder
+    foreach ($scenario in 'install', 'upgrade') {
+        $files = @(Get-ChildItem -Path $Dir -Filter "*_$scenario.json" -File -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+        $how = if ($scenario -eq 'upgrade') { 'install-test.ps1 -Upgrade -FromInstaller <older installer> -Installer <installer>' } else { 'install-test.ps1 -Installer <installer>' }
+        if ($files.Count -eq 0) { Add-Check "install record $scenario" $false "no *_$scenario.json in $Dir (run desktop\scripts\$how on an installer of $ReleaseFolder)"; continue }
+        $passing = $null
+        $firstProblems = ''
+        foreach ($file in $files) {
+            $record = try { Get-Content -Raw -Path $file.FullName -Encoding UTF8 | ConvertFrom-Json } catch { $null }
+            $problems = if ($null -eq $record) { @('unreadable record') } else { Get-InstallRecordProblems $record $scenario $Stamp $Version $Computer $installers }
+            if ($problems.Count -eq 0) { $passing = @{ file = $file.Name; record = $record }; break }
+            if (-not $firstProblems) { $firstProblems = "$($file.Name): $($problems -join '; ')" }
+        }
+        if ($null -eq $passing) { Add-Check "install record $scenario" $false "$firstProblems [records present: $(@($files | ForEach-Object { $_.Name }) -join ', ')]"; continue }
+        $name = $installers["$(Get-Prop (Get-Prop $passing.record 'installer') 'sha256')".ToLowerInvariant()]
+        Add-Check "install record $scenario" $true "$($passing.file): $(Get-Prop $passing.record 'steps_total') steps passed on $name, real install untouched, same stamp"
+        if ((Get-Prop $passing.record 'variant') -eq 'renamed') { Write-Host "NOTE  the $scenario record tested the renamed-product build of this tree ($name): the same NSIS script and hooks, not the shipped bytes" }
+    }
+}
+
 function Test-TagName {
     param([string]$Name, [string]$Tree)
     $parsed = [regex]::Match($Name, '^desktop-v(\d+\.\d+\.\d+)$')
@@ -300,6 +369,8 @@ if ($version) {
     Test-Provenance $ReleaseDir $stamp $version
     Test-RecordInputs $recordsDir $ReleaseDir $date (Get-CurrentInputs)
     if (Test-Path -LiteralPath $ReleaseDir) { Test-Checksums $ReleaseDir; Test-Artefacts $ReleaseDir $artefactScript }
+    if ($RequireInstall) { Test-InstallRecords $recordsDir $ReleaseDir $stamp $version $computer }
+    else { Write-Host ("NOTE  install-test records: {0} (not required without -RequireInstall)" -f $(if (@(Get-ChildItem -Path $recordsDir -Filter '*_install.json' -ErrorAction SilentlyContinue).Count -gt 0) { 'present' } else { 'none' })) }
 }
 
 Write-Host ''

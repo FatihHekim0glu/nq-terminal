@@ -34,6 +34,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 use windows::Win32::Foundation::{
     CloseHandle, HANDLE, HANDLE_FLAG_INHERIT, HANDLE_FLAGS, SetHandleInformation, WAIT_OBJECT_0,
+    WAIT_TIMEOUT,
 };
 use windows::Win32::Security::SECURITY_ATTRIBUTES;
 use windows::Win32::System::JobObjects::{
@@ -45,7 +46,7 @@ use windows::Win32::System::JobObjects::{
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
     CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
-    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess, INFINITE,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetExitCodeProcess,
     InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST, OpenProcess,
     PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROC_THREAD_ATTRIBUTE_JOB_LIST, PROCESS_INFORMATION,
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, ResumeThread, STARTF_USESTDHANDLES,
@@ -680,13 +681,16 @@ fn tool_env(extra: &[(String, String)]) -> Vec<u16> {
 /// Runs one tool of the page rebuild (window_rebuild.rs) to its end: `application` with `command_line` as given (the
 /// exact CreateProcessW line), in `cwd`, with this process's environment plus `env`, hidden, in a kill-on-close job
 /// that closes with the run (so nothing the tool left behind outlives it), its output appended to `log`. Returns the
-/// tool's exit code.
+/// tool's exit code. A tool still running after `timeout` is ended with its whole job and the run is an error that
+/// says so (a hung `pnpm install` must not leave the rebuild page busy for ever; the caller's limit comes from
+/// window_rebuild.rs).
 pub fn run_tool(
     application: &Path,
     command_line: &str,
     cwd: &Path,
     env: &[(String, String)],
     log: &Path,
+    timeout: Duration,
 ) -> Result<u32, String> {
     let text = |f: Failure| format!("{f:?}");
     let job = kill_on_close_job().map_err(text)?;
@@ -704,8 +708,18 @@ pub fn run_tool(
     let (tool, _thread) = (Owned(process.hProcess), Owned(process.hThread));
     drop((stdin_ours, stdin_theirs, out_theirs));
     let reader = drain_tool_output(out_ours.into_file(), log.to_path_buf());
-    // SAFETY: an unbounded wait on the tool's own process handle, which this function owns.
-    let waited = unsafe { WaitForSingleObject(tool.raw(), INFINITE) };
+    let millis = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX - 1);
+    // SAFETY: a bounded wait on the tool's own process handle, which this function owns.
+    let waited = unsafe { WaitForSingleObject(tool.raw(), millis) };
+    if waited == WAIT_TIMEOUT {
+        // SAFETY: the job handle is open; this ends the tool and everything it started, which closes the output pipe.
+        let _ = unsafe { TerminateJobObject(job.raw(), 1) };
+        let _ = reader.join();
+        return Err(format!(
+            "the tool did not finish within {} s and was stopped",
+            timeout.as_secs()
+        ));
+    }
     let mut code = 0u32;
     // SAFETY: the process has ended; the handle is open and `code` is a valid out-pointer.
     let read = unsafe { GetExitCodeProcess(tool.raw(), &mut code) };

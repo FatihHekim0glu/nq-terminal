@@ -1,5 +1,20 @@
 # G2 placeholder values for the hand-over documents
 
+## Release 0.1.2 (the 0.1.2 re-measure), values the finisher fills in
+
+The 0.1.2 documents carry the build-dependent values below as visible `{{V012: ...}}` placeholders. The finisher fills them after the 0.1.2 build in the default folder `D:\dev\release\0.1.2` and after the tag, from that folder's `SHA256SUMS` and `PROVENANCE.json`, from `results.md` and `verdict.md` in this folder, and from the install records of the release check. The README release rows keep saying that 0.1.1 is the latest release until the tag exists. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+
+| Placeholder | Value to write (0.1.2) | Source |
+| --- | --- | --- |
+| {{V012: installer SHA256}} | the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.1.2\SHA256SUMS` |
+| {{V012: installer bytes}} | the size of that file | the same file |
+| {{V012: tag and commit}} | `desktop-v0.1.2` and the release commit it names | `PROVENANCE.json`, `git rev-parse desktop-v0.1.2^{commit}` |
+| {{V012: commits}} and {{V012: date}} | the commits of this wave and their date, for the commit list of `handover_windows.md` | `git log` |
+| {{V012: idle memory}} | idle at HOME, the private working set of the whole tree, taken more than 65 s after HOME is ready, with the private bytes beside it (a trim lowers the working set, not the private bytes); the 400 MB target and the 500 MB ceiling; label PROVISIONAL when the 60 s CPU load was above the plan's limit | `results.md` and `verdict.md` of the 0.1.2 re-measure |
+| {{V012: warm rows with and without the trim}} | the warm HOME, EQ and REG rows with the trim on and off (`NQT_MEMTRIM=0`); the trim must not make them slower | the same |
+| {{V012: install and upgrade records}} | the dates and step counts of the renamed-product install test and the upgrade scenario, and the `release_check.ps1 -RequireInstall` result | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
+| {{V012: release check result}} | the `release_check.ps1` result with its date | the release check |
+
 ## Release 0.1.1 (the 0.1.1 re-measure of 4 October 2026)
 
 The documents of release 0.1.1 carry three build-dependent values, which the manager filled after the 0.1.1 build in the default folder `D:\dev\release\0.1.1` and after the tag: the installer SHA256 (`3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`, from that folder's `SHA256SUMS`), the installer size (3,253,307 bytes, the size of that file) and the tag name (`desktop-v0.1.1`, on commit `777c162`). They stand in the README (status, install table), in `handover_windows.md` (sections 1, 2 and 7) and in `smartscreen.md` (the verification step), and nowhere else. A self-test build's hash or the measuring build's size (3,253,511 bytes, `D:/dev/w6/release-m/0.1.1`) is not a value to write: it would make the owner's check fail. The G2 values below are read from `results.md` (sections A1 to A7) and `verdict.md`.

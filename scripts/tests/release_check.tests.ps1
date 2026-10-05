@@ -525,9 +525,122 @@ Write-Sums $case.release
 $r = Invoke-ReleaseCheck $case.args
 Check 'a release folder that lists no smoke payload cannot vouch for the smoke exe' (($r.code -eq 1) -and ($r.text -match 'smoke exe'))
 
+# ---- install-test records (-RequireInstall) -----------------------------------------------------------------------------
+# install-test.ps1 writes <date>_install.json and <date>_upgrade.json; -RequireInstall needs one passing record of each,
+# stamped with this tree, for an installer that sits at the top of the release folder (hashed when the check runs).
+
+function Add-Installer {
+    # A stand-in installer at the top of a release folder, SHA256SUMS rewritten; returns its sha256.
+    param([string]$Release, [string]$Bytes = 'installer bytes', [string]$Name = 'nq-lab terminal installtest_0.1.0_x64-setup.exe')
+    $file = Join-Path $Release $Name
+    [System.IO.File]::WriteAllText($file, $Bytes, $Utf8)
+    Write-Sums $Release
+    return (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+}
+
+function Write-InstallTestRecord {
+    # A record in the shape install-test.ps1 writes; $Over replaces fields.
+    param([string]$Dir, [string]$Scenario, $Stamp, [string]$Sha, [hashtable]$Over = @{}, [string]$Date = $Today)
+    New-Item -ItemType Directory -Force -Path $Dir | Out-Null
+    $from = if ($Scenario -eq 'upgrade') { [ordered]@{ name = 'old_0.0.9_x64-setup.exe'; sha256 = ('0' * 64); version = '0.0.9' } } else { $null }
+    $body = [ordered]@{ check = $Scenario; date = $Date; pc = $Pc; finished_utc = (Get-Date).ToUniversalTime().ToString('o'); self_test = $false; exit_code = 0
+        steps_total = 60; steps_passed = 60; steps_failed = 0; failed_steps = @(); version = '0.1.0'; variant = 'renamed'
+        installer = [ordered]@{ name = 'nq-lab terminal installtest_0.1.0_x64-setup.exe'; sha256 = $Sha; product = 'nq-lab terminal installtest'; version = '0.1.0' }
+        from_installer = $from; allow_foreign = $true; real_install = [ordered]@{ unchanged = $true; problems = @() }
+        head = $Stamp.head; stamp = $Stamp; report = 'run.report.json' }
+    foreach ($key in $Over.Keys) { $body[$key] = $Over[$key] }
+    [System.IO.File]::WriteAllText((Join-Path $Dir "${Date}_$Scenario.json"), ($body | ConvertTo-Json -Depth 6), $Utf8)
+}
+
+function New-InstallCase {
+    # A passing case with an installer in the release folder and both install-test records; a case breaks one thing.
+    param([string]$Name, [switch]$NoRecords)
+    $case = New-Case $Name
+    $case['sha'] = Add-Installer $case.release
+    if (-not $NoRecords) {
+        Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha
+        Write-InstallTestRecord $case.records 'upgrade' $case.stamp $case.sha
+    }
+    $case['args'] = Merge-Args $case.args @{ RequireInstall = $true }
+    return $case
+}
+
+$case = New-InstallCase 'inst-ok'
+$r = Invoke-ReleaseCheck $case.args
+Check 'with -RequireInstall, passing install and upgrade records for a release installer pass' (($r.code -eq 0) -and ($r.text -match 'PASS  install record install') -and ($r.text -match 'PASS  install record upgrade')) $r.text
+Check 'a record of the renamed-product build is named as not the shipped bytes' ($r.text -match 'not the shipped bytes')
+
+$case = New-InstallCase 'inst-none' -NoRecords
+$r = Invoke-ReleaseCheck $case.args
+Check 'with -RequireInstall, a missing install record is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'FAIL  install record install') -and ($r.text -match 'no \*_install\.json'))
+$r = Invoke-ReleaseCheck (Merge-Args $case.args @{ RequireInstall = $false })
+Check 'without -RequireInstall the same case passes and says the records are not required' (($r.code -eq 0) -and ($r.text -match 'not required without -RequireInstall'))
+
+$case = New-InstallCase 'inst-wrong-sha'
+Write-InstallTestRecord $case.records 'install' $case.stamp ('a' * 64)
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record of another installer (wrong sha256) is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'is not an installer of the release folder'))
+
+$case = New-InstallCase 'inst-rebuilt'
+Add-Installer $case.release 'rebuilt installer bytes' | Out-Null
+$r = Invoke-ReleaseCheck $case.args
+Check 'an installer rebuilt after the install test is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'FAIL  install record install') -and ($r.text -match 'FAIL  install record upgrade'))
+
+$case = New-InstallCase 'inst-failed-step'
+Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha @{ exit_code = 1; steps_passed = 59; steps_failed = 1; failed_steps = @('silent install') }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record with a failed step is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'exit code is 1') -and ($r.text -match '1 failed'))
+
+$case = New-InstallCase 'inst-no-steps'
+Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha @{ steps_total = 0; steps_passed = 0 }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record with no steps is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'steps: 0 run'))
+
+$case = New-InstallCase 'inst-guard'
+Write-InstallTestRecord $case.records 'upgrade' $case.stamp $case.sha @{ real_install = [ordered]@{ unchanged = $false; problems = @('the uninstall key changed') } }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record whose run changed the real install is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'real install untouched') -and ($r.text -match 'FAIL  install record upgrade'))
+
+$case = New-InstallCase 'inst-stamp'
+$otherTree = New-Tree 'inst-stamp-other'
+[System.IO.File]::WriteAllText((Join-Path $otherTree 'b.txt'), "other`n", $Utf8)
+Write-InstallTestRecord $case.records 'install' (Get-TreeStamp $otherTree) $case.sha
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record stamped with another tree is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'FAIL  install record install') -and ($r.text -match 'differs'))
+
+$case = New-InstallCase 'inst-no-upgrade'
+Remove-Item -LiteralPath (Join-Path $case.records "${Today}_upgrade.json")
+$r = Invoke-ReleaseCheck $case.args
+Check 'an install record without an upgrade record is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'PASS  install record install') -and ($r.text -match 'no \*_upgrade\.json'))
+
+$case = New-InstallCase 'inst-same-version'
+Write-InstallTestRecord $case.records 'upgrade' $case.stamp $case.sha @{ from_installer = [ordered]@{ name = 'same'; sha256 = $case.sha; version = '0.1.0' } }
+$r = Invoke-ReleaseCheck $case.args
+Check 'an upgrade record that did not start from a lower version is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'not one below 0\.1\.0'))
+
+$case = New-InstallCase 'inst-version'
+Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha @{ version = '0.0.9' }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record of another version than the tag is refused (born failing)' (($r.code -eq 1) -and ($r.text -match "tested version '0\.0\.9'"))
+
+$case = New-InstallCase 'inst-self-test'
+Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha @{ self_test = $true }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record that says self_test is refused (born failing)' (($r.code -eq 1) -and ($r.text -match 'self_test = false'))
+
+$case = New-InstallCase 'inst-other-pc'
+Write-InstallTestRecord $case.records 'install' $case.stamp $case.sha @{ pc = 'OTHER-PC' }
+$r = Invoke-ReleaseCheck $case.args
+Check 'a record of another PC is refused (born failing)' (($r.code -eq 1) -and ($r.text -match "from PC 'OTHER-PC'"))
+
+$case = New-InstallCase 'inst-several'
+Write-InstallTestRecord $case.records 'install' $case.stamp ('b' * 64) @{} $Yesterday
+$r = Invoke-ReleaseCheck $case.args
+Check 'one passing record per scenario is enough when an older failing one is present' ($r.code -eq 0) $r.text
+
 # ---- summary ---------------------------------------------------------------------------------------------------------
 
-if ($Scratch.StartsWith('D:dev	mpw5a-package-tests')) { Remove-Item -Recurse -Force $Scratch -ErrorAction SilentlyContinue }
+if ($Scratch.StartsWith('D:\dev\tmp\w5a-package-tests\')) { Remove-Item -Recurse -Force $Scratch -ErrorAction SilentlyContinue }
 Write-Host ''
 Write-Host ("release_check tests: {0} passed, {1} failed" -f $Passed, $Failed.Count)
 if ($Failed.Count -gt 0) { Write-Host ("FAILED: " + ($Failed -join '; ')); exit 1 }

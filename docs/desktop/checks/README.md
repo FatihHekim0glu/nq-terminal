@@ -22,6 +22,7 @@ G2 and milestone M4 stay provisional until every row marked "G2" below has a fil
 | The all-day soak | [2026-10-03_all-day-soak.md](2026-10-03_all-day-soak.md) | G2, only if the overnight soak was partial | one day with the PC left alone | NOT RUN |
 | Measurements left pending or provisional | [2026-10-03_pending-measurements.md](2026-10-03_pending-measurements.md) | G2 | 10 minutes in a quiet window | NOT RUN |
 | The weekly parity list | [2026-10-03_weekly-parity.md](2026-10-03_weekly-parity.md) | D6, once a week for four weeks | about 15 minutes | NOT RUN |
+| Install and upgrade test on the renamed product, beside the real install | [2026-10-05_install-upgrade-test.md](2026-10-05_install-upgrade-test.md) | release check `-RequireInstall` (automated, not an owner check) | none | AUTOMATED, PASS |
 | The four-week dual-run kit | [2026-10-03_dual-run-kit.md](2026-10-03_dual-run-kit.md) | D6 | a few minutes a day | NOT STARTED |
 
 The installer, the runbook and the SmartScreen record that these checks lean on are in `docs/desktop/handover_windows.md` and `docs/desktop/smartscreen.md`. The decisions behind the pass rules are in `docs/desktop/owner_decisions_windows.md`.

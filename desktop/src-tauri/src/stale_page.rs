@@ -37,6 +37,7 @@ pub fn hook<R: Runtime>(
                 &call.cwd,
                 &call.env,
                 &log,
+                call.timeout,
             )
         });
         let (done, outcome) = mpsc::channel();

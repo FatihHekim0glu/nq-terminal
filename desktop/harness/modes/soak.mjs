@@ -12,7 +12,7 @@ import { runLine, waitHomeReady } from '../lib/page-rows.mjs'
 import { executeSlot } from '../lib/slot.mjs'
 import { memTree, memTreeBreakdown, errorText, SETTLED_FROM_S } from '../lib/mem.mjs'
 import { figure } from '../lib/record.mjs'
-import { MB } from '../lib/rows.mjs'
+import { MB, privateBytesLeakVerdict } from '../lib/rows.mjs'
 import { isMainTree } from '../lib/paths.mjs'
 
 export const SOAK_STOP_FILE = 'D:\\dev\\d5\\soak.stop'
@@ -26,11 +26,13 @@ export { SETTLED_FROM_S }
  * Summary of a sample series. maxMB is the soak row (the largest sample) and its meaning does not change. Beside it, as
  * information only: firstSampleAtS and startupPeakMB (the first sample with a reading), settledMaxMB (the largest sample
  * from SETTLED_FROM_S, null when there is none), the range of the private bytes and the breakdown (backend, UI tree, shell)
- * at the first and last sample that carries one (breakdownFailures and breakdownError, the first reason, only when a read failed). Also the last sample and the slope of a straight-line fit (MB per hour).
+ * at the first and last sample that carries one, and the private-bytes verdict (leak: the rule of lib/rows.mjs, with its slope and growth), which
+ * passes or fails the soak on its own so that a working-set trim cannot hide a leak (breakdownFailures and breakdownError, the first reason, only when a read failed). Also the last sample and the slope of a straight-line fit (MB per hour).
  */
 export function summariseSoak(samples) {
   const have = samples.filter((s) => typeof s.wsPrivateMB === 'number')
-  const empty = { n: 0, maxMB: null, lastMB: null, slopeMBPerHour: null, firstSampleAtS: null, startupPeakMB: null, settledMaxMB: null, privateBytesMinMB: null, privateBytesMaxMB: null, breakdown: null }
+  const leak = privateBytesLeakVerdict(samples)
+  const empty = { n: 0, maxMB: null, lastMB: null, slopeMBPerHour: null, firstSampleAtS: null, startupPeakMB: null, settledMaxMB: null, privateBytesMinMB: null, privateBytesMaxMB: null, breakdown: null, privateBytesSlopeMBPerHour: null, privateBytesGrowthMB: null, leak }
   if (have.length === 0) return empty
   const xs = have.map((s) => s.wsPrivateMB)
   const t = have.map((s) => s.atS / 3600)
@@ -47,6 +49,7 @@ export function summariseSoak(samples) {
   return { n, maxMB: Math.max(...xs), lastMB: xs.at(-1), slopeMBPerHour: Math.round(slope * 10) / 10,
     firstSampleAtS: have[0].atS, startupPeakMB: have[0].wsPrivateMB, settledMaxMB: settled.length ? Math.max(...settled) : null,
     privateBytesMinMB: pb.length ? Math.min(...pb) : null, privateBytesMaxMB: pb.length ? Math.max(...pb) : null,
+    privateBytesSlopeMBPerHour: leak.slopeMBPerHour, privateBytesGrowthMB: leak.growthMB, leak,
     breakdown: withBreakdown.length ? { first: at(withBreakdown[0]), last: at(withBreakdown.at(-1)) } : null,
     ...(failed.length ? { breakdownFailures: failed.length, breakdownError: failed[0].breakdownError } : {}) }
 }
@@ -105,11 +108,14 @@ export async function run({ args, outDir, provenance }) {
       result.samples = samples
       result.workloadErrors = errors.slice(0, 50)
       result.soak = summariseSoak(samples)
+      result.leak = result.soak.leak
       result.rows = result.soak.maxMB === null ? {} : { soak_mem: result.soak.maxMB }
       result.homeReady = result.homeReady !== false
-      result.figures = result.soak.maxMB === null ? [] : [figure({ row: 'soak_mem', build: 'smoke', value: result.soak.maxMB, unit: 'MB', method: 'soak runner: whole-tree private working set, the largest sample', cpuLoadPct: gate?.avgPct, provenance, extra: { samples: samples.length, hours, partial: result.stoppedEarly || totalS < 8 * 3600, startupPeakMB: result.soak.startupPeakMB, settledMaxMB: result.soak.settledMaxMB } })]
+      result.figures = result.soak.maxMB === null ? [] : [figure({ row: 'soak_mem', build: 'smoke', value: result.soak.maxMB, unit: 'MB', method: 'soak runner: whole-tree private working set, the largest sample', cpuLoadPct: gate?.avgPct, provenance, extra: { privateBytesMaxMB: result.soak.privateBytesMaxMB, privateBytesSlopeMBPerHour: result.soak.privateBytesSlopeMBPerHour, leak: result.soak.leak.verdict, samples: samples.length, hours, partial: result.stoppedEarly || totalS < 8 * 3600, startupPeakMB: result.soak.startupPeakMB, settledMaxMB: result.soak.settledMaxMB } })]
       return result
     } })
-  console.log(JSON.stringify({ mode: 'soak', status: out.status, soak: out.result?.soak, partial: out.result?.stoppedEarly, windows: out.result?.watch?.newWindows.length }))
-  return out
+  const leakFailed = out.result?.leak?.verdict === 'fail'
+  if (leakFailed) console.error(`soak FAILED: ${out.result.leak.reason}`)
+  console.log(JSON.stringify({ mode: 'soak', status: out.status, leak: out.result?.leak?.verdict, soak: out.result?.soak, partial: out.result?.stoppedEarly, windows: out.result?.watch?.newWindows.length }))
+  return { ...out, failed: leakFailed }
 }

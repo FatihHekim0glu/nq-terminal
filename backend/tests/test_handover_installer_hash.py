@@ -30,9 +30,17 @@ def _owner_documents() -> list[Path]:
     return [HANDOVER, SMARTSCREEN, *sorted((DOCS / "checks").glob("*.md"))]
 
 
+RENAMED_BUILD_MARK = "renamed installer"
+
+
+def _owner_facing(line: str) -> bool:
+    """A line the owner checks a hash against. A row about a renamed-product build (the install and upgrade tests) is not one:
+    those installers are never shipped, and their hashes are evidence, not values to verify."""
+    return ("installer" in line.lower() or "Expected:" in line) and RENAMED_BUILD_MARK not in line.lower()
+
+
 def _installer_lines(path: Path) -> list[str]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    return [line for line in lines if "installer" in line.lower() or "Expected:" in line]
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if _owner_facing(line)]
 
 
 def _verification_step() -> str:
@@ -94,3 +102,10 @@ def test_every_owner_document_names_the_current_hash_wherever_it_names_one():
         for match in HEX64.findall(line)
     }
     assert found <= HISTORY_HASHES | {_current_value().lower()}
+
+
+def test_a_renamed_product_row_is_evidence_not_an_owner_value_but_any_other_installer_row_still_counts():
+    other = "a" * 64
+    assert not _owner_facing(f"| 0.1.2 renamed installer | built from HEAD, SHA-256 `{other}` |")
+    assert _owner_facing(f"| 0.1.2 installer | SHA-256 `{other}` |")
+    assert _owner_facing(f"Expected: `{other}`")

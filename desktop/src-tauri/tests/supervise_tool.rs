@@ -25,6 +25,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use support::{RUN_ROOT, Tracked, lab_python, wait_until, watch};
 
+/// A limit no test tool comes near; the one test of the limit itself passes its own.
+const TOOL_LIMIT: Duration = Duration::from_secs(120);
+
 fn run_folder(name: &str) -> PathBuf {
     let dir = Path::new(RUN_ROOT).join(format!("tool-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -51,7 +54,7 @@ fn a_tool_runs_where_and_how_it_is_told_and_its_exit_code_comes_back() {
     let code = "import os,sys; print('cwd=' + os.getcwd()); print('marker=' + os.environ['NQT_TOOL_MARKER']); sys.exit(3)";
     let (python, line) = python_line(code);
     let env = vec![("NQT_TOOL_MARKER".to_string(), "from-the-caller".to_string())];
-    let exit = supervise::run_tool(&python, &line, &dir, &env, &log);
+    let exit = supervise::run_tool(&python, &line, &dir, &env, &log, TOOL_LIMIT);
     assert_eq!(exit, Ok(3), "the exit code is the tool's own");
     let text = log_text(&log);
     assert!(text.contains("marker=from-the-caller"), "log: {text}");
@@ -66,7 +69,8 @@ fn a_missing_program_is_an_error_not_a_panic() {
     let dir = run_folder("missing");
     let missing = dir.join("no-such-tool.exe");
     let line = format!("\"{}\" --version", missing.display());
-    let exit = supervise::run_tool(&missing, &line, &dir, &[], &dir.join("rebuild.log"));
+    let log = dir.join("rebuild.log");
+    let exit = supervise::run_tool(&missing, &line, &dir, &[], &log, TOOL_LIMIT);
     assert!(exit.is_err(), "got {exit:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -78,7 +82,10 @@ fn what_the_tool_leaves_running_ends_with_the_run() {
     let log = dir.join("rebuild.log");
     let code = "import subprocess,sys; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'], creationflags=0x08000000); print('straggler=%d' % p.pid)";
     let (python, line) = python_line(code);
-    assert_eq!(supervise::run_tool(&python, &line, &dir, &[], &log), Ok(0));
+    assert_eq!(
+        supervise::run_tool(&python, &line, &dir, &[], &log, TOOL_LIMIT),
+        Ok(0)
+    );
     let text = log_text(&log);
     let pid: u32 = text
         .lines()
@@ -93,5 +100,50 @@ fn what_the_tool_leaves_running_ends_with_the_run() {
         );
     }
     watching.assert_clean();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_tool_that_outlives_its_limit_is_stopped_and_the_run_says_so() {
+    let watching = watch();
+    let dir = run_folder("timeout");
+    let log = dir.join("rebuild.log");
+    let code = "import os,subprocess,sys,time; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'], creationflags=0x08000000); print('pid=%d' % os.getpid()); print('straggler=%d' % p.pid); sys.stdout.flush(); time.sleep(120)";
+    let (python, line) = python_line(code);
+    let started = std::time::Instant::now();
+    let exit = supervise::run_tool(&python, &line, &dir, &[], &log, Duration::from_secs(3));
+    let took = started.elapsed();
+    let why = exit.expect_err("a tool that never ends is an error, not an exit code");
+    assert!(why.contains("did not finish within 3 s"), "why: {why}");
+    assert!(
+        took < Duration::from_secs(30),
+        "the wait is bounded, took {took:?}"
+    );
+    let text = log_text(&log);
+    for key in ["pid=", "straggler="] {
+        let pid: u32 = text
+            .lines()
+            .find_map(|l| l.strip_prefix(key))
+            .and_then(|p| p.trim().parse().ok())
+            .unwrap_or_else(|| panic!("the tool printed {key}: {text}"));
+        if let Some(process) = Tracked::open(pid) {
+            wait_until(
+                Duration::from_secs(5),
+                "the stopped tool and what it started end with the run",
+                || process.ended_within(Duration::from_millis(100)),
+            );
+        }
+    }
+    watching.assert_clean();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_tool_that_ends_inside_its_limit_keeps_its_exit_code() {
+    let dir = run_folder("inside");
+    let log = dir.join("rebuild.log");
+    let (python, line) = python_line("import sys; sys.exit(7)");
+    let exit = supervise::run_tool(&python, &line, &dir, &[], &log, Duration::from_secs(60));
+    assert_eq!(exit, Ok(7));
     let _ = std::fs::remove_dir_all(&dir);
 }
