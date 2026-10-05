@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadRecords, COUNTED } from './lib/record.mjs'
-import { ROWS, CHECKS, verdictOf } from './lib/rows.mjs'
+import { ROWS, CHECKS, verdictOf, privateBytesLeakVerdict } from './lib/rows.mjs'
 import { median, range, agreeWithinNoise, round } from './lib/stats.mjs'
 import { SETTLED_FROM_S } from './lib/mem.mjs'
 
@@ -63,6 +63,12 @@ export function newestReproduction(records) {
   return newest(verdicts.filter((r) => !r.dry)) ?? newest(verdicts)
 }
 
+/** The private-bytes verdict of every counted soak record, recomputed from its raw samples (a record without the summary still gets one). */
+export function soakLeaks(records) {
+  return records.filter((r) => COUNTED.includes(r.status) && (r.soak || r.mode === 'soak') && Array.isArray(r.samples))
+    .map((r) => ({ file: r.file, ...privateBytesLeakVerdict(r.samples) }))
+}
+
 export function buildReport(records, { minRuns = 3 } = {}) {
   const figs = collectFigures(records)
   const rows = ROWS.map((row) => rowReport(row, figs, minRuns))
@@ -76,7 +82,7 @@ export function buildReport(records, { minRuns = 3 } = {}) {
   for (const r of records) { const k = `${r.build ?? '-'}:${r.mode ?? '-'}`; (counts[k] ??= {})[r.status] = ((counts[k][r.status]) ?? 0) + 1 }
   const rejected = records.filter((r) => r.status === 'rejected').map((r) => ({ file: r.file, avgPct: r.gate?.avgPct ?? null, build: r.build }))
   const repro = newestReproduction(records)
-  return { rows, agreement, checks: checkReport(records, figs), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
+  return { rows, agreement, checks: checkReport(records, figs), soakLeaks: soakLeaks(records).map(({ rule, ...l }) => l), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
     unreproducedRuns: records.filter((r) => COUNTED.includes(r.status) && r.unreproduced === true).length,
     provenanceHeads: [...new Set(records.map((r) => r.provenance?.head).filter(Boolean))], stampsAgree: new Set(records.filter((r) => r.provenance?.diffSha256).map((r) => `${r.provenance.diffSha256}/${r.provenance.untrackedSha256}`)).size <= 1 }
 }
@@ -110,6 +116,7 @@ export function overCeiling(report) {
   for (const r of report.rows) if (r.verdict === 'over-ceiling') bad.push(`row ${r.id} is over its ceiling`)
   for (const [id, a] of Object.entries(report.agreement)) if (a.agree === false) bad.push(`the builds disagree on ${id}`)
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'over-ceiling') bad.push(`check ${id} is over its ceiling`)
+  for (const l of report.soakLeaks ?? []) if (l.verdict === 'fail') bad.push(`soak ${path.basename(l.file ?? '')}: ${l.reason}`)
   if (report.unreproducedRuns > 0) bad.push(`${report.unreproducedRuns} counted run(s) were taken without a reproduction of the W0B figures (UNREPRODUCED)`)
   return bad
 }
@@ -141,6 +148,11 @@ export function informationalLines(records) {
     const cmdFail = mine.find((r) => r.idleBreakdown.commandLineError)
     if (cmdFail) lines.push(`${INFO}: command lines not read in ${mine.filter((r) => r.idleBreakdown.commandLineError).length} of ${mine.length} runs (${build} build): ${cmdFail.idleBreakdown.commandLineError}; the WebView2 processes are counted as unknown`)
   }
+  for (const build of [...new Set(counted.filter((r) => Array.isArray(r.memSamples)).map((r) => r.build))]) {
+    const mine = counted.filter((r) => r.build === build && Array.isArray(r.memSamples) && r.memSamples.length)
+    const med = (key) => median(mine.flatMap((r) => r.memSamples.map((m) => m[key])).filter((v) => typeof v === 'number'))
+    if (mine.length && med('privateBytesMB') !== null) lines.push(`${INFO}: idle private bytes, ${build} build, median of ${mine.length}: ${fmt(med('privateBytesMB'))} MB beside the private working set ${fmt(med('wsPrivateMB'))} MB (a trim lowers the working set, not the private bytes)`)
+  }
   const unread = idleBreakdownUnread(records)
   if (unread.unread > 0) lines.push(`${INFO}: idle breakdown not read in ${unread.unread} of ${unread.taken} runs: ${unread.reason}; T4 canvas clause not evaluated for those runs`)
   for (const r of counted.filter((x) => x.soak && typeof x.soak.startupPeakMB === 'number')) {
@@ -149,6 +161,7 @@ export function informationalLines(records) {
     if (sk.breakdownFailures > 0) lines.push(`${INFO}: soak breakdown not read in ${sk.breakdownFailures} samples: ${sk.breakdownError}`)
     lines.push(`${INFO}: soak, start-up peak ${fmt(sk.startupPeakMB)} MB (first sample at ${sk.firstSampleAtS} s), settled maximum ${settled} (samples from ${SETTLED_FROM_S} s); the row is the largest sample, ${fmt(sk.maxMB)} MB`)
   }
+  for (const l of soakLeaks(records)) lines.push(`soak private bytes (leak signal, ${path.basename(l.file ?? '')}): ${l.verdict}; ${l.reason}`)
   return lines
 }
 

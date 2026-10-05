@@ -7,6 +7,7 @@ Each guard was born failing: without `_join` the two-request test makes two serv
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -22,7 +23,10 @@ from test_result_cache_routes import CASES, GATED, Lab, minus_gate
 
 TWO_DAY_URL = "/api/market/two-day?symbols=NQ.V.0"
 ROUTE = "/api/analytics/deflated"
-WAIT_S = 10.0
+# An upper bound, not a pace: every wait below returns the moment its condition holds, so a long limit costs nothing on a
+# quiet machine and stops a load spike (the suite runs beside vitest, Playwright and Rust builds) from failing a test that
+# is only slow. NQT_SINGLEFLIGHT_WAIT_S overrides it.
+WAIT_S = float(os.environ.get("NQT_SINGLEFLIGHT_WAIT_S", "90"))
 
 
 @pytest.fixture()
@@ -236,7 +240,7 @@ def one_computation(tmp_path: Path) -> tuple[int, int]:
     return single.serve.calls, single.gate_lines()
 
 
-def race_two_requests(lab: Lab, *, joined: bool) -> list:
+def race_two_requests(lab: Lab, *, joined: bool, rows: list[int] | None = None) -> list:
     lab.serve.hold = threading.Event()
     with ThreadPoolExecutor(max_workers=2) as pool:
         first = pool.submit(lambda: lab.client.get(TWO_DAY_URL))
@@ -245,7 +249,8 @@ def race_two_requests(lab: Lab, *, joined: bool) -> list:
         if joined:
             assert _wait_for(lambda: lab.cache.stats().waited == 1), "the second request waits for the first"
         else:
-            time.sleep(0.5)
+            # without the join the second request computes beside the first: wait for that, not for a fixed time
+            assert rows is not None and _wait_for(lambda: len(rows) == 2), "the second request computes on its own"
         lab.serve.hold.set()
         return [first.result(WAIT_S), second.result(WAIT_S)]
 
@@ -267,7 +272,7 @@ def test_born_failing_without_the_join_two_requests_compute_twice(tmp_path, monk
     rows = count_rows(monkeypatch)
     monkeypatch.setattr(rc.ResultCache, "_join", lambda self, key: (rc._Flight(threading.get_ident()), True))
     lab = Lab(tmp_path, "race").build()
-    first, second = race_two_requests(lab, joined=False)
+    first, second = race_two_requests(lab, joined=False, rows=rows)
     assert first.status_code == second.status_code == 200
     assert len(rows) == 2, "this is what the single-flight prevents"
 

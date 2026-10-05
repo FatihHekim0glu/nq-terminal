@@ -1,23 +1,27 @@
-# The local release build (04 D5.4, 03 section 13.1; the Windows stand-in for desktop-release.yml): three builds from
+# The local release build (04 D5.4, 03 section 13.1; the Windows stand-in for desktop-release.yml): four builds from
 # one tree, with the checks the roadmap names, into one folder with its checksums and provenance.
 #
-#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.1.1 [-TargetDir D:\dev\targets\release] [-Force]
+#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.1.2 [-TargetDir D:\dev\targets\release] [-Force]
 #
 # Builds, all with cargo-tauri on the GNU host and --locked:
 #   release  cargo tauri build --bundles nsis -- --locked                                  (no smoke, no measure)
 #   measure  cargo tauri build --bundles nsis --features measure --config src-tauri\tauri.measure.conf.json
 #                -- --locked --no-default-features
+#   installtest  cargo tauri build --bundles nsis --config src-tauri\tauri.installtest.conf.json -- --locked
+#                the release feature set under the product name "nq-lab terminal installtest" and its own identifier, so that
+#                install-test.ps1 can install and upgrade it on a PC that already has the real app (never the real product)
 #   smoke    cargo tauri build --no-bundle --features smoke --config src-tauri\tauri.smoke.conf.json
 #                -- --locked --no-default-features
-# The three builds share one target folder, so each build's outputs are copied out straight after it (the next
+# The four builds share one target folder, so each build's outputs are copied out straight after it (the next
 # build overwrites target\release\nq-lab-terminal.exe).
 #
 # Output, D:\dev\release\<version>\ (or -OutRoot):
 #   <product>_<version>_x64-setup.exe          the release installer
 #   <product> measure_<version>_x64-setup.exe  the measure installer
-#   payload\release|measure|smoke\             the exe each build produced, with WebView2Loader.dll
-#   nsis\release|measure\installer.nsi         the generated installer script (install-test.ps1 reads it)
-#   nsis\release|measure\hooks.nsh              the installer hooks it includes (artefact-check.mjs reads them)
+#   <product> installtest_<version>_x64-setup.exe  the install-test installer (never published)
+#   payload\release|measure|installtest|smoke\             the exe each build produced, with WebView2Loader.dll
+#   nsis\release|measure|installtest\installer.nsi         the generated installer script (install-test.ps1 reads it)
+#   nsis\release|measure|installtest\hooks.nsh              the installer hooks it includes (artefact-check.mjs reads them)
 #   config\tauri*.conf.json                    the configuration files the builds used (artefact-check.mjs reads them)
 #   SHA256SUMS                                 sha256 of every file above, sha256sum style
 #   PROVENANCE.json                            version, HEAD, sha256 of `git diff HEAD`, sha256 of the untracked
@@ -172,7 +176,7 @@ function Copy-Config {
     # Tauri 2 compiles its configuration into the exe as Rust data, so artefact-check.mjs reads the files the builds used.
     $dest = Join-Path $OutDir 'config'
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    foreach ($name in 'tauri.conf.json', 'tauri.measure.conf.json', 'tauri.smoke.conf.json') { Copy-Item -LiteralPath (Join-Path $Crate $name) -Destination $dest }
+    foreach ($name in 'tauri.conf.json', 'tauri.measure.conf.json', 'tauri.smoke.conf.json', 'tauri.installtest.conf.json') { Copy-Item -LiteralPath (Join-Path $Crate $name) -Destination $dest }
 }
 
 function Test-Bootstrapper {
@@ -289,6 +293,8 @@ $script:BuildStart = Get-Date
 if (Invoke-Build 'release' @('--bundles', 'nsis', '--', '--locked')) { Copy-Payload 'release' -WithInstaller; $script:Bootstrapper = Test-Bootstrapper 'release' $cacheBefore }
 $script:BuildStart = Get-Date
 if (Invoke-Build 'measure' @('--bundles', 'nsis', '--features', 'measure', '--config', 'src-tauri\tauri.measure.conf.json', '--', '--locked', '--no-default-features')) { Copy-Payload 'measure' -WithInstaller; Test-Bootstrapper 'measure' $script:Bootstrapper | Out-Null }
+$script:BuildStart = Get-Date
+if (Invoke-Build 'installtest' @('--bundles', 'nsis', '--config', 'src-tauri\tauri.installtest.conf.json', '--', '--locked')) { Copy-Payload 'installtest' -WithInstaller; Test-Bootstrapper 'installtest' $script:Bootstrapper | Out-Null }
 if (Invoke-Build 'smoke' @('--no-bundle', '--features', 'smoke', '--config', 'src-tauri\tauri.smoke.conf.json', '--', '--locked', '--no-default-features')) { Copy-Payload 'smoke' }
 Test-ManifestWarnings
 Copy-Config

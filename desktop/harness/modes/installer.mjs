@@ -6,13 +6,13 @@ import { RELEASE_ROOT } from '../lib/paths.mjs'
 import { rowById, verdictOf, MB } from '../lib/rows.mjs'
 import { figure, writeRecord } from '../lib/record.mjs'
 
-/** The newest *_x64-setup.exe under the release root (one folder per version), or null. */
+/** The newest release *_x64-setup.exe under the release root (one folder per version), or null; the measure and install-test installers beside it are other builds. */
 export function findInstaller(root = RELEASE_ROOT) {
   let found = []
   try {
     for (const d of fs.readdirSync(root, { withFileTypes: true })) {
       if (!d.isDirectory()) continue
-      for (const f of fs.readdirSync(path.join(root, d.name))) if (/_x64-setup\.exe$/i.test(f)) found.push(path.join(root, d.name, f))
+      for (const f of fs.readdirSync(path.join(root, d.name))) if (/_x64-setup\.exe$/i.test(f) && !/ (measure|installtest)_/i.test(f)) found.push(path.join(root, d.name, f))
     }
   } catch { return null }
   found = found.map((f) => ({ f, m: fs.statSync(f).mtimeMs })).sort((a, b) => b.m - a.m)

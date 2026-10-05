@@ -557,6 +557,44 @@ test('the measure build is held to the same hook rules', () => {
   assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /measure: .*inheritance/)
 })
 
+// ---- the install-test build (the renamed product that install-test.ps1 installs beside a real install) ----------------------
+
+const INSTALLTEST_ID = `${IDENTIFIER}.installtest`
+function addInstallTest(dir, { hooks = realHooks(), exeExtra = '', script = nsi() } = {}) {
+  writeFile(dir, 'config/tauri.installtest.conf.json', JSON.stringify({ productName: 'nq-lab terminal installtest', identifier: INSTALLTEST_ID }))
+  writeFile(dir, 'payload/installtest/nq-lab-terminal.exe', Buffer.concat([buildPe(), Buffer.from(`\0${INSTALLTEST_ID}\0${exeExtra}`)]))
+  writeFile(dir, 'nsis/installtest/installer.nsi', script)
+  writeFile(dir, 'nsis/installtest/hooks.nsh', hooks)
+  writeFile(dir, 'nq-lab terminal installtest_0.1.0_x64-setup.exe', buildPe({ imports: ['KERNEL32.dll', 'user32.dll'] }))
+  return dir
+}
+
+test('a release folder that also holds the install-test build passes and says it checked it', () => {
+  const result = checkRelease(addInstallTest(cleanRelease(scratch('rel'))), OPTIONS)
+  assert.deepEqual(result.problems, [])
+  assert.match(result.notes.join('\n'), /installtest/)
+})
+
+test('the install-test build is held to the same hook rules', () => {
+  const dir = addInstallTest(cleanRelease(scratch('rel')), { hooks: realHooks().replaceAll('/inheritance:r', '/inheritance:e') })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /installtest: .*inheritance/)
+})
+
+test('an install-test exe that holds smoke-build code fails', () => {
+  const dir = addInstallTest(cleanRelease(scratch('rel')), { exeExtra: '--attach-url' })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /installtest: the exe holds smoke-build code/)
+})
+
+test('an install-test installer script that embeds another bootstrapper than the recorded one fails', () => {
+  const dir = addInstallTest(cleanRelease(scratch('rel')), { script: nsi().replace(BOOTSTRAPPER_PATH, 'D:\\other\\MicrosoftEdgeWebview2Setup.exe') })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /installtest: the installer script embeds/)
+})
+
+test('a release exe that carries the install-test identifier fails', () => {
+  const dir = cleanRelease(scratch('rel'), { exe: Buffer.concat([buildPe(), Buffer.from(`\0${INSTALLTEST_ID}\0`)]) })
+  assert.match(checkRelease(dir, OPTIONS).problems.join('\n'), /release: the exe carries the identifier of the installtest build/)
+})
+
 // ---- the command line --------------------------------------------------------------------------------------------------
 
 function run(args, env = {}) {

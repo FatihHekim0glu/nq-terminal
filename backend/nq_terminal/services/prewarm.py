@@ -23,6 +23,9 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
   quarter of one core over a half-second window), or after `quiet_timeout` seconds, whichever comes first. On a first
   launch (02 section 4.1 item 3, decided: the cold-HOME cap holds on the first launch) they would otherwise take the
   interpreter from HOME's own requests while HOME loads; like requestIdleCallback in a page, they wait for idle time.
+- `on_stage` (optional) is called with `STAGE_TASKS` once the tasks are done and with `STAGE_LATER` once the later
+  tasks are done (vnext perf-1: the app trims its working set there, `memtrim.py`). A failing hook is logged and the
+  thread goes on. `prewarm_running()` is true while the thread works, so the quiet-period trim waits for it.
 """
 from __future__ import annotations
 
@@ -45,11 +48,20 @@ QUIET_WINDOW_S = 0.5  # one reading of the process CPU
 QUIET_CPU_SHARE = 0.25  # of one core: a process serving HOME's requests runs near one core (the interpreter lock)
 QUIET_WINDOWS = 2  # quiet readings in a row before the later tasks start
 QUIET_TIMEOUT_S = 20.0  # the later tasks start by then even if the process never goes quiet
+STAGE_TASKS = "tasks"  # on_stage argument once the HOME tasks are done
+STAGE_LATER = "later"  # on_stage argument once the later tasks are done
 
 Task = Callable[[], object]
+StageHook = Callable[[str], object]
 
 _lock = threading.Lock()
 _started = False
+_running = threading.Event()  # set while the prewarm thread works
+
+
+def prewarm_running() -> bool:
+    """True while the prewarm thread is running its tasks (or waiting for the port or for quiet between them)."""
+    return _running.is_set()
 
 
 def prewarm_enabled(environ: Mapping[str, str] | None = None) -> bool:
@@ -81,7 +93,8 @@ class Idle:
 def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: Callable[[], bool] | None = None,
                   ready_timeout: float = READY_TIMEOUT_S, later: Iterable[Task] = (),
                   quiet: Callable[[], bool] | None = None, quiet_windows: int = QUIET_WINDOWS,
-                  quiet_timeout: float = QUIET_TIMEOUT_S) -> threading.Thread | None:
+                  quiet_timeout: float = QUIET_TIMEOUT_S,
+                  on_stage: StageHook | None = None) -> threading.Thread | None:
     """Run `tasks` once, in order, on a daemon thread, then `later` once the process is quiet; return the thread, or
     None when nothing was started.
 
@@ -102,10 +115,13 @@ def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: 
         if _started:
             return None
         thread = threading.Thread(target=_run, args=(snapshot, ready, ready_timeout, deferred, idle),
-                                  name=THREAD_NAME, daemon=True)
+                                  kwargs={} if on_stage is None else {"on_stage": on_stage}, name=THREAD_NAME,
+                                  daemon=True)
+        _running.set()
         try:
             thread.start()
         except RuntimeError:
+            _running.clear()
             LOG.exception("the prewarm thread could not start")
             return None
         _started = True
@@ -113,17 +129,32 @@ def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: 
 
 
 def _run(tasks: tuple[Task, ...], ready: Callable[[], bool] | None, ready_timeout: float,
-         later: tuple[Task, ...] = (), idle: Idle | None = None) -> None:
-    _wait_until_ready(ready, ready_timeout)
-    began = time.monotonic()
-    done = sum(_run_task(task) for task in tasks)
-    LOG.info("prewarm finished: %d of %d tasks ok in %.2f s", done, len(tasks), time.monotonic() - began)
-    if not later:
+         later: tuple[Task, ...] = (), idle: Idle | None = None, on_stage: StageHook | None = None) -> None:
+    try:
+        _wait_until_ready(ready, ready_timeout)
+        began = time.monotonic()
+        done = sum(_run_task(task) for task in tasks)
+        LOG.info("prewarm finished: %d of %d tasks ok in %.2f s", done, len(tasks), time.monotonic() - began)
+        _after_stage(on_stage, STAGE_TASKS)
+        if not later:
+            return
+        _wait_until_quiet(idle if idle is not None else Idle(process_quiet_probe()))
+        began = time.monotonic()
+        done = sum(_run_task(task) for task in later)
+        LOG.info("prewarm later tasks finished: %d of %d ok in %.2f s", done, len(later), time.monotonic() - began)
+        _after_stage(on_stage, STAGE_LATER)
+    finally:
+        _running.clear()
+
+
+def _after_stage(on_stage: StageHook | None, stage: str) -> None:
+    """Call the stage hook; a failure is logged and never raised."""
+    if on_stage is None:
         return
-    _wait_until_quiet(idle if idle is not None else Idle(process_quiet_probe()))
-    began = time.monotonic()
-    done = sum(_run_task(task) for task in later)
-    LOG.info("prewarm later tasks finished: %d of %d ok in %.2f s", done, len(later), time.monotonic() - began)
+    try:
+        on_stage(stage)
+    except Exception:  # noqa: BLE001 - a hook problem leaves the prewarm and the app alone
+        LOG.exception("the prewarm stage hook failed after the %s", stage)
 
 
 def _wait_until_quiet(idle: Idle) -> None:

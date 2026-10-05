@@ -3,6 +3,8 @@
 // ceiling (04 D5, "Exit criteria"). Process-level rows are read on both builds; page-internal rows need the debugging
 // protocol, which only the GNU smoke build has.
 
+import { SETTLED_FROM_S } from './mem.mjs'
+
 export const BUILDS = ['smoke', 'measure']
 
 const SMOKE_CDP = 'smoke build over the debugging protocol (port from DevToolsActivePort)'
@@ -40,6 +42,39 @@ export function verdictOf(row, value) {
 }
 
 export const MB = 1048576
+
+/**
+ * The leak rule of the soak (perf-2). A trim of the backend working set after the HOME prewarm lowers the counted private working
+ * set but not the committed memory, so the whole-tree private bytes are the leak signal and are judged on their own. Over the
+ * settled samples (from settledFromS) a straight-line fit must not climb faster than maxSlopeMBPerHour AND grow by minGrowthMB or
+ * more across the window; both limits, so a steep line over a trivial span is not a leak. Provisional limits, to be tuned from the
+ * first all-day soak; a series too short to judge is 'not-evaluated', never a pass.
+ */
+export const LEAK_RULE = Object.freeze({ settledFromS: SETTLED_FROM_S, minSamples: 4, minSpanS: 1800, maxSlopeMBPerHour: 30, minGrowthMB: 50 })
+
+const round1 = (v) => Math.round(v * 10) / 10
+
+/** The verdict of the rule on a soak sample series ({ atS, privateBytesMB }): { verdict: pass|fail|not-evaluated, slopeMBPerHour, growthMB, n, spanS, reason, rule }. */
+export function privateBytesLeakVerdict(samples, rule = LEAK_RULE) {
+  const settled = (samples ?? []).filter((s) => typeof s.privateBytesMB === 'number' && Number.isFinite(s.privateBytesMB) && s.atS >= rule.settledFromS)
+  const n = settled.length
+  const spanS = n ? settled.at(-1).atS - settled[0].atS : 0
+  const base = { n, spanS, rule }
+  if (n < rule.minSamples || spanS < rule.minSpanS) {
+    return { ...base, verdict: 'not-evaluated', slopeMBPerHour: null, growthMB: null,
+      reason: `private bytes not judged: ${n} settled sample(s) over ${spanS} s, ${rule.minSamples} over ${rule.minSpanS} s needed (from ${rule.settledFromS} s)` }
+  }
+  const t = settled.map((s) => s.atS / 3600)
+  const y = settled.map((s) => s.privateBytesMB)
+  const mt = t.reduce((a, b) => a + b, 0) / n
+  const my = y.reduce((a, b) => a + b, 0) / n
+  const den = t.reduce((a, b) => a + (b - mt) ** 2, 0)
+  const slope = den === 0 ? 0 : t.reduce((a, b, i) => a + (b - mt) * (y[i] - my), 0) / den
+  const growth = slope * (spanS / 3600)
+  const fail = slope > rule.maxSlopeMBPerHour && growth >= rule.minGrowthMB
+  return { ...base, verdict: fail ? 'fail' : 'pass', slopeMBPerHour: round1(slope), growthMB: round1(growth),
+    reason: fail ? `private bytes grow ${round1(slope)} MB an hour (${round1(growth)} MB over the settled window; limits ${rule.maxSlopeMBPerHour} MB an hour and ${rule.minGrowthMB} MB)` : `private bytes steady: ${round1(slope)} MB an hour, ${round1(growth)} MB over the settled window` }
+}
 
 /** Conditions G2 requires that are not budget rows (04 D5 exit list); each has a ceiling that fails. */
 export const CHECKS = Object.freeze({

@@ -2,8 +2,10 @@
 //!
 //! When the backend reports the page build stale or missing, the window shows rebuild.html. In the release, and
 //! only after the explicit click of the native confirm, the shell runs the two steps start.ps1 runs
-//! (`pnpm install --frozen-lockfile`, then `pnpm build`, in `<lab>\terminal\web`, caches on D:); when node or pnpm
-//! is missing it shows "rebuild needed" with the command. Smoke and measure refuse the rebuild with a log line.
+//! (`pnpm install --frozen-lockfile`, then `pnpm build`, in `<lab>\terminal\web`, caches on D:, or under the folder
+//! `NQT_REBUILD_CACHE_ROOT` names); each step is stopped after 15 minutes (`NQT_REBUILD_TOOL_TIMEOUT_S` sets the limit)
+//! so a hung network cannot keep the page busy for ever. When node or pnpm is missing it shows "rebuild needed" with the
+//! command. Smoke and measure refuse the rebuild with a log line.
 //! The shell starts no process here: the caller hands in the runner (process creation belongs to supervise.rs).
 use super::Tools;
 #[path = "window_rebuild_announce.rs"]
@@ -11,8 +13,10 @@ mod announce;
 use crate::ShellError;
 use crate::dialogs::{self, Confirm};
 use serde_json::json;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{Runtime, WebviewWindow};
 
 /// The bundled pages' origin on Windows (frontendDist), and the rebuild page.
@@ -20,11 +24,23 @@ pub const ASSET_ORIGIN: &str = "http://tauri.localhost/";
 pub const REBUILD_PAGE: &str = "rebuild.html";
 /// The page sources in the lab, where the two steps run.
 pub const LAB_WEB: &str = r"terminal\web";
-/// Package caches for the rebuild when the shell's environment names none (03 section 7.1: caches on D:).
-const REBUILD_CACHES: [(&str, &str); 2] = [
-    ("npm_config_cache", r"D:\dev\npm-cache"),
-    ("npm_config_store_dir", r"D:\dev\pnpm-store"),
+/// Package caches for the rebuild when the shell's environment names none (03 section 7.1: caches on D:): each variable
+/// and the folder under the cache root that it points at.
+const CACHE_FOLDERS: [(&str, &str); 2] = [
+    ("npm_config_cache", "npm-cache"),
+    ("npm_config_store_dir", "pnpm-store"),
 ];
+/// Where the caches live when `CACHE_ROOT_VAR` is not set and D: exists.
+const DEFAULT_CACHE_ROOT: &str = r"D:\dev";
+/// Names the (absolute) folder that holds both caches, for a PC without a D: drive or with another layout (AUD-6).
+pub const CACHE_ROOT_VAR: &str = "NQT_REBUILD_CACHE_ROOT";
+/// How long one step of the rebuild may run before it is stopped (AUD-6): `pnpm install` on a hung network would
+/// otherwise keep the rebuild page busy for ever.
+pub const TOOL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+/// Sets that limit in seconds; a value outside `TOOL_TIMEOUT_MIN_S..=TOOL_TIMEOUT_MAX_S` or not a number is ignored.
+pub const TOOL_TIMEOUT_VAR: &str = "NQT_REBUILD_TOOL_TIMEOUT_S";
+const TOOL_TIMEOUT_MIN_S: u64 = 10;
+const TOOL_TIMEOUT_MAX_S: u64 = 2 * 60 * 60;
 
 /// The page build as the backend reports it (handshake `dist`, `/api/health`; 03 section 7.1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -54,6 +70,8 @@ pub struct ToolCall {
     pub command_line: String,
     pub cwd: PathBuf,
     pub env: Vec<(String, String)>,
+    /// The step is stopped, and the rebuild fails, when it runs longer than this.
+    pub timeout: Duration,
 }
 
 pub type ToolRunner = dyn Fn(&ToolCall) -> Result<u32, String> + Send + Sync;
@@ -103,13 +121,44 @@ pub fn rebuild_command(lab: &Path) -> String {
     )
 }
 
+/// The step limit for a setting (the value of `TOOL_TIMEOUT_VAR`, if any): the default unless it is a whole number of
+/// seconds inside the allowed range.
+pub fn tool_timeout(setting: Option<&str>) -> Duration {
+    setting
+        .and_then(|text| text.trim().parse::<u64>().ok())
+        .filter(|secs| (TOOL_TIMEOUT_MIN_S..=TOOL_TIMEOUT_MAX_S).contains(secs))
+        .map_or(TOOL_TIMEOUT, Duration::from_secs)
+}
+
+/// The cache variables the rebuild adds to the shell's environment. `root` is the value of `CACHE_ROOT_VAR` (used only
+/// when it is an absolute path), else D:\dev when `d_drive` says D: exists, else nothing. A variable the shell's
+/// environment already names (`named`) is never overridden.
+pub fn cache_env(
+    root: Option<&OsStr>,
+    named: &dyn Fn(&str) -> bool,
+    d_drive: bool,
+) -> Vec<(String, String)> {
+    let configured = root.map(Path::new).filter(|path| path.is_absolute());
+    let base = match configured {
+        Some(path) => path.to_path_buf(),
+        None if d_drive => PathBuf::from(DEFAULT_CACHE_ROOT),
+        None => return Vec::new(),
+    };
+    CACHE_FOLDERS
+        .iter()
+        .filter(|(name, _)| !named(name))
+        .map(|(name, folder)| ((*name).to_string(), base.join(folder).display().to_string()))
+        .collect()
+}
+
 /// The two tool runs for a pnpm found on PATH; a .cmd shim runs through cmd.exe.
 pub fn rebuild_calls(lab: &Path, pnpm: &Path) -> Vec<ToolCall> {
-    let env: Vec<(String, String)> = REBUILD_CACHES
-        .iter()
-        .filter(|(name, _)| std::env::var_os(name).is_none() && Path::new(r"D:\").is_dir())
-        .map(|(name, value)| ((*name).to_string(), (*value).to_string()))
-        .collect();
+    let env = cache_env(
+        std::env::var_os(CACHE_ROOT_VAR).as_deref(),
+        &|name| std::env::var_os(name).is_some(),
+        Path::new(r"D:\").is_dir(),
+    );
+    let timeout = tool_timeout(std::env::var(TOOL_TIMEOUT_VAR).ok().as_deref());
     let is_cmd = pnpm
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("cmd"));
@@ -138,6 +187,7 @@ pub fn rebuild_calls(lab: &Path, pnpm: &Path) -> Vec<ToolCall> {
             command_line,
             cwd,
             env,
+            timeout,
         }
     };
     vec![step("install --frozen-lockfile"), step("build")]
@@ -391,6 +441,87 @@ mod tests {
         );
         assert_eq!(seen.borrow().last(), Some(&RebuildPage::Failed));
         let _ = std::fs::remove_dir_all(&lab);
+    }
+
+    fn pair(name: &str, value: &str) -> (String, String) {
+        (name.to_string(), value.to_string())
+    }
+
+    #[test]
+    fn the_cache_root_setting_moves_both_caches() {
+        let env = cache_env(Some(OsStr::new(r"E:\caches")), &|_| false, true);
+        assert_eq!(
+            env,
+            [
+                pair("npm_config_cache", r"E:\caches\npm-cache"),
+                pair("npm_config_store_dir", r"E:\caches\pnpm-store"),
+            ]
+        );
+        let without_d = cache_env(Some(OsStr::new(r"E:\caches")), &|_| false, false);
+        assert_eq!(without_d, env, "the setting works on a PC with no D: drive");
+    }
+
+    #[test]
+    fn without_a_setting_the_caches_stay_on_d_when_it_exists() {
+        let env = cache_env(None, &|_| false, true);
+        assert_eq!(
+            env,
+            [
+                pair("npm_config_cache", r"D:\dev\npm-cache"),
+                pair("npm_config_store_dir", r"D:\dev\pnpm-store"),
+            ]
+        );
+        assert!(cache_env(None, &|_| false, false).is_empty());
+    }
+
+    #[test]
+    fn an_empty_or_relative_cache_root_is_ignored() {
+        for bad in ["", "caches", r"\caches", r"..\caches"] {
+            let env = cache_env(Some(OsStr::new(bad)), &|_| false, true);
+            assert_eq!(env, cache_env(None, &|_| false, true), "{bad:?}");
+            assert!(cache_env(Some(OsStr::new(bad)), &|_| false, false).is_empty());
+        }
+    }
+
+    #[test]
+    fn a_cache_variable_the_shell_already_has_is_not_overridden() {
+        let has = |name: &str| name == "npm_config_cache";
+        let env = cache_env(Some(OsStr::new(r"E:\caches")), &has, true);
+        assert_eq!(env, [pair("npm_config_store_dir", r"E:\caches\pnpm-store")]);
+    }
+
+    #[test]
+    fn the_step_limit_is_bounded_and_a_bad_setting_keeps_the_default() {
+        assert_eq!(tool_timeout(None), TOOL_TIMEOUT);
+        assert_eq!(tool_timeout(Some("120")), Duration::from_secs(120));
+        assert_eq!(tool_timeout(Some(" 600 ")), Duration::from_secs(600));
+        for bad in [
+            "",
+            "abc",
+            "-5",
+            "1.5",
+            "0",
+            "9",
+            "7201",
+            "99999999999999999999",
+        ] {
+            assert_eq!(tool_timeout(Some(bad)), TOOL_TIMEOUT, "{bad:?}");
+        }
+        assert!(
+            TOOL_TIMEOUT >= Duration::from_secs(60),
+            "pnpm install needs minutes, not seconds"
+        );
+    }
+
+    #[test]
+    fn every_rebuild_step_carries_the_limit() {
+        let setting = std::env::var(TOOL_TIMEOUT_VAR).ok();
+        let calls = rebuild_calls(Path::new(r"D:\lab"), Path::new(r"D:\tools\pnpm.exe"));
+        assert_eq!(calls.len(), 2);
+        for call in &calls {
+            assert_eq!(call.timeout, tool_timeout(setting.as_deref()));
+            assert!(call.timeout > Duration::ZERO);
+        }
     }
 
     #[test]

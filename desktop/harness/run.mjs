@@ -9,6 +9,7 @@
 //   node run.mjs --mode t8 [--playwright]                       smoke --attach-url on the offline demo server, WebView2 version recorded
 //   node run.mjs --mode soak [--hours 8] [--real-data]          the all-day soak at the shipped caps, sampled every 5 minutes
 //   node run.mjs --mode installer [--installer FILE]            the installer size row
+//   node run.mjs --mode parity [--runs 1] [--settle-s 6] [--shell-port N --plain-port N]     the fixture backend started as the shell starts it and the plain way (8792, 8791): fails above 5 MB or on a thread count
 //   node run.mjs --mode selftest                                the live self-tests (planted spin, planted window, PATH, DRY runs)
 //   node report.mjs DIR [--check]                               medians, verdicts and the read-back check of every figure
 //
@@ -32,6 +33,7 @@ const MODES = {
   soak: () => import('./modes/soak.mjs'),
   installer: () => import('./modes/installer.mjs'),
   selftest: () => import('./modes/selftest.mjs'),
+  parity: () => import('./modes/parity.mjs'),
 }
 
 export function modeOf(args) {
@@ -40,6 +42,12 @@ export function modeOf(args) {
   if (m) return m
   if (args.flag('build')) return 'rows'
   return null
+}
+
+// A mode reports failure as a boolean (parity, soak) or as the list of failed section names (selftest, empty on success).
+export function exitCodeOf(out) {
+  const failed = out?.failed
+  return (Array.isArray(failed) ? failed.length > 0 : Boolean(failed)) ? 1 : 0
 }
 
 async function main() {
@@ -62,5 +70,5 @@ async function main() {
 
 import { fileURLToPath } from 'node:url'
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1) })
+  main().then((out) => process.exit(exitCodeOf(out)), (e) => { console.error(e); process.exit(1) })
 }

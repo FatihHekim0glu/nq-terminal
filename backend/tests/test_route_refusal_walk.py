@@ -24,6 +24,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from nq_terminal.api.live_stream import StreamLimits
 from nq_terminal.app import create_app
+from nq_terminal.memtrim import ActivityMiddleware
 from nq_terminal.desktop import lifecycle, sessions
 from nq_terminal.security import (SESSION_EXEMPT, LoopbackOnlyMiddleware, SameOriginApiMiddleware,
                                   SecurityHeadersMiddleware, SessionMiddleware)
@@ -163,5 +164,6 @@ def test_static_files_need_no_cookie(tmp_path):
 
 def test_the_session_middleware_sits_inside_the_host_checks_and_just_outside_same_origin():
     order = [m.cls for m in create_app(load_settings({})).user_middleware]  # outermost first
-    assert order == [SecurityHeadersMiddleware, LoopbackOnlyMiddleware, TrustedHostMiddleware, SessionMiddleware,
+    # The memory trim's request counter is outermost, so a refused request still counts as activity (vnext perf-1).
+    assert order == [ActivityMiddleware, SecurityHeadersMiddleware, LoopbackOnlyMiddleware, TrustedHostMiddleware, SessionMiddleware,
                      SameOriginApiMiddleware]

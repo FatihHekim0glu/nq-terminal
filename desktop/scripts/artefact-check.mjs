@@ -42,8 +42,10 @@ const UPDATER_TOKENS = ['tauri-plugin-updater', 'tauri_plugin_updater', 'plugin:
 const SMOKE_ONLY_STRINGS = ['--attach-url', 'DevToolsActivePort', 'NQT_SMOKE_FORCE_PANIC', 'NQT_TEST_POLICY_ROOT']
 const MAIN_EXE = 'nq-lab-terminal.exe'
 const MICROSOFT_SIGNER = /(^|,\s*)O=Microsoft Corporation(,|$)/
-const BUILDS = ['release', 'measure', 'smoke']
-const IDENTITY_FILE = { release: 'tauri.conf.json', measure: 'tauri.measure.conf.json', smoke: 'tauri.smoke.conf.json' }
+// installtest is the release feature set under another product name and identifier, so install-test.ps1 can install and upgrade it beside a real install.
+const BUILDS = ['release', 'measure', 'smoke', 'installtest']
+const SUFFIXED_BUILDS = ['smoke', 'measure', 'installtest']
+const IDENTITY_FILE = { release: 'tauri.conf.json', measure: 'tauri.measure.conf.json', smoke: 'tauri.smoke.conf.json', installtest: 'tauri.installtest.conf.json' }
 
 const segmentsOf = (p) => String(p).replace(/\\/g, '/').split('/').filter((s) => s !== '' && s !== '.')
 
@@ -192,7 +194,7 @@ export function installerScriptProblems(text, name) {
   const out = []
   const map = defines(text)
   if (map.get('INSTALLMODE') !== 'currentUser') out.push(`${name}: INSTALLMODE is ${map.get('INSTALLMODE')}, not currentUser (a per-user install, no admin)`)
-  if (name === 'release' && map.get('INSTALLWEBVIEW2MODE') !== 'embedBootstrapper') out.push(`${name}: INSTALLWEBVIEW2MODE is ${map.get('INSTALLWEBVIEW2MODE')}, not embedBootstrapper`)
+  if ((name === 'release' || name === 'installtest') && map.get('INSTALLWEBVIEW2MODE') !== 'embedBootstrapper') out.push(`${name}: INSTALLWEBVIEW2MODE is ${map.get('INSTALLWEBVIEW2MODE')}, not embedBootstrapper`)
   if (!/^\s*!insertmacro\s+MUI_PAGE_DIRECTORY\b/m.test(text)) out.push(`${name}: the installer script has no folder page (MUI_PAGE_DIRECTORY), so the install folder could not be chosen`)
   if (!/GetOptions\}?\s+\$CMDLINE\s+"\/NS"/.test(text)) out.push(`${name}: the installer script has no /NS (no shortcuts) switch`)
   const { files, problems } = installerFiles(text)
@@ -242,8 +244,8 @@ export function mergePatch(target, patch) {
 /** The exe is of the build it is filed under: no other build's identifier, and no smoke code in release or measure. */
 function identityProblems(exe, identifier, name) {
   const out = []
-  const base = String(identifier ?? '').replace(/.(smoke|measure)$/, '')
-  for (const other of ['smoke', 'measure'].filter((suffix) => !String(identifier).endsWith(`.${suffix}`))) {
+  const base = String(identifier ?? '').replace(/.(smoke|measure|installtest)$/, '')
+  for (const other of SUFFIXED_BUILDS.filter((suffix) => !String(identifier).endsWith(`.${suffix}`))) {
     if (base && exe.includes(Buffer.from(`${base}.${other}`))) out.push(`${name}: the exe carries the identifier of the ${other} build (${base}.${other})`)
   }
   if (name !== 'smoke') {
@@ -344,7 +346,7 @@ export function checkRelease(dir, options = {}) {
   for (const installer of installers) problems.push(...installerProblems(path.join(dir, installer)).map((p) => `${installer}: ${p}`))
   const checked = BUILDS.filter((build) => checkBuild(dir, build, opts, problems))
   const entry = provenanceBootstrapper(dir, problems)
-  for (const build of ['release', 'measure']) {
+  for (const build of ['release', 'measure', 'installtest']) {
     const script = path.join(dir, 'nsis', build, 'installer.nsi')
     if (fs.existsSync(script)) problems.push(...bootstrapperEmbedProblems(fs.readFileSync(script, 'utf8'), entry, build))
   }

@@ -45,10 +45,14 @@ Notes on what is synthetic. On a fixture backend the 8,411 fills are answered in
 budgets), and the GIP series is the real response tiled out to 20,000 bars with the timestamps running on (`bars.mjs`; the record says
 `barsSynthetic`). The real-data run reads the real run with 8,411 fills and the real day, and rewrites only the bar count.
 
+## The leak signal
+
+The soak row is the largest whole-tree private working set, which a trim of the backend working set can lower without releasing committed memory. So the soak also judges the whole-tree private bytes on their own (`LEAK_RULE` in `lib/rows.mjs`): over the settled samples (from 900 s, at least 4 samples over at least 30 minutes) a straight-line fit must not climb faster than 30 MB an hour while growing 50 MB or more across the window. A series that grows fails the soak (exit 1, and `report.mjs --check --strict` exits 4) even when the working set is flat; a series too short to judge is `not-evaluated`, never a pass. The limits are provisional until the first all-day soak. The idle sample waits on evidence, not on a fixed offset (`lib/idle-trim.mjs`): the backend's private working set is read at HOME ready and from 66 s on (`idleQuietMs`, the floor) every 5 s, and the sample is taken once it has dropped by at least 30 MB and 10 % and the last two readings agree, or at the cap (`idleCapMs`, 120 s, which covers the record watch's last foreground request 16 s after it mounts). The `idle_mem_home` figure carries `trimSeen`, `trimCapped` and `trimWaitedMs`; a capped wait with no trim seen is a reading to distrust, not a pass. The floor: the backend trims its working set 60 s after the last foreground request and looks every 5 s (`backend/nq_terminal/memtrim.py`), and a sample taken sooner reads the untrimmed set. The background polls (`/api/health`, `/api/commands`, `/api/audit/oos-log`) do not delay the trim; an open `/api/live/stream` or a queued or running job holds it off by design. Idle figures carry the tree's private bytes beside the working set (`privateBytesMB` on the `idle_mem_home` figure; the report prints both).
+
 ## Commands
 
 ```
-node run.mjs --build smoke|measure|both [--rows all|id,id] [--runs 3] [--warmup 1] [--real-data] [--dry]
+node run.mjs --build smoke|measure|both [--rows all|id,id] [--runs 3] [--warmup 1] [--real-data] [--memtrim on|off] [--dry]
 node run.mjs --mode reproduce [--runs 3] [--dry]
 node run.mjs --mode minimise-sim [--hold-seconds 1800]     (30 to 60 minutes for the real reading)
 node run.mjs --mode minimise-real [--hold-seconds 1800]    (screen 2 only, behind the guard)
@@ -56,6 +60,7 @@ node run.mjs --first-launch [--build measure|smoke]        (one command for the 
 node run.mjs --mode t8 [--playwright]
 node run.mjs --mode soak [--hours 8] [--real-data]
 node run.mjs --mode installer [--installer FILE]
+node run.mjs --mode parity [--runs 1] [--settle-s 6]   (fixture backend started as the shell starts it and the plain way, ports 8792 and 8791; fails above 5 MB private working set or on a thread count; no window)
 node run.mjs --mode selftest [--only spin,screen2,planted,path] [--dry-modes | --dry-only a,b]
 node report.mjs DIR [--min-runs 3] [--json] [--check [--strict]]
 node --test "tests/*.test.mjs"
@@ -64,6 +69,8 @@ node --test "tests/*.test.mjs"
 `--dry` takes one unmeasured run per mode: no gate is enforced, nothing is counted, and the record is `dry`. `--exe`, `--smoke-exe`
 and `--measure-exe` name a build; without them the newest exe of the kind under `D:\dev\targets` is used, and a launch refuses an exe
 that is another build (the smoke exe carries the `--attach-url` switch text, the measure exe `NQT_MEASURE_DIR`).
+
+`--memtrim off` runs every launch of the invocation with `NQT_MEMTRIM=0` (the shell passes that name on to the backend, `PASSED_NQT` in `supervise_check.rs`), so the warm rows with and without the backend working-set trim can be compared; every figure records `memtrim` (`on` or `off`).
 
 Measurements run from the main tree only (`--real-data` and every non-dry run refuse to start elsewhere). From a worktree only
 `--dry` runs, on a derived lab (`lab.mjs`): the owner's venv launcher, a copy of the research package sources and junctions to the

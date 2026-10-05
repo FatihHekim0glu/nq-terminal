@@ -1,6 +1,6 @@
 # SmartScreen and the unsigned installer
 
-Status: brought in line with the tree at commit `f2e03bf` on 3 October 2026, for the Windows hand-over (D6). The installer is unsigned by decision (see the last section). The facts about this PC were read on 3 October 2026 (at 23:26 local time) with read-only commands, and the table below gives the results. Figures that the final build will produce are written as visible placeholders in double curly brackets that start with G2 or W6. The hand-over step fills them (the full list is in section 10 of `handover_windows.md`).
+Status: brought in line with the tree at commit `f2e03bf` on 3 October 2026, for the Windows hand-over (D6). The installer is unsigned by decision (see the last section). The facts about this PC were read on 3 October 2026 (at 23:26 local time) with read-only commands, and the table below gives the results. The figures of each final build were filled in after its tag (section 10 of `handover_windows.md`); none is left as a placeholder. The licence, the signing routes and the Microsoft Store route were brought up to date on 5 October 2026.
 
 ## What SmartScreen does with this installer
 
@@ -47,6 +47,7 @@ Do this for any copy that did not come straight from the build folder on this PC
    - `SHA256SUMS` in the build folder (`D:\dev\release\0.1.1\SHA256SUMS`), read on the PC that built it;
    - the value in the hand-over note, `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` (the final 0.1.0 installer gave `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` and the 0.1.0 build from `49229b9` gave `c568be92eb49bf814f2c151ace6631b11032050f2b6028bf3b0c183a27f90e58`, and this changes with every rebuild);
    - `PROVENANCE.json` in the same folder names the version, the commit (`head`) and the tools; it must name the commit that the tag desktop-v0.1.1 names (for 0.1.0 it was `8122c877bb00e4f07ce505d5ba0468d6a9858f41`).
+   - the release page of the public repository. GitHub turns the space of an uploaded file name into a dot, so the asset is `nq-lab.terminal_0.1.1_x64-setup.exe`, and the published `SHA256SUMS` lists that dotted name with the same hash. A copy saved under the dotted name is the same file; compare the hash, not the name. `desktop\scripts\upgrade-owner.ps1` reads `SHA256SUMS` either way.
 
 3. If the two hashes differ by even one character, stop. Delete the copy and fetch it again from the build folder. Do not click through the prompt.
 
@@ -97,19 +98,19 @@ Signing does not make the prompt disappear at once. SmartScreen weighs the publi
 | Route | Cost (research L4, 2026 figures) | Who can have it | Effect on SmartScreen |
 |---|---|---|---|
 | Unsigned (today) | none | anyone | prompt on every downloaded file; refused outright if Smart App Control is on |
-| OV certificate (for example a cloud-keyed certificate from Certum) | from about 209 euros a year | publishers; whether it is sold to a private person is unverified | the publisher name shows; the prompt stays until reputation builds. Keys must sit in hardware or a cloud key store, and a certificate lasts at most 460 days |
+| OV or IV certificate for an individual: Certum's cloud code signing for an individual developer, or SSL.com IV | Certum: about 139 US dollars a year before VAT through a reseller (Certum's own shop lists its Standard cloud certificate from 209 euros without saying who may buy it); SSL.com IV: 129 US dollars a year plus eSigner cloud signing from 20 US dollars a month, or a hardware token | a UK individual: a reseller sells Certum's variant "intended exclusively for individual software creators", and SSL.com sells IV certificates to individuals | the publisher name shows; the prompt stays until reputation builds. Keys must sit in hardware or a cloud key store, and a certificate lasts at most 459 days (Certum, from 27 February 2026) |
 | EV certificate | about 329 to 379 euros a year | organisations | no advantage over OV for SmartScreen any more; Microsoft says paying for EV only to avoid the prompt is no longer justified |
-| Azure Trusted Signing (now Artifact Signing) | from about 9.99 US dollars a month | organisations in the US, Canada, the EU and the UK; individuals only in the US or Canada | the same as OV: reputation builds over time. Needs a paid Azure subscription and identity checks of 1 to 20 working days |
-| Microsoft Store with MSIX | free developer account | anyone who passes the identity checks | no SmartScreen prompt for Store installs. Tauri cannot build MSIX today, so this route is closed for now |
-| SignPath Foundation | free | open-source projects with an OSI licence | the same as OV. The repository has no licence, so it does not qualify as it stands |
+| Azure Artifact Signing (formerly Trusted Signing) | from about 9.99 US dollars a month | organisations in the US, Canada, the EU and the UK; individuals only in the US or Canada (Microsoft Learn quickstart, updated 29 September 2026), so not the owner as a private person | the same as OV: reputation builds over time. Needs a paid Azure subscription and identity checks of 1 to 20 working days |
+| Microsoft Store, EXE listing | free developer account | anyone who passes the identity checks | no SmartScreen prompt for Store installs, but the Store requires the EXE to be code signed and the WebView2 offline installer mode, which grows the installer from about 3 MB to well over 100 MB. It does not avoid buying a certificate |
+| SignPath Foundation | free | open-source projects with an OSI licence | the same as OV. The repository's `LICENSE` is all rights reserved (published for viewing and evaluation only), not an OSI licence, so it does not qualify |
 
 Signing also changes Smart App Control: a signed build from a certificate Windows trusts is allowed to run when Smart App Control is on, an unsigned one is not.
 
-Recommendation: stay unsigned while the owner is the only user and Smart App Control is off. Buy or arrange a certificate only when a second person needs to install the app, or if Smart App Control gets switched on. The first route to look at then is Azure Trusted Signing through a UK limited company, then an OV certificate. Open decision; see [owner_decisions_windows.md](owner_decisions_windows.md), section 3, item 1.
+Recommendation: stay unsigned while the owner is the only user and Smart App Control is off. Buy or arrange a certificate only when a second person needs to install the app, or if Smart App Control gets switched on. The cheapest workable route for a UK individual is then an individual OV or IV certificate (Certum's cloud variant or SSL.com IV); Artifact Signing is open to the owner only through a company, so it is worth it only if a company is formed for other reasons. Open decision; see [owner_decisions_windows.md](owner_decisions_windows.md), section 3, item 1.
 
 ## The owner's unsigned decision
 
-- The 0.1.0 release is unsigned, and so is 0.1.1. This is a choice made for the first build, recorded here, and not an oversight.
+- The 0.1.0 release is unsigned, and so is 0.1.1; 0.1.2 stays unsigned too, on the recommended default taken as a provisional owner decision. This is a choice made for the first build, recorded here, and not an oversight.
 - Its reasons: one user on a PC where the build is made, no reputation to gain from a certificate with one user, and a cost and an identity process that give nothing yet.
 - What it costs: a prompt on every downloaded installer, and a hard stop if Smart App Control is ever switched on.
 - What it does not change: the installer is per user, needs no administrator rights, writes nothing under the lab, and is covered by the same checks as a signed build (artefact check, silent install test, release check).

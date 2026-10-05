@@ -27,11 +27,26 @@ export function selectRows(build, spec, realData) {
 
 const PAGE_ROWS = new Set(['warm_home', 'eq_warm', 'reg_warm', 'grid_open', 'gip_pan_zoom_p95', 'keystroke_p95'])
 
-export function figuresOf(build, result, gate, provenance) {
+/** Whether a trim was seen before the idle samples: the figure of record is only comparable across builds when it was. */
+const trimNote = (t) => ({ trimSeen: t.seen, trimCapped: t.capped, trimWaitedMs: t.waitedMs })
+
+/**
+ * The backend's memory trim for the launches of this run (NQT_MEMTRIM reaches the backend through the shell, supervise_check.rs
+ * PASSED_NQT): --memtrim off sets NQT_MEMTRIM=0 in the environment the shell inherits, on clears it, no option leaves it as it is.
+ * Returns the state the run holds, 'on' or 'off', which every figure records.
+ */
+export function memtrimState(option, env = process.env) {
+  if (option === 'off') env.NQT_MEMTRIM = '0'
+  else if (option === 'on') delete env.NQT_MEMTRIM
+  else if (option !== null && option !== undefined) throw new Error('--memtrim on|off')
+  return env.NQT_MEMTRIM === '0' ? 'off' : 'on'
+}
+
+export function figuresOf(build, result, gate, provenance, memtrim) {
   return Object.entries(result.rows ?? {}).map(([id, value]) => {
     const row = rowById(id)
     const method = id === 'cold_home' ? `${row?.method[build]} [read as: ${result.coldHomeMethod}]` : id === 'splash_painted' ? `${row?.method[build]} [read as: ${result.splashMethod}]` : row?.method[build]
-    return figure({ row: id, build, value: value, unit: row?.unit, method, cpuLoadPct: gate?.avgPct, provenance, extra: { dataKind: result.dataKind } })
+    return figure({ row: id, build, value: value, unit: row?.unit, method, cpuLoadPct: gate?.avgPct, provenance, extra: { dataKind: result.dataKind, ...(memtrim ? { memtrim } : {}), ...(id === 'idle_mem_home' && typeof result.idlePrivateBytesMB === 'number' ? { privateBytesMB: result.idlePrivateBytesMB } : {}), ...(id === 'idle_mem_home' && result.idleTrim ? trimNote(result.idleTrim) : {}) } })
   })
 }
 
@@ -48,6 +63,15 @@ export async function run({ args, outDir, provenance }) {
   const builds = which === 'both' ? ['smoke', 'measure'] : [which]
   if (builds.some((b) => !['smoke', 'measure'].includes(b))) throw new Error('--build smoke|measure|both')
   refuseUnsound(dry, realData, builds)
+  const priorMemtrim = process.env.NQT_MEMTRIM
+  const memtrim = memtrimState(args.opt('memtrim', null))
+  try { return await runSlots({ args, outDir, provenance, dry, realData, builds, memtrim }) } finally {
+    if (priorMemtrim === undefined) delete process.env.NQT_MEMTRIM
+    else process.env.NQT_MEMTRIM = priorMemtrim
+  }
+}
+
+async function runSlots({ args, outDir, provenance, dry, realData, builds, memtrim }) {
   const runs = Number(args.opt('runs', dry ? 1 : 3))
   const warmup = Number(args.opt('warmup', dry ? 0 : 1))
   const gateSeconds = Number(args.opt('gate-seconds', dry ? 5 : 60))
@@ -56,7 +80,7 @@ export async function run({ args, outDir, provenance }) {
   const gate = reproduceGate()
   if (!dry && !gate.ok && !args.flag('allow-unreproduced')) throw new Error(`${gate.why} (or pass --allow-unreproduced; every figure is then labelled UNREPRODUCED)`)
   const exes = Object.fromEntries(builds.map((b) => [b, resolveBuild(b, args.opt(`${b}-exe`, args.opt('exe', null)))]))
-  const meta = { provenance, harnessDigest: harnessDigest(), unreproduced: !gate.ok, cFreeMBBefore: cFreeMB() }
+  const meta = { provenance, memtrim, harnessDigest: harnessDigest(), unreproduced: !gate.ok, cFreeMBBefore: cFreeMB() }
   const kinds = [...Array(warmup).fill('warmup'), ...Array(runs).fill(dry ? 'dry' : 'measure')]
   const outcomes = []
   for (const [i, kind] of kinds.entries()) {
@@ -83,7 +107,7 @@ async function slotsFor(ctx) {
   for (let attempt = 1, rejects = 0; ; attempt++) {
     const runDir = path.join(outDir, 'launch', `${build}-s${slot}-a${attempt}`)
     const out = await executeSlot({ mode: 'rows', build, slot, attempt, kind, outDir, gateSeconds: ctx.gateSeconds, limitPct: ctx.limitPct, gateFn: readCpu, rejectsSoFar: rejects, provisionalAfter: ctx.provisionalAfter, meta, expected: rows,
-      runFn: async ({ gate }) => { const r = await launchRun({ build, exe, runDir, o: { realData, pageRows, homeTimeoutMs: Number(args.opt('home-timeout-ms', 90_000)) } }); return { ...r, figures: figuresOf(build, r, gate, meta.provenance) } } })
+      runFn: async ({ gate }) => { const r = await launchRun({ build, exe, runDir, o: { realData, pageRows, homeTimeoutMs: Number(args.opt('home-timeout-ms', 90_000)) } }); return { ...r, figures: figuresOf(build, r, gate, meta.provenance, meta.memtrim) } } })
     done.push({ build, slot, attempt, status: out.status, result: out.result })
     console.log(JSON.stringify({ build, slot, attempt, kind, status: out.status, gateAvgPct: out.gate?.avgPct, rows: out.result?.rows, windows: out.result?.watch?.newWindows.length, fg: out.result?.watch?.foregroundChanges.length, fatal: out.result?.fatal?.slice(0, 160) }))
     if (out.status !== 'rejected') return done.at(-1)
