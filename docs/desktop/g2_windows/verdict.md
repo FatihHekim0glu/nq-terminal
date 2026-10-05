@@ -1,8 +1,42 @@
-# G2 on Windows: automated verdict (the release 0.1.2 re-measure of 5 October 2026, taken before its tag; release 0.1.1 below)
+# G2 on Windows: automated verdict (the release 0.2.0 re-measure of 5 October 2026, taken before its tag; release 0.1.2, the published release, and release 0.1.1 below)
 
-The 0.1.2 re-measure comes first. The 0.1.1 verdict, the verdict of the previous release now that 0.1.2 is published, follows unchanged, with the 0.1.0 and W5B verdicts as history.
+The 0.2.0 re-measure comes first. Until the 0.2.0 tag exists, the 0.1.2 verdict that follows it is the verdict of the published release. The 0.1.1 verdict, the verdict of the release before it, follows unchanged, with the 0.1.0 and W5B verdicts as history.
 
-## Release 0.1.2: the re-measure of 5 October 2026, before the tag
+## Release 0.2.0: the re-measure of 5 October 2026, before the tag
+
+Evidence: `results.md` in this folder (sections C1 to C7), built from raw records under `D:/dev/v020/measure-runs`. Tree: `d1abef7`, clean, which is the 0.2.0 commit `6cac154` plus three commits for the hosted CI runner that landed during the slot and change no backend, shell, contract or page source (`results.md` C1); fresh GNU builds of that tree in the default folder `D:/dev/release/0.2.0`; the GNU smoke build against the real lab for every app row. The harness code is that of 0.1.2 (digest unchanged) and the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 874 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.8 to 5.0%; the minimise launches 4.3 to 5.2%; 0 rejected) with its GPU reading recorded (9 to 16%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal). Until the 0.2.0 tag exists, the 0.1.2 verdict below is the verdict of the published release.
+
+### The 0.2.0 reading
+
+**AUTOMATED PASS, OWNER ROWS PENDING.** Every automated row re-measured on 0.2.0 is inside its ceiling at the median. The release row, whole-app idle memory at HOME, reads 197.1 MB (190.0 to 199.4 MB over nine counted launches) (`report.mjs` within-target ACCEPTED), against 199.0 MB on 0.1.2, at the same reading point (73 s after HOME ready, once the backend's working set has dropped) and by the same method; the private bytes at the same samples are 686.6 MB (693.8 MB on 0.1.2). The launcher, the job indicator and the anchor badge cost nothing measurable at idle; in these smoke launches the indicator reads the job list once and stops, because the smoke build runs its backend with the runner off, and a separate check shows that the installed app's 15 s read of the list does not hold off the trim. Two single launches are new and are named here: one first launch read cold HOME 5,084 ms, above the 5,000 ms ceiling (the median of nine is 3,257 ms, and the fourth first launch, taken to check it, read 3,227 ms), and one rows launch of six ended on the shell's stopped page because the backend did not answer the shell's 2 s identity check in time; neither was seen in the 0.1.2 or 0.1.1 records. The new WebView2 memory target works as designed: 60 s after a simulated hide the UI tree's private working set is 42.7 MB on the 0.2.0 shell against 149.6 MB on the 0.1.2 shell, and 60 s after a real minimise on screen 2 it is 83.5 MB against 148.9 MB; the UI tree's private bytes do not change, and the stream came back at once in all four. The 30 min partial soak at 0.2.0 peaked at 619.9 MB, its first sample (target 1,000 MB, ceiling 1,500 MB); 30 minutes is too short for the private-bytes leak rule, which was not evaluated, and an outside sampler read between rounds saw the private bytes climb in shrinking steps (890.3 to 960.8 MB over 25 minutes), as on 0.1.2, so the all-day soak decides. It is partial, and the 2 h soak of 0.1.0 stays the G2 soak evidence. M4 stays provisional, for the reasons given under the 0.1.1 verdict below.
+
+### The 0.2.0 rows
+
+"App harness" is the harness `rows` mode and its first-launch mode on the GNU smoke build of `D:/dev/release/0.2.0`, real lab, app-launched, trim on. n is the number of counted launches behind the figure.
+
+| Row | 0.2.0 reading | 0.1.2 reading | Target | Ceiling | Source | n |
+| --- | ---: | ---: | ---: | ---: | --- | ---: |
+| Whole app idle at HOME, private working set | **197.1 MB** (190.0 to 199.4), read 73 s after HOME ready | 199.0 MB (192.8 to 202.8), read at the same point | 400 MB (met) | 500 MB | App harness, rows and first-launch series | 5 plus 4 launches |
+| The same tree's private bytes (informational, not a row) | 686.6 MB (680.0 to 711.5) | 693.8 MB (678.6 to 713.5) | n/a | n/a | The same samples | 9 launches |
+| Cold HOME, first launch (empty state folder) | 3,257 ms (3,168 to 5,084; one launch of nine above the ceiling) | 3,186.5 ms (3,152 to 3,209) | 3,500 ms (met at the median; first-launch target 4,500 ms met at the median) | 5,000 ms | App harness, rows and first-launch series | 5 plus 4 launches |
+| Cold HOME, usual launch (state filled) | 2,818 ms (2,806 to 2,828) | 2,773 ms | 3,500 ms (met) | 5,000 ms | Tool `t4t5.mjs usual-app`, after one priming launch | 3 launches |
+| Warm HOME | 548.6 ms (543.0 to 562.5) | 543.1 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| `volmanaged_v0 EQ`, second run of the line | 38.2 ms (30.7 to 41.9) | 32.1 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| `REG`, second run of the line | 56.9 ms (52.7 to 59.3) | 53.5 ms | 1,000 ms (met) | 1,500 ms | App harness | 5 launches |
+| Backend ready | 1,447 ms (1,407 to 1,621) | 1,397.5 ms | 1,500 ms (met) | 2,500 ms | App harness | 9 launches |
+| Splash | 317.8 ms (309.2 to 509.4) | 312.7 ms | 500 ms (met) | 1,000 ms | App harness | 9 launches |
+| Grid open, 8,411 fills | 65.8 ms (61.8 to 206.3) | 63.3 ms | 100 ms (met) | 500 ms | App harness | 5 launches |
+| GIP pan and zoom p95, 20,000 bars | 5.9 ms (5.7 to 6.1) | 6.0 ms | 16.7 ms (met) | 25 ms | App harness | 5 launches |
+| Keystroke to paint, p95 | 8.2 ms (8.1 to 8.3) | 8.1 ms | 50 ms (met) | 100 ms | App harness | 5 launches |
+| UI tree 60 s after a hide or minimise, private working set (new, informational) | 42.7 MB after a simulated hide; 83.5 MB after a real minimise on screen 2 | the 0.1.2 shell in the same session: 149.6 MB and 148.9 MB | n/a | n/a | Harness `minimise-sim` and `minimise-real` with an outside sampler (`results.md` C4) | 1 launch each |
+| Stream back in stream mode after the restore | 1 ms (simulated), 0 ms (real minimise) | the 0.1.2 shell in the same session: 1 ms and 1 ms | n/a | 30,000 ms | Harness minimise modes, LIVE open | 1 launch each |
+| 30 min partial soak at 0.2.0, largest sample | 619.9 MB (the first sample; from 900 s at most 583.3 MB; last 458.6 MB); private bytes 1,116.5 to 1,324.0 MB, leak rule not evaluated (too short); PARTIAL, 30 min | 0.1.2, 45 min: 641.9 MB, leak rule pass | 1,000 MB (met) | 1,500 MB | Harness `soak` mode, trim on | 7 samples, 1 run |
+
+### Not re-measured on 0.2.0
+
+The measure-artefact rows and the smoke against measure agreement stay pending (port 8765 listening, decision 11; the 0.2.0 measure installer is built and not installed). The trim-off series of 0.1.2 (B4, B5) was not repeated, because the trim is unchanged; T8, the stage 1 Enter units, the eight routes and the 20,000-point hop were not run on 0.2.0. The 2 h soak of 0.1.0 stays the G2 soak evidence and the all-day soak stays an owner check. The owner-attended rows are pending, as listed under the 0.1.1 verdict, and a real JOBS backtest started from the launcher is among them. The installer size of the release is written after the tag; the measuring build's release installer is 3,256,218 bytes, 3.1 MB against the 30 MB ceiling.
+
+## Release 0.1.2 (the published release): the re-measure of 5 October 2026, before the tag
 
 Evidence: `results.md` in this folder (sections B1 to B7), built from raw records under `D:/dev/v012/measure-runs`. Tree: the 0.1.2 release commit `31baa14`, clean (the `git diff HEAD` and untracked hashes are the empty sha256 in every record), fresh GNU builds of that tree in the default folder `D:/dev/release/0.1.2`, the GNU smoke build against the real lab for every app row. The harness code changed in 0.1.2, so the W0B anchor was reproduced first (`reproduced: true`; launch to HOME ready 873 ms against 834.5 ms). Every counted launch passed the 60 second CPU gate (2.9 to 3.4%, 0 rejected) with its GPU reading recorded (7 to 18%); the slot was quiet by the manager's locks (`QUIET_MEASURE` and `QUIET`), not an owner-named window. All app rows ran at the shipped desktop caps of 512 and 128 MiB. The measure artefact was built but not run against the real lab, because port 8765 was listening (the owner's terminal).
 

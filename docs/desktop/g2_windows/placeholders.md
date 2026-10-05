@@ -1,5 +1,18 @@
 # G2 placeholder values for the hand-over documents
 
+## Release 0.2.0 (the 0.2.0 re-measure), measured values for the documents written after the tag
+
+The 0.2.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections C1 to C7) and `verdict.md`; the README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` keep 0.1.2 as the latest release until the 0.2.0 tag exists, and then take these values. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.2.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+
+| Value | Measured (0.2.0) | Source |
+| --- | --- | --- |
+| idle memory | 197.1 MB (190.0 to 199.4 MB, median of 9 counted launches, smoke build, real data, desktop caps, trim on): the private working set of the whole tree, read 73 s after HOME ready once the backend's working set had dropped, as on 0.1.2; the private bytes beside it 686.6 MB (680.0 to 711.5 MB); inside the 400 MB target and the 500 MB ceiling; not PROVISIONAL (every counted launch at a 60 s CPU load of 2.8 to 5.0%, 0 rejected). 0.1.2 read 199.0 MB at the same point | `results.md` sections C1 to C3; `verdict.md` |
+| first launch and usual launch | first launch 3,257 ms (3,168 to 5,084 ms, median of 9, one launch above the 5,000 ms ceiling); usual launch 2,818 ms (median of 3); 0.1.2 read 3,186.5 ms and 2,773 ms | `results.md` section C2 |
+| warm rows | warm HOME 548.6 ms, EQ second run of the line 38.2 ms, REG second run of the line 56.9 ms (medians of 5); 0.1.2 read 543.1, 32.1 and 53.5 ms | `results.md` section C2 |
+| minimised or hidden (new in 0.2.0) | 60 s after the hide or minimise, the UI tree's private working set reads 42.7 MB (simulated hide) and 83.5 MB (real minimise on screen 2) on the 0.2.0 shell, against 149.6 MB and 148.9 MB on the 0.1.2 shell; the UI tree's private bytes unchanged (260.9 against 260.4 MB, 250.6 against 252.4 MB); single launches, no ceiling of its own | `results.md` section C4 |
+| soak | 30 min partial soak at 0.2.0: largest sample 619.9 MB (the first), last 458.6 MB, private bytes 1,116.5 to 1,324.0 MB, leak rule not evaluated (30 minutes is too short); the 2 h soak of 0.1.0 stays the G2 soak evidence | `results.md` section C6 |
+| installer bytes, SHA256, tag and commit, commits and date, install and upgrade records, release check result | written after the tag, as for 0.1.2 above | the release folder and the release check |
+
 ## Release 0.1.2 (the 0.1.2 re-measure), values the finisher fills in
 
 The 0.1.2 documents carried the build-dependent values below as visible placeholders. They were filled on 5 October 2026, after the 0.1.2 build in the default folder `D:\dev\release\0.1.2` and after the tag, from that folder's `SHA256SUMS`, from `results.md` and `verdict.md` in this folder, and from the install records of the release check. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` now name 0.1.2 as the latest release and keep 0.1.1 as history. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
