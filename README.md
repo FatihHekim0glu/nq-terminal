@@ -15,7 +15,7 @@
 <p align="center">
   <a href="#safety-model"><img src="https://img.shields.io/badge/read%20only-no%20order%20path-870F1E?style=flat-square&labelColor=191919" alt="read only: no order path"></a>
   <a href="#try-the-demo"><img src="https://img.shields.io/badge/demo-runs%20in%20the%20browser-FFB000?style=flat-square&labelColor=191919" alt="demo: runs in the browser"></a>
-  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.1.1%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.1.1 for Windows, unsigned"></a>
+  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.1.2%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.1.2 for Windows, unsigned"></a>
   <a href="#how-it-is-built"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
 </p>
 
@@ -44,15 +44,17 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 As of 4 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 81 API paths.
-- **Windows desktop app, 0.1.1.** Released as the annotated tag desktop-v0.1.1: an unsigned, per-user installer of
-  3,253,307 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It caps the maths thread
-  pools of the backend server, which is what brought idle memory under its ceiling. The earlier 0.1.0 release
-  (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes) stays available.
+- **Windows desktop app, 0.1.2.** Released on 5 October 2026 as the annotated tag desktop-v0.1.2, on commit `5153496`: an
+  unsigned, per-user installer of 3,254,474 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It trims
+  the backend's working set after the HOME prewarm and in quiet periods. The earlier releases stay available:
+  0.1.1 (`desktop-v0.1.1`, 3,253,307 bytes), which capped the maths thread pools of the backend server, and 0.1.0
+  (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes).
 - **Gate G2 (speed and memory on Windows).** **AUTOMATED PASS, OWNER ROWS PENDING.** Whole-app idle memory at HOME
-  reads 477.3 MB against a 500 MB ceiling (it read 505.4 MB, over the ceiling, on 0.1.0), but it is still above the
-  400 MB target. Every other row measured on 0.1.1 is inside its ceiling too, among them first-launch cold HOME at
-  3,192.5 ms. The 2-hour soak (largest sample 705.8 MB, a partial run, not all day), the simulated minimise and the
-  drift run were taken on 0.1.0 and not repeated on 0.1.1. The owner-attended checks (screen readers, real keyboard,
+  reads 199.0 MB on 0.1.2 (192.8 to 202.8 MB, trim on, read 73 s after HOME ready), inside both the 500 MB ceiling and
+  the 400 MB target. On 0.1.1 it read 477.3 MB at HOME ready plus 2.5 s, another reading point, and on 0.1.0 505.4 MB,
+  over the ceiling. Every other row re-measured on 0.1.2 is inside its ceiling too, among them first-launch cold HOME
+  at 3,186.5 ms. The 2-hour soak (largest sample 705.8 MB, a partial run, not all day), the simulated minimise and the
+  drift run were taken on 0.1.0 and not repeated since. The owner-attended checks (screen readers, real keyboard,
   visible run, SmartScreen first run and others) are still pending. Source: [G2 verdict](docs/desktop/g2_windows/verdict.md).
 - **macOS app.** Not built. It waits for its own gate (G1). On macOS and Linux, use the web terminal or the demo.
 
@@ -128,13 +130,14 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 
 | Release | File | Size | SHA256 |
 |---|---|---:|---|
+| `desktop-v0.1.2` | `nq-lab terminal_0.1.2_x64-setup.exe` | 3,254,474 bytes | `3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377` |
 | `desktop-v0.1.1` | `nq-lab terminal_0.1.1_x64-setup.exe` | 3,253,307 bytes | `3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc` |
 | `desktop-v0.1.0` | `nq-lab terminal_0.1.0_x64-setup.exe` | 3,253,432 bytes | `2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590` |
 
 **2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.1.1_x64-setup.exe' | Format-List Algorithm,Hash
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.1.2_x64-setup.exe' | Format-List Algorithm,Hash
 ```
 
 PowerShell prints the hash in capitals; compare it with the value above without regard to case. If it differs by one
@@ -530,11 +533,13 @@ annualise geometrically. Every chart names its return basis and unit.
 **The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2), from
 performance and drawdowns to research integrity and live paper monitoring.
 
-**Latest full run.** The suites of the 0.1.1 tree read: backend 4,155 passed, crosscheck strict PASS 2,495, FAIL 0, QA
-333 passed, vitest 7,394 passed (47 skipped), Playwright e2e 539 passed, offline 190 (3 declared skips), desktop 42,
-perf 3 and `check.ps1` 29 of 29 ([G2 results](docs/desktop/g2_windows/results.md), section A6). The release check of the
-0.1.0 tree, for comparison, read backend 4,147 passed and 1 skipped and crosscheck strict PASS 2,495, FAIL 0
-([hand-over](docs/desktop/handover_windows.md), section 7).
+**Latest full run.** The release records of the 0.1.2 tree (5 October 2026) read: backend 4,201 passed, crosscheck strict
+PASS 2,495, FAIL 0, smoke and smoke-app passed, the install test on a renamed-product build 54 of 54 and the upgrade
+from 0.1.1 to 0.1.2 on a renamed-product build 105 of 105, and `release_check.ps1 -Tag desktop-v0.1.2 -RequireSmokeApp
+-RequireInstall` PASS with no WARN ([hand-over](docs/desktop/handover_windows.md), section 7). The suites of the 0.1.1
+tree read: backend 4,155 passed, crosscheck strict PASS 2,495, FAIL 0, QA 333 passed, vitest 7,394 passed (47 skipped),
+Playwright e2e 539 passed, offline 190 (3 declared skips), desktop 42, perf 3 and `check.ps1` 29 of 29 ([G2
+results](docs/desktop/g2_windows/results.md), section A6).
 
 <br clear="right">
 

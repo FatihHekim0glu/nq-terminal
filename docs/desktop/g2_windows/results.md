@@ -1,4 +1,4 @@
-# G2 on Windows: measured results (release 0.1.2 re-measure before its tag; the 0.1.1, 0.1.0 and W5B records follow as history)
+# G2 on Windows: measured results (release 0.1.2 re-measure, taken before its tag; the 0.1.1, 0.1.0 and W5B records follow as history)
 
 Sections B1 to B7 are the 0.1.2 record: taken on 5 October 2026, in a quiet slot from 04:25 to 06:02 BST, on the owner's PC, on the 0.1.2 release commit before its tag, written from the raw records under `D:/dev/v012/measure-runs` (named in B7). Sections A1 to A7 are the 0.1.1 record: taken on 4 October 2026, in a slot from 16:39 to 16:57 BST, on the owner's PC (host `DESKTOP-FM5O3JM`), after the thread-cap fix of release 0.1.1 (commit `519a3cb`, merged as `656a964`), written from the raw records under `D:/dev/w6/measure-runs` (named in A7). Sections 1 to 14 below them are the 0.1.0 record of wave W5C, unchanged, and section 13 sets W5B beside W5C; they stay as history and are the evidence for every row that neither 0.1.1 nor 0.1.2 re-ran. The verdict is in `verdict.md`.
 

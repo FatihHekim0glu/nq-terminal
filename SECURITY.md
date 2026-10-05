@@ -11,7 +11,7 @@ report can be judged against the design as it stands.
 | Version | Supported |
 | --- | --- |
 | `main` | Yes. Fixes land here first |
-| Windows desktop app 0.1.x (current release `desktop-v0.1.1`; `desktop-v0.1.0` is the previous release) | Yes |
+| Windows desktop app 0.1.x (current release `desktop-v0.1.2`; `desktop-v0.1.1` and `desktop-v0.1.0` are earlier releases) | Yes |
 | Anything older than 0.1.0, and any other branch or fork | No |
 
 The desktop app is a 0.x release. Its public surface may still change, and a security fix may ship as a new 0.1.x
@@ -122,8 +122,8 @@ The 0.1 installer has no Authenticode signature. Windows SmartScreen will warn a
 ("Windows protected your PC", unknown publisher), and Smart App Control, if you switch it on, would refuse an unsigned
 program outright. This is a decision for now, not an oversight. [`docs/desktop/smartscreen.md`](docs/desktop/smartscreen.md)
 explains what you will see, how to check the installer's hash before you run it, and when signing will be reopened.
-The release `desktop-v0.1.1` is an installer of 3,253,307 bytes with SHA256
-`3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc`. Check the hash against a source other than the file
+The release `desktop-v0.1.2` is an installer of 3,254,474 bytes with SHA256
+`3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377`. Check the hash against a source other than the file
 you downloaded. Do not click through a prompt if the hashes differ by even one character.
 
 ## Update and rollback
