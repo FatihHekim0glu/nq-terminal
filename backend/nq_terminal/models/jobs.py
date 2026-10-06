@@ -27,7 +27,7 @@ from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from nq_terminal.models.common import ResponseModel
 
-STRATEGY_NAMES = ("za_orb", "overnight", "volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy")
+STRATEGY_NAMES = ("za_orb", "overnight", "volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy", "tsydemfx")
 VARIANTS = ("repaired", "vendor")
 IN_SAMPLE_START = date(2010, 1, 1)
 IN_SAMPLE_END = date(2022, 1, 1)  # exclusive: data through 2021-12-31
@@ -39,13 +39,16 @@ FEED_PARAM_KEYS: dict[str, tuple[str, ...]] = {
     "tsmom": ("ticks", "first_month", "last_month", "end_date"),
     "dtsmom": ("ticks", "first_month", "last_month", "end_date", "book"),
     "eomtsy": ("ticks", "first_month", "last_month"),
+    "tsydemfx": ("ticks",),
 }
+# Strategies whose feed runs only on one frozen span (run_base.load_tsydemfx raises on any other): (variant, start, end).
+FROZEN_SPANS: dict[str, tuple[str, date, date]] = {"tsydemfx": ("repaired", date(2010, 1, 1), date(2022, 1, 1))}
 TICKS_REQUIRED = frozenset(name for name, keys in FEED_PARAM_KEYS.items() if "ticks" in keys)
 TICK_LEVELS = (0, 1, 2)  # the specs' cost levels (sizing_nt.TICK_LEVELS)
 # run_base fills these in from the data it loads, so a request may not set them.
 # They are strategy config fields, but the feeds derive them from the served data, so a request may not set them.
 RUNNER_SET_PARAMS = ("instrument_id", "bar_type", "instrument_ids", "bar_types", "sessions", "end_ns", "t0_ns",
-                     "formations", "days", "mult", "roots")
+                     "formations", "days", "mult", "roots", "tsy_days", "tsy_events")
 MONTH_KEYS = ("first_month", "last_month")
 DATE_KEYS = ("end_date", "t0")  # ISO dates a feed reads (tsmom and dtsmom end_date, volmanaged_bh t0)
 FIRST_MONTH = (IN_SAMPLE_START.year, IN_SAMPLE_START.month)
@@ -62,7 +65,7 @@ ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 RUN_ID = re.compile(RUN_ID_PATTERN)
 JOB_ID = re.compile(JOB_ID_PATTERN)
 
-JobStrategy = Literal["za_orb", "overnight", "volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy"]
+JobStrategy = Literal["za_orb", "overnight", "volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy", "tsydemfx"]
 JobVariant = Literal["repaired", "vendor"]
 JobState = Literal["queued", "running", "ok", "failed", "error", "stopped"]
 FINISHED_STATES = frozenset({"ok", "failed", "error", "stopped"})
@@ -140,6 +143,14 @@ def _check_month(key: str, value: Any) -> None:
         raise ValueError(f"{key} is a [year, month] pair from 2010-01 to 2021-12")
 
 
+def _check_frozen_span(spec: "JobSpec") -> None:
+    frozen = FROZEN_SPANS.get(spec.strategy)
+    if frozen is not None and (spec.variant, spec.start, spec.end) != frozen:
+        variant, start, end = frozen
+        raise ValueError(f"{spec.strategy} runs only on variant {variant} from {start.isoformat()} to "
+                         f"{end.isoformat()} (end exclusive)")
+
+
 def _check_calendar(params: dict[str, Any]) -> None:
     """The calendar keys a feed reads are inside the in-sample fence, so no child is started that the OOS gate would stop."""
     for key in DATE_KEYS:
@@ -206,6 +217,7 @@ class JobSpec(ResponseModel):
             raise ValueError(f"parameters {unknown} do not belong to {self.strategy}")
         _check_ticks(self.strategy, self.params)
         _check_calendar(self.params)
+        _check_frozen_span(self)
         if len(config_json(self)) > MAX_CONFIG_JSON_CHARS:
             raise ValueError("the config is too long")
         return self

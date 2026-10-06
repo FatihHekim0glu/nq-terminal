@@ -19,7 +19,11 @@ import test, { after, before } from 'node:test'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const HOOKS = path.join(HERE, '..', '..', 'src-tauri', 'windows', 'nsis', 'hooks.nsh')
-const ROOT = process.env.NQT_TEST_TMP_HOOKS || 'D:/dev/tmp/dec1-hooks-tests'
+/** The folder with its parent resolved to the real folder: the installer refuses a link or junction in the path, and D:\dev is a junction on a PC whose big folders moved. */
+function realFolder(folder) {
+  try { return path.join(fs.realpathSync(path.dirname(folder)), path.basename(folder)).replaceAll('\\', '/') } catch { return folder }
+}
+const ROOT = realFolder(process.env.NQT_TEST_TMP_HOOKS || 'D:/dev/tmp/dec1-hooks-tests')
 const SYS = process.env.SystemRoot || 'C:\\Windows'
 const ICACLS = path.join(SYS, 'System32', 'icacls.exe')
 const POWERSHELL = path.join(SYS, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
@@ -427,7 +431,7 @@ function defaultFolderFor(stub, start) {
   fs.rmSync(stub.report, { force: true })
   const result = spawnSync(stub.exe, ['/S'], { encoding: 'utf8', windowsHide: true, env: { ...process.env, TEMP: ROOT, TMP: ROOT, NQT_STUB_INSTDIR: start } })
   assert.equal(result.error, undefined, `the installer did not start: ${result.error}`)
-  assert.equal(fs.existsSync(stub.report), true, `the stub wrote no report (exit code ${result.status})`)
+  assert.equal(fs.existsSync(stub.report), true, `the stub wrote no report for ${start} (exit code ${result.status})`)
   return fs.readFileSync(stub.report, 'latin1')
 }
 
@@ -442,7 +446,7 @@ test('the bundler default %LOCALAPPDATA%\\<product> moves under Programs, anythi
     [path.join(local, 'Programs', 'product x'), path.join(local, 'Programs', 'product x')],
     [path.join(local, 'Programs'), path.join(local, 'Programs')],
     [path.join(local, 'a', 'b'), path.join(local, 'a', 'b')],
-    ['D:\\dev\\tmp\\dec1-hooks-tests\\default-elsewhere\\product x', 'D:\\dev\\tmp\\dec1-hooks-tests\\default-elsewhere\\product x'],
+    [path.join(ROOT, 'default-elsewhere', 'product x'), path.join(ROOT, 'default-elsewhere', 'product x')],
   ]
   for (const [start, want] of cases) assert.equal(defaultFolderFor(stub, start).toLowerCase(), want.toLowerCase(), `default ${start}`)
 })

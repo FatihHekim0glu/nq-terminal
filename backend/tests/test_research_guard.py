@@ -297,6 +297,32 @@ def test_session_guard_covers_the_research_folders(research_files_guard):
     assert research_files_guard.would_block("os.mkdir", (str(ROOT / "results" / "new"), 0o777, None))
 
 
+def test_session_guard_covers_the_spec_folder(research_files_guard):
+    """`experiments/` holds the specs the presets hash on every listing; nothing in the session may write there."""
+    from nq_lab.config import ROOT
+
+    spec = ROOT / "experiments" / "overnight_v0.json"
+    for path in (spec, spec.with_suffix(".sha256"), ROOT / "experiments" / "new_v0.json"):
+        assert research_files_guard.would_block("open", (str(path), "w", 0)) is not None, path
+        assert research_files_guard.would_block("os.remove", (str(path), None)) is not None, path
+        assert research_files_guard.would_block("open", (str(path), "r", 0)) is None, path
+    assert research_files_guard.would_block("os.mkdir", (str(ROOT / "experiments" / "cache"), 0o777, None))
+
+
+def test_an_in_process_write_under_the_spec_folder_raises_permission_error(tmp_path):
+    """The same folder rule, end to end on a stand-in spec folder (the session guard records any refusal it makes, so
+    the real folder is checked with `would_block` above and never written to)."""
+    specs = tmp_path / "experiments"
+    specs.mkdir()
+    guard = ResearchGuard({}, protected_dirs=[specs]).start()
+    try:
+        with pytest.raises(PermissionError):
+            (specs / "x_v0.sha256").write_text("x", encoding="utf-8")
+    finally:
+        guard.stop()
+    assert not (specs / "x_v0.sha256").exists()
+
+
 def test_session_guard_covers_both_state_folders(research_files_guard):
     """The checkout's terminal/state and the shared lab's (ROOT/terminal/state, the owner's live folder, which is a
     different folder in a worktree): an older conftest let a test leave nqt-planted.txt in the shared one."""

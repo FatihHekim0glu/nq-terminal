@@ -50,8 +50,8 @@ def test_registry_rows_and_counts_come_from_the_file(real):
     assert [r.name for r in view.rows] == [r["name"] for r in rows]
     assert view.counts.rows == len(rows)
     assert view.counts.registered == sum(r["registered"] == "True" for r in rows)
-    assert view.counts.passed == sum(r["verdict"].split()[0] == "PASS" for r in rows)
-    assert view.counts.failed == sum(r["verdict"].split()[0] == "FAIL" for r in rows)
+    assert view.counts.passed == sum(r["verdict"].split()[0].rstrip(",;:") == "PASS" for r in rows)
+    assert view.counts.failed == sum(r["verdict"].split()[0].rstrip(",;:") == "FAIL" for r in rows)
     assert view.counts.checks == view.counts.rows - view.counts.passed - view.counts.failed
 
 
@@ -94,6 +94,14 @@ def test_verdict_badge_and_note():
     assert verdict_parts("FAIL [multi-asset universe: 27 CME futures, not NQ]") == (
         "FAIL", "multi-asset universe: 27 CME futures, not NQ")
     assert verdict_parts("check inside za_v0 (no own pass bar)") == ("CHECK", "check inside za_v0 (no own pass bar)")
+
+
+def test_a_verdict_word_followed_by_a_comma_is_still_the_badge():
+    """Born failing: the registry writes `PASS, not family-wise significant [...]`; the comma hid the PASS token."""
+    assert verdict_parts("PASS, not family-wise significant [six CME FX futures, in-sample only]") == (
+        "PASS", "not family-wise significant [six CME FX futures, in-sample only]")
+    assert verdict_parts("FAIL, no edge") == ("FAIL", "no edge")
+    assert verdict_parts("PASSED the bar") == ("CHECK", "PASSED the bar")
 
 
 # ---------------------------------------------------------------- joins and spec re-hash

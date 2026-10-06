@@ -463,3 +463,151 @@ def test_only_reading_the_job_list_is_a_background_poll(calls):
     generation = trim.activity.generation
     served(trim, JOBS_LIST, "GET")
     assert trim.activity.generation == generation, "GET /api/jobs is a background poll"
+
+
+# ---------------------------------------------------------------- the log lines the harness reads (carried, 0.3.0)
+# The desktop shell drains the backend's stdout and stderr into backend.log. The prewarm and the trim logged at INFO, but a
+# process that never set logging up drops INFO, so neither wrote a line there. These tests prove the lines exist (caplog) and
+# that they reach stderr in such a process.
+
+MB = 1024 * 1024
+
+
+def messages(caplog) -> list[str]:
+    return [record.getMessage() for record in caplog.records]
+
+
+@pytest.fixture
+def unconfigured_logging(monkeypatch: pytest.MonkeyPatch):
+    """Call the returned function first in a test: from then on the process has never configured logging (no root handler,
+    and no handler or level on the two loggers). Pytest adds its own root handlers when the test starts, so this cannot
+    be done in the fixture's setup. The loggers' own state is put back afterwards."""
+    loggers = [memtrim.LOG, prewarm.LOG]
+    saved = [(logger, list(logger.handlers), logger.level) for logger in loggers]
+
+    def start() -> None:
+        monkeypatch.setattr(logging.root, "handlers", [])
+        for logger in loggers:
+            logger.handlers = []
+            logger.setLevel(logging.NOTSET)
+
+    yield start
+    for logger, handlers, level in saved:
+        logger.handlers = handlers
+        logger.setLevel(level)
+
+
+def test_born_failing_a_trim_logs_the_working_set_before_and_after(monkeypatch, caplog, calls):
+    readings = iter([800 * MB, 300 * MB])
+    monkeypatch.setattr(memtrim, "_working_set_bytes", lambda: next(readings))
+    with caplog.at_level(logging.INFO, logger=memtrim.LOG.name):
+        assert memtrim.trim_working_set("quiet period", collect=False) is True
+    lines = [m for m in messages(caplog) if m.startswith("working set trimmed")]
+    assert len(lines) == 1
+    assert "(quiet period)" in lines[0] and "before 800.0 MB" in lines[0] and "after 300.0 MB" in lines[0]
+    assert calls == ["trim"]
+
+
+def test_a_working_set_that_cannot_be_read_is_logged_as_unavailable_and_the_trim_still_runs(monkeypatch, caplog, calls):
+    monkeypatch.setattr(memtrim, "_working_set_bytes", lambda: None)
+    with caplog.at_level(logging.INFO, logger=memtrim.LOG.name):
+        assert memtrim.trim_working_set("test", collect=False) is True
+    line = next(m for m in messages(caplog) if m.startswith("working set trimmed"))
+    assert "before unavailable" in line and "after unavailable" in line
+    assert calls == ["trim"]
+
+
+def test_born_failing_the_quiet_trim_and_the_post_prewarm_trim_each_log_one_line(monkeypatch, caplog, calls):
+    readings = iter([700 * MB, 350 * MB, 360 * MB, 340 * MB])
+    monkeypatch.setattr(memtrim, "_working_set_bytes", lambda: next(readings))
+    clock = Clock()
+    trim = trimmer(clock)
+    clock.advance(memtrim.QUIET_S + 1)
+    with caplog.at_level(logging.INFO, logger=memtrim.LOG.name):
+        assert trim.quiet_check() is True
+        assert trim.after_stage(prewarm.STAGE_LATER) is True
+    lines = [m for m in messages(caplog) if m.startswith("working set trimmed")]
+    assert len(lines) == 2
+    assert "(quiet period)" in lines[0] and "before 700.0 MB" in lines[0] and "after 350.0 MB" in lines[0]
+    assert "(after the prewarm later)" in lines[1] and "before 360.0 MB" in lines[1]
+
+
+def test_a_skipped_trim_logs_nothing_about_a_working_set(caplog, calls):
+    clock = Clock()
+    trim = trimmer(clock)
+    clock.advance(memtrim.QUIET_S + 1)
+    trim.activity.begin("/api/runs", "GET")
+    with caplog.at_level(logging.INFO, logger=memtrim.LOG.name):
+        assert trim.after_stage(prewarm.STAGE_LATER) is False
+    assert not [m for m in messages(caplog) if m.startswith("working set trimmed")]
+    assert calls == []
+
+
+def test_the_working_set_reading_is_none_off_windows(monkeypatch):
+    monkeypatch.setattr(memtrim, "PLATFORM", "linux")
+    assert memtrim._working_set_bytes() is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the real Windows call")
+def test_the_real_working_set_reading_is_a_positive_size(monkeypatch):
+    monkeypatch.undo()
+    reading = memtrim._working_set_bytes()
+    assert isinstance(reading, int) and reading > 10 * MB
+
+
+def test_born_failing_the_prewarm_logs_when_it_starts_and_when_it_ends(caplog):
+    caplog.set_level(logging.INFO, logger=prewarm.LOG.name)
+    thread = prewarm.start_prewarm([lambda: None, lambda: None], True, later=[lambda: None], quiet=lambda: True,
+                                   quiet_windows=1)
+    assert thread is not None
+    thread.join(WAIT_S)
+    assert not thread.is_alive()
+    lines = messages(caplog)
+    started = [m for m in lines if m.startswith("prewarm started")]
+    ended = [m for m in lines if m.startswith("prewarm ended")]
+    assert len(started) == 1 and "2 tasks" in started[0] and "1 later" in started[0]
+    assert len(ended) == 1
+    assert lines.index(started[0]) < lines.index(ended[0])
+    assert lines.index(ended[0]) > max(i for i, m in enumerate(lines) if m.startswith("prewarm later tasks finished"))
+
+
+def test_the_prewarm_end_line_is_logged_even_when_a_task_fails(caplog):
+    def boom() -> None:
+        raise RuntimeError("two-day failed")
+
+    caplog.set_level(logging.INFO, logger=prewarm.LOG.name)
+    thread = prewarm.start_prewarm([boom], True)
+    assert thread is not None
+    thread.join(WAIT_S)
+    lines = messages(caplog)
+    assert any(m.startswith("prewarm started") for m in lines) and any(m.startswith("prewarm ended") for m in lines)
+
+
+def test_born_failing_the_lines_reach_stderr_when_the_process_never_set_logging_up(unconfigured_logging, capsys, calls):
+    unconfigured_logging()
+    assert memtrim.trim_working_set("quiet period", collect=False) is True
+    err = capsys.readouterr().err
+    assert "working set trimmed (quiet period)" in err and " INFO " in err
+    thread = prewarm.start_prewarm([lambda: None], True)
+    assert thread is not None
+    thread.join(WAIT_S)
+    err = capsys.readouterr().err
+    assert "prewarm started" in err and "prewarm ended" in err
+    assert len(memtrim.LOG.handlers) == 1 and len(prewarm.LOG.handlers) == 1, "one handler each, however many times it is asked"
+
+
+def test_a_process_that_set_logging_up_is_left_alone(unconfigured_logging, capsys, monkeypatch):
+    unconfigured_logging()
+    own = logging.NullHandler()
+    monkeypatch.setattr(logging.root, "handlers", [own])
+    assert prewarm.ensure_log_lines(memtrim.LOG) is False
+    assert memtrim.LOG.handlers == [] and memtrim.LOG.level == logging.NOTSET
+    memtrim.LOG.info("nothing is added for this")
+    assert capsys.readouterr().err == ""
+
+
+def test_without_a_stderr_no_handler_is_made(unconfigured_logging, monkeypatch):
+    unconfigured_logging()
+    monkeypatch.setattr(sys, "stderr", None)
+    assert prewarm.ensure_log_lines(memtrim.LOG) is False
+    assert memtrim.LOG.handlers == []

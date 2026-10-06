@@ -31,11 +31,17 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
   names, which is `STAGE_LATER` only (vnext perf-1, `memtrim.py`); after `STAGE_TASKS` it does nothing. A failing hook
   is logged and the thread goes on. `prewarm_running()` is true while the thread works, so the quiet-period trim waits
   for it.
+- One line when the thread begins its tasks ("prewarm started") and one when it ends ("prewarm ended"), beside the
+  existing per-task and per-stage lines. The desktop shell drains the backend's stderr into `backend.log`, but a process
+  that never set logging up drops INFO, so `ensure_log_lines` gives these loggers a stderr handler in that case (and
+  only then: a process that configured logging keeps its own). The measurement harness reads the prewarm's span, and
+  the memory trim's lines (`memtrim.py`), from that log.
 """
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import threading
 import time
 from typing import Callable, Iterable, Mapping
@@ -61,9 +67,28 @@ STAGE_LATER = "later"  # on_stage argument once the later tasks are done
 Task = Callable[[], object]
 StageHook = Callable[[str], object]
 
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
 _lock = threading.Lock()
 _started = False
 _running = threading.Event()  # set while the prewarm thread works
+
+
+def ensure_log_lines(logger: logging.Logger) -> bool:
+    """Make `logger`'s INFO lines reach stderr, which is where the desktop shell's `backend.log` comes from, when the
+    process has not set logging up: no handler on the root logger or on `logger`, and a stderr to write to. True when a
+    handler was added. Asked again, it adds nothing; a configured process is left alone. Never raises."""
+    try:
+        if logger.handlers or logging.getLogger().handlers or sys.stderr is None:
+            return False
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+        return True
+    except Exception:  # noqa: BLE001 - a log line is never worth an error in the app
+        return False
 
 
 def prewarm_running() -> bool:
@@ -180,9 +205,13 @@ def start_prewarm(tasks: Iterable[Task], enabled: bool | None = None, *, ready: 
 
 def _run(tasks: tuple[Task, ...], ready: Callable[[], bool] | None, ready_timeout: float,
          later: tuple[Task, ...] = (), idle: Idle | None = None, on_stage: StageHook | None = None) -> None:
+    ensure_log_lines(LOG)
+    thread_began = time.monotonic()
     try:
         _wait_until_ready(ready, ready_timeout)
         began = time.monotonic()
+        LOG.info("prewarm started: %d tasks, %d later tasks, %.2f s after the thread began", len(tasks), len(later),
+                 began - thread_began)
         done = sum(_run_task(task) for task in tasks)
         LOG.info("prewarm finished: %d of %d tasks ok in %.2f s", done, len(tasks), time.monotonic() - began)
         _after_stage(on_stage, STAGE_TASKS)
@@ -195,6 +224,7 @@ def _run(tasks: tuple[Task, ...], ready: Callable[[], bool] | None, ready_timeou
         _after_stage(on_stage, STAGE_LATER)
     finally:
         _running.clear()
+        LOG.info("prewarm ended: %.2f s after the thread began", time.monotonic() - thread_began)
 
 
 def _after_stage(on_stage: StageHook | None, stage: str) -> None:

@@ -88,7 +88,7 @@ DEVICE = SEP * 2 + "?" + SEP
 
 
 @pytest.mark.parametrize("raw", [
-    "C:/",
+    ROOT.anchor,  # the drive root above the project, wherever the lab lives (a junction can put it on E:)
     str(ROOT),
     str(ROOT.parent),
     str(ROOT / "results"),
@@ -181,7 +181,7 @@ def test_state_dir_must_exist_and_be_a_folder(tmp_path):
 
 
 @pytest.mark.parametrize("raw", [
-    "C:/",
+    ROOT.anchor,  # the drive root above the project, wherever the lab lives (a junction can put it on E:)
     str(ROOT),
     str(ROOT.parent),
     str(ROOT / "results"),

@@ -43,6 +43,13 @@ def test_feed_keys_are_named_and_ticks_is_required_where_the_feed_needs_it() -> 
     assert fields["first_month"].kind == "month" and fields["first_month"].default == [2011, 1]
 
 
+def test_the_tsydemfx_schema_is_the_cost_level_alone() -> None:
+    fields = {f.name: f for f in lp.schema("tsydemfx")}
+    assert list(fields) == ["ticks"] and fields["ticks"].required is True and fields["ticks"].feed_key is True
+    assert lp.param_problems("tsydemfx", {"ticks": 1}) == []
+    assert [loc for loc, _ in lp.param_problems("tsydemfx", {"ticks": 1, "tsy_days": [1]})] == [("params", "tsy_days")]
+
+
 def test_choices_come_from_the_strategy_rules() -> None:
     assert {f.name: f.choices for f in lp.schema("overnight")}["exit_at"] == ["bar_close", "open_tick"]
     assert {f.name: f.choices for f in lp.schema("tsmom")}["book"] == ["managed", "vs", "bh"]

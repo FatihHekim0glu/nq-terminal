@@ -56,6 +56,14 @@
   box-shadow: inset 0 0 0 1px var(--border-int);
 }
 
+/* Forced colours: the step's inline fill is a live chart token (a system colour there); without this the browser
+   repaints it as Canvas and the key vanishes. The MRET ramp's inline linear-gradient (stops are system colours
+   there) is dropped outright by forced colours unless the element opts out. */
+@media (forced-colors: active) {
+  .echarts-scale-step,
+  .echarts-scale-ramp { forced-color-adjust: none; }
+}
+
 .echarts-scale-named {
   display: flex;
   align-items: center;
@@ -70,4 +78,25 @@
 .echarts-scale-ramp {
   width: 240px;
   height: 13px;
+}
+
+/* Forced colours: eight sector tones share four system colours, so a key swatch carries the same numbered
+   pattern as its sector's area (compositionModel.ts PATTERN_SHAPES), drawn in the page colour over the swatch
+   fill. The inline fill sets background-image: none, hence !important. */
+@media (forced-colors: active) {
+  .echarts-scale-step[data-pattern='0'] { background-image: repeating-linear-gradient(180deg, Canvas 0 1px, transparent 1px 4px) !important; }
+  .echarts-scale-step[data-pattern='1'] { background-image: repeating-linear-gradient(90deg, Canvas 0 1px, transparent 1px 4px) !important; }
+  .echarts-scale-step[data-pattern='2'] { background-image: repeating-linear-gradient(45deg, Canvas 0 1px, transparent 1px 4px) !important; }
+  .echarts-scale-step[data-pattern='3'] { background-image: repeating-linear-gradient(135deg, Canvas 0 1px, transparent 1px 4px) !important; }
+  .echarts-scale-step[data-pattern='4'] { background-image: radial-gradient(Canvas 1px, transparent 1.5px) !important; background-size: 4px 4px !important; }
+  .echarts-scale-step[data-pattern='5'] {
+    background-image: repeating-linear-gradient(45deg, Canvas 0 1px, transparent 1px 4px), repeating-linear-gradient(135deg, Canvas 0 1px, transparent 1px 4px) !important;
+  }
+  .echarts-scale-step[data-pattern='6'] {
+    background-image: repeating-linear-gradient(180deg, Canvas 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, Canvas 0 1px, transparent 1px 4px) !important;
+  }
+  .echarts-scale-step[data-pattern='7'] {
+    background-image: conic-gradient(Canvas 25%, transparent 0 50%, Canvas 0 75%, transparent 0) !important;
+    background-size: 6px 6px !important;
+  }
 }

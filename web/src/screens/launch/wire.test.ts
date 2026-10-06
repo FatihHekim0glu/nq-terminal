@@ -6,18 +6,23 @@ const FIELD: Schemas['ParamField'] = {
   name: 'or_minutes', kind: 'int', default: 30, required: false, minimum: 5, maximum: 120, exclusive_minimum: false, choices: null, feed_key: false,
 }
 
+const SHA = 'b'.repeat(64) // a plain test value, not the hash of any file
+
+// Built apart from LIST so the objects carry spec_sha256 whether or not the generated contract has caught up yet.
+const OFFERED = [
+  {
+    preset_id: 't_EXP12_za_base', exp_id: 'EXP12', spec_sha256: SHA, ts_utc: '2026-09-01T10:00:00Z', strategy: 'za_orb', variant: 'repaired', start: '2010-06-01',
+    end: '2022-01-01', params: { or_minutes: 45 }, runtime_s: 41.5, run_found: true, launchable: true, reasons: [],
+  },
+  {
+    preset_id: 't_bh', exp_id: null, spec_sha256: null, ts_utc: null, strategy: 'volmanaged_bh', variant: 'vendor', start: '2010-06-01', end: '2022-01-01',
+    params: { t0: '2012-01' }, runtime_s: null, run_found: false, launchable: false, reasons: ['t0 is not a launch parameter'],
+  },
+]
+
 const LIST: Schemas['PresetList'] = {
   ledger_found: true,
-  presets: [
-    {
-      preset_id: 't_EXP12_za_base', exp_id: 'EXP12', ts_utc: '2026-09-01T10:00:00Z', strategy: 'za_orb', variant: 'repaired', start: '2010-06-01', end: '2022-01-01',
-      params: { or_minutes: 45 }, runtime_s: 41.5, run_found: true, launchable: true, reasons: [],
-    },
-    {
-      preset_id: 't_bh', exp_id: null, ts_utc: null, strategy: 'volmanaged_bh', variant: 'vendor', start: '2010-06-01', end: '2022-01-01',
-      params: { t0: '2012-01' }, runtime_s: null, run_found: false, launchable: false, reasons: ['t0 is not a launch parameter'],
-    },
-  ],
+  presets: OFFERED,
   strategies: [
     {
       strategy: 'za_orb',
@@ -37,9 +42,14 @@ describe('presetsView', () => {
   it('names a preset by its id and keeps its window, parameters, run time and launch state', () => {
     expect(view.presets[0]).toEqual({
       source_run_id: 't_EXP12_za_base', exp_id: 'EXP12', strategy: 'za_orb', variant: 'repaired', start: '2010-06-01', end: '2022-01-01',
-      params: { or_minutes: 45 }, runtime_s: 41.5, launchable: true, reasons: [],
+      params: { or_minutes: 45 }, spec_sha256: SHA, runtime_s: 41.5, launchable: true, reasons: [],
     })
-    expect(view.presets[1]).toMatchObject({ exp_id: null, runtime_s: null, launchable: false, reasons: ['t0 is not a launch parameter'] })
+    expect(view.presets[1]).toMatchObject({ exp_id: null, spec_sha256: null, runtime_s: null, launchable: false, reasons: ['t0 is not a launch parameter'] })
+  })
+
+  it('reads a missing spec hash as none, so a server without the field never marks a preset as bound to a spec', () => {
+    const { spec_sha256: _gone, ...older } = OFFERED[0]!
+    expect(presetsView({ ledger_found: true, presets: [older], strategies: [] } as unknown as Schemas['PresetList']).presets[0]?.spec_sha256).toBeNull()
   })
 
   it('reads each parameter field as the form types it', () => {

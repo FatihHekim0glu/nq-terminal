@@ -16,7 +16,8 @@
      127.0.0.1:ApiPort against the real data root (NQT_FIXTURE_DIR removed), and vite preview of that
      build on 127.0.0.1:WebPort with /api proxied to it. The user's own backend on 8765 is never used.
      The backend has a state folder of its own (so its own lock and token, and it never meets the user's
-     backend), NQT_JOBS=off (it can run neither a backtest nor the IB snapshot) and only the allow-listed
+     backend; it sits inside the work folder and is removed once the servers have stopped), NQT_JOBS=off
+     (it can run neither a backtest nor the IB snapshot, whatever the caller's shell sets) and only the allow-listed
      environment of desktop\envlist.py, built by the venv Python: no API key of this shell reaches it.
   5. Reads the token from that lock after the backend proved it holds it (a fresh nonce), mints a one-time
      launch code and hands the session page address http://127.0.0.1:WebPort/session.html#<code> to
@@ -270,7 +271,72 @@ function Test-SmokeCoverage([string]$Text) {
     return $problems
 }
 
+# ---------------------------------------------------------------- the backend's own state folder
+
+# A smoke run gives its backend a state folder of its own inside the run's work folder (its result cache, jobs file, lock and
+# token), so it never reads or writes the owner's terminal\state, and turns the job queue off whatever the caller's shell says.
+# Returns the folder; NQT_STATE_DIR and NQT_JOBS are set for this process (the main flow restores the caller's values).
+function New-SmokeState([string]$WorkFolder) {
+    $state = Join-Path $WorkFolder 'state'
+    New-Item -ItemType Directory -Force -Path $state | Out-Null
+    $env:NQT_STATE_DIR = $state
+    $env:NQT_JOBS = 'off'
+    return $state
+}
+
+# Removes that folder after the servers have stopped. It removes only the folder named 'state' directly inside a work folder of
+# a smoke run (nqt-smoke-*), never a link and never any other folder, so a wrong argument cannot reach the owner's state.
+# True when the folder is gone, false when it was refused or could not be removed.
+function Remove-SmokeState([string]$WorkFolder, [string]$State) {
+    if ([string]::IsNullOrEmpty($WorkFolder) -or [string]::IsNullOrEmpty($State)) { return $false }
+    if ((Split-Path -Leaf $WorkFolder) -notlike 'nqt-smoke-*') { return $false }
+    $expected = [System.IO.Path]::GetFullPath((Join-Path $WorkFolder 'state'))
+    if (-not [string]::Equals([System.IO.Path]::GetFullPath($State), $expected, [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if (-not (Test-Path -LiteralPath $expected)) { return $true }
+    if ((Get-Item -LiteralPath $expected -Force).Attributes -band [System.IO.FileAttributes]::ReparsePoint) { return $false }
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try { Remove-Item -LiteralPath $expected -Recurse -Force -ErrorAction Stop; return $true } catch { Start-Sleep -Milliseconds 400 }
+    }
+    return -not (Test-Path -LiteralPath $expected)
+}
+
 # ---------------------------------------------------------------- self-test (born failing)
+
+function Invoke-StateSelfTest {
+    $failures = New-Object System.Collections.Generic.List[string]
+    $base = Join-Path ([System.IO.Path]::GetTempPath()) ('nqt-selftest-' +[guid]::NewGuid().ToString('N').Substring(0, 8))
+    $work = Join-Path $base 'nqt-smoke-20260101-000000'
+    $savedState = $env:NQT_STATE_DIR
+    $savedJobs = $env:NQT_JOBS
+    $check = {
+        param([string]$Name, [bool]$Passed)
+        Write-Host ("self-test {0} {1}" -f $(if ($Passed) { 'ok  ' } else { 'FAIL' }), $Name)
+        if (-not $Passed) { $failures.Add($Name) }
+    }
+    try {
+        New-Item -ItemType Directory -Force -Path $work | Out-Null
+        $env:NQT_STATE_DIR = Join-Path $base 'callers-own-state'
+        $env:NQT_JOBS = 'on'
+        $state = New-SmokeState $work
+        & $check 'the smoke state folder is made inside the work folder and named by NQT_STATE_DIR, not the caller state' ((Test-Path -LiteralPath $state -PathType Container) -and ($env:NQT_STATE_DIR -eq $state) -and ($state -eq (Join-Path $work 'state')))
+        & $check 'the job queue is off whatever the caller set' ($env:NQT_JOBS -eq 'off')
+        [System.IO.File]::WriteAllText((Join-Path $state 'jobs.json'), "{}`n", $Utf8)
+        New-Item -ItemType Directory -Force -Path (Join-Path $state 'logs') | Out-Null
+        $outside = Join-Path $base 'terminal-state'
+        New-Item -ItemType Directory -Force -Path $outside | Out-Null
+        & $check 'a folder that is not the run own state is refused and left in place' ((-not (Remove-SmokeState $work $outside)) -and (Test-Path -LiteralPath $outside))
+        & $check 'a work folder that is not a smoke work folder is refused and its state left in place' ((-not (Remove-SmokeState $base (Join-Path $base 'state'))) -and (Test-Path -LiteralPath $state))
+        & $check 'no argument is refused' ((-not (Remove-SmokeState '' '')) -and (Test-Path -LiteralPath $state))
+        $removed = Remove-SmokeState $work $state
+        & $check 'the smoke state folder is removed afterwards with what the backend wrote in it, the work folder stays' ($removed -and (-not (Test-Path -LiteralPath $state)) -and (Test-Path -LiteralPath $work))
+        & $check 'removing it again is a no-op that reports it gone' (Remove-SmokeState $work $state)
+    } finally {
+        $env:NQT_STATE_DIR = $savedState
+        $env:NQT_JOBS = $savedJobs
+        if (Test-Path -LiteralPath $base) { Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    return $failures
+}
 
 function Invoke-SelfTest {
     $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("nqt-smoke-selftest-" + [guid]::NewGuid().ToString('N'))
@@ -677,7 +743,7 @@ function Invoke-LabRootSelfTest {
 
 # ---------------------------------------------------------------- run
 
-$selfFailures = @(Invoke-SelfTest) + @(Invoke-AppSelfTest)
+$selfFailures = @(Invoke-SelfTest) + @(Invoke-AppSelfTest) + @(Invoke-StateSelfTest)
 if ($selfFailures.Count -gt 0) { Stop-Smoke ("the self-test failed: " + ($selfFailures -join ' | ')) }
 if (-not (Test-Path -LiteralPath $SmokeSpec)) { Stop-Smoke "missing: $SmokeSpec" }
 $coverage = @(Test-SmokeCoverage ([System.IO.File]::ReadAllText($SmokeSpec, $Utf8)))
@@ -719,6 +785,7 @@ foreach ($name in @('NQT_PORT', 'NQT_CACHE_BYTES', 'NQT_FIXTURE_DIR', 'NQT_IB_RE
     $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
 }
 $testsExit = -1
+$State = $null
 $serverProblems = New-Object System.Collections.Generic.List[string]
 try {
     if ($Mode -eq 'App') {
@@ -737,10 +804,7 @@ try {
         # The backend keeps its result cache and jobs file in its state folder: a smoke run gets its own, inside the work
         # folder, so it never writes the owner's terminal\state. The queue is off and the HOME prewarm is off, so the run
         # reads exactly what the page asks for.
-        $State = Join-Path $Work 'state'
-        New-Item -ItemType Directory -Path $State | Out-Null
-        $env:NQT_STATE_DIR = $State
-        $env:NQT_JOBS = 'off'
+        $State = New-SmokeState $Work
         foreach ($name in @('NQT_PREWARM', 'NQT_DESKTOP', 'NQT_STDIN_CONTROL')) { [Environment]::SetEnvironmentVariable($name, $null, 'Process') }
         $env:NQT_PORT = "$WebPort"
         $env:NQT_CACHE_BYTES = "$(1024 * 1024 * 1024)"
@@ -796,6 +860,8 @@ try {
 } finally {
     foreach ($p in $started) { Stop-Tree $p }
     Close-Logs
+    # The backend has stopped: its temporary state folder goes, so the run leaves only its logs and summary in the work folder.
+    if ($null -ne $State -and -not (Remove-SmokeState $Work $State)) { $serverProblems.Add("the temporary state folder $State could not be removed") }
     foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
 }
 

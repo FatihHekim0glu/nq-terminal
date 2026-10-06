@@ -5,6 +5,10 @@
 @import "./tokens.css";
 @import "./amberClassic.css";
 @import "./panelScroll.css";
+/* The two system contrast modes (roadmap Phase D9): token lifts under prefers-contrast: more, and the Windows
+   contrast themes under forced-colors: active. Both apply only inside their media query. */
+@import "./contrastMore.css";
+@import "./forcedColors.css";
 
 /* Bergoom, OFL-1.1 (src/assets/fonts/bergoom/LICENSE.md), shipped unmodified under its own name.
    Only the faces a page uses are fetched; Source Sans 3 (@fontsource, OFL) is the fallback. */

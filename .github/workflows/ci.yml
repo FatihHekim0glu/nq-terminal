@@ -106,6 +106,8 @@ jobs:
         working-directory: terminal
         run: node --test desktop/harness/tests/*.test.mjs
 
+      # Every PowerShell test of the release scripts runs here. The upgrade test reads the owner's real install only
+      # when one exists for the user, which a hosted runner never has, so that part skips itself and says so.
       - name: Release script self-tests
         working-directory: terminal
         shell: powershell
@@ -113,5 +115,11 @@ jobs:
           $ErrorActionPreference = 'Stop'
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\release_check.tests.ps1
           if ($LASTEXITCODE -ne 0) { throw "release_check.tests.ps1 exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\smoke_real.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "smoke_real.tests.ps1 exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "install-test.ps1 -SelfTest exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\install-test.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "install-test.tests.ps1 exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\upgrade-owner.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "upgrade-owner.tests.ps1 exit $LASTEXITCODE" }

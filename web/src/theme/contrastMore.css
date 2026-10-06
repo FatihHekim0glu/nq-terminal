@@ -1,0 +1,65 @@
+/* prefers-contrast: more (roadmap Phase D9). When the system asks for more contrast, text and rules are lifted
+   in both looks: secondary text reaches 7:1 (WCAG 1.4.6) on every dark surface, and every border, divider,
+   grid rule and idle control edge reaches 3:1 at least, each value lighter than the one it replaces. Values only,
+   as amberClassic.css does: no new token, no size, no font, and none of the tokens the colour-vision themes own
+   (the sign colours, the heat and bar ramps, the amber of the protanomaly theme), so data-cvd still combines.
+   Outside the media query nothing changes, so the default look and its baselines stay as they are.
+   Checked by src/theme/contrastModes.test.ts. */
+
+@media (prefers-contrast: more) {
+  :root:not([data-theme="amber-classic"]) {
+    /* Text */
+    --text: #F2F2F2;
+    --muted: #CCCCCC;
+    --muted-hover: #DADADA;
+    --th-fg: #F2F2F2;
+    --tab-fg: #F2F2F2;
+    --frame-tab-fg: #F2F2F2;
+    --minibar-fg: #F2F2F2;
+    --link: #8CCBFF;
+
+    /* Borders, rules and idle edges */
+    --border: #8C8C8C;
+    --border-int: #A0A0A0;
+    --th-rule: #9A9A9A;
+    --box-border: #9A9A9A;
+    --chrome-div: #9A9A9A;
+    --frame-tab-edge: #8C8C8C;
+    --list-border: #E0E0E0;
+    --menu-border: #E0E0E0;
+    --chart-grid: #8C8C8C;
+    --zero-line: #B0B0B0;
+    --chart-year-div: #B0B0B0;
+    --sb-thumb: #A8A8A8;
+    --cmd-border-idle: #4A8CDB;
+    --cmd-caret-idle: #3F7FE0;
+    --spark-prior: #8C8C8C;
+  }
+
+  :root[data-theme="amber-classic"] {
+    /* Text */
+    --text: #FFD699;
+    --muted: #E0C49A;
+    --muted-hover: #E8CDA6;
+    --tab-fg: #FFB850;
+    --link: #8CCBFF;
+
+    /* Borders, rules and idle edges (the command line stays blue in this look, so its idle edge is the
+       standard look's lifted blue) */
+    --zero-line: #B0B0B0;
+    --chart-year-div: #B0B0B0;
+    --spark-prior: #8C8C8C;
+    --cmd-border-idle: #4A8CDB;
+    --cmd-caret-idle: #3F7FE0;
+    --border: #9A6A26;
+    --border-int: #E0962A;
+    --th-rule: #A87420;
+    --box-border: #A87420;
+    --chrome-div: #B8761C;
+    --frame-tab-edge: #9A6A26;
+    --chart-grid: #9A6A26;
+    --sb-thumb: #C08838;
+    --list-border: #FFB850;
+    --menu-border: #FFB850;
+  }
+}

@@ -5,6 +5,7 @@ import { echartsWithGrid, type EchartsTheme } from './echartsTheme'
 import { lwcWithGrid, type LwcTheme } from './lwcTheme'
 import { uplotWithGrid, type UplotTheme } from './uplotTheme'
 
+export * from './chartContrast'
 export * from './chartTokens'
 export * from './echartsTheme'
 export * from './geometry'

@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isMainModule } from './main-module.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const TERMINAL = path.resolve(HERE, '..', '..')
@@ -176,6 +177,6 @@ function main(argv) {
   return 0
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2))
 }

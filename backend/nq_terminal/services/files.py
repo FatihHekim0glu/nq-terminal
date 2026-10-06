@@ -215,9 +215,13 @@ _SEPARATORS = re.compile(r"[\\/]+")
 
 
 def _root_prefixes(root: Path) -> re.Pattern[str]:
-    """The root written with either separator, then at least one separator, in any case."""
+    """The root written with either separator, then at least one separator, in any case. The project folder under a
+    home folder counts as the root too: research files record `C:\\Users\\<name>\\<project>\\...` while the root may
+    resolve through a junction to another drive."""
     parts = [re.escape(part) for part in _SEPARATORS.split(str(root)) if part]
-    return re.compile(r"[\\/]+".join(parts) + r"[\\/]+", re.IGNORECASE)
+    name = re.escape(Path(root).name)
+    home_alias = rf"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\"\r\n]+[\\/]+{name}|/(?:home|Users)/[^/\s\"]+/{name}"
+    return re.compile(rf"(?:{r'[\\/]+'.join(parts)}|{home_alias})[\\/]+", re.IGNORECASE)
 
 
 def redact_local_paths(value: Any, root: Path) -> Any:

@@ -7,7 +7,8 @@ import { mountCandleChart, type CandleEngine, type CandleEngineInput, type Candl
 import type { ChartLibraryState, LwcModule } from './lazy'
 import { eventText, type BarEvents } from './CandleChart.model'
 import type { TipState } from './CandleChart.overlays'
-import { CHART_GEOMETRY as G, readChartTokens } from './theme'
+import { CHART_GEOMETRY as G, readLiveChartTokens } from './theme'
+import { useChartContrastVersion } from './useChartContrast'
 
 /** How long a held key, a pointer or a linked move must settle before the readout announces it. */
 export const READOUT_SETTLE_MS = 300
@@ -101,6 +102,8 @@ export function useCandleEngine(lib: ChartLibraryState<LwcModule>, host: HTMLEle
     onRendered.current = input.onRendered
   }, [input.onRendered])
   const { bars, step, intraday, timeZone, fills, rolls, indicator, precision, minMove, grid, link, chartId, onCursor } = input
+  // A forced-colours or prefers-contrast change remounts the chart with freshly read tokens.
+  const contrast = useChartContrastVersion()
 
   useEffect(() => {
     const el = host
@@ -108,7 +111,7 @@ export function useCandleEngine(lib: ChartLibraryState<LwcModule>, host: HTMLEle
     const started = performance.now()
     const eng = mountCandleChart(lib.lib, el, {
       bars, step, intraday, timeZone, fills, rolls, ...(indicator ? { indicator } : {}), precision, minMove, grid, link, chartId,
-      tokens: readChartTokens(),
+      tokens: readLiveChartTokens(),
     }, { onCursor, onView: setView })
     engine.current = eng
     const cancelFrames = afterTwoFrames(() => {
@@ -124,7 +127,7 @@ export function useCandleEngine(lib: ChartLibraryState<LwcModule>, host: HTMLEle
       engine.current = null
       setDrawn(false)
     }
-  }, [lib, host, bars, step, intraday, timeZone, fills, rolls, indicator, precision, minMove, grid, link, chartId, onCursor])
+  }, [lib, host, bars, step, intraday, timeZone, fills, rolls, indicator, precision, minMove, grid, link, chartId, onCursor, contrast])
 
   return { engine, drawn, view }
 }

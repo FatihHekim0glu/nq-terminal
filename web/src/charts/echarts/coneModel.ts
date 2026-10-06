@@ -14,7 +14,7 @@ import type { ChartTable } from '../ChartA11y'
 import { CHART_GEOMETRY, DEFAULT_CHART_TOKENS, type ChartTokens } from '../theme'
 import type { EChartsOption, LineSeriesOption } from './core'
 import { signed, withUnit } from './format'
-import { baseOption, isFiniteNumber, markLine, niceAxis, refLine, textFont, themeXAxis, themeYAxis } from './shared'
+import { baseOption, forcedLineType, isFiniteNumber, markLine, niceAxis, refLine, textFont, themeXAxis, themeYAxis } from './shared'
 
 export interface ConeBand {
   /** The percentile (5, 25, 50, 75, 95). */
@@ -90,7 +90,11 @@ export function coneHasRealised(input: ConeInput): boolean {
   return input.realised.some(isFiniteNumber)
 }
 
-function pathLine(id: string, label: string, data: Array<[number, number | null]>, colour: string, width: number, dashed = false, z = 4): LineSeriesOption {
+/** How a cone line is drawn: dashed (the outer band), or else the forced-colours cue for its position. */
+type LineDash = boolean | { readonly type?: number[] }
+
+function pathLine(id: string, label: string, data: Array<[number, number | null]>, colour: string, width: number, dashed: LineDash = false, z = 4): LineSeriesOption {
+  const dash = dashed === true ? { type: [...CHART_GEOMETRY.fenceDash] } : dashed === false ? {} : dashed
   return {
     id,
     type: 'line',
@@ -99,7 +103,7 @@ function pathLine(id: string, label: string, data: Array<[number, number | null]
     z,
     data,
     name: label,
-    lineStyle: { color: colour, width, ...(dashed ? { type: [...CHART_GEOMETRY.fenceDash] } : {}) },
+    lineStyle: { color: colour, width, ...dash },
   }
 }
 
@@ -124,6 +128,11 @@ export function coneKey(tokens: ChartTokens = DEFAULT_CHART_TOKENS, overlays: re
   ]
 }
 
+/** Series positions for the forced-colours dash cue (theme/chartContrast.ts FORCED_DASHES). */
+const FORCED_REALISED = 1
+const FORCED_INNER = 2
+const FORCED_OVERLAY = 3
+
 export function coneOption(input: ConeInput, tokens: ChartTokens = DEFAULT_CHART_TOKENS): EChartsOption {
   const c = tokens.color
   const g = CHART_GEOMETRY
@@ -133,13 +142,15 @@ export function coneOption(input: ConeInput, tokens: ChartTokens = DEFAULT_CHART
   }
   const lines = [5, 25, MEDIAN, 75, 95].map((p) => {
     const [colour, width, dashed] = style[p]!
-    return pathLine(`p${p}`, pLabel(p), points(input.steps, bandOf(input, p)), colour, width, dashed)
+    // Under forced colours the inner band lines get a dotted cue too (the median stays solid).
+    const cue = dashed || p === MEDIAN ? dashed : forcedLineType(tokens, FORCED_INNER)
+    return pathLine(`p${p}`, pLabel(p), points(input.steps, bandOf(input, p)), colour, width, cue)
   })
   const realised = coneHasRealised(input)
-    ? [pathLine('realised', CONE.realised, points(input.steps, input.realised), c.accent2, g.primaryWidth)]
+    ? [pathLine('realised', CONE.realised, points(input.steps, input.realised), c.accent2, g.primaryWidth, forcedLineType(tokens, FORCED_REALISED))]
     : []
-  const overlays = overlaysOf(input).map((o) =>
-    pathLine(overlayKey(o), o.label, points(input.steps, o.values), c[o.tone], g.primaryWidth, false, OVERLAY_Z))
+  const overlays = overlaysOf(input).map((o, i) =>
+    pathLine(overlayKey(o), o.label, points(input.steps, o.values), c[o.tone], g.primaryWidth, forcedLineType(tokens, FORCED_OVERLAY + i), OVERLAY_Z))
   const all = [...input.bands.flatMap((b) => b.values), ...input.realised, ...overlaysOf(input).flatMap((o) => o.values), 0].filter(isFiniteNumber)
   const nice = niceAxis(Math.min(...all), Math.max(...all))
   const y = themeYAxis(tokens)

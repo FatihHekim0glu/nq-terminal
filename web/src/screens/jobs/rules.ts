@@ -8,7 +8,11 @@ import { fillCopy } from '../../copy/workspace'
 import type { JobSpec } from './types'
 
 /** run_base.FEEDS keys, in the order the runner lists them. */
-export const STRATEGIES = ['za_orb', 'overnight', 'volmanaged', 'volmanaged_bh', 'tsmom', 'dtsmom', 'eomtsy'] as const
+export const STRATEGIES = ['za_orb', 'overnight', 'volmanaged', 'volmanaged_bh', 'tsmom', 'dtsmom', 'eomtsy', 'tsydemfx'] as const
+/** Strategies whose feed runs only on one frozen span (run_base.load_tsydemfx): the server refuses any other. */
+export const FROZEN_SPANS: Readonly<Record<string, { readonly variant: string; readonly start: string; readonly end: string }>> = {
+  tsydemfx: { variant: 'repaired', start: '2010-01-01', end: '2022-01-01' },
+}
 /** The data variants nq_lab.data knows (EXCLUDE_BY_VARIANT). */
 export const VARIANTS = ['repaired', 'vendor'] as const
 export const WINDOW_START = '2010-01-01'
@@ -82,6 +86,16 @@ function windowErrors(start: string, end: string): DraftErrors {
   }
 }
 
+function frozenSpanErrors(strategy: string, variant: string, start: string, end: string): DraftErrors {
+  const frozen = FROZEN_SPANS[strategy]
+  if (frozen === undefined) return {}
+  return {
+    ...(variant !== frozen.variant ? { variant: JOBS.errors.frozenSpan } : {}),
+    ...(start !== frozen.start ? { start: JOBS.errors.frozenSpan } : {}),
+    ...(end !== frozen.end ? { end: JOBS.errors.frozenSpan } : {}),
+  }
+}
+
 /** Checks a draft against the server's rules; `taken` holds every run id a job or a run already uses. */
 export function checkDraft(draft: JobDraft, taken: ReadonlySet<string>): DraftCheck {
   const start = draft.start.trim()
@@ -91,6 +105,7 @@ export function checkDraft(draft: JobDraft, taken: ReadonlySet<string>): DraftCh
   const errors: DraftErrors = {
     ...((STRATEGIES as readonly string[]).includes(draft.strategy) ? {} : { strategy: JOBS.errors.strategy }),
     ...((VARIANTS as readonly string[]).includes(draft.variant) ? {} : { variant: JOBS.errors.variant }),
+    ...frozenSpanErrors(draft.strategy, draft.variant, start, end),
     ...windowErrors(start, end),
     ...(!RUN_ID_PATTERN.test(runId) ? { runId: JOBS.errors.runIdFormat } : taken.has(runId) ? { runId: JOBS.errors.runIdTaken } : {}),
     ...('error' in params ? { paramsText: params.error } : {}),

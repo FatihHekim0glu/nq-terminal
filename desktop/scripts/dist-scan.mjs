@@ -14,6 +14,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isMainModule } from './main-module.mjs'
 
 const DEFAULT_DIST = fileURLToPath(new URL('../../web/dist', import.meta.url))
 const MAX_FILE_BYTES = 512 * 1024 * 1024
@@ -122,7 +123,7 @@ function parseArguments(argv, environment) {
   return { dists, bundles }
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   try {
     const { exitCode, lines } = runScan(parseArguments(process.argv.slice(2), process.env))
     console.log(lines.join('\n'))

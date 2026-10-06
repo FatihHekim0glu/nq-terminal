@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { ORB_PRESET, ORB_SEED, ORB_SPEC, PRESETS, TICKS_SPEC } from './launch.fixtures'
+import { LAUNCH } from '../../copy/launch'
+import { LAUNCH_SPEC } from '../../copy/launchSpec'
+import { fillCopy } from '../../copy/workspace'
+import { ORB_PRESET, ORB_PRESET_NO_SPEC, ORB_SEED, ORB_SPEC, ORB_SPEC_SHA, PRESETS, TICKS_SPEC } from './launch.fixtures'
 import {
   checkLaunch,
   initialDraft,
@@ -10,6 +13,7 @@ import {
   seedFromPreset,
   seedFromRun,
   serverFieldKey,
+  specView,
   suggestRunId,
   toRequest,
   type LaunchDraft,
@@ -263,5 +267,46 @@ describe('serverFieldKey', () => {
 
   it('names no field when the words name none', () => {
     expect(serverFieldKey('the queue is full', names)).toBeNull()
+  })
+})
+
+describe('specView: the OFF SPEC badge from the spec hash and the changes together', () => {
+  const unchanged = checkLaunch(draftOf(), ORB_SEED, ORB_SPEC, NONE, ORB_PRESET.source_run_id)
+  const edited = checkLaunch(draftOf({}, { or_minutes: '60' }), ORB_SEED, ORB_SPEC, NONE, ORB_PRESET.source_run_id)
+  const moved = checkLaunch(draftOf({ end: '2021-12-31' }), ORB_SEED, ORB_SPEC, NONE, ORB_PRESET.source_run_id)
+
+  it('is on spec only when nothing differs and the preset carries its spec hash, and shows the hash', () => {
+    const view = specView(unchanged, ORB_PRESET)
+    expect(view).toEqual({ state: 'on', offSpec: false, badge: LAUNCH.onSpec, line: fillCopy(LAUNCH_SPEC.hash, { exp: 'EXP12', sha: ORB_SPEC_SHA }) })
+  })
+
+  it('is off spec when a parameter or the window differs, even with a spec hash', () => {
+    for (const check of [edited, moved]) {
+      const view = specView(check, ORB_PRESET)
+      expect(view.state).toBe('changed')
+      expect(view.offSpec).toBe(true)
+      expect(view.badge).toBe(LAUNCH.offSpec)
+      expect(view.line).toContain(ORB_SPEC_SHA)
+    }
+  })
+
+  it('is off spec when the preset carries no spec hash, even with nothing changed, and says the file was not found', () => {
+    const view = specView(unchanged, ORB_PRESET_NO_SPEC)
+    expect(view).toEqual({ state: 'unbound', offSpec: true, badge: LAUNCH_SPEC.offNoSpec, line: fillCopy(LAUNCH_SPEC.noFile, { exp: 'EXP12' }) })
+  })
+
+  it('keeps the changed wording when a parameter differs and there is no spec hash either', () => {
+    const view = specView(edited, ORB_PRESET_NO_SPEC)
+    expect(view).toMatchObject({ state: 'changed', offSpec: true, badge: LAUNCH.offSpec, line: fillCopy(LAUNCH_SPEC.noFile, { exp: 'EXP12' }) })
+  })
+
+  it('says a preset that names no experiment carries no spec hash', () => {
+    const view = specView(unchanged, { ...ORB_PRESET_NO_SPEC, exp_id: null })
+    expect(view).toMatchObject({ state: 'unbound', offSpec: true, line: LAUNCH_SPEC.noExp })
+  })
+
+  it('without a matched preset, follows the changes alone and shows no spec line', () => {
+    expect(specView(unchanged, null)).toEqual({ state: 'on', offSpec: false, badge: LAUNCH.onSpec, line: null })
+    expect(specView(edited, null)).toEqual({ state: 'changed', offSpec: true, badge: LAUNCH.offSpec, line: null })
   })
 })

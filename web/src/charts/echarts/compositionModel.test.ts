@@ -15,7 +15,7 @@ vi.mock('../lazy', async (importOriginal) => {
   return { ...actual, loadEcharts: () => Promise.resolve(fake.lib) }
 })
 
-import { DEFAULT_CHART_TOKENS, interpolateHex } from '../theme'
+import { DEFAULT_CHART_TOKENS, SYSTEM_COLOUR_FALLBACK, forcedChartTokens, interpolateHex } from '../theme'
 import { Composition } from './Composition'
 import {
   compositionCells,
@@ -294,6 +294,78 @@ describe('compositionStackOption', () => {
 
   it('takes every colour from the tokens', () => {
     expect(strayColours(option, tokenValues(T))).toEqual([])
+  })
+})
+
+describe('forced colours: sector areas and key swatches carry a second cue', () => {
+  const FORCED = forcedChartTokens(SYSTEM_COLOUR_FALLBACK, DEFAULT_CHART_TOKENS)
+  const SECTORS = ['equity', 'rates', 'fx', 'energy', 'metals', 'grains', 'livestock', 'other']
+  const ALL_SECTORS: CompositionInput = {
+    ...INPUT,
+    rows: SECTORS.flatMap((s): CompositionInput['rows'] => [
+      { kind: 'band', label: s, tone: toneOfSector(s) },
+      { kind: 'instrument', label: s.toUpperCase(), sector: s, tone: toneOfSector(s), values: [0.1, 0.1, 0.1, 0.1] },
+    ]),
+  }
+  type Cued = Series & { itemStyle?: { decal?: { color: string } }; lineStyle?: { color?: string; width: number } }
+  const areas = (o: unknown) => (seriesOf(o) as Cued[]).filter((s) => s.stack !== undefined)
+  const decalOf = (s: Cued) => JSON.stringify(s.itemStyle?.decal)
+
+  it('gives every sector its own decal, so sectors sharing a system colour still differ', () => {
+    const drawn = areas(compositionStackOption(ALL_SECTORS, FORCED))
+    expect(drawn).toHaveLength(8)
+    expect(drawn.every((s) => s.itemStyle?.decal !== undefined)).toBe(true)
+    expect(new Set(drawn.map(decalOf)).size).toBe(8)
+    // equity, energy and livestock are all LinkText: only the pattern tells them apart
+    const named = (n: string) => decalOf(drawn.find((s) => s.name === n)!)
+    expect(new Set([named('EQUITY'), named('ENERGY'), named('LIVESTOCK')]).size).toBe(3)
+  })
+
+  it('paints the decal in the page colour and gives each area a 1px edge in the text colour', () => {
+    for (const s of areas(compositionStackOption(ALL_SECTORS, FORCED))) {
+      expect(s.itemStyle!.decal!.color).toBe(FORCED.color.bg)
+      expect(s.lineStyle).toMatchObject({ width: 1, color: FORCED.color.text })
+    }
+    expect(strayColours(compositionStackOption(ALL_SECTORS, FORCED), tokenValues(FORCED))).toEqual([])
+  })
+
+  it('keeps one decal for every instrument of a sector', () => {
+    const drawn = areas(compositionStackOption(INPUT, FORCED))
+    expect(decalOf(drawn[0]!)).toBe(decalOf(drawn[1]!))
+    expect(decalOf(drawn[0]!)).not.toBe(decalOf(drawn[2]!))
+  })
+
+  it('numbers the key swatches by sector pattern in both views, and gives Gross and Net none', () => {
+    const stack = compositionKey(ALL_SECTORS, 'stack', FORCED)
+    const patterns = stack.slice(0, 8).map((k) => k.pattern)
+    expect(new Set(patterns).size).toBe(8)
+    expect(patterns.every((p) => typeof p === 'number')).toBe(true)
+    expect(stack.slice(8).map((k) => k.pattern)).toEqual([undefined, undefined])
+    expect(compositionKey(ALL_SECTORS, 'heat', FORCED).every((k) => typeof k.pattern === 'number')).toBe(true)
+  })
+
+  it('leaves the default look as it was: no decal, no edge, no pattern', () => {
+    for (const s of areas(compositionStackOption(ALL_SECTORS, T))) {
+      expect(s.itemStyle).toBeUndefined()
+      expect(s.lineStyle?.width).toBe(0)
+    }
+    expect(compositionKey(ALL_SECTORS, 'stack', T).every((k) => k.pattern === undefined)).toBe(true)
+  })
+
+  it('marks the key swatches with their pattern number when the page is in forced colours', async () => {
+    const real = window.matchMedia
+    window.matchMedia = ((q: string) => ({ matches: q.includes('forced-colors') })) as unknown as typeof window.matchMedia
+    try {
+      fake.chart.setOption.mockClear()
+      render(createElement(Composition, { data: INPUT, mode: 'stack', chartId: 'test-forced' }))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      const steps = [...document.querySelectorAll('.echarts-scale-step')]
+      expect(steps.map((s) => s.getAttribute('data-pattern'))).toEqual(['0', '1', null, null])
+    } finally {
+      window.matchMedia = real
+    }
   })
 })
 

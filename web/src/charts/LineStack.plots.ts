@@ -16,7 +16,8 @@ import { sharedGutter, type SharedGutter } from './LineStack.draw'
 import { paneOptions, paneUplotData, type PaneDrawInfo, type PaneSync } from './LineStack.options'
 import type { LanesSpec, LineStackPane, RibbonSpec, StackSpan } from './LineStack.types'
 import { uplotCrosshairSync } from './sync'
-import { lineStackSeries, readChartTokens, type ChartTokens } from './theme'
+import { lineStackSeries, readLiveChartTokens, type ChartTokens } from './theme'
+import { useChartContrastVersion } from './useChartContrast'
 
 export interface PlotsArgs {
   readonly lib: UplotConstructor | null
@@ -104,7 +105,13 @@ function paneLegend(el: HTMLElement, pane: LineStackPane, values: readonly Value
   const format = paneFormat(pane)
   const intraday = isIntraday(t)
   const single = pane.series.length === 1 && pane.legendStats !== false
-  const handle = createLegend(el, pane.series.map((s) => ({ name: s.name, colour: styles[s.style].stroke })), single)
+  // Under forced colours each swatch is drawn as its line, dash included, so the key keeps the second cue.
+  const forced = tokens.contrast === 'forced'
+  const handle = createLegend(el, pane.series.map((s) => {
+    const style = styles[s.style]
+    const dash = 'dash' in style ? style.dash : undefined
+    return forced ? { name: s.name, colour: style.stroke, line: [...(dash ?? [])] } : { name: s.name, colour: style.stroke }
+  }), single)
   let visible: [number, number] | null = null
   let stats: LegendStats | null = null
   const refresh = (u: uPlot) => {
@@ -235,6 +242,8 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
     args.current = a
   })
   const { lib, t, panes, data, link, fence, log, uid, paneEls, spans, ribbon, highlightLane } = a
+  // A forced-colours or prefers-contrast change rebuilds the panes with freshly read tokens.
+  const contrast = useChartContrastVersion()
 
   useEffect(() => {
     if (lib === null) return
@@ -243,7 +252,7 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
     // Log toggle, a refetch) can change while every host is null. Bail without building rather than
     // throw; the hosts coming back (D34, this effect's `paneEls` dep) rebuilds once they are real.
     if (panes.some((_, i) => !cur.paneEls[i])) return undefined
-    const tokens = readChartTokens()
+    const tokens = readLiveChartTokens()
     const start = performance.now()
     const waiting = new Set(panes.map((_, i) => i))
     setDrawn(false)
@@ -270,7 +279,7 @@ export function useLineStackPlots(a: PlotsArgs): PlotsState {
       }
       plots.current = []
     }
-  }, [lib, t, panes, data, link, fence, log, uid, paneEls, spans, ribbon])
+  }, [lib, t, panes, data, link, fence, log, uid, paneEls, spans, ribbon, contrast])
 
   useLaneHighlight(plots, panes, highlightLane ?? null)
   useResizePanes(plots, args, a.container)

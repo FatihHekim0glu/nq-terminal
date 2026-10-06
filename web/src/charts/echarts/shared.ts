@@ -2,7 +2,7 @@
 // copies of the theme's readonly axes, the 2022-01-01 fence line and plain line styles. Colours come
 // only from ChartTokens (src/charts/theme); nothing here writes a colour of its own.
 import { ECHARTS } from '../../copy/echarts'
-import { CHART_GEOMETRY, echartsPresets, makeEchartsTheme, type ChartTokens, type EchartsTheme } from '../theme'
+import { CHART_GEOMETRY, echartsPresets, forcedDash, makeEchartsTheme, type ChartTokens, type EchartsTheme } from '../theme'
 
 /** The OOS fence (UI_SPEC section 6): 2022-01-01 00:00 UTC in epoch seconds. */
 export const FENCE_SECONDS = Date.UTC(2022, 0, 1) / 1000
@@ -39,6 +39,16 @@ export function themeYAxis(tokens: ChartTokens): DeepWritable<EchartsTheme['yAxi
 
 export function themeXAxis(tokens: ChartTokens): DeepWritable<EchartsTheme['xAxis']> {
   return writable(makeEchartsTheme(tokens).xAxis)
+}
+
+/**
+ * The second cue for a line at series position `position` under forced colours (theme/chartContrast.ts):
+ * its dash as a lineStyle part. Empty in every other mode and for the solid lead line, so the default
+ * look is untouched.
+ */
+export function forcedLineType(tokens: ChartTokens, position: number): { type?: number[] } {
+  const dash = forcedDash(tokens, position)
+  return dash !== undefined && dash.length > 0 ? { type: dash } : {}
 }
 
 /** The chart font at the chart size (ECharts labels default to 12px; the look is 13px). */

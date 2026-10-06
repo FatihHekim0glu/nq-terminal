@@ -6,9 +6,14 @@ params, variant, start, end): an older row with the same config is not offered a
 strategy is not one the JOBS queue runs, its dates do not parse, or its window leaves `[2010-01-01, 2022-01-01)`.
 A row whose params break the launch rules or the job spec is listed with `launchable` false and the reasons, so the
 screen can say why it cannot be started.
+
+Each preset carries `spec_sha256`, the sha256 of `experiments/<exp_id>.json` when the exp id is a plain file stem and
+that file exists, read through the same file cache (keyed on the file's mtime and size, so an edited spec is hashed
+again); else None. The spec file is only read: nothing under `experiments/` is written or edited.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from datetime import date
@@ -19,9 +24,12 @@ from pydantic import ValidationError
 from nq_terminal.models.actions import LaunchPreset, PresetList, StrategyParams
 from nq_terminal.models.jobs import IN_SAMPLE_END, IN_SAMPLE_START, STRATEGY_NAMES, VARIANTS, JobSpec
 from nq_terminal.services import launch_params
+from nq_terminal.services.audit import spec_path
+from nq_terminal.services.files import FileAccessError
 from nq_terminal.services.runs import RUN_ID_RE, RunService, parse_ledger
 
 CHECK_RUN_ID = "t_preset_check"  # a placeholder id: only the spec's other checks matter for a preset
+SPEC_HASH_KIND = "presets:spec_sha256"
 
 
 class UnknownPreset(LookupError):
@@ -70,11 +78,28 @@ def spec_reasons(strategy: str, params: Mapping[str, Any], variant: str, start: 
     return list(dict.fromkeys(reasons))
 
 
-def _preset(row: Mapping[str, Any], found: bool) -> LaunchPreset:
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def spec_sha256(runs: RunService, exp_id: str | None) -> str | None:
+    """The sha256 of `experiments/<exp_id>.json` under the data root, or None (no exp id, not a plain file stem, no
+    such file, or a file the cache refuses). Read only."""
+    path = spec_path(runs.data_root, exp_id) if exp_id else None
+    if path is None:
+        return None
+    try:
+        return runs.cache.get(path, _sha256, kind=SPEC_HASH_KIND)
+    except (FileNotFoundError, FileAccessError):
+        return None
+
+
+def _preset(runs: RunService, row: Mapping[str, Any], found: bool) -> LaunchPreset:
     params = _params(row.get("params_json")) or {}
     reasons = spec_reasons(row["strategy"], params, row["variant"], row["start"], row["end"])
-    exp_id = row.get("exp_id")
-    return LaunchPreset(preset_id=row["run_id"], exp_id=exp_id if isinstance(exp_id, str) and exp_id else None,
+    raw_exp = row.get("exp_id")
+    exp_id = raw_exp if isinstance(raw_exp, str) and raw_exp else None
+    return LaunchPreset(preset_id=row["run_id"], exp_id=exp_id, spec_sha256=spec_sha256(runs, exp_id),
                         ts_utc=row.get("ts_utc") or None, strategy=row["strategy"], variant=row["variant"],
                         start=row["start"], end=row["end"], params=params, runtime_s=_runtime(row.get("runtime_s")),
                         run_found=found, launchable=not reasons, reasons=reasons)
@@ -106,7 +131,7 @@ def list_presets(runs: RunService) -> PresetList:
     if rows is None:
         return PresetList(ledger_found=False, presets=[], strategies=[])
     entries = runs.index.entries()
-    presets = [_preset(row, row["run_id"] in entries) for row in _newest_unique(rows)]
+    presets = [_preset(runs, row, row["run_id"] in entries) for row in _newest_unique(rows)]
     strategies = list(dict.fromkeys(p.strategy for p in presets))
     schemas = [StrategyParams(strategy=s, params=launch_params.schema(s)) for s in strategies]
     return PresetList(ledger_found=True, presets=presets, strategies=schemas)

@@ -29,6 +29,17 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
   checked for the default look, for the optional amber classic look, and for two colour-vision schemes
   (deuteranopia and protanomaly) chosen in the Options menu. A sign is never shown by colour alone: every signed value
   carries a sign or a glyph (1.4.1).
+- **Windows contrast themes and more contrast.** Under a Windows contrast theme (forced colours) every screen is drawn
+  in the theme's system colours: text in CanvasText on Canvas, selected, pressed, current and open states in Highlight
+  with HighlightText, disabled controls in GrayText, and the keyboard ring as an outline in Highlight (HighlightText on
+  a selected item). Controls keep a 1px edge, shadows that carried a boundary become borders, and badges, flags and
+  chips are outlined, so nothing relies on a fill that the theme removes (1.4.11, 2.4.7). Canvas charts read the system
+  colours live and redraw when the theme changes, with no reload: series that differ only by colour also differ by dash
+  pattern, rising candles are hollow, and the legend swatches are drawn as short lines with the same dash. Heat maps
+  give way to the system colours; the sign and the value stay in the printed text. Under `prefers-contrast: more` the
+  same look is kept with stronger tokens: secondary text at 7:1, and rules, borders and idle edges at 3:1, in the
+  default look and in amber classic. The look chooser in the Options menu has no contrast option: both modes follow
+  the system setting only. The default look is unchanged when neither is on.
 - **Charts have a text form.** Every canvas chart has `role="img"`, an `aria-label` with a data summary (range, last
   value, maximum drawdown) and a table view. Press `T` with a chart focused to swap the picture for the table. Left
   and Right step the crosshair one bar and update a readout under the chart.
@@ -55,6 +66,7 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
 | --- | --- | --- |
 | axe, with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` | Playwright specs under `web/e2e` (`shell.spec.ts`, `home.spec.ts`, `panels.spec.ts`, `keys.spec.ts`, `perspective.spec.ts`, `visual/screens.spec.ts`, `launch.spec.ts`, `jobsbar.spec.ts`, the `flows` folder and others), through `@axe-core/playwright` | HOME, every screen, the command dropdown and the menus, in both looks and at 1,920 by 1,080 and 1,366 by 768. A scan must come back clean |
 | Colour contrast | `web/src/theme/contrast.test.ts`, with `tokens.test.ts`, `cvdSim.test.ts` and, for the amber classic look, `amberClassic.looks.test.ts` | Every text pair at 4.5:1 and every graphic pair at 3:1, in the default look, the amber classic look and both colour-vision schemes, with the negative cases that must fail |
+| Windows contrast themes and more contrast | `web/src/theme/contrastModes.test.ts` and `web/e2e/contrast-modes.spec.ts`, with `web/src/charts/theme/chartContrast.test.ts` and the contrast-cue tests | Every rule of `forcedColors.css` and `contrastMore.css` sits inside its media query and uses system colour keywords or token values only, every selected, pressed, current and open state has a Highlight fill, and the chart tokens and dash cues follow the mode. 30 screens are opened with `page.emulateMedia({ forcedColors: 'active' })` and with `{ contrast: 'more' }` and scanned with axe, and the focus ring is checked. The detectors are tested born failing |
 | Keyboard flows | `web/e2e/keys.spec.ts`, `fkeys.spec.ts`, `flows/keyboard.spec.ts` and `web/e2e/desktop/40-keys.desktop.ts` | The key grammar, focus order, focus return after a menu closes, and the chart keys |
 | Zoom and reflow at 200% | `web/e2e/reflow-200.spec.ts`, `reflow-menus-200.spec.ts` and `web/e2e/desktop/50-zoom.desktop.ts` | Every panel maximised, in the 1,366 by 768, 1,024 by 640 and 1,920 by 1,080 windows at 200%: every control present and reachable, nothing overlapping, nothing cut off, nothing but a data grid scrolling sideways. The detectors are tested born failing with planted faults. `shell.spec.ts` also checks 400% zoom and 320 CSS pixels |
 | The desktop shell | The desktop Playwright project (`pnpm e2e:desktop`) against a hidden build of the app, with the engine's own zoom | The same page inside WebView2, with the window watch over every window |
@@ -65,6 +77,12 @@ Figures from the project record, with their sources:
   3 October 2026 ([`docs/desktop/d5_integration.md`](docs/desktop/d5_integration.md)).
 - The 200% reflow survey of 44 panels in three windows passes 133 of 133 cases. It failed 75 of 89 before the fixes
   ([`docs/desktop/owner_decisions_windows.md`](docs/desktop/owner_decisions_windows.md), entry 1.2).
+
+To try a contrast theme by hand, open Settings, Accessibility, Contrast themes in Windows 11 and choose one (Aquatic,
+Desert, Dusk, Night sky, or the Windows high contrast themes), then start the terminal in a browser or the desktop app.
+The page and the charts follow the theme at once. The test equivalent is `page.emulateMedia({ forcedColors: 'active' })`
+(and `{ contrast: 'more' }`). Run that spec alone with
+`corepack pnpm exec playwright test --project=chromium e2e/contrast-modes.spec.ts`.
 
 Run the suites from the `web` folder with `corepack pnpm e2e` (the browser terminal, in Chromium) or
 `corepack pnpm e2e:desktop` (the app). See [`docs/TESTING.md`](docs/TESTING.md) for the rest.
@@ -96,10 +114,13 @@ pending. Their templates and status are in [`docs/desktop/checks/`](docs/desktop
 - **The 200% zoom check by eye is pending.** The automated survey passes, but it shows that a control exists and can
   be focused, not that a person can find it. The look by eye on the installed release is
   [`2026-10-03_zoom-200-by-eye.md`](docs/desktop/checks/2026-10-03_zoom-200-by-eye.md), not yet run.
-- **No forced-colours or increased-contrast styles.** There is no `forced-colors` or `prefers-contrast` rule in
-  `web/src`, so Windows contrast themes and macOS Increase contrast do not change the terminal, and the canvas charts
-  do not switch to system colours. The table view gives a text alternative for every chart. The gap is listed as a
-  later phase in [`docs/desktop/owner_decisions_windows.md`](docs/desktop/owner_decisions_windows.md), section 5.
+- **Contrast themes are tested in emulation only.** The forced-colours and more-contrast looks are checked with the
+  browser engine's emulated media queries. They have not yet been checked under a real Windows contrast theme in the
+  installed desktop app. Dark-on-light themes such as Desert are not tested separately; the styles use system colour
+  keywords only, so they should follow. The pivot grid's own shadow-tree styles are left to the browser's automatic
+  forced colours, and heat-map cells, quality-category fills and the bar and sign colours give way to system colours
+  with no pattern fill, so the printed value or letter carries the meaning. The table view gives a text alternative
+  for every chart. A person using a real contrast theme has not yet reviewed it.
 - **The Perspective pivot grid is not checked by axe or a screen reader.** It draws its grid in a shadow tree that axe
   leaves out. The Table view of the same rows is the accessible form, and it is the default under reduced motion.
 - **Density.** The terminal is dense on purpose. Wide data grids scroll sideways inside their panel at 200% zoom, which

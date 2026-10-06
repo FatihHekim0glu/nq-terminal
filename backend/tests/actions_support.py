@@ -7,6 +7,7 @@ prove that nothing under `results/` was written.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -67,6 +68,24 @@ def make_root(tmp_path: Path, *, ledger: bool = True) -> Path:
     return root
 
 
+SPEC_DOCS: dict[str, str] = {
+    ZA_EXP: '{"name": "za_v0_fixture", "bar": 2.5}\n',
+    "volmanaged_v0_ok": '{"name": "volmanaged_v0_ok", "cap": 2.0}\n',
+}  # OVERNIGHT_EXP and volmanaged_v0_fixture have no spec file on purpose
+
+
+def add_specs(root: Path, docs: dict[str, str] | None = None) -> dict[str, str]:
+    """Write `experiments/<exp>.json` for the fixture experiments that have a spec; returns each file's sha256."""
+    folder = root / "experiments"
+    folder.mkdir(exist_ok=True)
+    hashes: dict[str, str] = {}
+    for exp, text in (SPEC_DOCS if docs is None else docs).items():
+        path = folder / f"{exp}.json"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        hashes[exp] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashes
+
+
 def runs_for(root: Path) -> RunService:
     return RunService(data_root=root, project_root=root, clock=FakeClock())
 
@@ -93,5 +112,6 @@ def plant_rerun(root: Path, run_id: str, base: str, mutate=None) -> Path:
     return add_run(root, run_id, doc)
 
 
-__all__ = ["FakePopen", "OVERNIGHT", "OVERNIGHT_EXP", "PYTHON", "RUNS", "SIZED", "ZA", "ZA_EXP", "jobs_for",
+__all__ = ["FakePopen", "OVERNIGHT", "OVERNIGHT_EXP", "PYTHON", "RUNS", "SIZED", "SPEC_DOCS", "ZA", "ZA_EXP",
+           "add_specs", "jobs_for",
            "ledger_rows", "make_root", "plant_rerun", "row", "runner_argv", "runs_for", "snapshot"]

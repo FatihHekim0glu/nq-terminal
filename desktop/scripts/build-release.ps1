@@ -1,7 +1,7 @@
 # The local release build (04 D5.4, 03 section 13.1; the Windows stand-in for desktop-release.yml): four builds from
 # one tree, with the checks the roadmap names, into one folder with its checksums and provenance.
 #
-#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.2.1 [-TargetDir D:\dev\targets\release] [-Force]
+#   powershell -NoProfile -File desktop\scripts\build-release.ps1 -Version 0.3.0 [-TargetDir D:\dev\targets\release] [-Force]
 #
 # Builds, all with cargo-tauri on the GNU host and --locked:
 #   release  cargo tauri build --bundles nsis -- --locked                                  (no smoke, no measure)

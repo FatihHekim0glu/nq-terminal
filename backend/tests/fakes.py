@@ -13,8 +13,9 @@ so any split of a window gives the same rows; nothing is read from disk. Convent
   stops). The loaders serve any window, 2022+ included: refusing it is the gate's job, and the tests prove it is.
 - The series that exist mirror the processed files as listed (names only) on 2026-09-27 02:30: 1m (vendor) for the
   29 roots in `MINUTE_ROOTS` (all 27 dtsmom roots plus RTY and MNQ, the micro the paper book trades, pulled from
-  2019-05), 1m repaired for the roots in `REPAIRED_ROOTS`, and 1d (vendor) for the 27 dtsmom roots (RTY and MNQ have
-  no processed 1d file). Anything else raises FileNotFoundError before the
+  2019-05), 1m repaired for the roots in `REPAIRED_ROOTS`, and 1d (vendor) for the 27 dtsmom roots plus the nine
+  vendor-only roots in `EXTRA_DAILY_ROOTS` that the daily pull added on 2026-10-06 (RTY and MNQ have no processed
+  1d file). Anything else raises FileNotFoundError before the
   gate, as the real serve does. `repaired` has the vendor prices and its own volume, so a test can tell which
   variant was served. The catalog drift test (`test_catalog_drift.py`) compares these sets with the real listing:
   vendor 1m and 1d exactly; repaired files generically (the futures repair workflow adds
@@ -76,7 +77,14 @@ LEVELS = {  # served price level in 2010 and at the end of 2021, in each root's 
     "RB": (2.1, 2.3), "GC": (1100, 1800), "SI": (17, 23), "HG": (3.3, 4.4), "ZC": (400, 590), "ZS": (1000, 1340),
     "ZW": (500, 770), "ZL": (40, 65), "ZM": (300, 400), "LE": (95, 140), "HE": (70, 80), "RTY": (650, 2250),
     "MNQ": (7700, 16000),
+    "6M": (0.0805, 0.0488), "6N": (0.7200, 0.6830), "GF": (100, 160), "KE": (500, 770), "PA": (450, 2000),
+    "PL": (1600, 960), "UB": (140, 190), "ZO": (300, 550), "ZR": (12.5, 13.5),
 }
+# Roots with a processed 1d vendor file but outside the frozen dtsmom table (the daily pull of 2026-10-06): the
+# catalog lists them, no screen ranks them. (root, tick in served units).
+EXTRA_DAILY_TICKS = (("6M", 0.000005), ("6N", 0.0001), ("GF", 0.025), ("KE", 0.25), ("PA", 0.05), ("PL", 0.1),
+                     ("UB", 0.03125), ("ZO", 0.25), ("ZR", 0.005))
+EXTRA_DAILY_ROOTS = tuple(root for root, _ in EXTRA_DAILY_TICKS)
 
 
 @dataclass(frozen=True)
@@ -91,7 +99,9 @@ class Spec:
 SPECS = {c.root: Spec(c.root, c.tick, *LEVELS[c.root], salt=1000 * (i + 1)) for i, c in enumerate(TABLE)}
 SPECS["RTY"] = Spec("RTY", RTY_TICK, *LEVELS["RTY"], salt=1000 * (len(TABLE) + 1))
 SPECS["MNQ"] = Spec("MNQ", MNQ_TICK, *LEVELS["MNQ"], salt=1000 * (len(TABLE) + 2))
-DAILY_ROOTS = frozenset(c.root for c in TABLE)
+for _i, (_root, _tick) in enumerate(EXTRA_DAILY_TICKS):
+    SPECS[_root] = Spec(_root, _tick, *LEVELS[_root], salt=1000 * (len(TABLE) + 3 + _i))
+DAILY_ROOTS = frozenset(c.root for c in TABLE) | frozenset(EXTRA_DAILY_ROOTS)
 
 
 def fixture_path(*parts: str) -> Path:

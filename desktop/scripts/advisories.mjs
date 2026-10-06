@@ -16,6 +16,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isMainModule } from './main-module.mjs'
 
 const API_URL = 'https://api.github.com/repos/tauri-apps/tauri/security-advisories?per_page=100'
 const MAX_PAGES = 5
@@ -164,6 +165,6 @@ async function main() {
   return exitCode
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main()
 }

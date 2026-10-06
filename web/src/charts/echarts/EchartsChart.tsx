@@ -6,20 +6,24 @@
 //
 // EchartsFigure wraps the host in ChartA11y: role="img" named by the data summary, plus the table
 // view, which is the chart's keyboard and screen reader path (UI_SPEC section 9).
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ECHARTS } from '../../copy/echarts'
 import { fillCopy } from '../../copy/workspace'
 import ChartA11y, { type ChartTable } from '../ChartA11y'
 import { loadEcharts, useChartLibrary } from '../lazy'
-import { readChartTokens, type ChartTokens } from '../theme'
+import type { ChartTokens } from '../theme'
+import { useLiveChartTokens } from '../useChartContrast'
 import type { EChartsOption, EChartsType } from './core'
 import './echarts.css'
 
 export const DRAW_MEASURE_PREFIX = 'nqt-echarts-draw:'
 
-/** The chart tokens as the page resolves them, read once per mount (CVD themes included). */
+/**
+ * The chart tokens as the page resolves them, read once per mount (CVD themes included) and again when
+ * forced colours or prefers-contrast changes, so the chart redraws in the new colours.
+ */
 export function useChartTokens(): ChartTokens {
-  return useMemo(() => readChartTokens(), [])
+  return useLiveChartTokens()
 }
 
 function recordDraw(chartId: string, start: number, end: number): void {

@@ -152,6 +152,7 @@ def verdict_parts(text: str) -> tuple[str, str | None]:
     """The badge (PASS, FAIL, or CHECK for a row without its own pass bar) and the rest as a note."""
     text = (text or "").strip()
     first, _, rest = text.partition(" ")
+    first = first.rstrip(",;:")  # `PASS, not family-wise significant [...]` is still a PASS
     if first.upper() in VERDICT_TOKENS:
         note = rest.strip()
         if note[:1] in "[(" and note[-1:] in "])":

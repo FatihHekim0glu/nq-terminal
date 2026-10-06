@@ -4,11 +4,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
 import { LAUNCH } from '../../copy/launch'
+import { LAUNCH_SPEC } from '../../copy/launchSpec'
 import { fillCopy } from '../../copy/workspace'
 import { job } from '../jobs/jobs.fixtures'
 import LaunchForm, { type LaunchFormProps } from './LaunchForm'
 import { LaunchTransportContext, type LaunchTransport } from './launchClient'
-import { ORB_PRESET, ORB_SEED, ORB_SPEC, PRESETS } from './launch.fixtures'
+import { ORB_PRESET, ORB_PRESET_NO_SPEC, ORB_SEED, ORB_SPEC, ORB_SPEC_SHA, PRESETS } from './launch.fixtures'
 import type { LaunchRequest } from './types'
 
 const NONE: ReadonlySet<string> = new Set()
@@ -179,6 +180,62 @@ describe('changes from the preset', () => {
     mount()
     edit(LAUNCH.end, '2021-12-31')
     expect(screen.getByText(fillCopy(LAUNCH.offSpec, { n: 1 }))).toBeTruthy()
+  })
+})
+
+describe('the spec hash and the OFF SPEC badge', () => {
+  const badge = (): HTMLElement => document.querySelector('.launch-badge') as HTMLElement
+
+  it('shows the preset spec sha256 and stays on spec while nothing differs', () => {
+    mount()
+    expect(screen.getByText(fillCopy(LAUNCH_SPEC.hash, { exp: 'EXP12', sha: ORB_SPEC_SHA }))).toBeTruthy()
+    expect(badge().textContent).toBe(LAUNCH.onSpec)
+    expect(badge().classList.contains('launch-off')).toBe(false)
+  })
+
+  it('turns OFF SPEC when a parameter changes and back on when it is restored, keeping the hash in view', () => {
+    mount()
+    edit('or_minutes', '60')
+    expect(badge().textContent).toBe(LAUNCH.offSpec)
+    expect(badge().classList.contains('launch-off')).toBe(true)
+    expect(screen.getByText(fillCopy(LAUNCH_SPEC.hash, { exp: 'EXP12', sha: ORB_SPEC_SHA }))).toBeTruthy()
+    edit('or_minutes', '45')
+    expect(badge().textContent).toBe(LAUNCH.onSpec)
+  })
+
+  it('is OFF SPEC with nothing changed when the preset carries no spec hash, says so in words, and still allows Launch', () => {
+    mount({ presets: [ORB_PRESET_NO_SPEC] })
+    expect(badge().textContent).toBe(LAUNCH_SPEC.offNoSpec)
+    expect(badge().classList.contains('launch-off')).toBe(true)
+    expect(screen.getByText(fillCopy(LAUNCH_SPEC.noFile, { exp: 'EXP12' }))).toBeTruthy()
+    expect(screen.queryByText(new RegExp(ORB_SPEC_SHA))).toBeNull()
+    expect(blocked(launchButton())).toBe(false)
+  })
+
+  it('puts the spec state and the spec line in the description of Launch, so it is heard before pressing it', () => {
+    mount({ presets: [ORB_PRESET_NO_SPEC] })
+    expect(described(launchButton())).toContain(LAUNCH_SPEC.offNoSpec)
+    expect(described(launchButton())).toContain(fillCopy(LAUNCH_SPEC.noFile, { exp: 'EXP12' }))
+    cleanup()
+    mount()
+    expect(described(launchButton())).toContain(LAUNCH.onSpec)
+    expect(described(launchButton())).toContain(fillCopy(LAUNCH_SPEC.hash, { exp: 'EXP12', sha: ORB_SPEC_SHA }))
+    edit(LAUNCH.end, '2021-12-31')
+    expect(described(launchButton())).toContain(LAUNCH.offSpec)
+    expect(described(launchButton())).not.toContain(LAUNCH.onSpec)
+  })
+
+  it('carries the state in a status region, so a change to OFF SPEC is announced', () => {
+    mount()
+    expect(badge().getAttribute('role')).toBe('status')
+    edit('or_minutes', '60')
+    expect(badge().textContent).toBe(LAUNCH.offSpec)
+  })
+
+  it('keeps the changed wording when a parameter differs on a preset without a spec hash', () => {
+    mount({ presets: [ORB_PRESET_NO_SPEC] })
+    edit('or_minutes', '60')
+    expect(badge().textContent).toBe(LAUNCH.offSpec)
   })
 })
 

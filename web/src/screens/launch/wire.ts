@@ -5,7 +5,8 @@ import type { Schemas } from '../../api/types'
 import type { ParamKind, ParamSpec, Preset, PresetsView, StrategySpec } from './types'
 
 type Field = Schemas['ParamField']
-type Offered = Schemas['LaunchPreset']
+// `spec_sha256` is read as optional so a server that does not serve it yet gives null, never a spec binding.
+type Offered = Schemas['LaunchPreset'] & { readonly spec_sha256?: string | null }
 
 const KINDS: Readonly<Record<Field['kind'], ParamKind>> = { int: 'int', float: 'float', str: 'text', month: 'text', date: 'text' }
 
@@ -32,6 +33,7 @@ function presetOf(preset: Offered): Preset {
     start: preset.start,
     end: preset.end,
     params: preset.params,
+    spec_sha256: typeof preset.spec_sha256 === 'string' && preset.spec_sha256 !== '' ? preset.spec_sha256 : null,
     runtime_s: preset.runtime_s,
     launchable: preset.launchable,
     reasons: preset.reasons,

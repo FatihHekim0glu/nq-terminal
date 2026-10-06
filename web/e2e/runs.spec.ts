@@ -229,7 +229,8 @@ test.describe('RUNS, RUN and LEDG in the workspace', () => {
         await expectWatchSegment(page)
         // The gate read count depends on what ran before in this backend process: masked.
         const gate = page.getByRole('contentinfo').locator('.seg', { hasText: /^Gate reads/ })
-        await expect(page).toHaveScreenshot(`${shot.name}-${size.width}x${size.height}.png`, { mask: [gate], maskColor: MASK_COLOR })
+        // RUN's ledger row prints the lab folder and the interpreter path of this machine: masked, so a moved lab changes no baseline.
+        await expect(page).toHaveScreenshot(`${shot.name}-${size.width}x${size.height}.png`, { mask: [gate, page.locator('.run-ledger')], maskColor: MASK_COLOR })
       })
     }
   }

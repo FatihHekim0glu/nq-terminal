@@ -19,14 +19,15 @@ import { cutOffIn, overlapsIn, sidewaysIn } from './reflow.ts'
 
 const OVERNIGHT = 'nt_overnight_v0_fixture_open'
 const DTS = 'nt_dtsmom_v0_fixture_ts1'
+const SPEC_SHA = 'c'.repeat(64) // a plain test value: the overnight preset is bound to a spec file, the dtsmom one is not
 
 const FIELD = { default: null, required: false, minimum: null, maximum: null, exclusive_minimum: false, choices: null, feed_key: false }
 const OFFERED = { ts_utc: '2026-09-30T10:00:00+00:00', runtime_s: 30, run_found: true, launchable: true, reasons: [] }
 const PRESETS = {
   ledger_found: true,
   presets: [
-    { ...OFFERED, preset_id: OVERNIGHT, exp_id: 'overnight_v0_fixture', strategy: 'overnight', variant: 'repaired', start: '2010-09-28', end: '2022-01-01', params: { exit_at: 'open_tick' } },
-    { ...OFFERED, preset_id: DTS, exp_id: null, strategy: 'dtsmom', variant: 'vendor', start: '2012-01-03', end: '2012-01-25', params: { ticks: 1 } },
+    { ...OFFERED, preset_id: OVERNIGHT, exp_id: 'overnight_v0_fixture', spec_sha256: SPEC_SHA, strategy: 'overnight', variant: 'repaired', start: '2010-09-28', end: '2022-01-01', params: { exit_at: 'open_tick' } },
+    { ...OFFERED, preset_id: DTS, exp_id: null, spec_sha256: null, strategy: 'dtsmom', variant: 'vendor', start: '2012-01-03', end: '2012-01-25', params: { ticks: 1 } },
   ],
   strategies: [
     { strategy: 'overnight', params: [{ ...FIELD, name: 'exit_at', kind: 'str', default: 'close', choices: ['close', 'open_tick'] }] },
@@ -188,6 +189,7 @@ test.describe('Start from in RUN', () => {
     await expect(form).toBeVisible()
     await expect(form.getByLabel('ticks', { exact: true })).toHaveValue('1')
     await expect(form.getByLabel('Run id', { exact: true })).toHaveValue(`t_${DTS}_1`)
+    await expect(form.getByText(/^OFF SPEC: no spec hash backs this preset/)).toBeVisible()
     await expectGalleryAxeClean(page)
     await page.keyboard.press('Escape')
     await expect(form).toHaveCount(0)

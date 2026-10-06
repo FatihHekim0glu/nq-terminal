@@ -8,6 +8,8 @@ import { FENCE_TIME } from './fence'
 import type { UplotConstructor } from './lazy'
 import LineStack from './LineStack'
 import { recordingContext } from './LineStack.testUtil'
+import { DEFAULT_CHART_TOKENS, FORCED_COLOURS_QUERY, readSystemColours } from './theme'
+import { fakeMedia } from './theme/themeTestUtil'
 import type { LanesSpec, LineStackPane, LineStackProps, RibbonSpec, StackSpan } from './LineStack.types'
 
 /** A minimal error boundary, the same shape ScreenBoundary gives a panel whose child throws. */
@@ -726,5 +728,52 @@ describe('LineStack context layer', () => {
     expect(FakeUplot.instances).toHaveLength(6)
     expect(FakeUplot.instances.slice(3).every((u) => !u.destroyed)).toBe(true)
     expect(screen.getByRole('img').getAttribute('aria-label')).toMatch(/Marked windows in view: 2\. Episode lanes: 3\.$/)
+  })
+})
+
+// Roadmap D9: canvas charts cannot be restyled by CSS, so the stack rebuilds its panes with system colours
+// when a Windows contrast theme turns on (forced colours), with a dash on every line but the lead.
+describe('LineStack under a contrast change', () => {
+  let uninstall: (() => void) | null = null
+  afterEach(() => {
+    uninstall?.()
+    uninstall = null
+  })
+
+  it('rebuilds every pane in system colours, the benchmark dashed and the legend drawing the dash', async () => {
+    const media = fakeMedia()
+    uninstall = media.install()
+    renderStack()
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(2)
+    const before = FakeUplot.instances[0]!.opts.series
+    expect(before[2]).toMatchObject({ stroke: DEFAULT_CHART_TOKENS.color.accent2 })
+    expect(before[2]).not.toHaveProperty('dash')
+    expect(document.querySelector('.chart-legend-swatch-line')).toBeNull()
+
+    act(() => media.set(FORCED_COLOURS_QUERY, true))
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(4)
+    expect(FakeUplot.instances.slice(0, 2).every((u) => u.destroyed)).toBe(true)
+    const eq = FakeUplot.instances[2]!.opts
+    // Draw order: the strategy's area, the benchmark, then the strategy's line on top.
+    expect(eq.series[2]).toMatchObject({ label: 'Benchmark', stroke: readSystemColours().highlight, dash: [10, 4] })
+    expect(eq.series[3]).toMatchObject({ label: 'Strategy', stroke: readSystemColours().canvasText })
+    expect(eq.series[3]).not.toHaveProperty('dash')
+    const lines = [...document.querySelectorAll('.chart-legend-swatch-line line')]
+    expect(lines.map((l) => [l.getAttribute('stroke'), l.getAttribute('stroke-dasharray')])).toEqual([
+      [readSystemColours().canvasText, null],
+      [readSystemColours().highlight, '5 2'],
+      [readSystemColours().canvasText, null],
+    ])
+  })
+
+  it('leaves the default build alone while no contrast query matches', async () => {
+    uninstall = fakeMedia().install()
+    renderStack()
+    await ready()
+    expect(FakeUplot.instances).toHaveLength(2)
+    const swatches = [...document.querySelectorAll<HTMLElement>('.chart-legend-swatch')].filter((s) => !s.classList.contains('linestack-legend-blank'))
+    expect(swatches.map((s) => s.style.backgroundColor)).toEqual(['rgb(255, 255, 255)', 'rgb(240, 96, 0)', 'rgb(255, 255, 255)'])
   })
 })

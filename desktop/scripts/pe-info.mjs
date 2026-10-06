@@ -9,7 +9,7 @@
 //       allows by pinned hash (W0A P5). --no-loader also refuses WebView2Loader.dll (an MSVC build has none).
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { isMainModule } from './main-module.mjs'
 
 const RT_MANIFEST = 24
 const DIR_IMPORT = 1
@@ -164,6 +164,6 @@ function main(argv) {
   return 0
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2))
 }

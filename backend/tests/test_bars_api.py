@@ -17,7 +17,7 @@ from nq_lab.dtsmom_universe import TABLE
 from nq_terminal.app import create_app
 from nq_terminal.settings import load_settings
 
-from fakes import FIXTURES, FakeCatalog, make_fake_serve
+from fakes import DAILY_ROOTS, FIXTURES, FakeCatalog, make_fake_serve
 
 from conftest import api_client
 
@@ -166,7 +166,7 @@ def test_catalog_lists_the_real_processed_series_from_metadata(fake):
     assert {c["name"]: c["type"] for c in nq["columns"]}["instrument_id"] == "int32"
     assert nq["extends_past_fence"] is True and nq["first_ts"].startswith("2010-")
     assert ("NQ.V.0", "1m", "repaired") in entries
-    assert sum(1 for k in entries if k[1] == "1d") == len(TABLE)
+    assert sum(1 for k in entries if k[1] == "1d") == len(DAILY_ROOTS)
     assert fake.calls == ()
 
 

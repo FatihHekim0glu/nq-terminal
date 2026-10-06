@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CHART } from '../copy/panelParts'
 import { usePanelRoving } from '../chrome/WorkspaceFocus'
 import { FAKE_DAY, FAKE_T0, fakeBars, fakeLib } from './CandleChart.fake'
+import { DEFAULT_CHART_TOKENS, FORCED_COLOURS_QUERY, readSystemColours } from './theme'
+import { fakeMedia } from './theme/themeTestUtil'
 
 const state = vi.hoisted(() => ({ fake: null as ReturnType<typeof import('./CandleChart.fake').fakeLib> | null }))
 
@@ -260,5 +262,35 @@ describe('CandleChart', () => {
     // A fresh (non-repeat) press still moves focus, same as the existing D35 roving-panel test.
     fireEvent.keyDown(figure, { key: 'ArrowRight' })
     expect(document.activeElement?.textContent).toBe('Next')
+  })
+})
+
+// Roadmap D9: the candles cannot be restyled by CSS, so a Windows contrast theme remounts the chart in
+// system colours, with hollow up candles as the second cue to direction.
+describe('CandleChart under a contrast change', () => {
+  let uninstall: (() => void) | null = null
+  afterEach(() => {
+    uninstall?.()
+    uninstall = null
+  })
+
+  it('remounts in system colours with hollow up candles when forced colours turn on', async () => {
+    const media = fakeMedia()
+    uninstall = media.install()
+    await renderChart()
+    const candles = () => state.fake!.series.filter((s) => s.kind === 'Candlestick')
+    expect(candles()).toHaveLength(1)
+    expect(candles()[0]!.options).toMatchObject({ upColor: DEFAULT_CHART_TOKENS.color.candleUp, borderVisible: false })
+    const created = vi.spyOn(state.fake!.lib, 'createChart')
+    act(() => media.set(FORCED_COLOURS_QUERY, true))
+    await waitFor(() => expect(created).toHaveBeenCalledTimes(1))
+    expect(candles()).toHaveLength(2)
+    expect(candles()[1]!.options).toMatchObject({
+      upColor: readSystemColours().canvas,
+      borderVisible: true,
+      borderUpColor: readSystemColours().canvasText,
+      downColor: readSystemColours().highlight,
+    })
+    expect(state.fake!.chart.options).toMatchObject({ layout: { background: { color: readSystemColours().canvas } } })
   })
 })

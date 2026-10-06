@@ -9,6 +9,11 @@ import { fillCopy } from '../copy/workspace'
 export interface LegendSeries {
   readonly name: string
   readonly colour: string
+  /**
+   * Forced colours only (theme/chartContrast.ts): draw the swatch as the series' line with this dash
+   * ([] is solid) instead of a colour square, so the key carries the same second cue as the chart.
+   */
+  readonly line?: readonly number[]
 }
 
 export interface LegendDated {
@@ -37,6 +42,38 @@ function cell(parent: HTMLElement, className: string, text = ''): HTMLElement {
   return el
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
+/** The line swatch fits the 13px legend column: chart dashes are drawn at half length, the stroke 2px. */
+const SWATCH_PX = 13
+const SWATCH_DASH_SCALE = 0.5
+const SWATCH_STROKE = 2
+
+/**
+ * A swatch drawn as a short line in `colour` with `dash`. It opts out of forced colours: its colour is
+ * already the system colour the chart draws with, and the browser would otherwise repaint it.
+ */
+export function lineSwatch(parent: HTMLElement, colour: string, dash: readonly number[]): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg')
+  svg.setAttribute('width', String(SWATCH_PX))
+  svg.setAttribute('height', String(SWATCH_PX))
+  svg.setAttribute('viewBox', `0 0 ${SWATCH_PX} ${SWATCH_PX}`)
+  svg.setAttribute('focusable', 'false')
+  svg.style.setProperty('forced-color-adjust', 'none')
+  svg.style.display = 'block'
+  const line = document.createElementNS(SVG_NS, 'line')
+  const mid = String(SWATCH_PX / 2)
+  line.setAttribute('x1', '0')
+  line.setAttribute('x2', String(SWATCH_PX))
+  line.setAttribute('y1', mid)
+  line.setAttribute('y2', mid)
+  line.setAttribute('stroke', colour)
+  line.setAttribute('stroke-width', String(SWATCH_STROKE))
+  if (dash.length > 0) line.setAttribute('stroke-dasharray', dash.map((d) => d * SWATCH_DASH_SCALE).join(' '))
+  svg.append(line)
+  parent.append(svg)
+  return svg
+}
+
 /** Sets text only when it changed, so a crosshair move touches the fewest nodes. */
 function setText(el: HTMLElement, text: string): void {
   if (el.textContent !== text) el.textContent = text
@@ -47,8 +84,9 @@ export function createLegend(host: HTMLElement, series: readonly LegendSeries[],
   box.className = 'chart-legend linestack-legend'
   box.setAttribute('aria-hidden', 'true')
   const values = series.map((s) => {
-    const swatch = cell(box, 'chart-legend-swatch')
-    swatch.style.backgroundColor = s.colour
+    const swatch = cell(box, s.line === undefined ? 'chart-legend-swatch' : 'chart-legend-swatch chart-legend-swatch-line')
+    if (s.line === undefined) swatch.style.backgroundColor = s.colour
+    else lineSwatch(swatch, s.colour, s.line)
     cell(box, 'chart-legend-name', `${s.name} ${LINE_STACK.axisTag}`)
     return cell(box, 'chart-legend-value')
   })

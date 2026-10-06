@@ -9,7 +9,7 @@ Everything here goes through the existing JOBS queue. The queue runs one backtes
 1. Open LEDG. Move to a row with the arrow keys. Press Space to mark one row (it is drawn with a plus and the word marked), or leave none marked to use the newest.
 2. Open 96) Actions on the function bar and choose "Start a run from the marked row" (or "from the newest row"). In RUN, Actions offers "Start a run from this run" once the run has loaded.
 3. The Start from form opens below the function bar and takes the focus on the first parameter. It shows the strategy and the data variant (both fixed by the preset), the window, a run id, and one field per named parameter with its type, allowed range and default.
-4. Change what you want. A parameter that differs from the preset is marked CHANGED with the preset value, and the form says OFF SPEC. That is a warning, not a block: the run is still started, and it is recorded as a run that differs from its preset.
+4. Change what you want. A parameter that differs from the preset is marked CHANGED with the preset value, and the form says OFF SPEC. That is a warning, not a block: the run is still started, and it is recorded as a run that differs from its preset. Each preset also carries a spec hash, the sha256 of its `experiments/<exp id>.json` file, read only and shown in a line under the form with the spec file name. When no spec file backs the preset (the file is missing, or the experiment id is not a plain file name), the badge says OFF SPEC from the start and the line says there is no spec hash, so the run cannot be tied to a spec. That too is a warning, never a block.
 5. Press Enter in a field, or Control with Enter anywhere in the form, to launch. Escape closes the form and returns the focus to where it was.
 
 The run id is suggested from the experiment id (`t_<exp id>_<n>`, with the first free n). Ids always start with `t_`, so a terminal run is never mistaken for one the lab wrote.
@@ -20,7 +20,7 @@ Only parameters the strategy declares, with the ranges the server states: a whol
 
 - a name that is not a parameter of the strategy;
 - a value outside its range or choices;
-- a calendar value (an end date, a first or last month, a start date for volmanaged_bh) past 2021-12-31;
+- a calendar value (an end date, a first or last month, a start date for volmanaged_bh) past 2021-12-31. The volmanaged_bh presets take a start date (`t0`) as an edited parameter, so a preset such as the final volmanaged run is launchable with its in-sample start date. Any date from 2010-01-01 to 2021-12-31 is accepted. A date of 2022-01-01 or later, a date before 2010-01-01 and a value that is not an ISO date are refused with the reason in words;
 - any configuration, path, command or argument list. The request carries a preset id, the edited parameter names and the window, and nothing else.
 
 ### What it will not do

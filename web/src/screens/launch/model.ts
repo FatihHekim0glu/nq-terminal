@@ -4,6 +4,7 @@
 // lists) plus the range, choices and required flags the presets route describes. The server checks all of it again;
 // these rules only say what is wrong in words, next to the field.
 import { LAUNCH } from '../../copy/launch'
+import { LAUNCH_SPEC } from '../../copy/launchSpec'
 import { fillCopy } from '../../copy/workspace'
 import type { LedgerRow } from '../ledg/model'
 import { STRATEGIES, checkDraft } from '../jobs/rules'
@@ -233,6 +234,33 @@ export function checkLaunch(draft: LaunchDraft, seed: LaunchSeed, spec: Strategy
     ? toRequest({ presetId, params: params.sent, start: start === seed.start ? null : start, end: end === seed.end ? null : end, runId: draft.runId.trim() })
     : null
   return { request, errors, changed: params.changed, offSpec: moved || params.changed.length > 0 }
+}
+
+/** How a run stands against its spec: `on` repeats a preset bound to its spec, `changed` differs from the preset, `unbound`
+ * repeats a preset that carries no spec hash. */
+export type SpecState = 'on' | 'changed' | 'unbound'
+
+export interface SpecView {
+  readonly state: SpecState
+  /** The OFF SPEC badge: anything differs, or no spec hash backs the preset. A warning, never a block. */
+  readonly offSpec: boolean
+  readonly badge: string
+  /** The spec line under the form: the spec file and its sha256, or why there is none; null without a matched preset. */
+  readonly line: string | null
+}
+
+function specLine(preset: Preset): string {
+  if (preset.spec_sha256 !== null && preset.exp_id !== null) return fillCopy(LAUNCH_SPEC.hash, { exp: preset.exp_id, sha: preset.spec_sha256 })
+  return preset.exp_id === null ? LAUNCH_SPEC.noExp : fillCopy(LAUNCH_SPEC.noFile, { exp: preset.exp_id })
+}
+
+/** The OFF SPEC badge from the changes and the preset's spec hash together. Without a matched preset (which cannot be
+ * launched anyway) it follows the changes alone. */
+export function specView(check: Pick<LaunchCheck, 'offSpec'>, preset: Preset | null): SpecView {
+  const line = preset === null ? null : specLine(preset)
+  if (check.offSpec) return { state: 'changed', offSpec: true, badge: LAUNCH.offSpec, line }
+  if (preset !== null && preset.spec_sha256 === null) return { state: 'unbound', offSpec: true, badge: LAUNCH_SPEC.offNoSpec, line }
+  return { state: 'on', offSpec: false, badge: LAUNCH.onSpec, line }
 }
 
 function recordedParams(row: Pick<LedgerRow, 'params' | 'params_json'>): Params {

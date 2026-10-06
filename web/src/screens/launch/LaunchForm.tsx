@@ -7,7 +7,8 @@
 // reasons heard; pressing it, or Enter in a field, says the reason again and moves focus to the first invalid field.
 // One always-mounted status region carries the stopped reason and the problem count: it is filled after it is mounted
 // (a region inserted already holding text is not reliably announced) and refilled when the owner is refused. The run is checked here with the server's own rules (model.ts) and
-// again by the server. A run that differs from its preset carries a warning, never a block. The form writes nothing
+// again by the server. A run that differs from its preset, or starts from a preset that no spec hash backs, carries the
+// OFF SPEC warning, never a block; the preset's spec file and sha256 are shown above it. The form writes nothing
 // itself: Launch queues the run in JOBS, and the run writes backtests/output like any queued run.
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { DropdownField, type FieldOption } from '../../chrome/Field'
@@ -30,6 +31,7 @@ import {
   seedLabel,
   serverFieldKey,
   shownValue,
+  specView,
   type LaunchDraft,
 } from './model'
 import type { LaunchSeed, Preset, StrategySpec } from './types'
@@ -132,12 +134,15 @@ export default function LaunchForm({ seed, strategies, presets, presetsNote, tak
   const draft: LaunchDraft = useMemo(() => ({ ...base, ...edits.top, values: { ...base.values, ...edits.values } }), [base, edits])
   const matched = useMemo(() => matchPreset(seed, presets), [seed, presets])
   const check = useMemo(() => checkLaunch(draft, seed, spec, allTaken, matched?.source_run_id ?? null), [draft, seed, spec, allTaken, matched])
+  const specState = useMemo(() => specView(check, matched), [check, matched])
   const errors = useMemo(() => ({ ...check.errors, ...(problem?.key ? { [problem.key]: problem.detail } : {}) }), [check.errors, problem])
   const problems = Object.keys(errors).length
   const stopped = blocked ?? presetBlock(presetsNote, matched)
   const disabled = stopped !== null || presetsNote !== null || action.isPending || problems > 0
   const summaryId = `${uid}-summary`
   const statusId = `${uid}-status`
+  const specLineId = `${uid}-specline`
+  const badgeId = `${uid}-specstate`
   const statusText = [stopped ?? '', problems > 0 ? fillCopy(problems === 1 ? LAUNCH.problems : LAUNCH.problemsMany, { n: problems }) : ''].filter(Boolean).join(' ')
   const [said, setSaid] = useState('')
   const [refusals, setRefusals] = useState(0)
@@ -234,7 +239,7 @@ export default function LaunchForm({ seed, strategies, presets, presetsNote, tak
     changes: changesText(check.changed.length),
   })
   const alert = problem?.detail ?? null
-  const describedBy = [summaryId, said ? statusId : ''].filter(Boolean).join(' ')
+  const describedBy = [summaryId, specState.line !== null ? specLineId : '', badgeId, said ? statusId : ''].filter(Boolean).join(' ')
 
   return (
     <section className="launch" aria-labelledby={headingId} ref={body}>
@@ -290,7 +295,8 @@ export default function LaunchForm({ seed, strategies, presets, presetsNote, tak
             </div>
           </fieldset>
           <p id={summaryId} className="launch-summary">{summary}</p>
-          <p className={check.offSpec ? 'launch-badge launch-off' : 'launch-badge'}>{check.offSpec ? LAUNCH.offSpec : LAUNCH.onSpec}</p>
+          {specState.line !== null ? <p id={specLineId} className="launch-note launch-mono" data-launch-spec>{specState.line}</p> : null}
+          <p id={badgeId} role="status" className={specState.offSpec ? 'launch-badge launch-off' : 'launch-badge'} data-spec-state={specState.state}>{specState.badge}</p>
           <div className="launch-actions">
             <button type="submit" className="launch-button launch-primary" aria-disabled={disabled || undefined} aria-describedby={describedBy} {...roving}>{LAUNCH.launch}</button>
             <button type="button" className="launch-button" onClick={onClose} {...roving}>{LAUNCH.close}</button>

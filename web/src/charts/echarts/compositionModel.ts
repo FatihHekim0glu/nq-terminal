@@ -12,7 +12,7 @@ import type { ChartTable } from '../ChartA11y'
 import { CHART_GEOMETRY, DEFAULT_CHART_TOKENS, interpolateHex, type ChartColorKey, type ChartTokens } from '../theme'
 import type { CustomSeriesOption, EChartsOption, LineSeriesOption } from './core'
 import { fixed, signed } from './format'
-import { bareAxis, baseOption, isFiniteNumber, markLine, refLine, textFont, themeXAxis, themeYAxis, type PlotRect } from './shared'
+import { bareAxis, baseOption, forcedLineType, isFiniteNumber, markLine, refLine, textFont, themeXAxis, themeYAxis, type PlotRect } from './shared'
 
 export type CompositionMode = 'heat' | 'stack'
 
@@ -37,6 +37,33 @@ const SECTOR_TONES: ReadonlyMap<string, SectorTone> = new Map<string, SectorTone
 
 export function toneOfSector(sector: string): SectorTone {
   return SECTOR_TONES.get(sector) ?? OTHER_TONE
+}
+
+/**
+ * Under forced colours eight sector tones share four system colours, so each sector also gets a pattern
+ * (an ECharts decal on its areas, a CSS pattern of the same number on its key swatch). The number is the
+ * tone's place in this list, so a sector keeps its pattern whatever else the book holds. Every pattern is
+ * drawn in the page colour over the area's own colour.
+ */
+const PATTERN_TONES: readonly SectorTone[] = ['secEquity', 'secRates', 'secFx', 'secEnergy', 'secMetals', 'secGrains', 'secLivestock', OTHER_TONE]
+
+type PatternShape = { readonly symbol: string; readonly rotation?: number; readonly dashArrayX: number[]; readonly dashArrayY: number | number[] }
+
+const QUARTER_TURN = Math.PI / 4
+const PATTERN_SHAPES: readonly PatternShape[] = [
+  { symbol: 'rect', dashArrayX: [1, 0], dashArrayY: [2, 4] },
+  { symbol: 'rect', dashArrayX: [2, 4], dashArrayY: [1, 0] },
+  { symbol: 'rect', rotation: QUARTER_TURN, dashArrayX: [1, 0], dashArrayY: [2, 5] },
+  { symbol: 'rect', rotation: -QUARTER_TURN, dashArrayX: [1, 0], dashArrayY: [2, 5] },
+  { symbol: 'circle', dashArrayX: [6, 4], dashArrayY: [6, 4] },
+  { symbol: 'triangle', dashArrayX: [8, 4], dashArrayY: [8, 4] },
+  { symbol: 'diamond', dashArrayX: [8, 4], dashArrayY: [8, 4] },
+  { symbol: 'rect', dashArrayX: [3, 3], dashArrayY: [3, 3] },
+]
+
+/** The pattern number of a sector tone. */
+export function patternOfTone(tone: SectorTone): number {
+  return Math.max(0, PATTERN_TONES.indexOf(tone))
 }
 
 /** A heading row: draws no cell. */
@@ -84,6 +111,8 @@ export interface CompositionCell {
 export interface CompositionKeyItem {
   readonly label: string
   readonly fill: string
+  /** Under forced colours only: the sector's pattern number (the key swatch draws the same pattern as the area). */
+  readonly pattern?: number
 }
 
 /** Brightness runs from this share of the sector colour (a small value) to all of it (the largest). */
@@ -220,7 +249,7 @@ export function compositionHeatOption(input: CompositionInput, tokens: ChartToke
   }
 }
 
-function pathLine(id: string, name: string, data: ReadonlyArray<number | null>, colour: string): LineSeriesOption {
+function pathLine(id: string, name: string, data: ReadonlyArray<number | null>, colour: string, cue: { type?: number[] } = {}): LineSeriesOption {
   return {
     id,
     name,
@@ -229,7 +258,7 @@ function pathLine(id: string, name: string, data: ReadonlyArray<number | null>, 
     showSymbol: false,
     z: 4,
     data: [...data],
-    lineStyle: { color: colour, width: CHART_GEOMETRY.primaryWidth },
+    lineStyle: { color: colour, width: CHART_GEOMETRY.primaryWidth, ...cue },
   }
 }
 
@@ -243,6 +272,7 @@ export function compositionStackOption(input: CompositionInput, tokens: ChartTok
   const years = yearLabels(input.columns)
   const x = themeXAxis(tokens)
   const y = themeYAxis(tokens)
+  const forced = tokens.contrast === 'forced'
   const areas = input.rows.flatMap((row, i): LineSeriesOption[] =>
     row.kind === 'band'
       ? []
@@ -256,8 +286,10 @@ export function compositionStackOption(input: CompositionInput, tokens: ChartTok
             stack: STACK_ID,
             // The served values are unsigned, so 'samesign' stacks them the same way and skips a missing value.
             stackStrategy: 'samesign',
-            lineStyle: { width: 0 },
+            // Under forced colours each area gets a 1px edge in the text colour and its sector's pattern.
+            lineStyle: forced ? { width: 1, color: c.text } : { width: 0 },
             areaStyle: { color: c[row.tone], opacity: 1 },
+            ...(forced ? { itemStyle: { decal: { ...PATTERN_SHAPES[patternOfTone(row.tone)]!, color: c.bg } } } : {}),
             data: [...row.values],
           },
         ],
@@ -281,7 +313,8 @@ export function compositionStackOption(input: CompositionInput, tokens: ChartTok
     series: [
       ...areas,
       pathLine('gross', COMPOSITION.gross, input.gross, c.chartS1),
-      pathLine('net', COMPOSITION.net, input.net, c.accent2),
+      // Under forced colours Net is dashed as well, so it never depends on colour alone against Gross.
+      pathLine('net', COMPOSITION.net, input.net, c.accent2, forcedLineType(tokens, 1)),
       { id: 'zero', type: 'line', silent: true, data: [], markLine: markLine([refLine({ yAxis: 0 }, c.zeroLine, { dashed: false })], tokens) },
     ],
   }
@@ -332,7 +365,10 @@ export function compositionTable(input: CompositionInput): ChartTable {
 /** The key under the chart: each sector present in its colour, and the two API lines in the stack view. */
 export function compositionKey(input: CompositionInput, mode: CompositionMode, tokens: ChartTokens = DEFAULT_CHART_TOKENS): CompositionKeyItem[] {
   const c = tokens.color
-  const sectors = input.rows.flatMap((r): CompositionKeyItem[] => (r.kind === 'band' ? [{ label: r.label, fill: c[r.tone] }] : []))
+  const forced = tokens.contrast === 'forced'
+  const sectors = input.rows.flatMap((r): CompositionKeyItem[] =>
+    r.kind === 'band' ? [{ label: r.label, fill: c[r.tone], ...(forced ? { pattern: patternOfTone(r.tone) } : {}) }] : [],
+  )
   if (mode === 'heat') return sectors
   return [...sectors, { label: COMPOSITION.gross, fill: c.chartS1 }, { label: COMPOSITION.net, fill: c.accent2 }]
 }

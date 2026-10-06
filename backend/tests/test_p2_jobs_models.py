@@ -21,7 +21,9 @@ from p2_jobs_fakes import spec_dict
 RUN_BASE = config.ROOT / "backtests" / "run_base.py"
 TICKS = {"ticks": 1}
 MINIMAL_PARAMS = {"za_orb": {"or_minutes": 5}, "overnight": {}, "volmanaged": TICKS, "volmanaged_bh": TICKS,
-                  "tsmom": TICKS, "dtsmom": {"ticks": 1, "book": "tsmom"}, "eomtsy": TICKS}
+                  "tsmom": TICKS, "dtsmom": {"ticks": 1, "book": "tsmom"}, "eomtsy": TICKS, "tsydemfx": TICKS}
+# tsydemfx runs only on its frozen span (run_base.load_tsydemfx): the other strategies take any in-sample window.
+FROZEN_SPAN = {"tsydemfx": {"variant": "repaired", "start": "2010-01-01", "end": "2022-01-01"}}
 
 
 def feeds_keys() -> set[str]:
@@ -55,7 +57,8 @@ def test_window_bounds_equal_the_in_sample_fence() -> None:
 
 @pytest.mark.parametrize("strategy", sorted(MINIMAL_PARAMS))
 def test_a_valid_spec_for_every_strategy(strategy: str) -> None:
-    spec = JobSpec.model_validate(spec_dict(strategy=strategy, params=MINIMAL_PARAMS[strategy]))
+    spec = JobSpec.model_validate(spec_dict(strategy=strategy, params=MINIMAL_PARAMS[strategy],
+                                            **FROZEN_SPAN.get(strategy, {})))
     assert spec.strategy == strategy and spec.params == MINIMAL_PARAMS[strategy]
 
 
@@ -139,15 +142,15 @@ def test_the_allowed_names_are_the_struct_fields_plus_the_feed_keys() -> None:
         assert not allowed & set(jm.RUNNER_SET_PARAMS) and "lookahead_probe" not in allowed
 
 
-@pytest.mark.parametrize("strategy", ["volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy"])
+@pytest.mark.parametrize("strategy", ["volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy", "tsydemfx"])
 @pytest.mark.parametrize("ticks", [-1, 3, True, False, 1.0, "1", None, [1]])
 def test_the_cost_levels_are_checked_for_the_feeds_that_need_them(strategy: str, ticks) -> None:
-    refused(strategy=strategy, params={"ticks": ticks})
+    refused(strategy=strategy, params={"ticks": ticks}, **FROZEN_SPAN.get(strategy, {}))
 
 
-@pytest.mark.parametrize("strategy", ["volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy"])
+@pytest.mark.parametrize("strategy", ["volmanaged", "volmanaged_bh", "tsmom", "dtsmom", "eomtsy", "tsydemfx"])
 def test_ticks_is_required_where_the_feed_needs_it(strategy: str) -> None:
-    refused(strategy=strategy, params={})
+    refused(strategy=strategy, params={}, **FROZEN_SPAN.get(strategy, {}))
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), 10**30, [[1, [2, [3]]]],
@@ -220,7 +223,7 @@ def test_the_fence_month_edges_are_allowed() -> None:
 RUNNER_DERIVED = {"za_orb": ["sessions"], "overnight": ["sessions"],
                   "volmanaged": ["end_ns", "sessions"], "volmanaged_bh": ["end_ns", "t0_ns", "sessions"],
                   "tsmom": ["end_ns", "sessions", "formations"], "dtsmom": ["days", "mult"],
-                  "eomtsy": ["days", "mult", "roots"]}
+                  "eomtsy": ["days", "mult", "roots"], "tsydemfx": ["tsy_days", "tsy_events", "roots", "mult"]}
 ENGINE_BASE = ["strategy_id", "order_id_tag", "oms_type", "manage_stop", "external_order_claims", "log_events",
                "log_commands", "manage_gtd_expiry", "manage_contingent_orders", "market_exit_max_attempts"]
 
@@ -228,13 +231,13 @@ ENGINE_BASE = ["strategy_id", "order_id_tag", "oms_type", "manage_stop", "extern
 @pytest.mark.parametrize("strategy", sorted(RUNNER_DERIVED))
 def test_runner_derived_fields_are_refused(strategy: str) -> None:
     for key in RUNNER_DERIVED[strategy]:
-        refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], key: 1})
+        refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], key: 1}, **FROZEN_SPAN.get(strategy, {}))
 
 
 @pytest.mark.parametrize("strategy", sorted(MINIMAL_PARAMS))
 @pytest.mark.parametrize("key", ENGINE_BASE)
 def test_nautilus_base_config_fields_are_refused(strategy: str, key: str) -> None:
-    refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], key: 1})
+    refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], key: 1}, **FROZEN_SPAN.get(strategy, {}))
 
 
 # volmanaged_bh buys at t0 (sizing_nt reads it before the strategy sees the rest): a date inside the in-sample fence.
@@ -250,6 +253,24 @@ def test_t0_of_volmanaged_bh_inside_the_fence_is_allowed(value) -> None:
     assert JobSpec.model_validate(spec_dict(strategy="volmanaged_bh", params=params)).params == params
 
 
-@pytest.mark.parametrize("strategy", ["volmanaged", "tsmom", "dtsmom", "eomtsy", "za_orb", "overnight"])
+@pytest.mark.parametrize("strategy", ["volmanaged", "tsmom", "dtsmom", "eomtsy", "za_orb", "overnight", "tsydemfx"])
 def test_t0_is_not_a_parameter_of_the_other_strategies(strategy) -> None:
-    refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], "t0": "2011-04-21"})
+    refused(strategy=strategy, params={**MINIMAL_PARAMS[strategy], "t0": "2011-04-21"}, **FROZEN_SPAN.get(strategy, {}))
+
+
+# tsydemfx (tsydemfx_v0): run_base.load_tsydemfx raises on any other span, so the spec refuses it before a process starts.
+@pytest.mark.parametrize("override", [{"variant": "vendor"}, {"start": "2010-09-28"}, {"start": "2010-01-02"},
+                                      {"end": "2021-12-31"}, {"end": "2021-06-01"}])
+def test_tsydemfx_refuses_any_span_but_its_frozen_one(override: dict) -> None:
+    errors = refused(strategy="tsydemfx", params=TICKS, **{**FROZEN_SPAN["tsydemfx"], **override}).errors()
+    assert any("tsydemfx" in e["msg"] and "2010-01-01" in e["msg"] for e in errors), errors
+
+
+def test_tsydemfx_takes_only_the_cost_level() -> None:
+    assert jm.allowed_param_names("tsydemfx") == frozenset({"ticks"})
+    assert "tsydemfx" in jm.STRATEGY_NAMES
+
+
+def test_only_tsydemfx_has_a_frozen_span() -> None:
+    assert set(jm.FROZEN_SPANS) == {"tsydemfx"}
+    JobSpec.model_validate(spec_dict(strategy="eomtsy", params=TICKS, variant="vendor", start="2010-09-28"))

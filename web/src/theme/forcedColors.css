@@ -1,0 +1,264 @@
+/* Windows contrast themes (roadmap Phase D9: forced-colors). Under `forced-colors: active` the browser swaps
+   every author colour for the user's system palette, drops box-shadows and gradient backgrounds, and leaves
+   the layout alone. What that breaks in the flat-black look, and what this sheet puts back:
+   - states drawn as a fill alone (a selected tab, row or option, a pressed toggle, the open menu button):
+     they take the selection pair, Highlight with HighlightText;
+   - controls and badges told apart by their fill alone (buttons, tabs, the MATCH and MISMATCH words, the
+     link-group chips, the red flags): they get a 1px boundary in the text colour;
+   - rules drawn as box-shadows (the chrome rows, the header cell gaps, the status segments, the job
+     indicator): they become borders;
+   - the keyboard ring: an outline (never a box-shadow) in Highlight, in HighlightText on a selected item.
+   Rules: system colour keywords only (Canvas, CanvasText, LinkText, Highlight, HighlightText, ButtonFace,
+   ButtonText, GrayText), never a token or a literal; no forced-color-adjust: none, so nothing keeps the amber
+   look. Every selector starts with :root, one class above the rule it answers, because the component sheets
+   load after this one. The default look is untouched: nothing here applies outside the media query.
+   Checked by src/theme/contrastModes.test.ts (structure and coverage of every state rule under src/) and
+   e2e/contrast-modes.spec.ts (every screen under emulated forced colours). */
+
+@media (forced-colors: active) {
+  /* ---------- keyboard focus: an outline in Highlight ---------- */
+  /* !important on the colour only: the component focus rules set their ring colour from a token, which the
+     theme would replace with a colour of its own choosing. Width, style and offset stay the components'. */
+  :root :focus-visible { outline-color: Highlight !important; }
+  :root .chart-a11y-figure:focus-visible::after,
+  :root .nqt-psp-host:focus-visible::after { outline-color: Highlight; }
+  /* The amber field drew a 1px ring: 2px here, so the ring holds 3:1 against the system canvas on its own. */
+  :root .field:focus-visible { outline-width: 2px; }
+  /* The command box carries its own ring (the input inside draws none); its idle edge stays a plain border. */
+  :root .cmd-box { border-color: ButtonText; }
+
+  /* ---------- control boundaries: a 1px inset line in the button text colour ---------- */
+  /* An outline, not a border, so no control changes size. Left off while the control has the keyboard ring,
+     so the 2px ring of the component replaces it; left off menu rows, list rows and link-like buttons, which
+     the system draws as plain text. */
+  :root :is(button, [role="button"], [role="tab"], select, textarea, input:not([type="checkbox"], [type="radio"])):not(
+      :focus-visible, :disabled, [aria-disabled="true"], [aria-invalid="true"], [id="cmd"], .menu-item, .related-row,
+      .menu-close, .frame-options-list button, .help-toc button, .cmd-link, .des-link, .des-md-cmd, .reg-link, .roll-pick,
+      .vcone-row-btn) {
+    outline: 1px solid ButtonText;
+    outline-offset: -1px;
+  }
+  :root :is(.cmd-link, .des-link, .des-md-cmd, .reg-link, .help .cmd-link-wrap, .cmdline [cmdk-item].more) { color: LinkText; }
+
+  /* ---------- disabled controls: GrayText, edge included ---------- */
+  :root :is(button, [role="button"], [role="tab"], [role="option"], a, input, select, textarea, .field):is(:disabled, [aria-disabled="true"]) {
+    color: GrayText;
+  }
+  :root :is(button, [role="button"], [role="tab"], select, textarea, input:not([type="checkbox"], [type="radio"])):is(
+      :disabled, [aria-disabled="true"]):not(:focus-visible) {
+    outline: 1px solid GrayText;
+    outline-offset: -1px;
+  }
+  :root .fn-btn[aria-disabled="true"] { color: GrayText; }
+
+  /* ---------- selected, pressed, current and open states: the selection pair ---------- */
+  :root .tabs-top .tab[aria-selected="true"],
+  :root .tabs-sub .tab[aria-selected="true"],
+  :root .frame-tab[aria-current="page"],
+  :root .frame-options-list button[aria-pressed="true"],
+  :root .fn-btn[aria-expanded="true"],
+  :root .ptitle-btn[aria-expanded="true"],
+  :root .ptitle-btn[aria-pressed="true"],
+  :root .btn-toggle[aria-pressed="true"],
+  :root .chart-a11y-toggle[aria-pressed="true"],
+  :root .chart-range-btn[aria-pressed="true"],
+  :root .cmdline [cmdk-item][data-selected="true"],
+  :root .cmd-menu .menu-row[aria-selected="true"],
+  :root .field-dd[aria-expanded="true"] .field-value,
+  :root .field-list [role="option"][data-active="true"],
+  :root .help-toc button[aria-current="true"],
+  :root .nqt-grid tbody tr[aria-selected="true"] td,
+  :root .nqt-grid tbody tr[data-marked="true"] td,
+  :root .tear-table [data-highlight="true"] td,
+  :root .tear-table [data-highlight="true"] th,
+  :root .books-pick[aria-pressed="true"],
+  :root .jobs-button[aria-pressed="true"],
+  :root .reg-item[aria-pressed="true"],
+  :root .live-table tbody tr.jobs-selected td,
+  :root .nqt-grid tr.roll-held td,
+  :root .nqt-grid tr.roll-held th,
+  :root .roll-strip .roll-on,
+  :root .vcone-row-on,
+  :root .vcone-row-on td,
+  :root .vcone-row-on th {
+    background-color: Highlight;
+    color: HighlightText;
+  }
+  /* Text inside a selected item takes the selection text colour too, whatever colour its own rule names. */
+  :root .tabs-top .tab[aria-selected="true"] *,
+  :root .tabs-sub .tab[aria-selected="true"] *,
+  :root .frame-tab[aria-current="page"] *,
+  :root .frame-options-list button[aria-pressed="true"] *,
+  :root .fn-btn[aria-expanded="true"] *,
+  :root .ptitle-btn[aria-expanded="true"] *,
+  :root .ptitle-btn[aria-pressed="true"] *,
+  :root .btn-toggle[aria-pressed="true"] *,
+  :root .chart-a11y-toggle[aria-pressed="true"] *,
+  :root .chart-range-btn[aria-pressed="true"] *,
+  :root .cmdline [cmdk-item][data-selected="true"] *,
+  :root .cmd-menu .menu-row[aria-selected="true"] *,
+  :root .field-dd[aria-expanded="true"] .field-value *,
+  :root .field-list [role="option"][data-active="true"] *,
+  :root .help-toc button[aria-current="true"] *,
+  :root .nqt-grid tbody tr[aria-selected="true"] td *,
+  :root .nqt-grid tbody tr[data-marked="true"] td *,
+  :root .tear-table [data-highlight="true"] td *,
+  :root .tear-table [data-highlight="true"] th *,
+  :root .books-pick[aria-pressed="true"] *,
+  :root .jobs-button[aria-pressed="true"] *,
+  :root .reg-item[aria-pressed="true"] *,
+  :root .live-table tbody tr.jobs-selected td :not(button),
+  :root .nqt-grid tr.roll-held td *,
+  :root .nqt-grid tr.roll-held th *,
+  :root .roll-strip .roll-on *,
+  :root .vcone-row-on * {
+    color: HighlightText;
+  }
+  /* A selected JOBS row holds grey buttons (Open in RUN, Stop, Yes, Keep it) whose opaque fill the theme repaints as
+     ButtonFace, not Highlight: they keep the button pair, since HighlightText would almost vanish on them. The pressed
+     View log button keeps the selection pair above; a disabled one keeps GrayText. */
+  :root .live-table tbody tr.jobs-selected td button:not([aria-pressed="true"], :disabled) {
+    background-color: ButtonFace;
+    color: ButtonText;
+  }
+  /* The ring on a selected item: HighlightText inside its edge, since Highlight would vanish on Highlight. */
+  :root .tabs-top .tab[aria-selected="true"]:focus-visible,
+  :root .tabs-sub .tab[aria-selected="true"]:focus-visible,
+  :root .frame-tab[aria-current="page"]:focus-visible,
+  :root .frame-options-list button[aria-pressed="true"]:focus-visible,
+  :root .fn-btn[aria-expanded="true"]:focus-visible,
+  :root .ptitle-btn[aria-expanded="true"]:focus-visible,
+  :root .ptitle-btn[aria-pressed="true"]:focus-visible,
+  :root .btn-toggle[aria-pressed="true"]:focus-visible,
+  :root .chart-a11y-toggle[aria-pressed="true"]:focus-visible,
+  :root .chart-range-btn[aria-pressed="true"]:focus-visible,
+  :root .cmdline [cmdk-item][data-selected="true"]:focus-visible,
+  :root .cmd-menu .menu-row[aria-selected="true"]:focus-visible,
+  :root .field-dd[aria-expanded="true"] .field-value:focus-visible,
+  :root .field-list [role="option"][data-active="true"]:focus-visible,
+  :root .help-toc button[aria-current="true"]:focus-visible,
+  :root .nqt-grid tbody tr[aria-selected="true"] td:focus-visible,
+  :root .nqt-grid tbody tr[data-marked="true"] td:focus-visible,
+  :root .tear-table [data-highlight="true"] td:focus-visible,
+  :root .tear-table [data-highlight="true"] th:focus-visible,
+  :root .books-pick[aria-pressed="true"]:focus-visible,
+  :root .jobs-button[aria-pressed="true"]:focus-visible,
+  :root .reg-item[aria-pressed="true"]:focus-visible,
+  :root .live-table tbody tr.jobs-selected td:focus-visible,
+  :root .nqt-grid tr.roll-held td:focus-visible,
+  :root .nqt-grid tr.roll-held th:focus-visible,
+  :root .roll-strip .roll-on:focus-visible,
+  :root .vcone-row-on:focus-visible,
+  :root .nqt-grid[role="grid"]:focus-visible tr:is([aria-selected="true"], [data-marked="true"]) .is-active {
+    outline-color: HighlightText !important;
+    outline-offset: -2px;
+  }
+  /* A button inside a selected row draws its ring on (or through to) the row's Highlight fill: HighlightText there,
+     with the button's own width and offset. */
+  :root .live-table tbody tr.jobs-selected td button:focus-visible,
+  :root .vcone-row-on button:focus-visible { outline-color: HighlightText !important; }
+
+  /* ---------- the focused panel, and a thin edge on the others (panels had only black gutters) ---------- */
+  :root .nqt-panel[data-focused="true"]::after { border: 2px solid Highlight; }
+  :root .nqt-panel:not([data-focused="true"])::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 26;
+    border: 1px solid GrayText;
+    pointer-events: none;
+  }
+
+  /* ---------- chrome rows: the box-shadow rules become borders ---------- */
+  :root .frame-strip { border-bottom: 1px solid CanvasText; padding-top: 7px; }
+  :root .key-toolbar { border-bottom: 1px solid CanvasText; padding-bottom: 3px; }
+  :root .nav-toolbar { border-bottom: 1px solid CanvasText; }
+  :root .nqt-cmdzone { border-bottom: 1px solid CanvasText; }
+  :root .jobbar-row,
+  :root .conn-strip { border-bottom: 1px solid CanvasText; }
+  :root .event-tape { border-top: 1px solid CanvasText; }
+  :root .nqt-status { border-top: 1px solid CanvasText; }
+  :root .nqt-status .seg { border-left: 1px solid GrayText; padding-left: 7px; }
+  :root .fn-bar { border-bottom-color: CanvasText; }
+  :root .nqt-grid thead th { border-right: 1px solid GrayText; border-bottom: 1px solid CanvasText; }
+  :root .help-table thead th { border-bottom: 1px solid CanvasText; }
+  :root .menu,
+  :root .field-list,
+  :root .frame-options-list,
+  :root .related,
+  :root .keymap-overlay,
+  :root .tip,
+  :root .cmdline .cmd-pop { border: 1px solid CanvasText; }
+
+  /* ---------- badges, flags and chips told apart by fill: a boundary around the words ---------- */
+  :root .anchor-badge-word,
+  :root .jobbar-state,
+  :root .frame-flag,
+  :root .nqt-status .seg.flag,
+  :root .pchip,
+  :root .ctx-chip,
+  :root .nav-btn.nav-help > span,
+  :root .kbd-key,
+  :root .dq-swatch,
+  :root .chart-legend,
+  :root .chart-datatip,
+  :root .chart-legend-swatch,
+  :root .candle-roll-tag,
+  :root .echarts-scale-step,
+  :root .echarts-scale-ramp,
+  :root .mon-spark {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+  :root .anchor-badge-word,
+  :root .jobbar-state { padding: 0 3px; }
+
+  /* ---------- graphics drawn as fills ---------- */
+  /* The command line's caret and block cursor are boxes of colour: the caret in the text colour, the cursor in
+     Highlight, steady (its blink animates two token colours that the theme would both replace). */
+  :root .cmd-caret { background-color: CanvasText; }
+  :root .cmd-box:focus-within .cmd-caret { background-color: Highlight; }
+  :root .cmd-cursor { animation: none; background-color: Highlight; }
+  /* OOS severity steps: lit steps solid, unlit steps an outline. */
+  :root .oos-sev-step { background-color: Canvas; outline: 1px solid GrayText; outline-offset: -1px; }
+  :root .oos-sev-step.on { background-color: CanvasText; outline-color: CanvasText; }
+  /* Inline value bars (the value is printed beside each). */
+  :root .nqt-grid .bar { background-color: CanvasText; }
+  /* Scrollbars: a visible thumb on the canvas (the arrow cones are gradients, which the theme removes). */
+  :root .nqt-workspace ::-webkit-scrollbar-track,
+  :root .nqt-workspace ::-webkit-scrollbar-corner,
+  :root .nqt-workspace ::-webkit-scrollbar-button:single-button,
+  :root .nqt-grid-scroll::-webkit-scrollbar-track,
+  :root .nqt-grid-scroll::-webkit-scrollbar-corner,
+  :root .nqt-grid-scroll::-webkit-scrollbar-button:single-button,
+  :root .chart-a11y-tablewrap::-webkit-scrollbar-track { background-color: Canvas; }
+  :root .nqt-workspace ::-webkit-scrollbar-thumb,
+  :root .nqt-grid-scroll::-webkit-scrollbar-thumb,
+  :root .chart-a11y-tablewrap::-webkit-scrollbar-thumb { background-color: CanvasText; border-color: Canvas; }
+
+  /* ---------- inline SVG on the screens: lines in the text colour, marks and the selection in Highlight ---------- */
+  :root .quote-spark polyline,
+  :root .mon-spark-current,
+  :root .mon-spark-up,
+  :root .mon-spark-down,
+  :root .mon-spark-flat { stroke: CanvasText; }
+  :root .mon-spark-prior { stroke: GrayText; }
+  :root .dq-cal-year,
+  :root .dq-cell text { fill: CanvasText; }
+  :root .dq-cell rect { fill: Canvas; stroke: GrayText; stroke-width: 1px; }
+  :root .dq-cell.dq-hover rect { stroke: CanvasText; }
+  :root .dq-cell.dq-selected rect { stroke: Highlight; stroke-width: 3px; }
+  :root .reg-cost-pos,
+  :root .reg-cost-neg,
+  :root .roll-bar.up,
+  :root .roll-bar.down { fill: CanvasText; }
+  :root .reg-cost-zero,
+  :root .reg-cost-even,
+  :root .roll-zero { stroke: CanvasText; }
+  :root .roll-fence { stroke: Highlight; }
+  :root .vcone-range { fill: Canvas; stroke: GrayText; }
+  :root .vcone-outer { fill: GrayText; }
+  :root .vcone-inner { fill: Canvas; stroke: CanvasText; }
+  :root .vcone-median { stroke: Highlight; }
+  :root .vcone-marker { fill: Highlight; }
+}

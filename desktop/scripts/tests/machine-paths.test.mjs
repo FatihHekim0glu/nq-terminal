@@ -10,7 +10,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import test, { after } from 'node:test'
-import { machinePathFindings, machinePathProblems } from '../artefact-check.mjs'
+import { machinePathFindings, machinePathProblems, machinePathScanTargets } from '../artefact-check.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CHECK = path.join(HERE, '..', 'artefact-check.mjs')
@@ -56,6 +56,15 @@ test('both slash directions, doubled backslashes and any case are found', () => 
   }
 })
 
+test('mixed-case planted paths are found: D:\\Dev, D:\\DEV, C:\\USERS, C:\\uSeRs, in both slash directions and as UTF-16 (born failing)', () => {
+  for (const text of ['D:\\Dev\\cargo\\registry\\src\\x', 'D:\\DEV\\cargo\\x', 'd:/DEV/cargo/x', 'D:\\dEv', 'C:\\USERS\\someone\\x', 'c:/uSeRs/x', 'C:\\\\USERS\\\\x']) {
+    assert.ok(machinePathFindings(wrap(text)).length > 0, text)
+  }
+  assert.deepEqual(rules(Buffer.concat([noise(10), Buffer.from('D:\\DEV\\cargo', 'utf16le'), noise(10)])), ['build-machine-path-dev'])
+  assert.deepEqual(rules(Buffer.concat([noise(11), Buffer.from('C:\\USERS\\x', 'utf16le'), noise(10)])), ['build-machine-path-users'])
+  assert.deepEqual(machinePathFindings(wrap('D:\\DEVICES\\x C:\\USERS2\\x D:\\Developer')), [], 'a longer folder name is still not a hit')
+})
+
 test('the path is found as UTF-16 text at either alignment', () => {
   const utf16 = Buffer.from('D:\\dev\\cargo\\registry\\src', 'utf16le')
   assert.deepEqual(rules(Buffer.concat([noise(10), utf16, noise(10)])), ['build-machine-path-dev'])
@@ -96,6 +105,30 @@ test('--paths exits 1 on a planted path, 0 on a clean file and 2 on a missing fi
   assert.equal(run(['--paths', good, bad]).status, 1)
   assert.equal(run(['--paths', path.join(SCRATCH, 'missing.exe')]).status, 2)
   assert.equal(run(['--paths']).status, 2)
+})
+
+test('--paths scans a folder, every file under it: the extracted payload, not only the installer (born failing)', () => {
+  const file = scratchFile('payload-marker.bin', wrap('nothing'))
+  const root = path.dirname(file)
+  fs.mkdirSync(path.join(root, 'release', 'res'), { recursive: true })
+  fs.writeFileSync(path.join(root, 'release', 'nq-lab-terminal.exe'), wrap('/cargo/registry/src/x'))
+  fs.writeFileSync(path.join(root, 'release', 'res', 'helper.dll'), wrap('D:\\Dev\\cargo\\registry\\src\\x\\lib.rs'))
+  const result = run(['--paths', root])
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /release[\\/]res[\\/]helper\.dll/)
+  assert.match(result.stderr, /D:\\Dev\\cargo/)
+  fs.rmSync(path.join(root, 'release', 'res'), { recursive: true })
+  assert.equal(run(['--paths', root]).status, 0)
+  assert.equal(run(['--paths', path.join(root, 'no-such-folder')]).status, 2)
+})
+
+test('the release check scans every file of the payload folder and every installer, and nothing else', () => {
+  const files = ['PROVENANCE.json', 'payload/release/nq-lab-terminal.exe', 'payload/release/WebView2Loader.dll', 'payload/smoke/res/deep.bin', 'payload/installtest/readme.txt',
+    'nsis/release/installer.nsi', 'config/tauri.conf.json', 'nq-lab terminal_0.3.0_x64-setup.exe', 'sub/other_x64-setup.exe']
+  const installers = ['nq-lab terminal_0.3.0_x64-setup.exe']
+  assert.deepEqual(machinePathScanTargets(files, installers).sort(), ['nq-lab terminal_0.3.0_x64-setup.exe', 'payload/installtest/readme.txt', 'payload/release/WebView2Loader.dll',
+    'payload/release/nq-lab-terminal.exe', 'payload/smoke/res/deep.bin'])
+  assert.deepEqual(machinePathScanTargets([], []), [])
 })
 
 // ---- build-release.ps1 remaps the build machine's folders ---------------------------------------------------------------------

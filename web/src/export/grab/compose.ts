@@ -3,7 +3,8 @@
 // The colours and the font come from the chart tokens, read from the page as it is now, so the image
 // follows the theme; there is no colour written in this file. Everything is drawn through a small canvas
 // interface, so a test can record the drawing without a browser.
-import { canvasFont, readChartTokens, type ChartTokens } from '../../charts/theme/chartTokens'
+import { readLiveChartTokens } from '../../charts/theme/chartContrast'
+import { canvasFont, type ChartTokens } from '../../charts/theme/chartTokens'
 import type { GrabFigure } from './collect'
 import { GRAB_MAX_CANVAS, GRAB_METRICS, grabLayout, grabScale, grabWidth, wrapLine, type GrabBox } from './grabModel'
 
@@ -17,7 +18,7 @@ export interface GrabPalette {
 }
 
 /** The palette from the chart tokens: page background, text, the data orange, the grid grey. */
-export function readGrabPalette(tokens: ChartTokens = readChartTokens()): GrabPalette {
+export function readGrabPalette(tokens: ChartTokens = readLiveChartTokens()): GrabPalette {
   return {
     background: tokens.color.bg,
     text: tokens.color.text,

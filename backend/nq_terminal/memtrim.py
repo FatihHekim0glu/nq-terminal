@@ -19,6 +19,11 @@ When it runs (`MemTrim`):
   nor end a quiet period, but a poll in flight still holds the trim off. A request that streams (the live stream) is in flight
   for as long as it is open, so a live screen is never trimmed under.
 
+Every trim writes one line to the log (backend.log, which the desktop shell fills from the backend's stderr): "working set
+trimmed (REASON) in X ms; before A MB, after B MB", with `unavailable` where the working set could not be read. The
+measurement harness reads its trims from those lines. A process that never set logging up would drop them at INFO, so
+`services.prewarm.ensure_log_lines` gives this module's logger a stderr handler in that case.
+
 Off Windows every call is a no-op. `NQT_MEMTRIM=0` switches all of it off. The quiet thread starts only in a desktop or
 launcher process (`NQT_DESKTOP=1` or `NQT_PREWARM=1`) or with `NQT_MEMTRIM=1`, so pytest and the plain fixture backend
 never run it. Errors are logged, never raised. Nothing here reads prices, touches a file or starts a process.
@@ -71,6 +76,12 @@ def quiet_trim_wanted(environ: Mapping[str, str] | None = None) -> bool:
     return prewarm_enabled(env)
 
 
+def _log_lines() -> None:
+    """Let this module's INFO lines reach backend.log in a process that never set logging up (see the module doc)."""
+    from nq_terminal.services.prewarm import ensure_log_lines
+    ensure_log_lines(LOG)
+
+
 def trim_available(environ: Mapping[str, str] | None = None) -> bool:
     """On Windows and not switched off."""
     return PLATFORM == "win32" and memtrim_enabled(environ)
@@ -99,14 +110,50 @@ def _trim_current_process() -> bool:
     return ok
 
 
+def _working_set_bytes() -> int | None:
+    """The working set of this process in bytes (K32GetProcessMemoryInfo), or None off Windows or when it cannot be read.
+    Never raises."""
+    if PLATFORM != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class ProcessMemoryCounters(ctypes.Structure):
+            _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                        ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                        ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        read = kernel32.K32GetProcessMemoryInfo
+        read.argtypes = [wintypes.HANDLE, ctypes.POINTER(ProcessMemoryCounters), wintypes.DWORD]
+        read.restype = wintypes.BOOL
+        counters = ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(ProcessMemoryCounters)
+        if not read(kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb):
+            return None
+        return int(counters.WorkingSetSize)
+    except Exception:  # noqa: BLE001 - a missing reading must never stop a trim
+        return None
+
+
+def _megabytes(size: int | None) -> str:
+    return "unavailable" if size is None else f"{size / (1024 * 1024):.1f} MB"
+
+
 def trim_working_set(reason: str = "", *, collect: bool = True) -> bool:
     """Trim this process's working set; True when it was trimmed. A no-op off Windows or with NQT_MEMTRIM=0. With
     `collect`, a full garbage collection first, so freed objects are not paged back in later. Never raises."""
     if not trim_available():
         return False
+    _log_lines()
     try:
         if collect:
             gc.collect()
+        before = _working_set_bytes()
         began = time.perf_counter()
         ok = bool(_trim_current_process())
     except Exception:  # noqa: BLE001 - a trim problem must never reach the app
@@ -115,7 +162,9 @@ def trim_working_set(reason: str = "", *, collect: bool = True) -> bool:
     if not ok:
         LOG.warning("the working set trim did not trim (%s)", reason or "no reason given")
         return False
-    LOG.info("working set trimmed (%s) in %.1f ms", reason or "no reason given", (time.perf_counter() - began) * 1e3)
+    elapsed_ms = (time.perf_counter() - began) * 1e3
+    LOG.info("working set trimmed (%s) in %.1f ms; before %s, after %s", reason or "no reason given", elapsed_ms,
+             _megabytes(before), _megabytes(_working_set_bytes()))
     return True
 
 
@@ -200,6 +249,7 @@ class MemTrim:
     def _trim(self, reason: str, require_quiet: bool) -> bool:
         if not trim_available():
             return False
+        _log_lines()
         gc.collect()  # outside the hold: a request arriving meanwhile is not kept waiting for it
         with self.activity.held() as (idle, generation, quiet_for):
             if not idle:
@@ -248,6 +298,7 @@ class MemTrim:
         """Start the quiet thread (once); None when it is already running or could not start."""
         if self._thread is not None and self._thread.is_alive():
             return None
+        _log_lines()
         self._stop.clear()
         thread = threading.Thread(target=self._loop, name=THREAD_NAME, daemon=True)
         try:

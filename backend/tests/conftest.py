@@ -88,7 +88,7 @@ WATCHED_FILES = {ROOT / "live" / "KILL": PRESENCE}  # the live workflow may togg
 # different folder when the tests run from a git worktree.
 REAL_STATE_DIR = BACKEND.parent / "state"
 MAIN_STATE_DIR = ROOT / "terminal" / "state"
-PROTECTED_DIRS = (RESULTS, ROOT / "backtests" / "output", ROOT / "data", ROOT / "live",
+PROTECTED_DIRS = (RESULTS, ROOT / "backtests" / "output", ROOT / "data", ROOT / "live", ROOT / "experiments",
                   BACKEND / "tests" / "fixtures", REAL_STATE_DIR, MAIN_STATE_DIR)
 _NOTES: list[str] = []
 

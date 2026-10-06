@@ -19,7 +19,7 @@ One job, `windows`, on `windows-latest`, with a 30 minute limit. The steps, in o
 | Desktop script tests | `node --test desktop/scripts/tests/*.test.mjs` | The artefact check, the dist scan, the installer hooks and the bootstrapper check. |
 | Stand-in lab | `python -m venv` under the runner's temp folder, `NQT_LAB` pointing at it | The harness runs the lab's interpreter for its window watch, a standard-library script. The folder holds no lab data. |
 | Desktop harness tests | `node --test desktop/harness/tests/*.test.mjs` | The measurement harness's own tests. |
-| Release script self-tests | `scripts/tests/release_check.tests.ps1` and `desktop/scripts/install-test.ps1 -SelfTest` | The born-failing tests of the release scripts. They install nothing. |
+| Release script self-tests | `scripts/tests/release_check.tests.ps1`, `scripts/tests/smoke_real.tests.ps1`, `desktop/scripts/install-test.ps1 -SelfTest`, `desktop/scripts/tests/install-test.tests.ps1` and `desktop/scripts/tests/upgrade-owner.tests.ps1` | The born-failing tests of the release scripts. They install nothing. The upgrade test reads the owner's real install only when one exists for the user, which a hosted runner never has, so that part skips itself and says so. `desktop/harness/tests/ci-workflow.test.mjs` fails when a new `*.tests.ps1` under `scripts/tests` or `desktop/scripts/tests` is not listed in the workflow. |
 
 The same commands are the local stand-in: `desktop/scripts/check.ps1 -Web` runs the web group and the Rust set on the lab PC.
 

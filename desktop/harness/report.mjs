@@ -7,7 +7,7 @@
 //   exceeded or two builds disagree (--check --strict).
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { isMainModule } from '../scripts/main-module.mjs'
 import { loadRecords, COUNTED } from './lib/record.mjs'
 import { ROWS, CHECKS, verdictOf, privateBytesLeakVerdict } from './lib/rows.mjs'
 import { median, range, agreeWithinNoise, round } from './lib/stats.mjs'
@@ -208,7 +208,7 @@ export function reportLines(report, records = []) {
 
 function printTable(report, records) { for (const line of reportLines(report, records)) console.log(line) }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMainModule(import.meta.url)) {
   const argv = process.argv.slice(2)
   const dir = argv.find((a) => !a.startsWith('--'))
   const minRuns = Number(argv[argv.indexOf('--min-runs') + 1] ?? 3) || 3

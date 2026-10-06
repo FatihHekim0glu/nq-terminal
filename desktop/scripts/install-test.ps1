@@ -3,7 +3,7 @@
   Silent per-user install and uninstall of a Tauri NSIS installer, with the window watch on (04 D5.4, D5.1).
 
 .DESCRIPTION
-  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.2.1\<name>_0.2.1_x64-setup.exe
+  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.3.0\<name>_0.3.0_x64-setup.exe
   powershell -NoProfile -File desktop\scripts\install-test.ps1 -SelfTest [-Installer <installer>]
 
   The install goes to <InstallRoot>\<Run> (default D:\dev\d5\install\<run>), never anywhere else, and the app is
@@ -69,7 +69,7 @@
   inherited and no broad writer, no shortcut, the app not started, and the stand-in state hashes as seeded. After each
   uninstall: no file left, the uninstall entry gone, the stand-in state unchanged (the silent uninstaller keeps data).
   The seeded state is removed at the end. The old version must be strictly lower than the new one.
-  -BuildRenamed <ref> builds the renamed-product installer of a git ref (a tag such as desktop-v0.2.1, or HEAD) in a
+  -BuildRenamed <ref> builds the renamed-product installer of a git ref (a tag such as desktop-v0.3.0, or HEAD) in a
   temporary detached worktree under D:\dev\wt, with CARGO_TARGET_DIR -TargetDir (default D:\dev\targets\v012), into
   <BuildOut>\<version>-<commit>\ laid out as build-release.ps1 lays out a release folder (installer, nsis\installtest,
   payload\installtest, BUILD.json); -BuildVersion sets a higher version for the build (an upgrade target from a tree
@@ -127,10 +127,29 @@ $Here = $PSScriptRoot
 $Terminal = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Crate = Join-Path $Terminal 'desktop\src-tauri'
 $OverlayFile = Join-Path $Crate 'tauri.installtest.conf.json'
+function Resolve-RealFolder {
+    # The folder with every junction or symbolic link in its path replaced by what it points at. The installer refuses a link
+    # anywhere in the install path, and D:\dev is a junction to E:\dev on a PC whose big folders moved, so every folder this
+    # script installs into or runs from is resolved first. A part that does not exist yet is kept as written.
+    param([string]$Path, [int]$Depth = 0)
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $current = [System.IO.Path]::GetPathRoot($full)
+    foreach ($part in @($full.Substring($current.Length).Split('\') | Where-Object { $_ })) {
+        $next = Join-Path $current $part
+        $item = Get-Item -LiteralPath $next -Force -ErrorAction SilentlyContinue
+        if ($item -and $item.LinkType -and $item.Target -and $Depth -lt 8) { $next = Resolve-RealFolder (@($item.Target)[0]) ($Depth + 1) }
+        $current = $next
+    }
+    return $current
+}
+
 $WorktreeRoot = 'D:\dev\wt'
-$ScratchBase = 'D:\dev\tmp\install-test'
+$ScratchBase = Resolve-RealFolder 'D:\dev\tmp\install-test'
 $ScratchTemp = Join-Path $ScratchBase ('run-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$PID")
 $AllowedRoot = 'D:\dev\'
+$AllowedRoots = @($AllowedRoot, ((Resolve-RealFolder 'D:\dev').TrimEnd('\') + '\')) | Select-Object -Unique
+$InstallRoot = Resolve-RealFolder $InstallRoot
+$CustomRoot = Resolve-RealFolder $CustomRoot
 $InstallTimeoutSec = 180
 $BundleMarkerBytes = 8
 $RefusedExitCode = 3
@@ -315,7 +334,7 @@ function Get-TargetProblems {
     param([string]$Target, [string[]]$ExistingKeys)
     $out = @()
     $full = [System.IO.Path]::GetFullPath($Target)
-    if (-not $full.StartsWith($AllowedRoot, [System.StringComparison]::OrdinalIgnoreCase)) { $out += "the target $full is outside $AllowedRoot" }
+    if (-not @($AllowedRoots | Where-Object { $full.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) })) { $out += "the target $full is outside $($AllowedRoots -join ' or ')" }
     if ((Test-Path -LiteralPath $full) -and @(Get-ChildItem -LiteralPath $full -Force -ErrorAction SilentlyContinue).Count -gt 0) { $out += "the target $full is not empty" }
     foreach ($key in $ExistingKeys) { $out += "the registry entry $key already exists (an existing install of this product: the installer would run its uninstaller)" }
     return ,@($out)
@@ -1595,6 +1614,18 @@ function Invoke-SelfTest {
     Expect 'a target outside D:\dev is refused (born failing)' ((Get-TargetProblems 'C:\Users\x\install' @()).Count -gt 0)
     Expect 'a target on D:\dev is accepted' ((Get-TargetProblems 'D:\dev\d5\install\self-test-never-created' @()).Count -eq 0)
     Expect 'an existing product key is refused (born failing)' ((Get-TargetProblems 'D:\dev\d5\install\self-test-never-created' @('HKCU:\x')).Count -gt 0)
+    Expect 'a target under the real folder of D:\dev is accepted too, because the installer refuses a junction in the path (born failing)' ((Get-TargetProblems (Join-Path (Resolve-RealFolder 'D:\dev') 'd5\install\self-test-never-created') @()).Count -eq 0)
+    $linkRoot = Join-Path $ScratchTemp ('resolve-self-test-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Force -Path (Join-Path $linkRoot 'real\sub') | Out-Null
+        New-Item -ItemType Junction -Path (Join-Path $linkRoot 'link') -Target (Join-Path $linkRoot 'real') | Out-Null
+        Expect 'a junction in the path resolves to its real folder, and a part not yet created is kept (born failing)' ((Resolve-RealFolder (Join-Path $linkRoot 'link\sub\new')) -eq (Join-Path $linkRoot 'real\sub\new'))
+        Expect 'a path without a link resolves to itself' ((Resolve-RealFolder (Join-Path $linkRoot 'real\sub')) -eq (Join-Path $linkRoot 'real\sub'))
+    } finally {
+        $link = Join-Path $linkRoot 'link'
+        if (Test-Path -LiteralPath $link) { (Get-Item -LiteralPath $link -Force).Delete() }
+        if (Test-Path -LiteralPath $linkRoot) { Remove-Item -LiteralPath $linkRoot -Recurse -Force }
+    }
     Expect 'a new visible window is reported by the diff (born failing)' ([NqtWindowWatch]::NewVisible([long[]]@(1, 2), [long[]]@(1, 2, 3)).Count -eq 1)
     Expect 'an unchanged window set reports nothing' ([NqtWindowWatch]::NewVisible([long[]]@(1, 2), [long[]]@(2, 1)).Count -eq 0)
     Expect 'a changed foreground window is reported (born failing)' ([NqtWindowWatch]::ForegroundChanged(5, 6))

@@ -60,6 +60,9 @@ export interface LwcTheme {
     readonly upColor: string
     readonly downColor: string
     readonly borderVisible: boolean
+    /** Forced colours only (chartContrast.ts): up candles are hollow, outlined in the up colour. */
+    readonly borderUpColor?: string
+    readonly borderDownColor?: string
     readonly wickUpColor: string
     readonly wickDownColor: string
     readonly priceLineVisible: boolean
@@ -98,6 +101,8 @@ const BOLLINGER_SD = 2
 
 export function makeLwcTheme(tokens: ChartTokens = DEFAULT_CHART_TOKENS): LwcTheme {
   const c = tokens.color
+  // Under forced colours the candles keep a second cue besides colour: up hollow, down filled.
+  const forced = tokens.contrast === 'forced'
   const gridLines = (): LwcGridLines => ({ visible: false, color: c.chartGrid, style: LWC_LINE_STYLE.Dashed })
   // House choice (best guess 9.2): no capture shows the crosshair lines; the pale cyan axis labels
   // come from one capture. The library picks the label text colour by contrast (black here).
@@ -122,9 +127,10 @@ export function makeLwcTheme(tokens: ChartTokens = DEFAULT_CHART_TOKENS): LwcThe
       crosshair: { vertLine: cross(), horzLine: cross() },
     },
     candle: {
-      upColor: c.candleUp,
+      upColor: forced ? c.bg : c.candleUp,
       downColor: c.candleDn,
-      borderVisible: false,
+      borderVisible: forced,
+      ...(forced ? { borderUpColor: c.candleUp, borderDownColor: c.candleDn } : {}),
       wickUpColor: c.candleUp,
       wickDownColor: c.candleDn,
       // Off: the library's line spans the whole plot; CandleChart draws it from the last bar to the

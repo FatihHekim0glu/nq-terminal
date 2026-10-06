@@ -10,7 +10,7 @@ import { attach, sleep } from './cdp.mjs'
 import { shellSpec, startShell, readDevToolsPort, teardown, identityRows, listState, newState } from './shell.mjs'
 import { readShellLog, milestones, engineSettingsProblems, waitForMilestone } from './shelllog.mjs'
 import { memTree, memTreeBreakdown, classifyTree, errorText, T4_UI_TREE_MB } from './mem.mjs'
-import { waitForIdleTrim, IDLE_CAP_MS, IDLE_POLL_MS } from './idle-trim.mjs'
+import { waitForIdleTrim, readBackendLog, IDLE_CAP_MS, IDLE_POLL_MS } from './idle-trim.mjs'
 import { mergeRecorded } from './survivors.mjs'
 import { makeLab } from './lab.mjs'
 import { isMainTree, LAB, TERMINAL } from './paths.mjs'
@@ -208,6 +208,8 @@ export async function launchRun({ build, exe, runDir, o = {} }) {
     treeRows = mergeRecorded(...samples.map(identityRows))
     result.rows.idle_mem_home = memRow(samples)
     result.idlePrivateBytesMB = idlePrivateBytesOf(samples)
+    // The backend's own trim and prewarm lines, from its log in the run's own state folder (the measure build's state is the lab's, left unread).
+    if (stateDir) result.backendLog = readBackendLog(path.join(stateDir, 'logs', 'backend.log'))
     result.idleBreakdown = idleBreakdownOf(run.child.pid, undefined, (why) => { result.idleBreakdownError = why; console.error(`idle breakdown not read: ${why}`) })
     result.uiOver350 = uiOver350Of(result.idleBreakdown)
     result.processCount = samples.at(-1).n

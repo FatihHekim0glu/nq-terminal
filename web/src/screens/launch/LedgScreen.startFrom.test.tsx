@@ -26,7 +26,7 @@ const OLDER: Schemas['LedgerRow'] = { ...NEWEST, run_id: 'nt_overnight_v0_fixtur
 const TWO: Schemas['LedgerView'] = { ledger_found: true, rows: [NEWEST, OLDER], anchor_pairs: [] }
 const presetOf = (row: Schemas['LedgerRow']): Preset => ({
   source_run_id: row.run_id, exp_id: row.exp_id, strategy: row.strategy as string, variant: row.variant as string, start: row.start as string,
-  end: row.end as string, params: row.params as Record<string, unknown>, runtime_s: null, launchable: true, reasons: [],
+  end: row.end as string, params: row.params as Record<string, unknown>, spec_sha256: null, runtime_s: null, launchable: true, reasons: [],
 })
 const JOBS_ON = { jobs: [], queue_cap: 10, queued: 0, running: 0, enabled: true }
 

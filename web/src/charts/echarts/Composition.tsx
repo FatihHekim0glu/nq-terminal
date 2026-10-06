@@ -41,7 +41,7 @@ export function Composition({ data, mode, chartId = 'composition' }: Composition
       <div className="echarts-scale" style={FOOTER_ROW}>
         {key.map((k) => (
           <span key={k.label} className="echarts-scale-named">
-            <span className="echarts-scale-step" style={{ background: k.fill }} />
+            <span className="echarts-scale-step" style={{ background: k.fill }} data-pattern={k.pattern} />
             {k.label}
           </span>
         ))}

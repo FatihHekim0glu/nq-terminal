@@ -72,6 +72,8 @@ function runCounters(page: Page): Locator[] {
   return [
     status.locator('.seg').filter({ hasText: 'Gate reads' }), status.locator('.seg.flag'), page.locator('.gp-footer'),
     page.locator('[data-key="stream-lastEvent"], [data-key="stream-rows"]'),
+    // RUN's ledger row prints the lab folder and the interpreter path of the machine that ran the suite (a junction can change them).
+    page.locator('.run-ledger'),
   ]
 }
 

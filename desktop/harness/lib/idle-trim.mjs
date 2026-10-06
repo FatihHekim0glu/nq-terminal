@@ -4,6 +4,8 @@
 // fixed wait can read an untrimmed or half-trimmed set. The backend's working set is read from the first moment and every poll after the
 // floor; the wait ends when it has dropped and settled, or at the cap, and the figure records which.
 
+import fs from 'node:fs'
+
 /** The longest wait from HOME ready: floor 66 s + record watch 12 s mount wait + 4 s idle timeout + one 5 s poll, with margin. */
 export const IDLE_CAP_MS = 120_000
 export const IDLE_POLL_MS = 5000
@@ -62,4 +64,34 @@ export async function waitForIdleTrim({ read, now, sleep, floorMs, capMs, pollMs
 export function trimRan(memtrim, dropSeen) {
   if (memtrim === 'off') return false
   return dropSeen === undefined ? null : dropSeen
+}
+
+// ---- the backend's own log lines (memtrim.py, services/prewarm.py): what the shell drains into <state>\logs\backend.log ----------------------
+// "2026-10-05 13:32:50,250 INFO nq_terminal.memtrim: working set trimmed (REASON) in 41.7 ms; before 812.4 MB, after 301.2 MB"
+// "2026-10-05 13:32:41,110 INFO nq_terminal.services.prewarm: prewarm started: ..." and "... prewarm ended: ...". The time is the backend's
+// local clock, so only differences between its own lines are meaningful.
+const TRIM_LINE = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) INFO nq_terminal\.memtrim: working set trimmed \((.*)\) in ([\d.]+) ms; before (unavailable|[\d.]+ MB), after (unavailable|[\d.]+ MB)$/
+const PREWARM_LINE = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d,\d{3}) INFO nq_terminal\.services\.prewarm: prewarm (started|ended)\b/
+const sizeMB = (text) => (text === 'unavailable' ? null : Number.parseFloat(text))
+const logTimeMs = (stamp) => Date.parse(`${stamp.slice(0, 10)}T${stamp.slice(11, 19)}.${stamp.slice(20)}`)
+
+/** Pure. The trims (reason, time, duration, working set before and after in MB, null where it was unavailable) and the prewarm's first start and last end. */
+export function parseBackendLog(text) {
+  const trims = []
+  let prewarmStarted = null
+  let prewarmEnded = null
+  for (const line of String(text).split(/\r?\n/)) {
+    const trim = TRIM_LINE.exec(line)
+    if (trim) { trims.push({ at: trim[1], atMs: logTimeMs(trim[1]), reason: trim[2], ms: Number.parseFloat(trim[3]), beforeMB: sizeMB(trim[4]), afterMB: sizeMB(trim[5]) }); continue }
+    const prewarm = PREWARM_LINE.exec(line)
+    if (prewarm && prewarm[2] === 'started') prewarmStarted ??= prewarm[1]
+    if (prewarm && prewarm[2] === 'ended') prewarmEnded = prewarm[1]
+  }
+  const prewarmSpanMs = prewarmStarted && prewarmEnded ? logTimeMs(prewarmEnded) - logTimeMs(prewarmStarted) : null
+  return { trims, prewarmStarted, prewarmEnded, prewarmSpanMs }
+}
+
+/** Reads and parses one backend.log; null when it cannot be read (an absent log is a reading to distrust, never an error). */
+export function readBackendLog(file) {
+  try { return parseBackendLog(fs.readFileSync(file, 'utf8')) } catch { return null }
 }

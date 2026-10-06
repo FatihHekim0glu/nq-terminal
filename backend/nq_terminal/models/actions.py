@@ -46,10 +46,12 @@ class StrategyParams(ResponseModel):
 
 class LaunchPreset(ResponseModel):
     """A ledger row offered as a starting point. `launchable` is false (with the reasons) when the job spec would
-    refuse its params as they stand."""
+    refuse its params as they stand. `spec_sha256` is the sha256 of `experiments/<exp_id>.json` when that file
+    exists (read only), else None: a run started from a preset without it cannot be tied to a spec."""
 
     preset_id: str
     exp_id: str | None
+    spec_sha256: str | None
     ts_utc: str | None
     strategy: str
     variant: str

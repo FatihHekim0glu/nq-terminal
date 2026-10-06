@@ -14,8 +14,8 @@ const NONE: ReadonlySet<string> = new Set()
 const check = (patch: Partial<JobDraft> = {}, taken: ReadonlySet<string> = NONE) => checkDraft({ ...GOOD, ...patch }, taken)
 
 describe('the rules mirror ARCHITECTURE section 8', () => {
-  it('lists exactly the seven feeds of run_base.FEEDS, and the queue cap of ten', () => {
-    expect([...STRATEGIES].sort()).toEqual(['dtsmom', 'eomtsy', 'overnight', 'tsmom', 'volmanaged', 'volmanaged_bh', 'za_orb'])
+  it('lists exactly the eight feeds of run_base.FEEDS, and the queue cap of ten', () => {
+    expect([...STRATEGIES].sort()).toEqual(['dtsmom', 'eomtsy', 'overnight', 'tsmom', 'tsydemfx', 'volmanaged', 'volmanaged_bh', 'za_orb'])
     expect(QUEUE_CAP).toBe(10)
     expect([...VARIANTS]).toEqual(['repaired', 'vendor'])
     expect([WINDOW_START, WINDOW_END]).toEqual(['2010-01-01', '2022-01-01'])
@@ -42,6 +42,17 @@ describe('checkDraft', () => {
       run_id: 't_tsmom_a',
     })
     expect(Object.keys(r.spec ?? {}).sort()).toEqual(['end', 'params', 'run_id', 'start', 'strategy', 'variant'])
+  })
+
+  it('holds tsydemfx to its frozen span: the repaired variant from 2010-01-01 to 2022-01-01', () => {
+    const frozen = { strategy: 'tsydemfx', variant: 'repaired', start: '2010-01-01', end: '2022-01-01' }
+    expect(check(frozen).errors).toEqual({})
+    expect(check(frozen).spec).toMatchObject({ strategy: 'tsydemfx', variant: 'repaired' })
+    expect(check({ ...frozen, variant: 'vendor' }).errors.variant).toBe(JOBS.errors.frozenSpan)
+    expect(check({ ...frozen, start: '2010-06-01' }).errors.start).toBe(JOBS.errors.frozenSpan)
+    expect(check({ ...frozen, end: '2021-12-31' }).errors.end).toBe(JOBS.errors.frozenSpan)
+    expect(check({ ...frozen, variant: 'vendor' }).spec).toBeNull()
+    expect(check({ variant: 'vendor' }).errors.variant).toBeUndefined()
   })
 
   it('treats empty parameters text as an empty object', () => {

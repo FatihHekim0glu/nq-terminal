@@ -53,12 +53,35 @@ pub fn check_data_dir(dir: &Path, lab: Option<&Path>) -> Result<(), ShellError> 
 const RESEARCH_FOLDERS: [&str; 4] = ["results", "data", "live", "backtests"];
 
 #[cfg(any(test, feature = "measure"))]
+fn on_drive(path: &Path, is_letter: fn(u8) -> bool) -> bool {
+    matches!(path.components().next(), Some(Component::Prefix(p))
+        if matches!(p.kind(), Prefix::Disk(b) | Prefix::VerbatimDisk(b) if is_letter(b)))
+}
+
+/// The rule for the folder as written: on the D: drive, no relative parts, not in a research folder.
+#[cfg(any(test, feature = "measure"))]
 fn test_folder_fault(path: &Path) -> Option<String> {
-    let on_d = matches!(path.components().next(), Some(Component::Prefix(p))
-        if matches!(p.kind(), Prefix::Disk(b'D' | b'd') | Prefix::VerbatimDisk(b'D' | b'd')));
-    if !on_d {
+    if !on_drive(path, |b| b.eq_ignore_ascii_case(&b'D')) {
         return Some("it must be on the D: drive".into());
     }
+    research_folder_fault(path)
+}
+
+/// The rule for where the folder really points. The name stays on D:, but the big folders may live on another data
+/// drive behind a junction (D:\dev to E:\dev), so the real folder only has to stay off the system drive C:; the research
+/// folder rule applies to it in full.
+#[cfg(any(test, feature = "measure"))]
+pub(super) fn resolved_fault(path: &Path) -> Option<String> {
+    if on_drive(path, |b| b.eq_ignore_ascii_case(&b'C'))
+        || !on_drive(path, |b| b.is_ascii_alphabetic())
+    {
+        return Some("it must resolve to a data drive, never the system drive C:".into());
+    }
+    research_folder_fault(path)
+}
+
+#[cfg(any(test, feature = "measure"))]
+fn research_folder_fault(path: &Path) -> Option<String> {
     for part in path.components() {
         if matches!(part, Component::ParentDir | Component::CurDir) {
             return Some("it may not contain relative parts".into());
@@ -99,7 +122,7 @@ fn resolved(path: &Path) -> PathBuf {
 #[cfg(any(test, feature = "measure"))]
 pub fn check_test_folder(dir: &Path, name: &str) -> Result<(), ShellError> {
     let fault = if dir.is_absolute() {
-        test_folder_fault(dir).or_else(|| test_folder_fault(&resolved(dir)))
+        test_folder_fault(dir).or_else(|| resolved_fault(&resolved(dir)))
     } else {
         Some("it must be an absolute path".into())
     };

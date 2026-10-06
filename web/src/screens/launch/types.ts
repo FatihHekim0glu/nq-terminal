@@ -40,6 +40,8 @@ export interface Preset {
   readonly start: string
   readonly end: string
   readonly params: Readonly<Record<string, unknown>>
+  /** The sha256 of experiments/<exp_id>.json when the lab holds that spec file, else null (the preset is not tied to a spec). */
+  readonly spec_sha256: string | null
   /** Typical run time of this configuration in seconds, from the ledger, or null. */
   readonly runtime_s: number | null
   /** False when the server would refuse the preset's own parameters as they stand; `reasons` says why. */

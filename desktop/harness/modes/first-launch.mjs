@@ -9,14 +9,28 @@ import { resolveBuild } from '../lib/build.mjs'
 import { waitQuiet } from '../lib/gate.mjs'
 import { executeSlot } from '../lib/slot.mjs'
 import { launchRun } from '../lib/launch-run.mjs'
-import { figuresOf, selectRows } from './rows.mjs'
+import { figuresOf, memtrimState, selectRows } from './rows.mjs'
 import { isMainTree, LAB } from '../lib/paths.mjs'
 import { launchBlock } from '../lib/lab-guard.mjs'
 import { writeRecord } from '../lib/record.mjs'
 
 export const BOOT_WINDOW_S = 30 * 60
 
-export async function run({ args, outDir, provenance }) {
+/**
+ * The first-launch reading, with the memory trim recorded as the rows mode records it: --memtrim off|on (no option reads the inherited
+ * NQT_MEMTRIM) goes into the environment the shell inherits, into the slot record and onto every figure, and the caller's environment
+ * is put back afterwards. `deps` swaps the outside effects for the tests (the build lookup, the launch and the slot).
+ */
+export async function run({ args, outDir, provenance }, deps = {}) {
+  const priorMemtrim = process.env.NQT_MEMTRIM
+  const memtrim = memtrimState(args.opt('memtrim', null))
+  try { return await readFirstLaunch({ args, outDir, provenance, memtrim }, { resolveBuild, executeSlot, launchRun, ...deps }) } finally {
+    if (priorMemtrim === undefined) delete process.env.NQT_MEMTRIM
+    else process.env.NQT_MEMTRIM = priorMemtrim
+  }
+}
+
+async function readFirstLaunch({ args, outDir, provenance, memtrim }, deps) {
   const dry = args.flag('dry')
   const build = args.opt('build', 'measure')
   if (!['smoke', 'measure'].includes(build)) throw new Error('--build smoke|measure')
@@ -25,10 +39,10 @@ export async function run({ args, outDir, provenance }) {
   const uptimeSeconds = Math.round(os.uptime())
   const firstAfterBoot = uptimeSeconds <= BOOT_WINDOW_S
   if (!dry && !firstAfterBoot) console.log(`note: the machine has been up ${Math.round(uptimeSeconds / 60)} minutes; this is not a first launch after a boot, and the record says so`)
-  const exe = resolveBuild(build, args.opt('exe', null))
+  const exe = deps.resolveBuild(build, args.opt('exe', null))
   const block = launchBlock(build, realData, LAB)
   if (block) {
-    const body = { mode: 'first-launch', build, slot: 1, attempt: 1, kind: 'measure', tag: 'FIRST-LAUNCH', provenance, uptimeSeconds, firstAfterBoot, status: 'pending', reason: `real lab not quiet: ${block.problems.join('; ')}`, pending: block.problems, labCheck: { before: block.summary } }
+    const body = { mode: 'first-launch', build, slot: 1, attempt: 1, kind: 'measure', tag: 'FIRST-LAUNCH', provenance, memtrim, uptimeSeconds, firstAfterBoot, status: 'pending', reason: `real lab not quiet: ${block.problems.join('; ')}`, pending: block.problems, labCheck: { before: block.summary } }
     const file = writeRecord(outDir, `first-launch-${build}-s01-a1-measure`, body)
     console.log(JSON.stringify({ mode: 'first-launch', build, status: 'pending', pending: block.problems }))
     return { status: 'pending', file, result: body }
@@ -37,9 +51,9 @@ export async function run({ args, outDir, provenance }) {
   const last = quiet.readings.at(-1) ?? { avgPct: null, maxPct: null, seconds: 0, limitPct: 10, enforced: false, pass: true, samples: [] }
   const rows = selectRows(build, 'all', realData)
   const runDir = path.join(outDir, 'launch', `first-launch-${build}`)
-  const out = await executeSlot({ mode: 'first-launch', build, slot: 1, attempt: 1, kind: dry ? 'dry' : 'measure', outDir, gateSeconds: 0, limitPct: 10, provisionalAfter: 1, gateFn: async () => last,
-    meta: { provenance, tag: 'FIRST-LAUNCH', uptimeSeconds, firstAfterBoot, quietReadings: quiet.readings.map((g) => ({ avgPct: g.avgPct, maxPct: g.maxPct })), waitedSeconds: quiet.waitedSeconds }, expected: rows.filter((id) => !['warm_home', 'eq_warm', 'reg_warm', 'grid_open', 'gip_pan_zoom_p95', 'keystroke_p95'].includes(id)),
-    runFn: async ({ gate }) => { const r = await launchRun({ build, exe, runDir, o: { realData, pageRows: false } }); return { ...r, figures: figuresOf(build, r, gate, provenance) } } })
-  console.log(JSON.stringify({ mode: 'first-launch', build, status: out.status, uptimeSeconds, firstAfterBoot, quiet: quiet.quiet, rows: out.result?.rows, windows: out.result?.watch?.newWindows.length }))
+  const out = await deps.executeSlot({ mode: 'first-launch', build, slot: 1, attempt: 1, kind: dry ? 'dry' : 'measure', outDir, gateSeconds: 0, limitPct: 10, provisionalAfter: 1, gateFn: async () => last,
+    meta: { provenance, memtrim, tag: 'FIRST-LAUNCH', uptimeSeconds, firstAfterBoot, quietReadings: quiet.readings.map((g) => ({ avgPct: g.avgPct, maxPct: g.maxPct })), waitedSeconds: quiet.waitedSeconds }, expected: rows.filter((id) => !['warm_home', 'eq_warm', 'reg_warm', 'grid_open', 'gip_pan_zoom_p95', 'keystroke_p95'].includes(id)),
+    runFn: async ({ gate }) => { const r = await deps.launchRun({ build, exe, runDir, o: { realData, pageRows: false } }); return { ...r, figures: figuresOf(build, r, gate, provenance, memtrim) } } })
+  console.log(JSON.stringify({ mode: 'first-launch', build, status: out.status, memtrim, uptimeSeconds, firstAfterBoot, quiet: quiet.quiet, rows: out.result?.rows, windows: out.result?.watch?.newWindows.length }))
   return out
 }

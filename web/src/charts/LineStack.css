@@ -78,3 +78,10 @@
 .linestack .u-cursor-x { border-right: 1px solid var(--crosshair); }
 .linestack .u-cursor-y { border-bottom: 1px solid var(--crosshair); }
 .linestack .uplot { font-family: var(--font-sans); }
+
+/* Forced colours: uPlot draws its cursor lines and drag selection as HTML, so the theme would paint them away. */
+@media (forced-colors: active) {
+  .linestack .u-cursor-x { border-right-color: CanvasText; }
+  .linestack .u-cursor-y { border-bottom-color: CanvasText; }
+  .linestack .u-select { background-color: Highlight; opacity: 0.3; }
+}

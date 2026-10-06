@@ -5,7 +5,7 @@
 //   node run.mjs --mode reproduce [--runs 3] [--dry]            the W0B Tauri-spike figures, reproduced before anything new
 //   node run.mjs --mode minimise-sim [--hold-seconds 1800]      controller hidden for 30 to 60 minutes with LIVE streaming, then back
 //   node run.mjs --mode minimise-real [--hold-seconds 1800]     real minimise and restore on screen 2 behind the guard
-//   node run.mjs --first-launch [--build measure|smoke]         the first launch after a reboot: one command for the owner
+//   node run.mjs --first-launch [--build measure|smoke] [--memtrim on|off]   the first launch after a reboot: one command for the owner (the memtrim state is recorded as in the rows mode)
 //   node run.mjs --mode t8 [--playwright]                       smoke --attach-url on the offline demo server, WebView2 version recorded
 //   node run.mjs --mode soak [--hours 8] [--real-data]          the all-day soak at the shipped caps, sampled every 5 minutes
 //   node run.mjs --mode installer [--installer FILE]            the installer size row
@@ -70,7 +70,7 @@ async function main() {
   return result
 }
 
-import { fileURLToPath } from 'node:url'
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+import { isMainModule } from '../scripts/main-module.mjs'
+if (isMainModule(import.meta.url)) {
   main().then((out) => process.exit(exitCodeOf(out)), (e) => { console.error(e); process.exit(1) })
 }

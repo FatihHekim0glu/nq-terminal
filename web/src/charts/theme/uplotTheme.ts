@@ -2,6 +2,7 @@
 // Plain objects with no library import. uPlot writes into the options it is given, so build a fresh
 // theme per chart with makeUplotTheme(readChartTokens(), linkGroup); `uplotTheme` is the default
 // snapshot for reference and tests.
+import { forcedDash } from './chartContrast'
 import { DEFAULT_CHART_TOKENS, canvasFont, seriesColor, type ChartTokens } from './chartTokens'
 import { CHART_GEOMETRY as G } from './geometry'
 
@@ -80,13 +81,24 @@ export function uplotWithGrid(theme: UplotTheme, on = true): UplotTheme {
   return { ...theme, axes: theme.axes.map((a) => ({ ...a, grid: { ...a.grid, show: on } })) }
 }
 
+/**
+ * Under forced colours (chartContrast.ts) a series that differs from its neighbours only by colour
+ * gets the dash for its position as a second cue; in every other mode the style is returned as it is.
+ */
+function cue<T extends { readonly stroke: string; readonly width: number }>(
+  style: T, tokens: ChartTokens, position: number,
+): T & { readonly dash?: readonly number[] } {
+  const dash = forcedDash(tokens, position)
+  return dash !== undefined && dash.length > 0 ? { ...style, dash } : style
+}
+
 /** Series styles for the LineStack panes (6.2, 7.5). */
 export function lineStackSeries(tokens: ChartTokens = DEFAULT_CHART_TOKENS) {
   const c = tokens.color
   const w = G.lineWidth
   return {
     primary: { stroke: c.chartS1, width: G.primaryWidth, fill: c.chartArea },
-    benchmark: { stroke: c.accent2, width: G.primaryWidth },
+    benchmark: cue({ stroke: c.accent2, width: G.primaryWidth }, tokens, 1),
     /** EQ lower pane: area from 0, green above, dark red below; the white outline carries the shape. */
     perfDiff: { stroke: c.chartS1, width: w, fillPos: c.perfPos, fillNeg: c.perfNeg },
     /** DD lower pane: underwater area from 0 downward. */
@@ -95,9 +107,9 @@ export function lineStackSeries(tokens: ChartTokens = DEFAULT_CHART_TOKENS) {
     zero: { stroke: c.chartS1, width: w },
     /** RR: 63-session and 252-session rolling Sharpe over a grey zero line; rolling volatility. */
     rollShort: { stroke: c.chartS1, width: G.primaryWidth },
-    rollLong: { stroke: c.accent2, width: G.primaryWidth },
+    rollLong: cue({ stroke: c.accent2, width: G.primaryWidth }, tokens, 1),
     rollZero: { stroke: c.zeroLine, width: w },
-    rollVol: { stroke: c.rollVol, width: G.primaryWidth },
+    rollVol: cue({ stroke: c.rollVol, width: G.primaryWidth }, tokens, 2),
     /** RR: the ends of the full-sample bootstrap interval (SV5), thin amber dashes. */
     ciBound: { stroke: c.data, width: w, dash: [...G.fenceDash] },
     fence: { stroke: c.fence, width: w, dash: [...G.fenceDash] },
@@ -114,9 +126,9 @@ export function lineStackSeries(tokens: ChartTokens = DEFAULT_CHART_TOKENS) {
 }
 
 function compareSolid(index: number, tokens: ChartTokens) {
-  return { stroke: seriesColor(index, tokens), width: G.primaryWidth }
+  return cue({ stroke: seriesColor(index, tokens), width: G.primaryWidth }, tokens, index)
 }
 
 function compareDashed(index: number, tokens: ChartTokens) {
-  return { ...compareSolid(index, tokens), dash: [...G.compareDash] }
+  return { stroke: seriesColor(index, tokens), width: G.primaryWidth, dash: forcedDash(tokens, index) ?? [...G.compareDash] }
 }

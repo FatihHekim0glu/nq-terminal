@@ -97,6 +97,16 @@ def test_redact_local_paths_keeps_the_part_below_the_root_and_hides_the_home_fol
     assert doc["cache"].startswith("C:\\Users"), "the input is not changed"
 
 
+def test_redact_local_paths_strips_the_project_folder_under_a_home_when_the_root_resolves_elsewhere():
+    """Born failing: the root resolves through a junction to another drive, the research files record the home path."""
+    root = Path("E:/projects/nq-lab")
+    doc = {"cache": "C:\\Users\\Some One\\nq-lab\\results\\sealed\\qa.json",
+           "posix": "/home/someone/nq-lab/results/x.csv", "other": "C:\\Users\\Some One\\other-project\\a.py"}
+    out = redact_local_paths(doc, root)
+    assert out["cache"] == "results\\sealed\\qa.json"
+    assert out["posix"] == "results/x.csv" and out["other"] == "~\\other-project\\a.py"
+
+
 def test_born_failing_the_leak_check_sees_a_home_path():
     assert _leaks(json.dumps({"cache": "C:\\Users\\Some One\\nq-lab\\x"}))
 

@@ -61,7 +61,8 @@ def test_tags_follow_the_registry_rule(real):
         assert row.overlay is (raw.get("overlay") == "True")
     assert view.counts.overlays == sum(r.get("overlay") == "True" for r in rows.values())
     assert view.counts.edges == sum(r.tag == "edge" for r in view.rows)
-    assert view.counts.passed_edges == sum(r.tag == "edge" and r.verdict.split()[0] == "PASS" for r in view.rows)
+    passes = [r.verdict.split()[0].rstrip(",;:") == "PASS" for r in view.rows]
+    assert view.counts.passed_edges == sum(r.tag == "edge" and ok for r, ok in zip(view.rows, passes))
     assert view.counts.passed_edges <= view.counts.passed
 
 
@@ -90,11 +91,33 @@ def test_accepted_amendments_are_parsed_and_rehashed(real):
     assert len(listed) == text.count("| `experiments/")
     for row in real.registry().rows:
         for name in row.amendment_files:
-            entry = listed[f"experiments/{name}"]
+            entry = listed.get(f"experiments/{name}")
+            if entry is None:
+                continue  # written by the research side, accepted later: see the pending test below
             assert row.name in entry.rows and entry.unchanged is True, name
     for entry in view.amendments:
         assert entry.sha256_now == amendments.sha256_file(ROOT / entry.file)
         assert "\\" not in entry.file and not entry.file.startswith("/")
+
+
+def test_an_amendment_not_yet_accepted_is_never_listed_as_accepted(real):
+    """The research side owns the acceptance record: a row may name an amendment file that the record does not list
+    yet. The terminal then lists nothing for it (it never invents an acceptance) and the listed ones stay unchanged."""
+    view = real.registry().acceptances
+    listed = {a.file for a in view.amendments}
+    pending = {f"experiments/{name}" for row in real.registry().rows for name in row.amendment_files} - listed
+    for file in pending:
+        assert (ROOT / file).is_file(), f"{file} is named by a registry row but is not in experiments/"
+    assert view.all_unchanged is all(a.unchanged for a in view.amendments)
+
+
+def test_a_row_naming_an_unaccepted_amendment_adds_no_acceptance_entry(tmp_path):
+    """Born failing for an invented acceptance: the amendment is copied, the record does not list it."""
+    root = build_root(tmp_path, ("airfx_v0",))
+    copy_file(REAL_EXPERIMENTS / "airfx_v0_amend1.json", root, "experiments", "airfx_v0_amend1.json")
+    copy_file(REAL_RESULTS / "amendment_acceptances.md", root, "results", "amendment_acceptances.md")
+    view = ResearchService(root).registry().acceptances
+    assert "experiments/airfx_v0_amend1.json" not in {a.file for a in view.amendments}
 
 
 def test_a_changed_amendment_file_shows_as_changed(tmp_path):

@@ -773,6 +773,26 @@ mod tests {
     }
 
     #[test]
+    fn a_resolved_folder_may_sit_on_another_data_drive_but_never_on_c_or_in_a_research_folder() {
+        // D:\dev is a junction to E:\dev on a PC whose big folders moved: the name is on D:, the real folder is not.
+        for ok in [r"E:\dev\tmp\run-results-data", r"D:\dev\tmp\run1"] {
+            assert_eq!(folders::resolved_fault(Path::new(ok)), None, "{ok}");
+        }
+        for bad in [
+            r"C:\Users\someone\run1",
+            r"c:\runs\one",
+            r"E:\nq-lab\results\run1",
+            r"E:\nq-lab\Data\run1",
+            r"D:\nq-lab\live.\run1",
+        ] {
+            assert!(
+                folders::resolved_fault(Path::new(bad)).is_some(),
+                "{bad} must be refused"
+            );
+        }
+    }
+
+    #[test]
     fn the_shell_script_freezes_the_three_fields() {
         for part in [
             "bridgeVersion: 2",

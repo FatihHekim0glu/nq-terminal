@@ -5,7 +5,7 @@
 import type { ChartTable } from '../../charts/ChartA11y'
 import type { EChartsOption, LineSeriesOption } from '../../charts/echarts/core'
 import { signed, withUnit } from '../../charts/echarts/format'
-import { baseOption, isFiniteNumber, markLine, niceAxis, refLine, textFont, themeXAxis, themeYAxis } from '../../charts/echarts/shared'
+import { baseOption, forcedLineType, isFiniteNumber, markLine, niceAxis, refLine, textFont, themeXAxis, themeYAxis } from '../../charts/echarts/shared'
 import { CHART_GEOMETRY, DEFAULT_CHART_TOKENS, type ChartTokens } from '../../charts/theme'
 import { EVT } from '../../copy/evt'
 import { fillCopy } from '../../copy/workspace'
@@ -45,28 +45,30 @@ function points(offsets: readonly number[], values: ReadonlyArray<number | null>
 // fixtures.ts's makeStudy(), pinned by model.test.ts), so it needs a deliberate decision on that
 // fixture (and, if the z itself moves, a backend change plus a qa/crosscheck/p11_evt.py update) rather
 // than a silent change here. Tracked in docs/ANALYTICS_CATALOG.md MV8 and left open.
-function band(input: EventPathInput, fill: string): LineSeriesOption[] {
+function band(input: EventPathInput, fill: string, edge?: string): LineSeriesOption[] {
   const width = input.offsets.map((_, i) => {
     const lo = input.lower[i]
     const hi = input.upper[i]
     return isFiniteNumber(lo) && isFiniteNumber(hi) ? hi - lo : null
   })
-  const common = { type: 'line' as const, silent: true, showSymbol: false, stack: 'band', stackStrategy: 'all' as const, lineStyle: { width: 0 } }
+  // Forced colours paint chartArea as Canvas, so the band is outlined at 1px in a system colour instead (as VCONE does).
+  const lineStyle = edge === undefined ? { width: 0 } : { width: 1, color: edge }
+  const common = { type: 'line' as const, silent: true, showSymbol: false, stack: 'band', stackStrategy: 'all' as const, lineStyle }
   return [
     { ...common, id: 'band-base', data: points(input.offsets, input.lower) },
     { ...common, id: 'band', data: points(input.offsets, width), areaStyle: { color: fill, opacity: 1 } },
   ]
 }
 
-function line(id: string, data: Array<[number, number | null]>, colour: string, width: number, dashed = false): LineSeriesOption {
-  return { id, type: 'line', silent: true, showSymbol: false, z: 4, data, lineStyle: { color: colour, width, ...(dashed ? { type: [...CHART_GEOMETRY.fenceDash] } : {}) } }
+function line(id: string, data: Array<[number, number | null]>, colour: string, width: number, dashed = false, cue: { type?: number[] } = {}): LineSeriesOption {
+  return { id, type: 'line', silent: true, showSymbol: false, z: 4, data, lineStyle: { color: colour, width, ...(dashed ? { type: [...CHART_GEOMETRY.fenceDash] } : cue) } }
 }
 
 export function eventPathKey(input: EventPathInput, tokens: ChartTokens = DEFAULT_CHART_TOKENS): EventPathKeyItem[] {
   const c = tokens.color
   const key = [
     { label: EVT.mean, fill: c.chartS1 },
-    { label: EVT.band, fill: c.chartArea },
+    { label: EVT.band, fill: tokens.contrast === 'forced' ? c.chartGrid : c.chartArea },
     { label: EVT.eventLine, fill: c.zeroLine },
   ]
   return input.selected ? [...key, { label: `${EVT.selected} ${input.selected.label}`, fill: c.accent2 }] : key
@@ -79,8 +81,8 @@ export function eventPathOption(input: EventPathInput, tokens: ChartTokens = DEF
   const nice = niceAxis(Math.min(...values), Math.max(...values))
   const x = themeXAxis(tokens)
   const y = themeYAxis(tokens)
-  const series: LineSeriesOption[] = [...band(input, c.chartArea), line('mean', points(input.offsets, input.mean), c.chartS1, g.primaryWidth)]
-  if (input.selected) series.push(line('selected', points(input.offsets, input.selected.values), c.accent2, g.lineWidth))
+  const series: LineSeriesOption[] = [...band(input, c.chartArea, tokens.contrast === 'forced' ? c.chartGrid : undefined), line('mean', points(input.offsets, input.mean), c.chartS1, g.primaryWidth)]
+  if (input.selected) series.push(line('selected', points(input.offsets, input.selected.values), c.accent2, g.lineWidth, false, forcedLineType(tokens, 1)))
   const marks = [refLine({ yAxis: 0 }, c.zeroLine, { dashed: false }), refLine({ xAxis: 0 }, c.zeroLine, { label: EVT.eventLine, position: 'end' })]
   series.push({ id: 'marks', type: 'line', silent: true, data: [], markLine: markLine(marks, tokens) })
   return {

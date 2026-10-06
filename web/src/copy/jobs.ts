@@ -87,6 +87,7 @@ export const JOBS = {
     startBefore: 'The start may not be before 2010-01-01.',
     endFormat: 'Write the end as a real date, YYYY-MM-DD.',
     endAfter: 'The end may not be after 2022-01-01.',
+    frozenSpan: 'This strategy runs only on its frozen span: the repaired variant from 2010-01-01 to 2022-01-01.',
     endNotAfterStart: 'The end must be after the start.',
     runIdFormat: 'The run id must be t_ followed by 1 to 80 characters from A to Z, a to z, 0 to 9, the sign _, a dot or a hyphen.',
     runIdTaken: 'A job or a run already uses this id. Every run needs a fresh id.',

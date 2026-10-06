@@ -94,9 +94,37 @@ const FS_CHART: TokenDef = { css: '--fs-chart', value: '13px' }
 export type ChartColorKey = keyof typeof CHART_TOKENS
 export type ChartColors = Readonly<Record<ChartColorKey, string>>
 
+/**
+ * The contrast mode a token set was resolved under (chartContrast.ts): 'forced' is a Windows contrast
+ * theme (forced-colors: active), 'more' is prefers-contrast: more. Absent in the default look.
+ */
+export type ChartContrast = 'forced' | 'more'
+
 export interface ChartTokens {
   readonly color: ChartColors
   readonly font: { readonly family: string; readonly size: number }
+  readonly contrast?: ChartContrast
+}
+
+/** The five CSS system colours the charts draw with under a Windows contrast theme. */
+export interface SystemColours {
+  readonly canvas: string
+  readonly canvasText: string
+  readonly highlight: string
+  readonly grayText: string
+  readonly linkText: string
+}
+
+/**
+ * Used when the probe cannot resolve a system colour (no DOM, or a browser that leaves the keyword
+ * unresolved): the classic Windows High Contrast Black theme, black canvas with white text.
+ */
+export const SYSTEM_COLOUR_FALLBACK: SystemColours = {
+  canvas: '#000000',
+  canvasText: '#FFFFFF',
+  highlight: '#1AEBFF',
+  grayText: '#3FF23F',
+  linkText: '#FFFF00',
 }
 
 /** What readChartTokens needs from a CSSStyleDeclaration (getComputedStyle of the root). */
