@@ -1,30 +1,30 @@
 {
-  "source": "docs/desktop/spike_electron/results/t2.md (wave W0B, 2 October 2026, main hidden session, 10 accepted Tauri spike runs) and docs/desktop/baseline/backend_ready.md",
+  "source": "re-anchored 2026-10-07 from 5 counted reproduction runs (D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-1, D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-2); the five runs at a 60 s CPU gate of 10% or less of the two standard reproductions of 7 October 2026, 21:19 to 21:29 BST, under D:/dev/locks/QUIET with the paper node stopped and the owner's app closed. Before: docs/desktop/spike_electron/results/t2.md (wave W0B, 2 October 2026, main hidden session, 10 accepted Tauri spike runs) and docs/desktop/baseline/backend_ready.md",
   "shell": "Tauri spike (D:\\dev\\spikes\\tauri-shell, nq-shell.exe) with the fixture backend of the T2 harness",
   "rule": "04 D5.1: each figure within 10% of the spike median or inside its min to max range",
   "figures": {
     "memHomeMB": {
       "unit": "MB",
-      "n": 10,
-      "median": 164.9,
-      "min": 159.7,
-      "max": 168.4,
+      "n": 5,
+      "median": 168.2,
+      "min": 167.8,
+      "max": 170.4,
       "what": "whole-tree private working set at HOME, after 2.5 s idle"
     },
     "memHeavyMB": {
       "unit": "MB",
-      "n": 10,
-      "median": 369.5,
-      "min": 363.1,
-      "max": 375.2,
+      "n": 5,
+      "median": 368.1,
+      "min": 362,
+      "max": 370,
       "what": "whole-tree private working set after the heavy set"
     },
     "homeReadyMs": {
       "unit": "ms",
-      "n": 10,
-      "median": 834.5,
-      "min": 814,
-      "max": 892,
+      "n": 5,
+      "median": 957,
+      "min": 910,
+      "max": 1092,
       "what": "launch to HOME ready (spawn to the nqt:home-ready mark)"
     }
   },
@@ -41,28 +41,116 @@
   "breakdown": {
     "navStartAfterSpawnMs": {
       "unit": "ms",
-      "n": 10,
-      "median": 214,
-      "min": 206,
-      "max": 229,
+      "n": 5,
+      "median": 330,
+      "min": 311,
+      "max": 448,
       "what": "spawn to the start of the HOME document (the spike milestones and the page navigation start)"
     },
     "readySinceNavMs": {
       "unit": "ms",
-      "n": 10,
-      "median": 618.6,
-      "min": 604.7,
-      "max": 662.7,
+      "n": 5,
+      "median": 632.4,
+      "min": 599.5,
+      "max": 643.4,
       "what": "HOME document start to the nqt:home-ready mark"
     },
     "frameMs": {
       "unit": "ms",
-      "n": 10,
-      "median": 140.2,
-      "min": 136.2,
-      "max": 164.9,
+      "n": 5,
+      "median": 152.2,
+      "min": 136.1,
+      "max": 170.3,
       "what": "HOME document start to the first HOME frame (nqt:home-frame)"
     }
   },
-  "note": "The W0B run was taken before D2. Behind the session token the spike opens the launch page, which redeems a one-time code and leaves for the terminal, so the launch-to-ready figure carries one extra hop (about 25 ms on the run of 3 October). The breakdown shows where a difference sits: before the HOME document starts (process and window), or after (page and data)."
+  "reanchor": {
+    "date": "2026-10-07",
+    "runs": [
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-1\\reproduce-tauri-spike-s03-a1-measure.json",
+        "gatePct": 7.8
+      },
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-1\\reproduce-tauri-spike-s04-a1-measure.json",
+        "gatePct": 7.7
+      },
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-2\\reproduce-tauri-spike-s02-a1-measure.json",
+        "gatePct": 9.6
+      },
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-2\\reproduce-tauri-spike-s03-a1-measure.json",
+        "gatePct": 4.8
+      },
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-2\\reproduce-tauri-spike-s04-a1-measure.json",
+        "gatePct": 4.8
+      }
+    ],
+    "skipped": [
+      {
+        "file": "D:\\dev\\v032\\evening-runs\\20261007-2116-0.3.2\\w0b-1\\reproduce-tauri-spike-s02-a1-measure.json",
+        "why": "gate 11.2% above 10%"
+      }
+    ],
+    "previous": {
+      "figures": {
+        "memHomeMB": {
+          "unit": "MB",
+          "n": 10,
+          "median": 164.9,
+          "min": 159.7,
+          "max": 168.4,
+          "what": "whole-tree private working set at HOME, after 2.5 s idle"
+        },
+        "memHeavyMB": {
+          "unit": "MB",
+          "n": 10,
+          "median": 369.5,
+          "min": 363.1,
+          "max": 375.2,
+          "what": "whole-tree private working set after the heavy set"
+        },
+        "homeReadyMs": {
+          "unit": "ms",
+          "n": 10,
+          "median": 834.5,
+          "min": 814,
+          "max": 892,
+          "what": "launch to HOME ready (spawn to the nqt:home-ready mark)"
+        }
+      },
+      "breakdown": {
+        "navStartAfterSpawnMs": {
+          "unit": "ms",
+          "n": 10,
+          "median": 214,
+          "min": 206,
+          "max": 229,
+          "what": "spawn to the start of the HOME document (the spike milestones and the page navigation start)"
+        },
+        "readySinceNavMs": {
+          "unit": "ms",
+          "n": 10,
+          "median": 618.6,
+          "min": 604.7,
+          "max": 662.7,
+          "what": "HOME document start to the nqt:home-ready mark"
+        },
+        "frameMs": {
+          "unit": "ms",
+          "n": 10,
+          "median": 140.2,
+          "min": 136.2,
+          "max": 164.9,
+          "what": "HOME document start to the first HOME frame (nqt:home-frame)"
+        }
+      },
+      "source": "docs/desktop/spike_electron/results/t2.md (wave W0B, 2 October 2026, main hidden session, 10 accepted Tauri spike runs) and docs/desktop/baseline/backend_ready.md"
+    },
+    "decision": "Re-anchored on 7 October 2026 by manager decision under the owner's full permission, because the reference shell, which runs no terminal code, moved after a WebView2 runtime update, a reboot and the lab's move to E:. Neither standard reproduction of that evening reproduced launch to HOME ready (1,026 and 946 ms against the 917.95 ms band edge; both memory figures and HOME document to ready inside their bands; the miss before the HOME document, spawn to the HOME document 385 and 314 ms against 214 ms), and the interleaved A/B of the same evening read 0.2.1 itself far slower than on 5 October (first launch 6,336 ms against 3,304 ms, backend ready 1,896 ms against 1,407.5 ms). The band rule is unchanged.",
+    "evidence": "docs/desktop/g2_windows/results.md section G1 (the A/B and the reproductions); the raw records under D:/dev/v032/evening-runs (20261007-2116-0.3.2 w0b-1, w0b-2; 20261007-2142-0.3.2 ab, w0b-anchor)"
+  },
+  "note": "The W0B run was taken before D2. Behind the session token the spike opens the launch page, which redeems a one-time code and leaves for the terminal, so the launch-to-ready figure carries one extra hop (about 25 ms on the run of 3 October). The breakdown shows where a difference sits: before the HOME document starts (process and window), or after (page and data). Re-anchored on 2026-10-07: the reference now comes from runs that include the launch-page hop, on the machine of that date (WebView2 runtime and disk layout as recorded in the run records)."
 }

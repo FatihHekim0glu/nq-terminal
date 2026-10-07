@@ -106,6 +106,16 @@ backend's lock) that redeems it and leaves for the terminal: one extra hop that 
 breakdown (spawn to the HOME document, HOME document to ready, first frame) so a difference can be placed before or after the page starts,
 and the real backend alone is read for reference (`informational`).
 
+The reference was re-anchored on 7 October 2026 by manager decision under the owner's full permission, because the reference shell, which
+runs no terminal code, moved after a WebView2 runtime update, a reboot and the lab's move to E:. The W0B figures of 2 October 2026 (launch to
+HOME ready 834.5 ms, 814 to 892 ms, band edge 917.95 ms; memory at HOME 164.9 MB; after the heavy set 369.5 MB; n = 10) are kept in the file
+under `reanchor.previous`. The new figures come from the five runs at a CPU gate of 10% or less of that evening's two standard reproductions
+(launch to HOME ready 957 ms, 910 to 1,092 ms, band 861.3 to 1,092 ms; memory at HOME 168.2 MB; after the heavy set 368.1 MB; spawn to the
+HOME document 330 ms against 214 ms; n = 5). The evidence is the interleaved A/B of the same evening, which read 0.2.1 itself far slower on
+that machine and lab than on 5 October (first launch 6,336 against 3,304 ms), in `docs/desktop/g2_windows/results.md` (section G1) and the
+register (`docs/desktop/owner_decisions_windows.md`, entry 1.8). The band rule is unchanged. Since then a reproduction proves that the machine
+is where it was on 7 October 2026, no longer that the harness reproduces the T2 result of W0B.
+
 ## Safety
 
 - Every spawn is hidden (`windowsHide`) with a PATH that has no `D:\dev\mingw` and no `D:\dev\cargo` (`paths.mjs`), no `WEBVIEW2_*`
@@ -151,7 +161,7 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 | `lib\watchlists.mjs`, `lib\pytestlock.mjs` | the shared window-watch lists read out of the three watches (parity test), the wait on a backend pytest session |
 | `lib\mem.*`, `stop.mjs`, `survivors.mjs`, `proc.mjs`, `backend.mjs`, `shelllog.mjs` | memory counters, identity-checked teardown, processes, backends, the shell log (`shelllog.mjs` also reads `keys_installed` back: a measure run whose engine reads devtools, accelerator keys or zoom control as on is marked failed) |
 | `lib\reliability.mjs`, `tailog.mjs`, `tailog.py` | the launch-reliability figures (outcome, READY to proof, summary) and the backend log tail |
-| `reference\w0b-tauri.json` | the W0B figures the reproduction is judged against |
+| `reference\w0b-tauri.json` | the figures the reproduction is judged against: re-anchored on 7 October 2026 (see Reproduction first), with the W0B figures under `reanchor.previous` |
 | `tests\` | `node --test` unit tests, each guard with a born-failing case |
 
 `pagejs.mjs` and `probe.js` are the page scripts of the T2 harness (the screen wait, the pivot step and the HOME marks), unchanged.

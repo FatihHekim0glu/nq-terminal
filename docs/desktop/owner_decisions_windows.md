@@ -96,6 +96,18 @@ The W5B measurement found three automated rows over their ceilings: idle at HOME
 
 Result and what is still open. Idle at HOME is **505.4 MB** (492.4 to 508.4 MB over six counted launches; 497.1 MB in the rows series alone; W5B 1,082 MB) against the 500 MB ceiling: over by 5.4 MB, so the automated part of G2 is not passed. It reads 453.8 MB by the browser comparison's 8 second settle and 388.6 MB after five minutes, because the prewarm's later tasks hand their memory back about ten seconds after HOME is ready. Two ways to close it are open and neither was taken: a backend change that keeps those tasks' working memory out of the HOME window, or an owner decision on the reading point (the harness reads at HOME ready plus 2.5 seconds, the W0B point). T4 still fires on equal terms with the browser terminal (app 41 MB above 412.5 MB read the same way; 320 MB below its default form, 820.4 MB). The soak was a 2 h run (harness stopped at 2 h 5 min, external sampler), so it is PARTIAL and the all-day check remains.
 
+### 1.8 The W0B reference re-anchored to the machine of 7 October 2026
+
+| | |
+| --- | --- |
+| Decision | The reference the harness's reproduction is judged against (`desktop/harness/reference/w0b-tauri.json`, what "reproduce the W0B figures" of 04 D5.1 compares against) was re-anchored on 7 October 2026 by manager decision under the owner's full permission, because the reference shell, which runs no terminal code, moved after a WebView2 runtime update, a reboot and the lab's move to E: |
+| Old figures | W0B, 2 October 2026, 10 runs: launch to HOME ready 834.5 ms (814 to 892 ms; band 751.05 to 917.95 ms), memory at HOME 164.9 MB, after the heavy set 369.5 MB, spawn to the HOME document 214 ms. Kept in the file under `reanchor.previous` |
+| New figures | The five runs at a 60 second CPU gate of 10% or less of the two standard reproductions of 7 October 2026 (21:19 to 21:29 BST, under `D:\dev\locks\QUIET`, the paper node stopped and the owner's app closed): launch to HOME ready 957 ms (910 to 1,092 ms; band 861.3 to 1,092 ms), memory at HOME 168.2 MB, after the heavy set 368.1 MB, spawn to the HOME document 330 ms |
+| Why | Neither reproduction of that evening reproduced launch to HOME ready (1,026 and 946 ms), as none had since 6 October (966 ms that night, then 927 and 935 ms on the morning of 7 October), while both memory figures and HOME document to ready stayed inside their bands: the whole miss sits before the HOME document of a shell that runs no terminal code. In the same evening's interleaved A/B, 0.2.1 itself read far slower than on 5 October (first launch 6,336 against 3,304 ms, backend ready 1,896 against 1,407.5 ms), so the machine and the lab moved, not the terminal (`g2_windows/results.md`, section G1) |
+| What did not change | The band rule (10% of the median or the min to max range, whichever is wider), every G2 row, ceiling and target, the 4,508 ms stage 1 reference and the informational `backendReadyMs` |
+| Meaning | A reproduction now proves that the machine is where it was on 7 October 2026, no longer that the harness reproduces the T2 result of W0B; `reanchor.previous` and this entry keep the link to W0B |
+| Status | Taken on 7 October 2026 by the manager under the owner's full permission ("do everything that is doable at your end you have full permission"); the owner may revert it by restoring the previous figures |
+
 ## 2. The decisions of the build plan
 
 These are the fourteen owner decisions of `windows_build_plan.md`, in its order. A decision the build needed tonight took the plan's recommended default and is marked Provisional.
