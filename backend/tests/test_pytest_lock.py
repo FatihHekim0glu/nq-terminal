@@ -45,8 +45,51 @@ def test_a_lock_older_than_two_hours_is_stale_and_a_younger_one_is_not(tmp_path:
     os.utime(old, (now - 2 * HOUR - 60, now - 2 * HOUR - 60))
     (tmp_path / "PYTEST.notes.txt").write_text("not a lock", encoding="utf-8")
     (tmp_path / "QUIET_MEASURE").write_text("another lock", encoding="utf-8")
-    assert sorted(p.name for p in fresh_session_locks(tmp_path, now)) == [fresh.name, young.name]
-    assert fresh_session_locks(tmp_path / "missing", now) == []
+    assert sorted(p.name for p in fresh_session_locks(tmp_path, now, is_alive=lambda pid: True)) == [fresh.name, young.name]
+    assert fresh_session_locks(tmp_path / "missing", now, is_alive=lambda pid: True) == []
+
+
+def _dead_pid() -> int:
+    """The pid of a process that has already exited (not reused within the test)."""
+    child = subprocess.Popen([sys.executable, "-c", ""])
+    child.wait()
+    return child.pid
+
+
+def test_a_lock_whose_pid_is_not_running_is_stale_at_once_and_a_live_one_is_fresh(tmp_path: Path):
+    live = write_session_lock(tmp_path, os.getpid())
+    dead = write_session_lock(tmp_path, _dead_pid())
+    assert conftest.pid_running(os.getpid()) is True
+    assert conftest.pid_running(int(dead.name.split(".")[1])) is False
+    assert [p.name for p in fresh_session_locks(tmp_path)] == [live.name], "the dead session's recent lock is stale"
+
+
+def test_a_live_pid_is_not_enough_when_the_lock_is_over_two_hours_old(tmp_path: Path):
+    old = write_session_lock(tmp_path, os.getpid())
+    when = time.time() - 2 * HOUR - 60
+    os.utime(old, (when, when))
+    assert fresh_session_locks(tmp_path) == [], "pid reuse: the age limit stays as the fallback"
+
+
+def test_a_lock_name_without_a_pid_is_judged_by_its_age_alone(tmp_path: Path):
+    odd = tmp_path / "PYTEST.session-a.lock"
+    odd.write_text("{}", encoding="utf-8")
+    assert fresh_session_locks(tmp_path) == [odd]
+
+
+def test_removing_a_lock_that_cannot_be_deleted_is_a_note_and_never_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    path = write_session_lock(tmp_path, 4242)
+    notes: list[str] = []
+    monkeypatch.setattr(conftest, "_NOTES", notes)
+
+    def refuse(self, missing_ok=False):
+        raise PermissionError(13, "Access is denied", str(self))
+
+    monkeypatch.setattr(Path, "unlink", refuse)
+    assert remove_session_lock(path) is False, "nothing was removed"
+    assert len(notes) == 1 and "PYTEST.4242.lock" in notes[0] and "not removed" in notes[0], notes
+    monkeypatch.undo()
+    assert path.exists(), "the file is still there for the next session's stale check"
 
 
 def test_the_session_hooks_skip_an_xdist_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

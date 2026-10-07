@@ -111,10 +111,11 @@ fn assert_an_exit_with_its_code(name: &str, mode: &Value, proofs_expected: usize
     let failure = supervise::spawn(&spec_for(&lab), &expect_for(&lab))
         .expect_err("a backend that ended is not used");
     assert!(
-        matches!(failure, Failure::Exited),
+        failure == Failure::Exited(Some(EXIT_CODE as u32)),
         "an ended backend was reported as {failure:?}"
     );
     assert_eq!(failure.code(), "exited");
+    assert_eq!(failure.exit_code(), Some(EXIT_CODE as u32));
     wait_until(Duration::from_secs(10), "the fake's record", || {
         !fake_ports(&lab).is_empty()
     });
@@ -163,6 +164,9 @@ impl Sink for Recording {
     fn stopped(&self, code: &str) {
         self.0.push(format!("stopped {code}"));
     }
+    fn exited(&self, exit_code: Option<u32>) {
+        self.0.push(format!("exited {exit_code:?}"));
+    }
     fn gave_up(&self, _log: &Path) -> AfterStop {
         self.0.push("gave_up".into());
         AfterStop::Quit
@@ -189,12 +193,12 @@ fn the_loop_treats_an_exit_during_the_proof_retry_as_a_crash_not_a_refusal() {
     assert_eq!(
         calls,
         [
-            "stopped exited",
-            "stopped exited",
-            "stopped exited",
+            "exited Some(7)",
+            "exited Some(7)",
+            "exited Some(7)",
             "gave_up"
         ],
-        "each ended backend was a crash and was restarted"
+        "each ended backend was a crash, was restarted, and the stopped page was told its exit code"
     );
     assert_eq!(records_in(&lab.lines()).len(), 3, "three backends started");
     assert!(shared.current().is_none());
@@ -274,7 +278,7 @@ fn an_unanswered_proof_from_an_ended_backend_is_an_exit_with_its_code() {
     for m in unanswered {
         assert!(run::unanswered(&m, &OWN), "{m:?}");
         let failure = run::proof_failure(m.clone(), 2, &ended, &OWN);
-        assert!(matches!(failure, Failure::Exited), "{m:?}: {failure:?}");
+        assert_eq!(failure, Failure::Exited(Some(ENDED_CODE)), "{m:?}");
     }
     let logged: Vec<Value> = crash::events()
         .into_iter()

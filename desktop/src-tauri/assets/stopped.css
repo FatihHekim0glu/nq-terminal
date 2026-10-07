@@ -15,3 +15,8 @@ main:not(:has(.reason:target)) #exited {
   font-family: var(--font-mono);
   color: var(--data);
 }
+
+/* The exit code line is filled in by the shell when it knows the code; with none it takes no room. */
+.exit-code:empty {
+  display: none;
+}

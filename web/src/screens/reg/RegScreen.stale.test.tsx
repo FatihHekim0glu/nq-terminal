@@ -2,7 +2,7 @@
 // V031: REG's registry staleness banner. A stale registry (the backend's `stale`, `generated_at` and `newest_input_at`)
 // shows one polite status line with an icon, and no control that writes anything; a fresh registry, and the answer of a
 // backend that serves none of the fields, show nothing and leave the screen as it always was.
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetConnection } from '../../api/connection'
 import { resetMessage } from '../../chrome/MessageLine.store'
@@ -11,6 +11,7 @@ import { stubLayout } from '../../grids/testing'
 import { ANSWERS, mountScreen, panelParams, stubApi } from './testHarness'
 import { REGISTRY } from './regFixtures'
 import RegScreen from './RegScreen'
+import RegStaleBanner from './RegStaleBanner'
 
 beforeAll(() => stubLayout(1200))
 beforeEach(() => {
@@ -37,11 +38,19 @@ function banner(): HTMLElement {
   return region
 }
 
+/** One macrotask: the banner inserts its line a tick after it is in the page. */
+async function tick(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 async function open(registry: unknown): Promise<HTMLElement> {
   stubApi({}, { '/api/registry': registry })
   mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
   await screen.findByRole('grid', { name: /Registry board/ })
   await waitFor(() => expect(screen.getAllByRole('row').length).toBeGreaterThan(1))
+  await tick()
   return banner()
 }
 
@@ -102,5 +111,98 @@ describe('REG staleness banner', () => {
     mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
     await screen.findByRole('grid', { name: /Registry board/ })
     expect(seen.filter((r) => r.method !== 'GET')).toEqual([])
+  })
+})
+
+/** Counts the times text is added to the live region (a screen reader announces an insertion into an aria-live region). */
+function watchInsertions(region: HTMLElement): { readonly count: () => number; readonly stop: () => void } {
+  let added = 0
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of Array.from(record.addedNodes)) if ((node.textContent ?? '').trim() !== '') added += 1
+    }
+  })
+  observer.observe(region, { childList: true, subtree: true, characterData: true })
+  return { count: () => added, stop: () => observer.disconnect() }
+}
+
+describe('REG staleness line is announced when the data is already there', () => {
+  const stale = { ...REGISTRY, ...STALE_FIELDS }
+
+  it('mounts the status region empty even when the registry is cached on the first render, then inserts the line once', async () => {
+    const { container } = render(<RegStaleBanner registry={stale} />)
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    expect(region.getAttribute('aria-live')).toBe('polite')
+    expect(region.textContent).toBe('')
+    const watch = watchInsertions(region)
+    await tick()
+    expect(region.textContent).toContain('Registry is older than the newest result')
+    await tick()
+    expect(watch.count()).toBe(1)
+    watch.stop()
+  })
+
+  it('announces the line once after a cold load too, in the same region', async () => {
+    const { container, rerender } = render(<RegStaleBanner registry={undefined} />)
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    await tick()
+    expect(region.textContent).toBe('')
+    const watch = watchInsertions(region)
+    rerender(<RegStaleBanner registry={stale} />)
+    await tick()
+    expect(region.textContent).toContain('Registry is older than the newest result')
+    expect(container.querySelector('[data-reg-stale]')).toBe(region)
+    await tick()
+    expect(watch.count()).toBe(1)
+    watch.stop()
+  })
+
+  it('does not announce again when the same answer is read again', async () => {
+    const { container, rerender } = render(<RegStaleBanner registry={stale} />)
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    await tick()
+    const watch = watchInsertions(region)
+    rerender(<RegStaleBanner registry={{ ...stale }} />)
+    await tick()
+    expect(watch.count()).toBe(0)
+    expect(region.textContent).toContain('Registry is older than the newest result')
+    watch.stop()
+  })
+
+  it('announces nothing for a fresh registry, cached or cold', async () => {
+    const fresh = { ...stale, stale: false }
+    const { container, rerender } = render(<RegStaleBanner registry={fresh} />)
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    const watch = watchInsertions(region)
+    await tick()
+    rerender(<RegStaleBanner registry={{ ...fresh }} />)
+    await tick()
+    expect(region.textContent).toBe('')
+    expect(region.querySelector('svg')).toBeNull()
+    expect(watch.count()).toBe(0)
+    watch.stop()
+  })
+
+  it('empties the region when the registry becomes fresh, and announces again if it goes stale again', async () => {
+    const { container, rerender } = render(<RegStaleBanner registry={stale} />)
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    await tick()
+    rerender(<RegStaleBanner registry={{ ...stale, stale: false }} />)
+    await tick()
+    expect(region.textContent).toBe('')
+    const watch = watchInsertions(region)
+    rerender(<RegStaleBanner registry={stale} />)
+    await tick()
+    expect(watch.count()).toBe(1)
+    watch.stop()
+  })
+
+  it('keeps the icon and no control in the inserted line', async () => {
+    const { container } = render(<RegStaleBanner registry={stale} />)
+    await tick()
+    const region = container.querySelector<HTMLElement>('[data-reg-stale]')!
+    expect(region.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+    expect(within(region).queryAllByRole('button')).toHaveLength(0)
+    expect(within(region).queryAllByRole('link')).toHaveLength(0)
   })
 })

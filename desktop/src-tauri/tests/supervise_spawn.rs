@@ -311,10 +311,10 @@ fn a_backend_that_ends_with_the_untrusted_lock_code_is_refused_at_once() {
 
 #[test]
 fn any_other_exit_before_the_handshake_is_still_an_exit() {
-    for code in [1, 2, 3] {
+    for code in [1u32, 2, 3] {
         let lab = fake_lab("early-exit", &json!({ "exit_before_handshake": code }));
         let failure = supervise::spawn(&spec_for(&lab), &expect_for(&lab)).expect_err("it ended");
-        assert_eq!(failure, Failure::Exited, "exit code {code}");
+        assert_eq!(failure, Failure::Exited(Some(code)), "exit code {code}");
     }
 }
 

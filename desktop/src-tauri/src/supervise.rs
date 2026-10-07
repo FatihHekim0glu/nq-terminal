@@ -576,7 +576,7 @@ fn admit(started: &Started, ready: &Ready) -> Result<Owned, Failure> {
 }
 
 /// What an end before the handshake means: the untrusted-lock exit code is a refusal that no restart can cure, any
-/// other end (or one that has not finished in time) is an exit.
+/// other end is an exit that carries its exit code, and one that has not finished in time is an exit without one.
 fn ended_before_handshake(launcher: &Owned) -> Failure {
     // SAFETY: the launcher's own process handle, open for the life of `Started`.
     let ended = unsafe { WaitForSingleObject(launcher.raw(), EXIT_CODE_WAIT_MS) } == WAIT_OBJECT_0;
@@ -585,7 +585,8 @@ fn ended_before_handshake(launcher: &Owned) -> Failure {
     let read = unsafe { GetExitCodeProcess(launcher.raw(), &mut code) };
     match (ended, read) {
         (true, Ok(())) if code == EXIT_UNTRUSTED_LOCK => Failure::Refused(Mismatch::LockUntrusted),
-        _ => Failure::Exited,
+        (true, Ok(())) => Failure::Exited(Some(code)),
+        _ => Failure::Exited(None),
     }
 }
 
@@ -596,7 +597,7 @@ fn handshake(
     nonce: &str,
 ) -> Result<Ready, Failure> {
     let (tx, rx) = mpsc::sync_channel(1);
-    let stdout = started.stdout.take().ok_or(Failure::Exited)?;
+    let stdout = started.stdout.take().ok_or(Failure::Exited(None))?;
     start_reader(stdout, spec.log_path(), tx);
     let secrets = format!("TOKEN {token}\nNONCE {nonce}\n");
     if started.stdin.write_all(secrets.as_bytes()).is_err() {

@@ -11,11 +11,16 @@ RunIndex
 Reading
 - `result.json` is 1 to 6.6 MB. It is read through the Phase 1 FileCache (confinement, retry on a decode
   error, mtime and size validation) with one parser per section, so a summary does not sanitise 8,588 fills:
-  `head` (everything except `trades`, `fills` and `strategy_log`, plus counts and the log metadata), `trades`,
-  `fills` and `strategy_log`. Values are sanitised (NaN to None, ns ints to ISO plus epoch seconds, Decimal
-  strings kept plus a float) and frozen; responses get thawed copies. The equity curve reads its own projection
-  of `trades` or `strategy_log.snapshots` (`curve:trades`, `curve:snapshots`: only the fields it reads), so the
-  ledger's anchor pairs and an equity line never sanitise a whole log.
+  `summary` (everything except `trades`, `fills` and `strategy_log`, plus the run's kind: what a row of the run
+  list and a ledger row read; V031B, found without decoding the large members, `run_head_scan.py`), `head` (the
+  same plus counts and the log metadata: the detail view), `trades`, `fills` and `strategy_log`. Values are
+  sanitised (NaN to None, ns ints to ISO plus epoch seconds, Decimal strings kept plus a float) and frozen;
+  responses get thawed copies. The equity curve reads its own projection of `trades` or `strategy_log.snapshots`
+  (`curve:trades`, `curve:snapshots`: only the fields it reads), so the ledger's anchor pairs and an equity line
+  never sanitise a whole log.
+- The run list (V031B) reads each run's `summary` through `run_views.RunViewIndex` when the service has a state
+  folder: groups of views kept in the state folder's cache, so a later start that must rebuild the list reads again
+  only the group of a run that was added, changed or removed.
 
 Badges (ARCHITECTURE 3.1): probe when `data.lookahead_probe` exists or the name holds `_probe_`; anchor for
 `_regress_` and `_haltfix_`; ledgered by joining `results/ledger.csv`; unusable when `balance_check.ok` is not
@@ -70,9 +75,12 @@ from nq_terminal.services.files import (
     sanitise,
     thaw,
 )
+from nq_terminal.services import result_cache
 from nq_terminal.services.research import ResearchService, service_for_root
 from nq_terminal.services.run_curves import CURVE_PARSERS, CURVE_SNAPSHOTS, CURVE_TRADES
 from nq_terminal.services.run_curves import kept_from
+from nq_terminal.services.run_head_scan import framed_head
+from nq_terminal.services.run_views import RunViewIndex
 
 RESCAN_S = 5.0
 CACHE_BYTES = 1024**3
@@ -88,6 +96,8 @@ UNUSABLE_REASON = "balance check failed: the run is unusable (rule 4)"
 REGRESS_CHECK = "regress_check"
 LOG_SECTIONS = ("decisions", "closes", "notes", "rolls", "snapshots")
 LARGE_KEYS = ("trades", "fills", "strategy_log")
+LOG_KEY = "strategy_log"
+KIND_KEYS = ("instruments", "snapshots")  # the strategy-log members `run_kind` reads
 META = "__terminal_meta__"
 REALISED_LABEL = "realised, no MTM"
 SNAPSHOT_LABEL = "mark to market snapshots"
@@ -131,9 +141,13 @@ def anchor_base_name(run_id: str) -> str | None:
 def run_kind(doc: Mapping[str, Any]) -> str:
     """`book` for multi-instrument logs (dtsmom), `sized` for snapshot books, else `intraday`."""
     log = doc.get("strategy_log")
-    if isinstance(log, Mapping) and "instruments" in log:
+    return _kind_of(frozenset(k for k in KIND_KEYS if k in log) if isinstance(log, Mapping) else frozenset())
+
+
+def _kind_of(log_keys: frozenset[str]) -> str:
+    if "instruments" in log_keys:
         return "book"
-    if isinstance(log, Mapping) and "snapshots" in log:
+    if "snapshots" in log_keys:
         return "sized"
     return "intraday"
 
@@ -361,6 +375,20 @@ def _head_of(doc: dict[str, Any]) -> dict[str, Any]:
     return head
 
 
+def parse_summary(raw: bytes) -> Any:
+    """What a row of the run list and a ledger row read: the head without its counts and log metadata (V031B). In the
+    research writer's layout the large members are never decoded (`run_head_scan.framed_head`); any other file is
+    decoded whole, as for the head. Each value is the one `parse_head` gives."""
+    framed = framed_head(raw, large=LARGE_KEYS, log_key=LOG_KEY, log_probe=KIND_KEYS)
+    if framed is None:
+        return freeze(sanitise(kept_from(raw, _summary_of)))
+    return freeze(sanitise({**framed.members, META: {"kind": _kind_of(framed.log_keys)}}))
+
+
+def _summary_of(doc: dict[str, Any]) -> dict[str, Any]:
+    return {**{k: v for k, v in doc.items() if k not in LARGE_KEYS}, META: {"kind": run_kind(doc)}}
+
+
 def _section_parser(key: str) -> Callable[[bytes], Any]:
     def parse(raw: bytes) -> Any:
         return freeze(sanitise(kept_from(raw, lambda doc: doc.get(key))))
@@ -371,7 +399,7 @@ def _section_parser(key: str) -> Callable[[bytes], Any]:
 SECTION_PARSERS = {key: _section_parser(key) for key in LARGE_KEYS}
 
 _PARSERS: Mapping[str, Callable[[bytes], Any]] = MappingProxyType(
-    {"head": parse_head, **SECTION_PARSERS, **CURVE_PARSERS})
+    {"head": parse_head, "summary": parse_summary, **SECTION_PARSERS, **CURVE_PARSERS})
 
 
 # ---------------------------------------------------------------- ledger file
@@ -433,13 +461,15 @@ class RunService:
 
     def __init__(self, *, data_root: Path, project_root: Path, cache: FileCache | None = None,
                  clock: Callable[[], float] = time.monotonic, rescan_s: float = RESCAN_S,
-                 research: ResearchService | None = None):
+                 research: ResearchService | None = None, state_dir: Path | None = None):
         self.data_root = Path(data_root)
         self.project_root = Path(project_root)
         self._research = research
         self.ledger_path = self.data_root / "results" / "ledger.csv"
         self.cache = cache if cache is not None else FileCache(roots=[self.data_root], max_bytes=CACHE_BYTES)
         self.index = RunIndex(self.data_root / "backtests" / "output", clock=clock, rescan_s=rescan_s)
+        # V031B: the run list's per-run index in the state folder's cache (None: every view is read from its file)
+        self.views = RunViewIndex(state_dir=state_dir, data_root=self.data_root) if state_dir is not None else None
 
     # ----- reading
 
@@ -469,15 +499,28 @@ class RunService:
 
     def summaries(self) -> list[RunSummary]:
         refs = self._ledger_refs()
-        return [self._summary_or_error(entry, refs) for entry in self.index.entries().values()]
+        entries = list(self.index.entries().values())
+        if self.views is None:
+            views = {entry.run_id: self._view_or_error(entry) for entry in entries}
+        else:
+            views = self.views.views(entries, self._view_or_error)
+        return [self._summary_or_error(entry, views[entry.run_id], refs) for entry in entries]
 
-    def _summary_or_error(self, entry: RunEntry, refs: Mapping[str, LedgerRef]) -> RunSummary:
+    def _view_or_error(self, entry: RunEntry) -> Mapping[str, Any] | str:
+        """The run's summary view, or the text of the error that made it unreadable."""
         try:
-            head = self._read(entry, "head")
+            return self._read(entry, "summary")
         except RunUnreadable as exc:
-            return RunSummary(run_id=entry.run_id, readable=False, error=str(exc), sidecars=list(entry.sidecars),
+            # an error before the file read (stat, confinement, resolve) leaves nothing recorded: never cache it
+            result_cache.record_unstable(entry.result)
+            return str(exc)
+
+    def _summary_or_error(self, entry: RunEntry, view: Mapping[str, Any] | str,
+                          refs: Mapping[str, LedgerRef]) -> RunSummary:
+        if isinstance(view, str):
+            return RunSummary(run_id=entry.run_id, readable=False, error=view, sidecars=list(entry.sidecars),
                               is_anchor=is_anchor(entry.run_id), is_probe=PROBE_MARKER in entry.run_id)
-        return self._summary(entry, head, refs.get(entry.run_id))
+        return self._summary(entry, view, refs.get(entry.run_id))
 
     def _summary(self, entry: RunEntry, head: Mapping[str, Any], ledger: LedgerRef | None) -> RunSummary:
         cfg, summ = _mapping(head.get("config")), _mapping(head.get("summary"))
@@ -718,7 +761,7 @@ class RunService:
         matches = None
         if entry is not None:
             try:
-                matches = _matches_result(values, self._read(entry, "head"))
+                matches = _matches_result(values, self._read(entry, "summary"))
             except RunUnreadable:
                 matches = None
         return LedgerRow(**values, run_found=entry is not None, matches_result=matches)

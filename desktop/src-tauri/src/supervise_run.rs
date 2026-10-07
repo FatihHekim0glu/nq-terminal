@@ -193,7 +193,7 @@ pub fn proof_failure(m: Mismatch, port: u16, processes: &[HANDLE], own: &[u32]) 
         "supervise_exit_during_proof",
         json!({ "port": port, "code": code, "after": m.code() }),
     );
-    Failure::Exited
+    Failure::Exited(Some(code))
 }
 
 /// The navigation check (05 G08): the backend has not ended, and its port passes the ownership check and a fresh
@@ -340,6 +340,12 @@ pub enum AfterStop {
 pub trait Sink: Send + Sync {
     fn ready(&self, port: u16, session: &str);
     fn stopped(&self, code: &str);
+    /// The backend ended (the "exited" reason) with this exit code, None when it could not be read. The default only
+    /// shows the reason; the window also writes the code into the stopped page in words.
+    fn exited(&self, exit_code: Option<u32>) {
+        let _ = exit_code;
+        self.stopped("exited");
+    }
     fn gave_up(&self, log: &Path) -> AfterStop;
     /// The backend reports the page build `state` (stale or missing). True when the page was rebuilt and the loop
     /// should start the backend again; false when the sink has shown why not. The default shows the stopped page.
@@ -521,10 +527,14 @@ fn serve(shared: &Shared, sink: &dyn Sink, backend: Backend) -> Option<Duration>
     );
     shared.set_current(Some(backend.clone()));
     sink.ready(backend.port(), backend.session());
-    let mut handles = backend.exit_handles();
+    let own_handles = backend.exit_handles();
+    let mut handles = own_handles.clone();
     handles.push(shared.stop_event.raw());
     // SAFETY: an unbounded wait on open handles; the stop event ends it on close.
     let _ = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
+    // The interpreter's own code is the backend's (its handle is the last of a spawned backend's).
+    let interpreter_first: Vec<HANDLE> = own_handles.iter().rev().copied().collect();
+    let exit_code = ended_code(&interpreter_first, Duration::ZERO);
     shared.set_current(None);
     if shared.stopping() {
         return None;
@@ -532,9 +542,9 @@ fn serve(shared: &Shared, sink: &dyn Sink, backend: Backend) -> Option<Duration>
     let ran = started.elapsed();
     crash::log(
         "supervise_exit",
-        json!({ "port": backend.port(), "ran_ms": ran.as_millis() }),
+        json!({ "port": backend.port(), "ran_ms": ran.as_millis(), "code": exit_code }),
     );
-    sink.stopped("exited");
+    sink.exited(exit_code);
     Some(ran)
 }
 
@@ -562,7 +572,12 @@ fn attempt(shared: &Shared, sink: &dyn Sink) -> Option<Duration> {
                 "supervise_failed",
                 json!({ "code": other.code(), "error": error }),
             );
-            sink.stopped(other.code());
+            // Every failure that shows the "exited" reason says so through `exited`, with the code when it is known.
+            if other.code() == "exited" {
+                sink.exited(other.exit_code());
+            } else {
+                sink.stopped(other.code());
+            }
             Some(began.elapsed())
         }
     }

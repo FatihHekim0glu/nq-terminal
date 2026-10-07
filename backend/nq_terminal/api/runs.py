@@ -67,7 +67,8 @@ def run_service_for(state: Any) -> RunService:
             if service is None:
                 settings = state.settings
                 cache = file_cache(settings.file_cache_bytes, roots=[settings.data_root], max_bytes=CACHE_BYTES)
-                service = RunService(data_root=settings.data_root, project_root=settings.root, cache=cache)
+                service = RunService(data_root=settings.data_root, project_root=settings.root, cache=cache,
+                                     state_dir=settings.state_dir)  # V031B: the run list's per-run index
                 state.run_service = service
     return service
 

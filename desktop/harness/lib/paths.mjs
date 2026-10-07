@@ -72,4 +72,15 @@ export function newRunFolder(name, root = RUNS_ROOT) {
   return dir
 }
 
-export const isMainTree = () => norm(TERMINAL) === norm(path.join(LAB, 'terminal'))
+/** The real path of a folder (a junction or link resolved); the typed path when it cannot be resolved (it does not exist yet). */
+function realOrTyped(p) {
+  const resolved = path.resolve(p)
+  try { return fs.realpathSync.native(resolved) } catch { return resolved }
+}
+
+/**
+ * True when `terminal` is the main tree's terminal folder, comparing real paths: the lab is reached through the junction
+ * C:\Users\...\nq-lab to E:\projects\nq-lab, and node reports this module's own path already resolved, so a plain string
+ * comparison called the main tree a worktree. A worktree beside the main tree stays a worktree.
+ */
+export const isMainTree = (terminal = TERMINAL, lab = LAB) => norm(realOrTyped(terminal)) === norm(realOrTyped(path.join(lab, 'terminal')))

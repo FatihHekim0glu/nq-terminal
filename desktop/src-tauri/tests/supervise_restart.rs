@@ -90,6 +90,9 @@ impl Sink for Recording {
     fn stopped(&self, code: &str) {
         self.0.push(format!("stopped {code}"));
     }
+    fn exited(&self, exit_code: Option<u32>) {
+        self.0.push(format!("exited {exit_code:?}"));
+    }
     fn gave_up(&self, log: &Path) -> AfterStop {
         self.0.push(format!("gave_up {}", log.display()));
         crate::dialogs::restart_or_quit::<tauri::Wry>(None, log);
@@ -149,7 +152,8 @@ fn the_loop_restarts_at_1_and_2_seconds_then_gives_up_after_three_crashes() {
     let second_ok = second_gap >= 2 * SECOND && second_gap < 2 * SECOND + SPAWN_SLACK;
     assert!(second_ok, "second restart after {second_gap:?}");
     let readies = calls.iter().filter(|c| c.starts_with("ready ")).count();
-    let stops = calls.iter().filter(|c| *c == "stopped exited").count();
+    // The fake ends itself with code 3 after its handshake; the stopped page is told that code each time.
+    let stops = calls.iter().filter(|c| *c == "exited Some(3)").count();
     assert_eq!((readies, stops), (3, 3), "{calls:?}");
     let asked = calls.last().is_some_and(|c| c.starts_with("gave_up "));
     assert!(asked, "the last word is the question: {calls:?}");

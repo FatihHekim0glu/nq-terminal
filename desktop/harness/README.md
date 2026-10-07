@@ -79,6 +79,16 @@ Measurements run from the main tree only (`--real-data` and every non-dry run re
 `--dry` runs, on a derived lab (`lab.mjs`): the owner's venv launcher, a copy of the research package sources and junctions to the
 tree under test, never to its `state` folder and never to a data folder.
 
+"The main tree" is decided on real paths (`isMainTree` in `lib\paths.mjs`): the lab is reached through the junction `C:\Users\...\nq-lab`
+to `E:\projects\nq-lab`, and a worktree beside the main tree stays a worktree. The scripts that run themselves compare real paths too
+(`desktop\scripts\main-module.mjs`, `web\scripts\mainModule.mjs`), so they run when started through a junction.
+
+Before any real-data run (`--real-data`, or `--first-launch` without `--dry`) `run.mjs` waits while a backend pytest session holds
+`D:\dev\locks\PYTEST.<pid>.lock` (`lib\pytestlock.mjs`, the rule of `check.ps1`: a lock is stale when its process is not running, and
+after two hours whatever its pid), says so on every look, and records the wait in `pytest-wait.json` in the run folder. `NQT_LOCK_DIR`
+names another locks folder, `NQT_PYTEST_WAIT_POLL_S` (30) and `NQT_PYTEST_WAIT_TIMEOUT_S` (7200) the poll and the limit; past the limit the
+run is refused with the lock named and nothing is started.
+
 ## Launch reliability
 
 `--mode reliability` runs N hidden launches of one smoke exe, one after the other, each with a fresh temporary state folder, and reports the refusals and the distribution of READY to the first identity proof. It exists for the start-up race of 0.2.0: the shell gives the backend's first identity proof `LINK_TIMEOUT` (2 s, `supervise_run.rs`) and refuses with `unverified` past it, so READY to proof is the margin against that refusal. Per launch it reads the shell log events (`supervise_spawned`, `supervise_checked`, `supervise_refused`, `supervise_failed`) and a 1 ms read-only tail of the backend log (`lib/tailog.py`: `NQT-READY`, the proof request, the first session read), and writes one record per launch plus `reliability-summary.json` under `--out`.
@@ -106,7 +116,7 @@ and the real backend alone is read for reference (`informational`).
   other programs' windows and foreground changes are kept as `notes` in the record (owner decision, 3 October 2026). An event
   whose owner was not traced fails, and so does every event of a watch that names no launched shell. The shell's own inert
   5 by 5 pixel event window is recorded and ignored. The notes name each foreign owner and whether it is on the named list
-  (`KNOWN_FOREIGN` in `lib\winwatch.mjs`: the Logitech Options+ agent; `NQT_KNOWN_FOREIGN` adds image names for one PC, separated
+  (`KNOWN_FOREIGN` in `lib\winwatch.mjs`: the Logitech Options+ helper program; `NQT_KNOWN_FOREIGN` adds image names for one PC, separated
   by semicolons). The list only labels the record; it never lets an event of the launched shell's tree pass. The cargo smoke tests
   apply the same rule (`src-tauri\tests\hidden_support\scope.rs`: the test process is the root).
 - A window may be shown only in the screen-2 mode: the guard (`screen2.mjs`) takes the second monitor's work area and the window's DWM
@@ -138,6 +148,7 @@ screen 2; the page stays `visible` while minimised in a smoke build, which is re
 | `lib\cdp.mjs`, `page-rows.mjs`, `pagejs.mjs`, `probe.js`, `trace.mjs`, `bars.mjs`, `fills.mjs`, `dockwait.mjs`, `heavy.mjs` | the page-internal rows |
 | `lib\gate.mjs`, `gpu.mjs`, `slot.mjs`, `record.mjs`, `rows.mjs`, `stats.mjs`, `provenance.mjs`, `harness.mjs` | gate, slot, records, the G2 table, statistics, the stamp, the reproduction gate |
 | `lib\winwatch.*`, `winctl.*`, `screen2.mjs`, `plantwin.py` | the window watch, the window helper and the screen-2 guard |
+| `lib\watchlists.mjs`, `lib\pytestlock.mjs` | the shared window-watch lists read out of the three watches (parity test), the wait on a backend pytest session |
 | `lib\mem.*`, `stop.mjs`, `survivors.mjs`, `proc.mjs`, `backend.mjs`, `shelllog.mjs` | memory counters, identity-checked teardown, processes, backends, the shell log (`shelllog.mjs` also reads `keys_installed` back: a measure run whose engine reads devtools, accelerator keys or zoom control as on is marked failed) |
 | `lib\reliability.mjs`, `tailog.mjs`, `tailog.py` | the launch-reliability figures (outcome, READY to proof, summary) and the backend log tail |
 | `reference\w0b-tauri.json` | the W0B figures the reproduction is judged against |

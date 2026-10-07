@@ -15,9 +15,13 @@
 //   node report.mjs DIR [--check]                               medians, verdicts and the read-back check of every figure
 //
 // --dry takes one unmeasured run per mode (no gate enforced, no counted figure). --out DIR names the output folder.
+// A real-data run (--real-data, or --first-launch without --dry) first waits while a backend pytest session holds a live PYTEST lock in D:\dev\locks.
 // Every launch: hidden window, the global window and foreground watch, and a PATH without D:\dev\mingw and D:\dev\cargo.
 // The smoke exe and the measure exe are found under D:\dev\targets (the newest of each kind) or named with --exe, --smoke-exe, --measure-exe.
+import fs from 'node:fs'
+import path from 'node:path'
 import { newRunFolder } from './lib/paths.mjs'
+import { usesRealData, waitNoPytestLock, lockDirFromEnv } from './lib/pytestlock.mjs'
 import { provenance as readProvenance, cFreeMB } from './lib/provenance.mjs'
 
 export function makeArgs(argv) {
@@ -52,6 +56,13 @@ export function exitCodeOf(out) {
   return (Array.isArray(failed) ? failed.length > 0 : Boolean(failed)) ? 1 : 0
 }
 
+const envSeconds = (name, fallbackMs) => (Number(process.env[name]) > 0 ? Number(process.env[name]) * 1000 : fallbackMs)
+
+/** A real-data run never overlaps a backend pytest session: wait while D:/dev/locks holds a live PYTEST lock (check.ps1's rule). */
+function waitBeforeRealData() {
+  return waitNoPytestLock({ dir: lockDirFromEnv(), step: 'real-data run', pollMs: envSeconds('NQT_PYTEST_WAIT_POLL_S', 30_000), timeoutMs: envSeconds('NQT_PYTEST_WAIT_TIMEOUT_S', 7_200_000) })
+}
+
 async function main() {
   const args = makeArgs(process.argv.slice(2))
   const mode = modeOf(args)
@@ -59,7 +70,9 @@ async function main() {
     console.error(`usage: node run.mjs --build smoke|measure|both | --mode ${Object.keys(MODES).filter((m) => m !== 'rows').join('|')} | --first-launch  (see the header of run.mjs)`)
     process.exit(2)
   }
+  const pytestWait = usesRealData(args) ? await waitBeforeRealData() : null
   const outDir = args.opt('out', null) ?? newRunFolder(mode + (args.flag('dry') ? '-dry' : ''))
+  if (pytestWait?.waited || pytestWait?.ignored.length) fs.writeFileSync(path.join(outDir, 'pytest-wait.json'), JSON.stringify(pytestWait, null, 2) + '\n')
   const provenance = readProvenance()
   const cBefore = cFreeMB()
   console.log(`output ${outDir}`)

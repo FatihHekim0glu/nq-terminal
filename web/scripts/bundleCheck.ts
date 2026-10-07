@@ -13,8 +13,8 @@
 // Usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { gzipSync } from 'node:zlib'
+import { isMainModule } from './mainModule.mjs'
 
 export const BUNDLE_BUDGET = {
   /**
@@ -212,6 +212,6 @@ function main(argv: readonly string[]): number {
   return report.violations.length === 0 ? 0 : 1
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2))
 }

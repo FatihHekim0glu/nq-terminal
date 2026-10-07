@@ -44,8 +44,9 @@ backend's output names one.
 
 Serialised sessions (0.3.1). A session creates `PYTEST.<pid>.lock` in the locks folder (D:/dev/locks, or NQT_LOCK_DIR)
 while it runs and removes it at the end (`pytest_sessionstart` and `pytest_sessionfinish`, the xdist controller only);
-a lock older than two hours is stale. `desktop/scripts/check.ps1` waits while a fresh one exists before its real-backend
-smoke steps. A lock that cannot be written is reported in the terminal summary and never fails the session.
+a lock older than two hours is stale, and so is one whose process is not running (`fresh_session_locks`, as in check.ps1).
+`desktop/scripts/check.ps1` waits while a fresh one exists before its real-backend smoke steps. A lock that cannot be written
+or removed (a PermissionError) is reported in the terminal summary and never fails the session.
 """
 from __future__ import annotations
 
@@ -123,24 +124,62 @@ def write_session_lock(folder: Path, pid: int) -> Path:
 
 
 def remove_session_lock(path: Path) -> bool:
-    """Removes a lock; False when it was already gone."""
+    """Removes a lock; False when it was already gone or could not be removed (a note says why in the second case)."""
     try:
         path.unlink()
     except FileNotFoundError:
         return False
+    except PermissionError as error:  # another process holds the file open: the next session's stale check handles it
+        _NOTES.append(f"PYTEST lock {path.name} not removed ({error}); it goes stale when this process is gone")
+        return False
     return True
 
 
-def fresh_session_locks(folder: Path, now: float | None = None) -> list[Path]:
-    """The locks in `folder` that are not stale (modified within the last two hours)."""
+STILL_ACTIVE, ERROR_ACCESS_DENIED = 259, 5
+
+
+def pid_running(pid: int) -> bool:
+    """True when a process with this id is running (access denied still means it exists)."""
+    if sys.platform != "win32":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    handle = kernel.OpenProcess(PROCESS_QUERY_LIMITED, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == ERROR_ACCESS_DENIED
+    try:
+        code = ctypes.c_ulong()
+        return bool(kernel.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == STILL_ACTIVE
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def fresh_session_locks(folder: Path, now: float | None = None, is_alive=None) -> list[Path]:
+    """The locks in `folder` that are not stale: written within the last two hours and, when the file name carries a
+    process id (PYTEST.<pid>.lock), that process is still running (a session killed without its cleanup leaves a lock
+    behind; the two-hour limit stays as the fallback for a reused pid, as in check.ps1)."""
     moment = time.time() if now is None else now
+    alive = pid_running if is_alive is None else is_alive
     found: list[Path] = []
     for path in sorted(folder.glob("PYTEST.*.lock")) if folder.is_dir() else []:
         try:
-            if moment - path.stat().st_mtime < PYTEST_LOCK_STALE_S:
-                found.append(path)
+            if moment - path.stat().st_mtime >= PYTEST_LOCK_STALE_S:
+                continue
         except FileNotFoundError:
             continue  # removed between the listing and the stat
+        pid = path.name.split(".")[1]
+        if pid.isdigit() and not alive(int(pid)):
+            continue
+        found.append(path)
     return found
 
 

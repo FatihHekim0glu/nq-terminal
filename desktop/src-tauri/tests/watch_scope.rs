@@ -1,5 +1,5 @@
 //! The scope rule of the global window watches (hidden_support/scope.rs): a window or a foreground change counts only
-//! when its owner is the test process or runs under it. Other programs' windows (a Logitech Options+ agent, a chat or overlay
+//! when its owner is the test process or runs under it. Other programs' windows (a Logitech Options+ helper program, a chat or overlay
 //! program) are filed apart and named; a window whose owner cannot be traced still counts (fail closed).
 //!
 //! Born failing: the first three cases hold the pure rule; the last starts a real child of this test process and reads its

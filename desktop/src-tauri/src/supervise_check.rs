@@ -410,8 +410,9 @@ pub fn check_ready(
 pub enum Failure {
     /// The process could not be created (or its pipes, job or log).
     Spawn(String),
-    /// It ended, or closed its output, before its handshake.
-    Exited,
+    /// It ended, or closed its output, before its handshake or while its first proof was retried; carries its exit
+    /// code when that was read.
+    Exited(Option<u32>),
     Timeout,
     /// It answered and failed a check: never retried.
     Refused(Mismatch),
@@ -423,10 +424,43 @@ impl Failure {
     pub fn code(&self) -> &'static str {
         match self {
             Self::Spawn(_) => "spawn",
-            Self::Exited | Self::Timeout | Self::Link(_) => "exited",
+            Self::Exited(_) | Self::Timeout | Self::Link(_) => "exited",
             Self::Refused(m) => m.code(),
         }
     }
+
+    /// The backend's exit code, when it ended and the code was read.
+    pub fn exit_code(&self) -> Option<u32> {
+        match self {
+            Self::Exited(code) => *code,
+            _ => None,
+        }
+    }
+}
+
+/// The id of the stopped page's exit code line, inside its "exited" section.
+pub const EXIT_NOTE_ID: &str = "exit-code";
+
+/// The stopped page's line for a backend's exit code, in words; nothing when the code is unknown. It names no folder.
+pub fn exit_note(code: Option<u32>) -> Option<String> {
+    code.map(|c| format!("The backend ended with exit code {c}."))
+}
+
+/// A script that puts the exit code line into the stopped page (and clears it when the code is unknown, so that a
+/// later exit never shows an earlier one's code). Run through the webview's eval after the navigation, like the
+/// announcement: it waits, bounded (50 looks, 100 ms apart), for the stopped page, because the first navigation is a
+/// full load that eval can overtake (the webview is then still on the outgoing page, which is a reason to wait, not
+/// to give up), and it changes nothing on any other page. A script that ran in the outgoing document dies with it;
+/// the shell therefore evals it again a few times (see `WindowSink::exited`).
+pub fn exit_note_script(code: Option<u32>) -> String {
+    let text = serde_json::to_string(&exit_note(code).unwrap_or_default())
+        .unwrap_or_else(|_| "\"\"".into());
+    format!(
+        "(function(){{var n=0;function go(){{var e=document.getElementById('{EXIT_NOTE_ID}');\
+if(!location.pathname.endsWith('stopped.html')||!e||document.readyState==='loading')\
+{{if(++n<50)setTimeout(go,100);return;}}\
+e.textContent={text};}}go();}})();"
+    )
 }
 
 #[cfg(test)]
@@ -558,6 +592,63 @@ mod tests {
             other
                 .iter()
                 .all(|(n, _)| n != "NQT_MEMTRIM" && n != "NQT_OTHER")
+        );
+    }
+
+    #[test]
+    fn a_known_exit_code_is_put_into_words_and_an_unknown_one_says_nothing() {
+        assert_eq!(
+            exit_note(Some(3)).as_deref(),
+            Some("The backend ended with exit code 3.")
+        );
+        assert_eq!(
+            exit_note(Some(0)).as_deref(),
+            Some("The backend ended with exit code 0.")
+        );
+        assert_eq!(
+            exit_note(Some(3_221_225_786)).as_deref(),
+            Some("The backend ended with exit code 3221225786.")
+        );
+        assert_eq!(exit_note(None), None);
+    }
+
+    #[test]
+    fn only_an_exit_carries_a_code() {
+        assert_eq!(Failure::Exited(Some(3)).exit_code(), Some(3));
+        assert_eq!(Failure::Exited(None).exit_code(), None);
+        assert_eq!(Failure::Timeout.exit_code(), None);
+        assert_eq!(Failure::Link("x".into()).exit_code(), None);
+        assert_eq!(Failure::Refused(Mismatch::Hmac).exit_code(), None);
+        assert_eq!(Failure::Exited(Some(3)).code(), "exited");
+        assert_eq!(Failure::Exited(None).code(), "exited");
+    }
+
+    #[test]
+    fn the_stopped_page_has_a_code_line_in_its_exited_section_and_no_folder_name_in_the_script() {
+        let page = include_str!("../assets/stopped.html");
+        let exited = page.split(r#"id="exited""#).nth(1).expect("exited section");
+        let exited = exited.split("</section>").next().expect("section end");
+        assert!(
+            exited.contains(&format!(r#"id="{EXIT_NOTE_ID}""#)),
+            "{exited}"
+        );
+        let script = exit_note_script(Some(3));
+        assert!(script.contains(EXIT_NOTE_ID), "{script}");
+        assert!(script.contains("The backend ended with exit code 3."));
+        assert!(!script.contains('\\'), "{script}");
+        assert!(!script.contains("terminal") && !script.contains("backend.log"));
+    }
+
+    #[test]
+    fn the_script_clears_the_line_when_the_code_is_unknown_and_stays_on_the_stopped_page() {
+        let known = exit_note_script(Some(7));
+        let unknown = exit_note_script(None);
+        assert!(known.contains("endsWith('stopped.html')"), "{known}");
+        assert!(unknown.contains("textContent=\"\""), "{unknown}");
+        assert!(!unknown.contains("exit code"), "{unknown}");
+        assert!(
+            known.contains("++n<50"),
+            "the wait must be bounded: {known}"
         );
     }
 }

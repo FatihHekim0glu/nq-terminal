@@ -6,8 +6,9 @@
 // and to the first line of schema.d.ts, so a stale copy of either is caught.
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import openapiTS, { astToString } from 'openapi-typescript'
+import { isMainModule } from '../../../scripts/mainModule.mjs'
 
 const API_DIR = new URL('../', import.meta.url)
 const CONTRACT = new URL('../../../../contract/openapi.json', import.meta.url)
@@ -60,7 +61,7 @@ async function main() {
   console.log(`wrote ${fileURLToPath(SCHEMA)} and ${fileURLToPath(SHA_FILE)} (sha256 ${sha})`)
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+if (isMainModule(import.meta.url)) {
   main().catch((error) => {
     console.error(error)
     process.exit(1)

@@ -3,7 +3,7 @@
 //!
 //! The watches see every process on the PC. A run fails on a new window or a foreground change only when the process
 //! that owns it is the test process or runs under it (the smoke exe, its backend stand-in, WebView2). Another program's
-//! window (the Logitech Options+ agent, a chat or overlay program, anything the owner opens) is filed apart in the
+//! window (the Logitech Options+ helper program, a chat or overlay program, anything the owner opens) is filed apart in the
 //! report's `foreign` list and never fails a run. The owner's process is read when the event is seen, from one Toolhelp
 //! snapshot, because the window may be gone by the time the verdict is made. Windows that system hosts draw for a run from
 //! outside its tree (WerFault, Windows Terminal, conhost, csrss, dllhost; a console or Windows Terminal window class) always

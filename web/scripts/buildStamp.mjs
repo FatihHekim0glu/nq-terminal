@@ -12,7 +12,8 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
+import { isMainModule } from './mainModule.mjs'
 
 export const STAMP_NAME = 'build-stamp.json'
 export const STAMP_VERSION = 1
@@ -87,7 +88,7 @@ function main(argv) {
   process.stdout.write(`build stamp: ${file}\n`)
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainModule(import.meta.url)) {
   try {
     main(process.argv.slice(2))
   } catch (error) {

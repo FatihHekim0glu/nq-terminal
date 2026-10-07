@@ -127,7 +127,9 @@ def test_the_first_launch_limitation_of_0_3_0_is_disclosed_and_the_g2_verdict_is
     assert "6,116 ms" in readme
     assert "0.2.1 stays the published G2 verdict" in readme
     verdict_head = _text(VERDICT).split("## Release 0.3.0")[0]
-    assert "the 0.2.1 verdict that follows it is the verdict of the published release" in verdict_head
+    assert "Release 0.3.0 has been published since 7 October 2026" in verdict_head
+    assert "Until 0.3.0 is published" not in verdict_head
+    assert "the 0.2.1 verdict that follows it stays the latest stated G2 verdict" in verdict_head
 
 
 def test_verdict_is_an_automated_pass_with_every_row_inside_its_ceiling():

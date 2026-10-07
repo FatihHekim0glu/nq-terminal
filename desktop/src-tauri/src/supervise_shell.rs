@@ -17,6 +17,7 @@ use crate::{Launch, ShellError, crash};
 use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{Manager, Runtime, WebviewWindow};
 use windows::core::PWSTR;
@@ -53,6 +54,21 @@ fn navigate<R: Runtime>(
     page: Result<tauri::Url, String>,
 ) -> Result<(), String> {
     page.and_then(|url| window.navigate(url).map_err(|e| e.to_string()))
+}
+
+/// How many times, and how far apart, the exit code script is evaluated again after the first time.
+const EXIT_NOTE_REPEATS: u32 = 12;
+const EXIT_NOTE_PAUSE: Duration = Duration::from_millis(250);
+/// The number of the latest "exited" report; a repeat loop of an older one stops.
+static EXIT_NOTE_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+fn eval_exit_note<R: Runtime>(window: &WebviewWindow<R>, script: &str) {
+    if let Err(e) = window.eval(script) {
+        crash::log(
+            "supervise_exit_note_failed",
+            json!({ "error": e.to_string() }),
+        );
+    }
 }
 
 impl<R: Runtime> WindowSink<R> {
@@ -100,6 +116,30 @@ impl<R: Runtime> Sink for WindowSink<R> {
         if let Err(e) = shown {
             crash::log("supervise_stopped_page_failed", json!({ "error": e }));
         }
+    }
+
+    /// The "exited" reason, then the exit code in words on the page (nothing when the code is unknown; an earlier
+    /// exit's code is cleared). The announcement runs first, so the heading is what a screen reader hears.
+    ///
+    /// The webview can still be on the outgoing page when the first eval runs (the navigation is a full load), and a
+    /// script that ran there dies with that document. The same script is therefore evaluated again a few times, off
+    /// this thread; it is idempotent and waits for the stopped page itself. A newer exit ends the older repeats, so an
+    /// earlier code can never overwrite a later one.
+    fn exited(&self, exit_code: Option<u32>) {
+        self.stopped("exited");
+        let generation = EXIT_NOTE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+        let script = check::exit_note_script(exit_code);
+        eval_exit_note(&self.window, &script);
+        let window = self.window.clone();
+        std::thread::spawn(move || {
+            for _ in 0..EXIT_NOTE_REPEATS {
+                std::thread::sleep(EXIT_NOTE_PAUSE);
+                if EXIT_NOTE_GENERATION.load(Ordering::SeqCst) != generation {
+                    return;
+                }
+                eval_exit_note(&window, &script);
+            }
+        });
     }
 
     fn reload(&self, uri: &str) {
