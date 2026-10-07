@@ -47,6 +47,9 @@ async function openLine(page: Page, line: string): Promise<Locator> {
   await page.keyboard.press('Control+k')
   const box = page.getByRole('combobox', { name: 'Command line' })
   await box.fill(line)
+  // As in p11.spec.ts: the index response arriving is not the index reaching the page. The <GO> preview shows only once it
+  // has, and an Enter pressed in between is refused ("has not loaded yet") and leaves the text in the box.
+  await expect(page.locator('.cmd-preview')).toContainText('<GO>')
   await box.press('Enter')
   await expect(box).toHaveValue('')
   const panel = page.locator(`[data-nqt-title="${line}"]`)
