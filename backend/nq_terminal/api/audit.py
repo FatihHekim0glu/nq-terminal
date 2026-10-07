@@ -5,7 +5,11 @@
   window), entries oldest first inside the page; `matched` counts every matching entry. The log is cached in its
   compact form (`audit.CompactLog`, W5C D6) on the file's (mtime, size) through `FileCache`: an index over the raw
   bytes, charged what it really keeps, of which only the requested page is decoded. The gate or a research workflow
-  appending lines costs only the appended lines (`audit.extend_oos_log`); any other change is a full parse.
+  appending lines costs only the appended lines (`audit.extend_oos_log`); any other change is a full parse. The read has
+  its own size cap (`AUDIT_MAX_FILE_BYTES`, 512 MiB, four times the general 128 MiB cap that the log would pass about
+  four research days after 7 October 2026); a log over even that answers 503 with a plain message, never 500 and never a
+  partial count (an audit page that understated the sealed reads would mislead). Its cache has its own byte budget
+  (`audit_cache_bytes`, 1.25 times that cap), not the app-wide cap, so a log the audit accepts is always cached.
 - `/api/audit/openings`: the openings file, its sha256, the sealed-line digest and the gate's pin checks
   (`oos_gate.check_openings_pin`, `check_sealed_log_pin` via `api.system.sealed_status`), next to the pinned values.
 - `/api/audit/spec-hashes`: every registry spec and every sealed-window confirmation re-hashed now.
@@ -35,7 +39,7 @@ from nq_terminal.models.audit import (
 )
 from nq_terminal.models.common import DEFAULT_LIMIT, MAX_LIMIT, error_responses
 from nq_terminal.services import audit
-from nq_terminal.services.files import FileCache, file_cache, sanitise
+from nq_terminal.services.files import FileAccessError, FileCache, sanitise
 from nq_terminal.services.research import ResearchDataError
 from nq_terminal.settings import Settings
 
@@ -45,6 +49,13 @@ _STATE_KEY = "audit_files"
 _LOCK = threading.Lock()
 _EMPTY = audit.compact_oos_log(b"")
 MAX_FILTER_CHARS = 128
+AUDIT_MAX_FILE_BYTES = 512 * 1024**2  # the audit's own file cap; read when the app's audit cache is built
+
+
+def audit_cache_bytes() -> int:
+    """The audit cache's byte budget: 1.25 times the file cap, which covers a CompactLog's weight (about 1.11 times
+    its file) for any log the audit will read. Read when the cache is built, like `AUDIT_MAX_FILE_BYTES`."""
+    return AUDIT_MAX_FILE_BYTES + AUDIT_MAX_FILE_BYTES // 4
 
 
 def _oos_gate() -> ModuleType:
@@ -64,7 +75,10 @@ def _files(request: Request) -> FileCache:
     with _LOCK:
         cache = getattr(state, _STATE_KEY, None)
         if cache is None:
-            cache = file_cache(_settings(request).file_cache_bytes, roots=(_settings(request).data_root,))
+            # the audit's own byte budget, not the app-wide cap (128 MiB in desktop mode): a CompactLog weighs about
+            # 1.11 times its file, so under the app-wide cap the log would stop being cached near 115 MiB
+            cache = FileCache(roots=(_settings(request).data_root,), max_file_bytes=AUDIT_MAX_FILE_BYTES,
+                              max_bytes=audit_cache_bytes())
             setattr(state, _STATE_KEY, cache)
     return cache
 
@@ -77,6 +91,9 @@ def read_log(request: Request) -> tuple[audit.CompactLog, bool]:
                                      weigh=audit.CompactLog.retained_bytes, extend=audit.extend_oos_log)
     except FileNotFoundError:
         return _EMPTY, False
+    except FileAccessError as exc:
+        # the refusal names the file and its size, never a folder; a log over the audit's own cap is not a failure
+        raise HTTPException(status_code=503, detail=f"the OOS access log cannot be read for the audit: {exc}") from exc
     return parsed, True
 
 

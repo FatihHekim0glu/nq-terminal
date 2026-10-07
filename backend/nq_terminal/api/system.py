@@ -9,7 +9,14 @@ reads are memoised for `BUILD_MEMO_S`.
 
 Every check reuses nq-lab's own read-only functions (`oos_gate.check_openings_pin`,
 `check_sealed_log_pin`, `load_openings`, `live_guards.kill_switch_on`); nothing is reimplemented and
-nothing is written.
+nothing is written outside the state folder's cache.
+
+The sealed-log pin (V032G, growth fix 1): the route checks it through the app's `services/sealed_log` tracker, which
+parses only what was appended to the gate log since its last call (`gate_cursor.scan_sealed_log`, the same answer as
+`check_sealed_log_pin`); it still hashes every byte before its cursor, streamed in 1 MiB pieces, so a changed log costs
+about 27 ms at 43 MB (linear in the log) and an unchanged one nothing. The whole sealed block is memoised on the
+(mtime_ns, size) of the log and the openings file. `sealed_status(settings)` without an app state keeps the
+whole-file checks.
 
 Gate counters: until the bar service exists (Phase 2.3) they read 0. The service publishes them by setting
 `app.state.gate_stats` to a callable returning `(gate_reads, cached_series, cached_bytes)`.
@@ -32,6 +39,7 @@ from nq_terminal.desktop import lifecycle
 from nq_terminal.desktop.build_stamp import OPENAPI, dist_status, openapi_sha256
 from nq_terminal.desktop.handshake import contract_number
 from nq_terminal.models.common import CacheStats, Fence, Health, Pins, SealedStatus
+from nq_terminal.services import sealed_log
 from nq_terminal.settings import DEFAULT_PORT, MODE_LAUNCHER, Settings
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -112,12 +120,22 @@ def _openings_closed(path: Path) -> bool | None:
     return all(entry.get("closed") is True for entry in openings)
 
 
-def sealed_status(settings: Settings) -> SealedStatus:
+def _sealed_now(settings: Settings, check_log: Callable[[Path], None]) -> SealedStatus:
     return SealedStatus(
         openings_pin_ok=_pin_ok(_oos_gate().check_openings_pin, settings.openings_path),
-        sealed_log_pin_ok=_pin_ok(_oos_gate().check_sealed_log_pin, settings.oos_log_path),
+        sealed_log_pin_ok=_pin_ok(check_log, settings.oos_log_path),
         openings_closed=_openings_closed(settings.openings_path),
     )
+
+
+def sealed_status(settings: Settings, state: object | None = None) -> SealedStatus:
+    """The gate's pin checks. With the app's state: the log's pin from the app's cursor, and the block memoised on the
+    log and the openings file; without: the whole-file checks."""
+    if state is None:
+        return _sealed_now(settings, _oos_gate().check_sealed_log_pin)
+    tracker = sealed_log.tracker_for(state)
+    return tracker.remember((settings.oos_log_path, settings.openings_path),
+                            lambda: _sealed_now(settings, tracker.check_pin))
 
 
 def gate_stats(state: object) -> GateStats:
@@ -125,7 +143,8 @@ def gate_stats(state: object) -> GateStats:
     return provider() if callable(provider) else (0, 0, 0)
 
 
-def build_health(settings: Settings, stats: GateStats, now: datetime | None = None) -> Health:
+def build_health(settings: Settings, stats: GateStats, now: datetime | None = None,
+                 state: object | None = None) -> Health:
     reads, series, cached_bytes = stats
     stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     pins = installed_pins()
@@ -134,7 +153,7 @@ def build_health(settings: Settings, stats: GateStats, now: datetime | None = No
         nautilus_version=pins.nautilus,
         pins=pins,
         fence=fence(),
-        sealed=sealed_status(settings),
+        sealed=sealed_status(settings, state),
         kill_switch_on=live_guards.kill_switch_on(str(settings.kill_switch_path)),
         gate_reads_this_process=reads,
         cache=CacheStats(series=series, bytes=cached_bytes),
@@ -142,14 +161,15 @@ def build_health(settings: Settings, stats: GateStats, now: datetime | None = No
     )
 
 
-def desktop_health(settings: Settings, stats: GateStats, bound_port: int) -> DesktopHealth:
+def desktop_health(settings: Settings, stats: GateStats, bound_port: int, state: object | None = None) -> DesktopHealth:
     sha, dist = build_state(settings.web_dist.parent)
-    return DesktopHealth(**build_health(settings, stats).model_dump(), contract=contract_number(), openapi_sha256=sha,
-                         dist=dist, port_fixed=port_fixed(settings.mode, bound_port))
+    return DesktopHealth(**build_health(settings, stats, state=state).model_dump(), contract=contract_number(),
+                         openapi_sha256=sha, dist=dist, port_fixed=port_fixed(settings.mode, bound_port))
 
 
 @router.get("/health", response_model=DesktopHealth)
 def health(request: Request) -> DesktopHealth:
     """Versions, the in-sample fence, sealed-window pin status, kill switch, gate counters and the desktop fields."""
     settings = request.app.state.settings
-    return desktop_health(settings, gate_stats(request.app.state), lifecycle.runtime(request.app).port)
+    state = request.app.state
+    return desktop_health(settings, gate_stats(state), lifecycle.runtime(request.app).port, state)

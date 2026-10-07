@@ -69,8 +69,8 @@ def _gate(tmp_path: Path):
 # ---------------------------------------------------------------- the allow list and the restart
 
 
-def test_the_allow_list_is_exactly_deflated_the_run_index_and_the_ledger():
-    assert rc.PERSIST_ROUTES == frozenset({"/api/analytics/deflated", "/api/runs", "/api/ledger"})
+def test_the_allow_list_is_exactly_deflated_the_run_index_the_ledger_and_the_card_list():
+    assert rc.PERSIST_ROUTES == frozenset({"/api/analytics/deflated", "/api/runs", "/api/ledger", "/api/hypotheses"})
     assert rc.DISK_BYTES == 64 * MIB and rc.CACHE_FOLDER == "cache"
 
 

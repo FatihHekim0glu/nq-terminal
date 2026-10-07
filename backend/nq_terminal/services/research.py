@@ -27,6 +27,7 @@ import math
 import re
 import threading
 from pathlib import Path
+from stat import S_ISDIR
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -71,7 +72,7 @@ from nq_terminal.models.research import (
     SealedView,
     SpecCheck,
 )
-from nq_terminal.services import amendments
+from nq_terminal.services import amendments, result_cache
 from nq_terminal.services.files import (
     RETRY_DELAY_S,
     FileCache,
@@ -354,6 +355,44 @@ def _counts(rows: Sequence[RegistryRow]) -> RegistryCounts:
 # ---------------------------------------------------------------- the service
 
 
+class _SummaryIndex:
+    """The first lines of the round summaries in results/screens, read once and in memory (V032G).
+
+    The rules are the old per-row scan's: files matching `*summary*.md` in sorted order, history copies skipped, a
+    row belongs to the first file whose FIRST line contains its name, the round is the digits after `round` in the
+    file name. Files are read lazily and only as far as a lookup reaches (so an undecodable file raises for a row
+    that gets that far, as before), each at most once for the index's life: a `cards()` call shares one index
+    among all its rows, where the scan opened the files again for every row."""
+
+    def __init__(self, service: "ResearchService"):
+        self._service = service
+        self._paths: list[Path] | None = None
+        self._lines: list[tuple[str, str]] = []
+
+    def _read_next(self) -> bool:
+        service = self._service
+        if self._paths is None:
+            result_cache.record_input(service.screens)  # the listing is pinned before it is read: a new file ends a cached body
+            self._paths = sorted(p for p in service.screens.glob("*summary*.md")
+                                 if not any(mark in p.name for mark in HISTORY_MARKS))
+        if len(self._lines) == len(self._paths):
+            return False
+        path = self._paths[len(self._lines)]
+        text = service._read(path, "text", path.name) or ""
+        self._lines.append((path.name, text.partition("\n")[0]))
+        return True
+
+    def find(self, name: str) -> tuple[int | None, str | None]:
+        position = 0
+        while position < len(self._lines) or self._read_next():
+            file_name, first_line = self._lines[position]
+            position += 1
+            if name in first_line:
+                number = re.search(r"round(\d+)", file_name)
+                return (int(number.group(1)) if number else None), file_name
+        return None, None
+
+
 class ResearchService:
     """Read-only research views over one data root (the project root, or the fixture folder)."""
 
@@ -441,8 +480,9 @@ class ResearchService:
         path = self.experiments / f"{spec}.json"
         return path if self._inside(path, self.experiments) else None
 
-    def _spec_check(self, row: RegistryRow) -> SpecCheck:
-        stem, screen = self._screen(row.name)
+    def _spec_check(self, row: RegistryRow, screened: tuple[str | None, Mapping[str, Any] | None] | None = None
+                    ) -> SpecCheck:
+        stem, screen = self._screen(row.name) if screened is None else screened
         path = self._spec_path(row.spec)
         rehash = self._read(path, "sha256", f"spec {row.spec}") if path is not None else None
         screen_sha = screen.get("spec_sha256") if screen is not None else None
@@ -464,16 +504,34 @@ class ResearchService:
 
     # cards and detail -------------------------------------------------------
 
+    def _has_result(self, folder: Path) -> bool:
+        """Whether the run folder holds a result.json; the stat that answers is pinned for the result cache."""
+        path = folder / "result.json"
+        try:
+            stat = path.stat()
+        except OSError:
+            result_cache.record_missing(path)
+            return False
+        if S_ISDIR(stat.st_mode):
+            result_cache.record_input(path)
+            return False
+        result_cache.record_file(path, stat.st_mtime_ns, stat.st_size)
+        return True
+
     def _run_names(self) -> tuple[str, ...]:
+        """The run folders that hold a result.json. The folder listing and each result.json are pinned for the result
+        cache (the listing first), so a new run folder or a new result.json ends a cached card list."""
+        result_cache.record_input(self.runs_dir)
         try:
             folders = sorted(p for p in self.runs_dir.iterdir() if p.is_dir())
         except OSError:
             return ()
-        return tuple(p.name for p in folders if (p / "result.json").is_file())
+        return tuple(p.name for p in folders if self._has_result(p))
 
-    def _card(self, row: RegistryRow, runs: Sequence[str]) -> HypothesisCard:
-        check = self._spec_check(row)
-        _, screen = self._screen(row.name)
+    def _card(self, row: RegistryRow, runs: Sequence[str], rounds: _SummaryIndex | None = None) -> HypothesisCard:
+        screened = self._screen(row.name)
+        check = self._spec_check(row, screened)
+        screen = screened[1]
         badge, note = verdict_parts(row.verdict)
         source = SERIES_SOURCES.get(row.name)
         prefixes = (f"nt_{row.name}_", f"{row.name}_")
@@ -483,7 +541,7 @@ class ResearchService:
             bh_q=row.bh_q, spec=row.spec, spec_sha256=row.spec_sha256, spec_sha_ok=row.spec_sha_ok,
             spec_rehash_ok=check.ok, tag=row.tag, amendment_files=list(row.amendment_files),
             amendments_ok=row.amendments_ok, screen=check.screen if screen is not None else None,
-            round=self._round(row.name)[0], pass_checks=_own_pass_checks(row.name, screen),
+            round=self._round(row.name, rounds)[0], pass_checks=_own_pass_checks(row.name, screen),
             **_headline(row.name, screen), series_kind=source.kind if source else None,
             series_costs=sorted(source.values) if source else [],
             nautilus_runs=[r for r in runs if r.startswith(prefixes)],
@@ -492,22 +550,16 @@ class ResearchService:
 
     def cards(self) -> list[HypothesisCard]:
         runs = self._run_names()
-        return [self._card(row, runs) for row in self.registry_rows()]
+        rounds = _SummaryIndex(self)
+        return [self._card(row, runs, rounds) for row in self.registry_rows()]
 
     def card(self, name: str) -> HypothesisCard:
         return self._card(self._row(name), self._run_names())
 
-    def _round(self, name: str) -> tuple[int | None, str | None]:
+    def _round(self, name: str, rounds: _SummaryIndex | None = None) -> tuple[int | None, str | None]:
         if name in ROUNDS:
             return ROUNDS[name]
-        for path in sorted(self.screens.glob("*summary*.md")):
-            if any(mark in path.name for mark in HISTORY_MARKS):
-                continue
-            text = self._read(path, "text", path.name) or ""
-            if name in text.partition("\n")[0]:
-                number = re.search(r"round(\d+)", path.name)
-                return (int(number.group(1)) if number else None), path.name
-        return None, None
+        return (_SummaryIndex(self) if rounds is None else rounds).find(name)
 
     def _screen_files(self, stem: str) -> tuple[list[str], dict[str, Any]]:
         history, auxiliaries = [], {}
@@ -522,12 +574,13 @@ class ResearchService:
 
     def detail(self, name: str) -> HypothesisDetail:
         row = self._row(name)
-        card = self._card(row, self._run_names())
+        rounds = _SummaryIndex(self)
+        card = self._card(row, self._run_names(), rounds)
         stem, screen = self._screen(name)
         spec_path = self._spec_path(row.spec)
         spec = self._read(spec_path, "json", f"spec {row.spec}") if spec_path is not None else None
         history, auxiliaries = self._screen_files(stem) if stem is not None else ([], {})
-        summary_name = self._round(name)[1]
+        summary_name = self._round(name, rounds)[1]
         summary = self._read(self.screens / summary_name, "text", summary_name) if summary_name else None
         local = self._local
         return HypothesisDetail(card=card, des=_des(name, screen), screen=local(thaw(screen)),
