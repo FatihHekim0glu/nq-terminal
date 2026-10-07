@@ -59,7 +59,7 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
   state is said in words (On or Off in this session) and the note says that a change is confirmed in the app's own
   dialog and applies at the next start, so the state never depends on colour. After a click a polite status line says
   to answer the dialog; Escape closes Options and returns focus to the Options button. When the snapshot is off, the
-  LIVE state line, a status region, names where the switch is. The confirmation and refusal dialogs are native Windows
+  LIVE state line, a status region, names the control (Options, IB snapshot) and never its position, which moves when the strip wraps (1.3.3). When an attached backend reads TWS while the app's switch is off, LIVE and the switch note say the backend follows its own setting. The confirmation and refusal dialogs are native Windows
   dialogs that a screen reader reads, and a refusal names the settings that are wrong and never shows their values.
 - **The stopped page.** The line that says the backend has stopped is a status region, and the exit code is part of
   that same announced line, so a code that is read late is spoken with the sentence instead of being written silently

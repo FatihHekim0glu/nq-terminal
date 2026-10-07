@@ -5,7 +5,8 @@
 //! D:\dev\tmp\w4b-supervise and fail every dialog closed.
 //!
 //! It also holds the GLOBAL window watch (every visible top-level window of every process, sampled every 100 ms, plus
-//! the foreground window: anything new fails the test that started it) and the fake lab: a folder under
+//! the foreground window: anything new in the test process tree, or a system host's window that appeared during the run, fails
+//! the test that started it; another program's window does not, see `scope` below) and the fake lab: a folder under
 //! D:\dev\tmp\w4b-supervise whose `.venv` is a junction to the nq-lab venv (so the spawned interpreter is the nq-lab
 //! venv's python.exe) and whose `terminal/backend/nq_terminal` package is tests/fixtures/fake_backend.py.
 //!
@@ -330,7 +331,25 @@ fn visible_windows() -> HashSet<isize> {
         .collect()
 }
 
-/// The global watch: any new visible top-level window anywhere, or a change of the foreground window, is recorded.
+/// The owner process and the class of a window.
+fn owner_and_class(hwnd: HWND) -> (u32, String) {
+    let (mut pid, mut class) = (0u32, [0u16; 256]);
+    // SAFETY: read-only queries into buffers that outlive the calls.
+    let n = unsafe {
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        GetClassNameW(hwnd, &mut class) as usize
+    };
+    (pid, String::from_utf16_lossy(&class[..n]))
+}
+
+/// The scope rule of every global watch (hidden_support/scope.rs): another program's window, or a focus change to one,
+/// is the owner's own use of the PC and never fails a run; a window of the test process or its tree, a system host's
+/// window that appeared during the run, or one whose owner cannot be traced counts.
+#[path = "hidden_support/scope.rs"]
+mod scope;
+
+/// The global watch: any new visible top-level window of the test's own tree (or a system host's, or an untraced
+/// owner's), or a change of the foreground window to one, is recorded. Another program's windows are not.
 pub struct Watch {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<Vec<String>>>,
@@ -344,11 +363,20 @@ pub fn watch() -> Watch {
         // SAFETY: a plain query.
         let mut foreground = unsafe { GetForegroundWindow() }.0 as isize;
         let mut seen = Vec::new();
+        let root = scope::root_pid();
+        let mut hosts = scope::HostWindows::default();
         while !flag.load(Ordering::SeqCst) {
             for hwnd in visible_windows().difference(&known.clone()) {
-                let what = describe(HWND(*hwnd as *mut _));
+                let handle = HWND(*hwnd as *mut _);
+                let (pid, class) = owner_and_class(handle);
+                // The owner is read when the window is first seen: it may be gone by the time the verdict is made.
+                let chain = scope::chain_of(pid);
+                hosts.note_new(*hwnd, &chain, &class);
+                let what = describe(handle);
                 // tao's event target reports visible but is never drawn (W0A); the stage A tests exempt it too.
-                if !what.contains(TAO_EVENT_TARGET) {
+                if !what.contains(TAO_EVENT_TARGET)
+                    && !scope::is_foreign_window(&chain, &class, root)
+                {
                     seen.push(format!("new visible window: {what}"));
                 }
                 known.insert(*hwnd);
@@ -356,10 +384,11 @@ pub fn watch() -> Watch {
             // SAFETY: a plain query.
             let now = unsafe { GetForegroundWindow() }.0 as isize;
             if now != foreground {
-                seen.push(format!(
-                    "foreground changed to {}",
-                    describe(HWND(now as *mut _))
-                ));
+                let handle = HWND(now as *mut _);
+                let (pid, class) = owner_and_class(handle);
+                if hosts.foreground_counts(now, &scope::chain_of(pid), &class, root) {
+                    seen.push(format!("foreground changed to {}", describe(handle)));
+                }
                 foreground = now;
             }
             std::thread::sleep(Duration::from_millis(100));

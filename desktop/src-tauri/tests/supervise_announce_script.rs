@@ -20,7 +20,8 @@ use serde_json::{Value, json};
 use std::process::Command;
 
 const REASON: &str = "The backend stopped.";
-const CODE: &str = "The backend ended with exit code 3.";
+/// The exit code line as `supervise_check::exit_note` writes it, with its own leading space.
+const CODE: &str = " The backend ended with exit code 3.";
 
 /// The stubs: a document whose reason line holds a text node and, when `code` is set, the exit code span after it.
 const HARNESS: &str = r#"

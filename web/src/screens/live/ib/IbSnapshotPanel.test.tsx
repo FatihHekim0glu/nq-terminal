@@ -66,6 +66,16 @@ describe('IbSnapshotView states', () => {
     expect(screen.queryAllByRole('table')).toHaveLength(0)
   })
 
+  it('disabled in the desktop app: names the control, never its position, and covers an already confirmed switch', () => {
+    render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={false} />)
+    const text = screen.getByRole('status').textContent ?? ''
+    // WCAG 1.3.3: the strip wraps at narrow widths and high zoom, so Options is not always at the top right.
+    expect(text).not.toMatch(/top right|top left|above|below|corner/i)
+    expect(IB.stateOffNoteDesktop).toBe(
+      'To read the paper account, open Options, turn on IB snapshot (read only), confirm, then start the terminal again. If you have already confirmed it, just start the terminal again. It has no order path either way.',
+    )
+  })
+
   it('disabled while the app has it on: says the backend was attached, not started by this app', () => {
     render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot />)
     const state = screen.getByRole('status')
@@ -74,6 +84,25 @@ describe('IbSnapshotView states', () => {
     expect(state.textContent).not.toContain('NQT_IB_READONLY')
   })
 
+  it('on in an attached backend while the app has it off: says the backend follows its own setting (not the app switch)', () => {
+    for (const [snapshot, nowMs] of [[LIVE_SNAPSHOT, NOW_FRESH_MS], [LIVE_SNAPSHOT, NOW_STALE_MS], [UNAVAILABLE_SNAPSHOT, NOW_FRESH_MS]] as const) {
+      render(<IbSnapshotView snapshot={snapshot} failed={false} detail={null} nowMs={nowMs} shellIbSnapshot={false} />)
+      const note = screen.getByText(IB.stateOnAttached)
+      expect(note.textContent).toMatch(/attached, not started by this app/)
+      expect(note.textContent).not.toMatch(/top right|top left|above|below|corner|NQT_IB_READONLY|[\u2013\u2014]/)
+      cleanup()
+    }
+  })
+
+  it('the attached note is absent when the app has it on, in a browser, and when the snapshot is off', () => {
+    for (const shell of [true, null] as const) {
+      render(<IbSnapshotView snapshot={LIVE_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={shell} />)
+      expect(screen.queryByText(IB.stateOnAttached)).toBeNull()
+      cleanup()
+    }
+    render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={false} />)
+    expect(screen.queryByText(IB.stateOnAttached)).toBeNull()
+  })
   it('disabled in a browser keeps the variable wording and the backend message', () => {
     render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={null} />)
     const state = screen.getByRole('status')

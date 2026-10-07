@@ -11,7 +11,7 @@ use super::STOP_GRACE_S;
 mod announce;
 use super::check::{self, CONFIG_KEY, Expect, Spec};
 use super::retry;
-use super::run::{self, AfterStop, Backend, Shared, Sink, Verdict};
+use super::run::{self, AfterStop, Backend, IbGate, Shared, Sink, Verdict};
 use crate::link;
 use crate::{Launch, ShellError, crash};
 use serde_json::json;
@@ -91,6 +91,16 @@ fn repeat_exit_note(
     ran
 }
 
+/// The scripts evaluated after the navigation to the stopped page's `code` section, in order: the exit code line
+/// first when there is one, so the reason line already holds this exit's code (or none) when the announcement focuses
+/// it and a screen reader reads it out; an earlier exit's code, still in the line on a fragment-only navigation, is
+/// never read (V032 review). Then the announcement.
+fn stopped_evals(code: &str, exit_note: Option<&str>) -> Vec<String> {
+    let mut evals: Vec<String> = exit_note.map(str::to_string).into_iter().collect();
+    evals.push(announce::announce_script(code));
+    evals
+}
+
 fn eval_exit_note<R: Runtime>(window: &WebviewWindow<R>, script: &str) {
     if let Err(e) = window.eval(script) {
         crash::log(
@@ -136,6 +146,24 @@ impl<R: Runtime> WindowSink<R> {
         });
     }
 
+    /// The stopped page's `code` section: the navigation, then `stopped_evals` (the exit code line, if any, then the
+    /// announcement), then the announcement's repeats.
+    fn show_stopped(&self, code: &str, exit_note: Option<&str>) {
+        let page = self.pages.join(&format!("{STOPPED_PAGE}#{code}"));
+        // A second reason is a fragment-only navigation: no load, no focus move, no new title. Announce it to screen
+        // readers the way the rebuild page does (WCAG 4.1.3).
+        let shown = navigate(&self.window, page.map_err(|e| e.to_string())).and_then(|()| {
+            stopped_evals(code, exit_note)
+                .into_iter()
+                .try_for_each(|script| self.window.eval(script).map_err(|e| e.to_string()))
+        });
+        if let Err(e) = shown {
+            crash::log("supervise_stopped_page_failed", json!({ "error": e }));
+            return;
+        }
+        self.announce_again(code);
+    }
+
     /// Whether the window already shows the stopped page's unverified section.
     fn shows_unverified(&self) -> bool {
         self.window
@@ -163,32 +191,21 @@ impl<R: Runtime> Sink for WindowSink<R> {
     }
 
     fn stopped(&self, code: &str) {
-        let page = self.pages.join(&format!("{STOPPED_PAGE}#{code}"));
-        // A second reason is a fragment-only navigation: no load, no focus move, no new title. Announce it to screen
-        // readers the way the rebuild page does (WCAG 4.1.3).
-        let shown = navigate(&self.window, page.map_err(|e| e.to_string())).and_then(|()| {
-            let script = announce::announce_script(code);
-            self.window.eval(script).map_err(|e| e.to_string())
-        });
-        if let Err(e) = shown {
-            crash::log("supervise_stopped_page_failed", json!({ "error": e }));
-            return;
-        }
-        self.announce_again(code);
+        self.show_stopped(code, None);
     }
 
-    /// The "exited" reason, then the exit code in words on the page (nothing when the code is unknown; an earlier
-    /// exit's code is cleared). The announcement runs first, so the heading is what a screen reader hears.
+    /// The "exited" reason with the exit code in words on the page (nothing when the code is unknown; an earlier
+    /// exit's code is cleared). The code line is written before the announcement (`stopped_evals`), so what a screen
+    /// reader hears is this exit's line, never an earlier exit's code.
     ///
     /// The webview can still be on the outgoing page when the first eval runs (the navigation is a full load), and a
     /// script that ran there dies with that document. The same script is therefore evaluated again a few times, off
     /// this thread; it is idempotent and waits for the stopped page itself. A newer exit ends the older repeats, so an
     /// earlier code can never overwrite a later one.
     fn exited(&self, exit_code: Option<u32>) {
-        self.stopped("exited");
         let generation = next_exit_generation(&EXIT_NOTE_GENERATION);
         let script = check::exit_note_script(exit_code);
-        eval_exit_note(&self.window, &script);
+        self.show_stopped("exited", Some(&script));
         let window = self.window.clone();
         std::thread::spawn(move || {
             let eval = || eval_exit_note(&window, &script);
@@ -203,9 +220,10 @@ impl<R: Runtime> Sink for WindowSink<R> {
         });
     }
 
-    /// Off the UI thread (the navigation handler spawned this call): the native question, then the settings write.
-    fn ib_switch(&self, on: bool) {
-        let outcome = super::ib_switch::ask(&self.window, on);
+    /// Off the UI thread (the navigation handler spawned this call): the native question, then the settings write;
+    /// for a backend this app attached to, only the native note that the switch does not apply.
+    fn ib_switch(&self, on: bool, attached: bool) {
+        let outcome = super::ib_switch::ask(&self.window, on, attached);
         crash::log(
             "ib_switch_done",
             json!({ "on": on, "outcome": format!("{outcome:?}") }),
@@ -312,18 +330,20 @@ fn install_navigation_check<R: Runtime>(
                         // The page that asked is the webview's address now (NavigationStarting comes before the
                         // address changes): only the current backend's own page reaches the dialog.
                         let source = sender.as_ref().map(page_source).unwrap_or_default();
-                        if shared.ib_switch_allowed(&source) {
+                        let gate = shared.ib_switch_gate(&source);
+                        if gate != IbGate::Refused {
                             // Logged, never relied on: whether a button's location.assign counts as user initiated.
                             let mut user = windows::core::BOOL(0);
                             // SAFETY: as above.
                             let read = unsafe { args.IsUserInitiated(&mut user) }.is_ok();
                             let initiated = read.then_some(user.as_bool());
+                            let attached = gate == IbGate::Attached;
                             crash::log(
                                 "ib_switch_request",
-                                json!({ "on": on, "user_initiated": initiated }),
+                                json!({ "on": on, "user_initiated": initiated, "attached": attached }),
                             );
                             let sink = sink.clone();
-                            std::thread::spawn(move || sink.ib_switch(on));
+                            std::thread::spawn(move || sink.ib_switch(on, attached));
                         } else {
                             crash::log(
                                 "ib_switch_refused",
@@ -550,6 +570,61 @@ pub fn start<R: Runtime>(
 #[cfg(test)]
 mod exit_note_tests {
     use super::*;
+
+    /// V032 review: on a second exit (a fragment-only navigation) the reason line still held the earlier exit's code
+    /// when the announcement focused it, so a screen reader read out a stale code. The code line is now written first:
+    /// the very scripts the window evaluates, run in their order by node against a stopped page whose line still holds
+    /// an earlier code, leave the reason line with this exit's code at the moment of the focus.
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "a unit test runs node on the shell's own scripts"
+    )]
+    fn the_announcement_reads_this_exits_code_never_an_earlier_one() {
+        let evals = stopped_evals("exited", Some(&check::exit_note_script(Some(5))));
+        let harness = format!(
+            r#"
+const evals = {evals};
+const reason = {{ nodeType: 3, textContent: 'The backend stopped.' }};
+const code = {{ nodeType: 1, textContent: ' The backend ended with exit code 3.' }};
+reason.nextSibling = code; code.nextSibling = null;
+const body = {{ id: 'body' }};
+let heard = null;
+const line = {{ firstChild: reason, setAttribute() {{}}, focus() {{ heard = reason.textContent + code.textContent; doc.activeElement = line; }} }};
+const doc = {{ title: 'nq-lab terminal: stopped', readyState: 'complete', body, activeElement: body,
+  getElementById: (id) => (id === 'exited-text' ? line : id === 'exit-code' ? code : null) }};
+const location = {{ pathname: '/stopped.html', hash: '#exited' }};
+for (const script of evals) new Function('document', 'location', 'setTimeout', script)(doc, location, () => {{}});
+console.log(JSON.stringify({{ heard, title: doc.title }}));
+"#,
+            evals = serde_json::to_string(&evals).expect("scripts")
+        );
+        let out = std::process::Command::new("node")
+            .args(["-e", &harness])
+            .output()
+            .unwrap_or_else(|e| panic!("cannot run node: {e}"));
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let got: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+        assert_eq!(
+            got,
+            json!({
+                "heard": "The backend stopped. The backend ended with exit code 5.",
+                "title": "nq-lab terminal: The backend stopped."
+            })
+        );
+    }
+
+    #[test]
+    fn a_reason_without_an_exit_code_evaluates_only_its_announcement() {
+        assert_eq!(
+            stopped_evals("lock-held", None),
+            [announce::announce_script("lock-held")]
+        );
+    }
 
     #[test]
     fn the_repeats_cover_a_full_page_load() {

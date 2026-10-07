@@ -442,8 +442,10 @@ impl Failure {
 pub const EXIT_NOTE_ID: &str = "exit-code";
 
 /// The stopped page's line for a backend's exit code, in words; nothing when the code is unknown. It names no folder.
+/// It starts with a real space, because it follows the reason's own text in the same line (no space drawn by CSS, which
+/// a copy of the line would lose).
 pub fn exit_note(code: Option<u32>) -> Option<String> {
-    code.map(|c| format!("The backend ended with exit code {c}."))
+    code.map(|c| format!(" The backend ended with exit code {c}."))
 }
 
 /// A script that puts the exit code line into the stopped page (and clears it when the code is unknown, so that a
@@ -600,17 +602,27 @@ mod tests {
     fn a_known_exit_code_is_put_into_words_and_an_unknown_one_says_nothing() {
         assert_eq!(
             exit_note(Some(3)).as_deref(),
-            Some("The backend ended with exit code 3.")
+            Some(" The backend ended with exit code 3.")
         );
         assert_eq!(
             exit_note(Some(0)).as_deref(),
-            Some("The backend ended with exit code 0.")
+            Some(" The backend ended with exit code 0.")
         );
         assert_eq!(
             exit_note(Some(3_221_225_786)).as_deref(),
-            Some("The backend ended with exit code 3221225786.")
+            Some(" The backend ended with exit code 3221225786.")
         );
         assert_eq!(exit_note(None), None);
+    }
+
+    /// V032 review: the space between the reason and the code was drawn by CSS (`::before`), so it was not in the
+    /// line's text. It is a real space in the note now, and the stylesheet draws none.
+    #[test]
+    fn the_space_before_the_code_is_text_and_not_drawn_by_the_stylesheet() {
+        assert!(exit_note(Some(3)).is_some_and(|n| n.starts_with(' ')));
+        let css = include_str!("../assets/stopped.css");
+        assert!(!css.contains("::before"), "{css}");
+        assert!(css.contains(".exit-code:empty"), "{css}");
     }
 
     #[test]
@@ -667,7 +679,7 @@ mod tests {
     #[test]
     fn a_repeated_script_writes_only_when_the_line_differs() {
         let known = exit_note_script(Some(7));
-        let text = "\"The backend ended with exit code 7.\"";
+        let text = "\" The backend ended with exit code 7.\"";
         let guarded = format!("if(e.textContent!=={text}){{e.textContent={text};}}");
         assert!(known.contains(&guarded), "{known}");
         let unknown = exit_note_script(None);

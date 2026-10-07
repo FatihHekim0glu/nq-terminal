@@ -181,87 +181,6 @@ fn the_shell_script_gives_the_page_a_frozen_object() {
     }
 }
 
-fn install_shell(shell: Option<Shell>) {
-    let cell = SHELL.get_or_init(|| Mutex::new(None));
-    *cell
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = shell;
-}
-
-fn scratch_settings(name: &str, settings: &Settings) -> (PathBuf, Vec<u8>) {
-    let dir = crate::crash::test_support::fresh(name);
-    let file = dir.join(SETTINGS_FILE);
-    let bytes = serde_json::to_vec_pretty(settings).expect("serialises");
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "a unit test writes its own scratch settings file under D:\\dev"
-    )]
-    std::fs::write(&file, &bytes).expect("scratch settings");
-    install_shell(Some(Shell {
-        settings: settings.clone(),
-        file: file.clone(),
-        pending: false,
-        created_data_dir: false,
-    }));
-    (file, bytes)
-}
-
-fn saved_settings() -> Settings {
-    Settings {
-        lab: Some(PathBuf::from(r"D:\dev\tmp\lab")),
-        webview_data_dir: Some(PathBuf::from(r"D:\dev\tmp\wv")),
-        zoom: 125,
-        ib_snapshot: false,
-    }
-}
-
-/// The switch's write changes only `ib_snapshot`, keeps the old file as settings.json.1, and needs settings.
-#[cfg(not(any(feature = "smoke", feature = "measure")))]
-#[test]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "a unit test reads back its own scratch settings files under D:\\dev"
-)]
-fn the_ib_switch_writes_only_its_own_key_and_keeps_the_old_file() {
-    install_shell(None);
-    assert!(store_ib_snapshot(true).is_err(), "no settings, no write");
-    let (file, old_bytes) = scratch_settings("ib-switch-settings", &saved_settings());
-    store_ib_snapshot(true).expect("written");
-    let read = |path: &Path| -> serde_json::Value {
-        serde_json::from_slice(&std::fs::read(path).expect("read back")).expect("JSON")
-    };
-    let mut new = read(&file);
-    let mut old: serde_json::Value = serde_json::from_slice(&old_bytes).expect("JSON");
-    assert_eq!(new["ib_snapshot"], json!(true));
-    for value in [&mut new, &mut old] {
-        value
-            .as_object_mut()
-            .expect("an object")
-            .remove("ib_snapshot");
-    }
-    assert_eq!(new, old, "only ib_snapshot may change");
-    let kept = std::fs::read(file.with_file_name("settings.json.1")).expect("the old copy");
-    assert_eq!(kept, old_bytes);
-    assert_eq!(ib_snapshot_stored(), Some(true));
-    assert_eq!(settings().zoom, 125);
-    install_shell(None);
-}
-
-/// A test build never writes the switch, whatever asks: the file keeps its bytes and the stored value stays.
-#[cfg(any(feature = "smoke", feature = "measure"))]
-#[test]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "a unit test reads back its own scratch settings file under D:\\dev"
-)]
-fn a_test_build_never_writes_the_ib_switch() {
-    let (file, old_bytes) = scratch_settings("ib-switch-test-build", &saved_settings());
-    assert!(store_ib_snapshot(true).is_err());
-    assert_eq!(std::fs::read(&file).expect("read back"), old_bytes);
-    assert_eq!(ib_snapshot_stored(), Some(false));
-    install_shell(None);
-}
-
 #[test]
 fn policy_refusal_names_the_hive() {
     let r = policy::PolicyRefusal {
@@ -269,4 +188,41 @@ fn policy_refusal_names_the_hive() {
         value: "AdditionalBrowserArguments".into(),
     };
     assert!(r.to_string().contains("HKLM"));
+}
+
+fn options_with(ib_snapshot: bool) -> WindowOptions {
+    WindowOptions {
+        title: "nq-lab terminal".into(),
+        width: DEFAULT_WIDTH,
+        height: DEFAULT_HEIGHT,
+        webview_data_dir: PathBuf::from(r"D:\dev\tmp\wv"),
+        config_dir: PathBuf::from(r"D:\dev\tmp\config"),
+        lab: Some(PathBuf::from(r"D:\dev\tmp\lab")),
+        ib_snapshot,
+    }
+}
+
+/// V032 review: the shell object said off whenever the window options were missing, while the backend could have
+/// been started with the snapshot on. The value in force is the options' own (on included); missing options refuse
+/// the setup; a smoke build says off.
+#[test]
+fn the_ib_snapshot_in_force_is_the_options_value_and_missing_options_refuse() {
+    assert!(matches!(
+        ib_in_force(Some(&options_with(true)), false),
+        Ok(true)
+    ));
+    assert!(matches!(
+        ib_in_force(Some(&options_with(false)), false),
+        Ok(false)
+    ));
+    let missing = ib_in_force(None, false);
+    assert!(
+        matches!(&missing, Err(ShellError::Refused(why)) if why.contains("IB snapshot")),
+        "{missing:?}"
+    );
+    assert!(matches!(
+        ib_in_force(Some(&options_with(true)), true),
+        Ok(false)
+    ));
+    assert!(matches!(ib_in_force(None, true), Ok(false)));
 }

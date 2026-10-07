@@ -11,7 +11,7 @@
 //!   late is unverified, not swapped: the navigation is cancelled and retried off the UI thread (supervise_retry.rs).
 //! - The two exact IB switch addresses (ib_switch.rs) are recognised before the shell's own pages pass: always
 //!   cancelled, and `Verdict::IbSwitch` only while a backend is current (supervise_shell.rs then checks that the page
-//!   that asked is that backend's own page).
+//!   that asked is that backend's own page, and whether this app started that backend or attached to it: `ib_gate`).
 //! - Restarts at 1, 2 and 4 s; three crashes within 60 s stop the retries and ask Restart or Quit.
 //! - A backend that ends while its spawn-time proof is retried is an exit (with its exit code in the log), not a
 //!   refusal, when the failed proof carries no checked answer (`proof_failure`); a checked answer stays a refusal.
@@ -369,10 +369,11 @@ pub trait Sink: Send + Sync {
     fn still_unverified(&self) {
         self.stopped(Mismatch::Unverified(String::new()).code());
     }
-    /// The backend's page asked to turn the read-only IB snapshot on or off for the next start (ib_switch.rs). The
-    /// window asks the owner natively; the default does nothing.
-    fn ib_switch(&self, on: bool) {
-        let _ = on;
+    /// The backend's page asked to turn the read-only IB snapshot on or off for the next start (ib_switch.rs);
+    /// `attached` when this app attached to that backend rather than started it. The window asks the owner natively
+    /// (or, for an attached backend, says why the switch does not apply); the default does nothing.
+    fn ib_switch(&self, on: bool, attached: bool) {
+        let _ = (on, attached);
     }
 }
 
@@ -406,6 +407,32 @@ pub fn ib_switch_verdict(uri: &str, backend_current: bool) -> Option<Verdict> {
     })
 }
 
+/// Whether the IB switch may be asked for, and of which backend.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IbGate {
+    /// No backend is current, or the page that asked is not its own page: dropped.
+    Refused,
+    /// The own page of a backend this app started: the switch is asked.
+    Started,
+    /// The own page of a backend this app attached to: its snapshot follows its own environment, so the switch only
+    /// says so (ib_switch.rs).
+    Attached,
+}
+
+/// The IB switch gate on its own: `current` is the current backend's port and whether it was attached to.
+pub fn ib_gate(source: &str, current: Option<(u16, bool)>) -> IbGate {
+    match current {
+        Some((port, attached)) if is_backend_page(source, port) => {
+            if attached {
+                IbGate::Attached
+            } else {
+                IbGate::Started
+            }
+        }
+        _ => IbGate::Refused,
+    }
+}
+
 /// Whether `source` (the address of the page that started a navigation) is a page of the backend on `port`.
 pub fn is_backend_page(source: &str, port: u16) -> bool {
     let origin = link::origin(port);
@@ -416,12 +443,21 @@ pub fn is_backend_page(source: &str, port: u16) -> bool {
 pub struct Shared {
     pub spec: Spec,
     pub expect: Arc<Expect>,
-    current: Mutex<Option<Arc<Backend>>>,
+    /// The current backend and the last exit code, under one lock so a retry never reads one without the other.
+    live: Mutex<Live>,
     stop_event: Owned,
     stopping: AtomicBool,
     /// Held by the one running supervision loop.
     looping: AtomicBool,
     approved: Approval,
+}
+
+/// What `Shared::live` holds.
+#[derive(Default)]
+struct Live {
+    current: Option<Arc<Backend>>,
+    /// The exit code `serve` last reported (None until a backend has exited, or when its code could not be read).
+    last_exit: Option<u32>,
 }
 
 /// The running loop's hold on `Shared::looping`, let go when the loop ends however it ends.
@@ -441,7 +477,7 @@ impl Shared {
         Ok(Arc::new(Self {
             spec,
             expect: Arc::new(expect),
-            current: Mutex::new(None),
+            live: Mutex::new(Live::default()),
             stop_event: Owned(event),
             stopping: AtomicBool::new(false),
             looping: AtomicBool::new(false),
@@ -450,12 +486,29 @@ impl Shared {
     }
 
     pub fn current(&self) -> Option<Arc<Backend>> {
-        self.current.lock().ok().and_then(|c| c.clone())
+        self.live.lock().ok().and_then(|l| l.current.clone())
     }
 
     fn set_current(&self, backend: Option<Arc<Backend>>) {
-        if let Ok(mut current) = self.current.lock() {
-            *current = backend;
+        if let Ok(mut live) = self.live.lock() {
+            live.current = backend;
+        }
+    }
+
+    /// A backend has ended: its exit code is recorded and it stops being current in one step, so a retry deciding on
+    /// another thread never sees no backend before the code of the one that just ended.
+    pub fn end_current(&self, code: Option<u32>) {
+        if let Ok(mut live) = self.live.lock() {
+            live.last_exit = code;
+            live.current = None;
+        }
+    }
+
+    /// Where the backend stands, read in one step: a current backend, or none with the last exit code.
+    pub fn standing(&self) -> AfterRetry {
+        match self.live.lock() {
+            Ok(live) if live.current.is_none() => AfterRetry::Ended(live.last_exit),
+            _ => AfterRetry::Current,
         }
     }
 
@@ -510,10 +563,28 @@ impl Shared {
     }
 
     /// Whether an IB switch request came from the current backend's own page (`source` is the webview's address when
-    /// the navigation started): the shell's pages and any other origin never reach the dialog.
-    pub fn ib_switch_allowed(&self, source: &str) -> bool {
-        self.current()
-            .is_some_and(|b| is_backend_page(source, b.port()))
+    /// the navigation started), and whether that backend was started or attached to: the shell's pages and any other
+    /// origin never reach the dialog.
+    pub fn ib_switch_gate(&self, source: &str) -> IbGate {
+        let current = self
+            .current()
+            .map(|b| (b.port(), matches!(*b, Backend::Attached(_))));
+        ib_gate(source, current)
+    }
+
+    /// The exit code `serve` last reported.
+    #[allow(
+        dead_code,
+        reason = "read by the tests; the retry reads it through `standing`"
+    )]
+    pub fn last_exit(&self) -> Option<u32> {
+        self.live.lock().ok().and_then(|l| l.last_exit)
+    }
+
+    fn note_exit(&self, code: Option<u32>) {
+        if let Ok(mut live) = self.live.lock() {
+            live.last_exit = code;
+        }
     }
 
     /// Where a retried proof sends the window: `uri`, or the backend's page for the Retry link.
@@ -540,21 +611,30 @@ impl Shared {
         let pause = || signalled_within(&[self.stop_event.raw()], retry::RETRY_PAUSE);
         let done = retry::retry(retry::RETRY_ATTEMPTS, once, pause);
         if !self.stopping() {
-            conclude_retry(sink, uri, done, self.current().is_none());
+            conclude_retry(sink, uri, done, self.standing());
         }
     }
 }
 
-/// How a retry ends: on to `uri` when the proof passed; the "exited" section through `exited` with no code when the
-/// backend has ended meanwhile (so an earlier exit's code line is cleared, which a fragment-only navigation to the same
-/// section would leave standing); an announcement in place when it was late every time; the refusal's own section
-/// otherwise.
-pub fn conclude_retry(sink: &dyn Sink, uri: &str, done: Result<(), Mismatch>, backend_gone: bool) {
-    match done {
-        Ok(()) => sink.reload(uri),
-        Err(_) if backend_gone => sink.exited(None),
-        Err(Mismatch::Unverified(_)) => sink.still_unverified(),
-        Err(m) => sink.stopped(m.code()),
+/// Where the backend stands when a retry ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AfterRetry {
+    /// A backend is current.
+    Current,
+    /// None is: the last exit code `serve` reported (None when no backend has exited or its code was not read).
+    Ended(Option<u32>),
+}
+
+/// How a retry ends: on to `uri` when the proof passed; the "exited" section through `exited` with the last exit code
+/// when the backend has ended meanwhile (the code `serve` has just written stays; with no code known an earlier line is
+/// cleared, which a fragment-only navigation to the same section would leave standing); an announcement in place when
+/// it was late every time; the refusal's own section otherwise.
+pub fn conclude_retry(sink: &dyn Sink, uri: &str, done: Result<(), Mismatch>, after: AfterRetry) {
+    match (done, after) {
+        (Ok(()), _) => sink.reload(uri),
+        (Err(_), AfterRetry::Ended(code)) => sink.exited(code),
+        (Err(Mismatch::Unverified(_)), AfterRetry::Current) => sink.still_unverified(),
+        (Err(m), AfterRetry::Current) => sink.stopped(m.code()),
     }
 }
 
@@ -577,10 +657,13 @@ fn serve(shared: &Shared, sink: &dyn Sink, backend: Backend) -> Option<Duration>
     // The interpreter's own code is the backend's (its handle is the last of a spawned backend's).
     let interpreter_first: Vec<HANDLE> = own_handles.iter().rev().copied().collect();
     let exit_code = ended_code(&interpreter_first, Duration::ZERO);
-    shared.set_current(None);
+    // A deliberate stop records no code. Otherwise the code is recorded as the backend stops being current, before the
+    // log write, so a retry on another thread never finds no backend with the code still missing.
     if shared.stopping() {
+        shared.set_current(None);
         return None;
     }
+    shared.end_current(exit_code);
     let ran = started.elapsed();
     crash::log(
         "supervise_exit",
@@ -616,6 +699,7 @@ fn attempt(shared: &Shared, sink: &dyn Sink) -> Option<Duration> {
             );
             // Every failure that shows the "exited" reason says so through `exited`, with the code when it is known.
             if other.code() == "exited" {
+                shared.note_exit(other.exit_code());
                 sink.exited(other.exit_code());
             } else {
                 sink.stopped(other.code());

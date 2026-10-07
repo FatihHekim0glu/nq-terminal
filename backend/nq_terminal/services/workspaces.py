@@ -35,7 +35,7 @@ from typing import Any
 from nq_terminal.desktop import sessions
 from nq_terminal.models import workspaces as models
 from nq_terminal.models.workspaces import DOC_NAMES, SCHEMA, DocumentError, InvalidDocument, UnknownDocument
-from nq_terminal.settings import RESEARCH_DIRS
+from nq_terminal.settings import inside_research_folder
 
 LOG = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class WorkspaceStore:
         state = self._state_dir.resolve()
         folder = (state / FOLDER).resolve()
         root = ROOT.resolve()
-        if folder.parent != state or any(folder.is_relative_to(root.joinpath(*parts)) for parts in RESEARCH_DIRS):
+        if folder.parent != state or inside_research_folder(folder, root):
             raise StoreError("the workspace folder may not be there")
         return folder
 

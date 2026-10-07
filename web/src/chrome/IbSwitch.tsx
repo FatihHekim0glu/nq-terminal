@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { getBridge } from '../bridge'
 import { requestIbSwitch } from '../bridge/ibSwitch'
 import { IB_SWITCH } from '../copy/ibSwitch'
+import { useIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
 
 /**
  * A native button with role=switch whose checked state is the value in force in this session. A click asks the app for
@@ -21,6 +22,8 @@ type Phase = 'idle' | 'clearing' | 'asking' | 'answered'
 
 export default function IbSwitch() {
   const on = getBridge().ibSnapshot
+  // LIVE reads TWS while this app has the switch off: only a backend attached at start (not started by this app) can.
+  const attachedReading = useIbSnapshotLive()
   const noteId = useId()
   const [phase, setPhase] = useState<Phase>('idle')
   const timer = useRef<number | undefined>(undefined)
@@ -44,7 +47,7 @@ export default function IbSwitch() {
       <button type="button" role="switch" aria-checked={on} aria-describedby={noteId} onClick={ask}>
         {IB_SWITCH.label}
       </button>
-      <p id={noteId} className="frame-ib-note">{on ? IB_SWITCH.noteOn : IB_SWITCH.noteOff}</p>
+      <p id={noteId} className="frame-ib-note">{on ? IB_SWITCH.noteOn : attachedReading ? IB_SWITCH.noteOffAttached : IB_SWITCH.noteOff}</p>
       <p role="status" className="frame-ib-note">{status}</p>
     </div>
   )

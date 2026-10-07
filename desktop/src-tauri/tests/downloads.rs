@@ -134,20 +134,15 @@ fn start_watch() -> Watch {
         let (mut failures, mut seen, mut fg) = (Vec::new(), HashSet::new(), first_fg);
         let mut hosts = scope::HostWindows::default();
         while !stop2.load(Ordering::SeqCst) {
-            for h in visible_windows() {
-                let w = describe(h);
-                if baseline.contains(&h) {
-                    continue;
-                }
-                let chain = scope::chain_of(w.pid);
-                hosts.note_new(h, &chain, &w.class);
-                if seen.insert(h)
-                    && (w.drawn || w.class != TAO_CLASS)
-                    && !scope::is_foreign_window(&chain, &w.class, root)
-                {
-                    failures.push(format!("new window: {w:?}"));
-                }
-            }
+            failures.extend(first_sightings(
+                visible_windows(),
+                &baseline,
+                &mut seen,
+                &mut hosts,
+                root,
+                &describe,
+                &scope::chain_of,
+            ));
             if foreground() != fg {
                 fg = foreground();
                 let now = describe(fg);
@@ -160,6 +155,76 @@ fn start_watch() -> Watch {
         failures
     });
     Watch { stop, handle }
+}
+
+/// One sample of the new-window rule. A window in the baseline or already handled is skipped before anything is
+/// looked up: the owner chain takes a full Toolhelp process snapshot, and taking one per seen window on every 100 ms
+/// tick slowed the watch on a loaded machine (V032 review). A first sighting is described, its chain read once, noted
+/// for the host rule, and reported when it counts (drawn, or not tao's event target, and not another program's).
+fn first_sightings(
+    windows: impl IntoIterator<Item = isize>,
+    baseline: &HashSet<isize>,
+    seen: &mut HashSet<isize>,
+    hosts: &mut scope::HostWindows,
+    root: u32,
+    describe: &dyn Fn(isize) -> Seen,
+    chain_of: &dyn Fn(u32) -> Vec<scope::Link>,
+) -> Vec<String> {
+    let mut failures = Vec::new();
+    for h in windows {
+        if baseline.contains(&h) || !seen.insert(h) {
+            continue;
+        }
+        let w = describe(h);
+        let chain = chain_of(w.pid);
+        hosts.note_new(h, &chain, &w.class);
+        if (w.drawn || w.class != TAO_CLASS) && !scope::is_foreign_window(&chain, &w.class, root) {
+            failures.push(format!("new window: {w:?}"));
+        }
+    }
+    failures
+}
+
+#[test]
+fn a_window_already_seen_is_not_looked_up_again() {
+    let lookups = std::cell::Cell::new(0);
+    let chain_of = |_: u32| {
+        lookups.set(lookups.get() + 1);
+        Vec::new()
+    };
+    let describe = |h: isize| Seen {
+        pid: 1,
+        class: if h == 3 {
+            "drawn".into()
+        } else {
+            TAO_CLASS.into()
+        },
+        drawn: h == 3,
+    };
+    let (baseline, mut seen) = (HashSet::from([1_isize]), HashSet::new());
+    let mut hosts = scope::HostWindows::default();
+    let mut failures = Vec::new();
+    for _tick in 0..3 {
+        failures.extend(first_sightings(
+            [1, 2, 3],
+            &baseline,
+            &mut seen,
+            &mut hosts,
+            0,
+            &describe,
+            &chain_of,
+        ));
+    }
+    assert_eq!(
+        lookups.get(),
+        2,
+        "one owner lookup per new window, not per tick"
+    );
+    assert_eq!(
+        failures.len(),
+        1,
+        "the drawn new window is reported once: {failures:?}"
+    );
 }
 
 impl Watch {

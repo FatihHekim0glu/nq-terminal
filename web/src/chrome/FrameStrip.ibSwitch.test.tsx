@@ -8,6 +8,7 @@ import { installBridge } from '../bridge'
 import { fakeBridge } from '../bridge/bridge.testUtil'
 import { FRAME_STRIP } from '../copy/chrome'
 import { IB_SWITCH } from '../copy/ibSwitch'
+import { setIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
 import { FrameStrip } from './FrameStrip'
 
 // The switch asks the shell by navigating, which jsdom cannot do, so the request is spied on (the addresses are
@@ -16,6 +17,7 @@ const requestIbSwitch = vi.hoisted(() => vi.fn())
 vi.mock('../bridge/ibSwitch', () => ({ requestIbSwitch }))
 
 afterEach(() => {
+  act(() => setIbSnapshotLive(false))
   requestIbSwitch.mockClear()
   cleanup()
   installBridge(null)
@@ -80,6 +82,26 @@ describe('the IB snapshot switch in Options', () => {
     expect(document.getElementById(on.getAttribute('aria-describedby') ?? '')?.textContent).toBe(IB_SWITCH.noteOn)
   })
 
+  it('says an attached backend reading TWS follows its own setting when the app has it off, and only then', async () => {
+    await open(false)
+    const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
+    const noteOf = () => document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.textContent
+    expect(noteOf()).toBe(IB_SWITCH.noteOff)
+    act(() => setIbSnapshotLive(true))
+    expect(noteOf()).toBe(IB_SWITCH.noteOffAttached)
+    expect(noteOf()).toMatch(/attached, not started by this app/)
+    expect(noteOf()).not.toMatch(/Off in this session/)
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+    act(() => setIbSnapshotLive(false))
+    expect(noteOf()).toBe(IB_SWITCH.noteOff)
+  })
+
+  it('keeps the on note when the app has it on, whatever the snapshot does', async () => {
+    await open(true)
+    act(() => setIbSnapshotLive(true))
+    const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
+    expect(document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.textContent).toBe(IB_SWITCH.noteOn)
+  })
   it('asks the app for the other value and says where the answer is asked, without changing its own state', async () => {
     await open(false)
     const sw = screen.getByRole('switch', { name: IB_SWITCH.label })

@@ -6,9 +6,11 @@
 use super::check::IB_NAMES;
 use std::ffi::OsString;
 
-/// The ports the backend refuses as live trading (services/ib_snapshot.py LIVE_PORTS: TWS 7496, Gateway 4001).
+/// The ports the backend refuses as live trading (services/ib_snapshot.py LIVE_PORTS: TWS 7496, Gateway 4001). A unit
+/// test reads that file and fails when the two lists drift apart.
 pub const IB_LIVE_PORTS: [u32; 2] = [7496, 4001];
-/// The paper account prefix (live_guards.py check_delayed_allowed; IB paper accounts are DU...).
+/// The paper account prefix (the lab's live_guards.py PAPER_PREFIX, which check_account requires; IB paper accounts
+/// are DU...). A unit test reads that file and fails when the two drift apart.
 pub const IB_PAPER_PREFIX: &str = "DU";
 
 /// Why turning the IB snapshot on is refused: an IB value is set and the backend (or the paper-only rule) would refuse
@@ -150,6 +152,102 @@ pub fn ib_names_set(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The backend's own snapshot service, in this repository.
+    const IB_SNAPSHOT_PY: &str =
+        include_str!("../../../backend/nq_terminal/services/ib_snapshot.py");
+
+    /// The numbers of the one `LIVE_PORTS = frozenset({...})` line of the backend's snapshot service, sorted.
+    fn backend_live_ports(source: &str) -> Vec<u32> {
+        let lines: Vec<&str> = source
+            .lines()
+            .filter(|l| l.starts_with("LIVE_PORTS = "))
+            .collect();
+        assert_eq!(lines.len(), 1, "one LIVE_PORTS line: {lines:?}");
+        let inner = lines[0]
+            .split_once('{')
+            .and_then(|(_, rest)| rest.split_once('}'))
+            .map(|(inner, _)| inner)
+            .unwrap_or_else(|| panic!("LIVE_PORTS is not a frozenset literal: {}", lines[0]));
+        let mut ports: Vec<u32> = inner
+            .split(',')
+            .map(|n| n.trim().parse().unwrap_or_else(|_| panic!("a port: {n:?}")))
+            .collect();
+        ports.sort_unstable();
+        ports
+    }
+
+    /// The string of the one `PAPER_PREFIX = "..."` line of the lab's live_guards.py.
+    fn guards_paper_prefix(source: &str) -> String {
+        let lines: Vec<&str> = source
+            .lines()
+            .filter(|l| l.starts_with("PAPER_PREFIX = "))
+            .collect();
+        assert_eq!(lines.len(), 1, "one PAPER_PREFIX line: {lines:?}");
+        let value = lines[0].trim_start_matches("PAPER_PREFIX = ").trim();
+        value
+            .strip_prefix('"')
+            .and_then(|v| v.strip_suffix('"'))
+            .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+            .unwrap_or_else(|| panic!("PAPER_PREFIX is not a plain string: {value}"))
+            .to_string()
+    }
+
+    /// V032 review: the live ports were copied from the backend with no test pinning them, so a change on one side
+    /// would let the shell's refusal drift silently.
+    #[test]
+    fn the_live_ports_are_the_backends_own() {
+        let mut ours = IB_LIVE_PORTS.to_vec();
+        ours.sort_unstable();
+        assert_eq!(ours, backend_live_ports(IB_SNAPSHOT_PY));
+        assert!(
+            IB_SNAPSHOT_PY.contains("if port in LIVE_PORTS:"),
+            "the backend refuses the live ports"
+        );
+    }
+
+    /// The paper prefix is the lab's own (src/nq_lab/live_guards.py, beside the terminal folder). A copy of the crate
+    /// without the lab skips with a printed line; a run that must prove the seams (NQT_REQUIRE_SEAMS=1) fails instead.
+    #[test]
+    #[allow(
+        clippy::disallowed_methods,
+        reason = "test: reads the lab's guard source beside this repository to pin a copied constant"
+    )]
+    fn the_paper_prefix_is_the_labs_own() {
+        let guards = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../src/nq_lab/live_guards.py");
+        let source = match std::fs::read_to_string(&guards) {
+            Ok(source) => source,
+            Err(why) if std::env::var_os("NQT_REQUIRE_SEAMS").is_some_and(|v| v == "1") => {
+                panic!(
+                    "NQT_REQUIRE_SEAMS=1 but {} cannot be read: {why}",
+                    guards.display()
+                )
+            }
+            Err(_) => {
+                println!(
+                    "SKIPPED: {} is not here (a copy of the crate)",
+                    guards.display()
+                );
+                return;
+            }
+        };
+        assert_eq!(guards_paper_prefix(&source), IB_PAPER_PREFIX);
+        assert!(
+            source.contains("account_id.startswith(PAPER_PREFIX)"),
+            "check_account requires the prefix"
+        );
+    }
+
+    /// The readers themselves: a drifted list or prefix is seen.
+    #[test]
+    fn a_drifted_list_or_prefix_is_seen() {
+        let drifted = "LIVE_PORTS = frozenset({7496, 4001, 4003})  # more\n";
+        assert_eq!(backend_live_ports(drifted), [4001, 4003, 7496]);
+        assert_ne!(backend_live_ports(drifted), [4001, 7496]);
+        assert_eq!(guards_paper_prefix("PAPER_PREFIX = 'DF'\n"), "DF");
+        assert_eq!(guards_paper_prefix("x = 1\nPAPER_PREFIX = \"DU\"\n"), "DU");
+    }
 
     fn os(pairs: &[(&str, &str)]) -> Vec<(OsString, OsString)> {
         pairs

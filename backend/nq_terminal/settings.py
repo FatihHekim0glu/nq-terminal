@@ -161,6 +161,24 @@ def _fixture_dir(env: Mapping[str, str]) -> Path | None:
     return path
 
 
+def _research_names() -> str:
+    return ", ".join("/".join(parts) for parts in RESEARCH_DIRS)
+
+
+def inside_research_folder(path: Path, root: Path) -> bool:
+    """True when the resolved `path` lies inside a research folder, read as written under `root` and as it resolves.
+
+    A research folder can sit behind a junction or a symlink (this machine keeps big folders on E: that way), so the
+    candidate is compared with both spellings of each folder; `root` is expected resolved, which keeps the lab root's
+    own C: to E: junction reachable. result_cache.py and workspaces.py use this same helper.
+    """
+    for parts in RESEARCH_DIRS:
+        folder = root.joinpath(*parts)
+        if path.is_relative_to(folder) or path.is_relative_to(folder.resolve()):
+            return True
+    return False
+
+
 def _state_dir(env: Mapping[str, str]) -> Path:
     """NQT_STATE_DIR resolved strictly and checked (see the module docstring), else the default, which may not
     exist yet (the jobs file and the result cache create it on their first write)."""
@@ -179,9 +197,8 @@ def _state_dir(env: Mapping[str, str]) -> Path:
     root = ROOT.resolve()
     if root.is_relative_to(path):
         raise SettingsError(f"NQT_STATE_DIR may not be the project root or one of its parents: {path}")
-    for parts in RESEARCH_DIRS:
-        if path.is_relative_to(root.joinpath(*parts)):
-            raise SettingsError(f"NQT_STATE_DIR may not be inside the research folder {'/'.join(parts)}: {path}")
+    if inside_research_folder(path, root):
+        raise SettingsError(f"NQT_STATE_DIR may not be inside a research folder ({_research_names()}): {path}")
     return path
 
 

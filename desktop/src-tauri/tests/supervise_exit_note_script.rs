@@ -69,7 +69,7 @@ console.log(JSON.stringify({{ text: el.textContent, ticks }}));
 fn the_script_waits_through_the_outgoing_page_and_writes_the_code_once_the_stopped_page_is_there() {
     let script = exit_note_script(Some(3));
     let r = run(&script, "/", "/stopped.html", 4, 1);
-    assert_eq!(r["text"], "The backend ended with exit code 3.", "{r}");
+    assert_eq!(r["text"], " The backend ended with exit code 3.", "{r}");
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn the_script_clears_an_earlier_code_on_the_stopped_page_even_after_a_wait() {
 fn the_script_on_the_stopped_page_at_once_writes_without_waiting() {
     let script = exit_note_script(Some(0));
     let r = run(&script, "/stopped.html", "/stopped.html", 0, 0);
-    assert_eq!(r["text"], "The backend ended with exit code 0.", "{r}");
+    assert_eq!(r["text"], " The backend ended with exit code 0.", "{r}");
 }
 
 #[test]

@@ -11,11 +11,21 @@ from nq_terminal.settings import (
     BIND_HOST,
     DEFAULT_CACHE_BYTES,
     DEFAULT_PORT,
+    TERMINAL_DIR,
     WEB_DIST,
     Settings,
     SettingsError,
     load_settings,
 )
+
+
+def test_the_terminal_folder_is_this_checkout_inside_the_project():
+    # The settings find the terminal from their own file, so a second checkout (a release worktree under the lab)
+    # is its own terminal folder. The main checkout is the folder called terminal.
+    assert TERMINAL_DIR == Path(__file__).resolve().parents[2]
+    assert TERMINAL_DIR.parent == ROOT.resolve()
+    if TERMINAL_DIR.name == "terminal":
+        assert TERMINAL_DIR == ROOT.resolve() / "terminal"
 
 
 def test_defaults_without_environment():
@@ -33,7 +43,7 @@ def test_bind_host_and_allowed_hosts_are_loopback_only():
 
 
 def test_web_dist_is_inside_the_terminal_folder():
-    assert WEB_DIST == ROOT / "terminal" / "web" / "dist"
+    assert WEB_DIST == TERMINAL_DIR / "web" / "dist"
     assert load_settings({}).web_dist == WEB_DIST
 
 
@@ -131,7 +141,7 @@ def test_fixture_dir_is_stored_resolved_and_absolute(tmp_path, monkeypatch):
 
 
 def test_the_checked_in_fixtures_folder_is_accepted():
-    fixtures = ROOT / "terminal" / "backend" / "tests" / "fixtures"
+    fixtures = TERMINAL_DIR / "backend" / "tests" / "fixtures"
     s = load_settings({"NQT_FIXTURE_DIR": str(fixtures)})
     assert s.fixture_mode and s.data_root == fixtures.resolve()
 
@@ -142,7 +152,7 @@ def test_the_checked_in_fixtures_folder_is_accepted():
 def test_state_dir_defaults_to_the_terminal_state_folder():
     from nq_terminal import settings as settings_module
 
-    assert settings_module.TERMINAL_STATE_DIR == ROOT / "terminal" / "state"
+    assert settings_module.TERMINAL_STATE_DIR == TERMINAL_DIR / "state"
     # Under pytest the default is redirected to a per-test folder (conftest); outside it is TERMINAL_STATE_DIR.
     assert load_settings({}).state_dir == settings_module.DEFAULT_STATE_DIR.resolve()
 
@@ -196,7 +206,7 @@ def test_state_dir_may_not_be_the_project_a_parent_or_a_research_folder(raw):
 
 def test_under_pytest_the_state_dir_is_a_per_test_folder_not_the_real_one(tmp_path):
     """The autouse fixture in conftest.py redirects NQT_STATE_DIR and the default; born failing without it."""
-    real = (ROOT / "terminal" / "state").resolve()
+    real = (TERMINAL_DIR / "state").resolve()
     for s in (load_settings(), load_settings({})):
         assert not s.state_dir.is_relative_to(real), s.state_dir
         assert s.state_dir.is_relative_to(tmp_path.parent), s.state_dir

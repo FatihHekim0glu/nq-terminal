@@ -24,18 +24,21 @@ pub mod rebuild;
 pub mod settings_file;
 #[path = "window_start.rs"]
 pub mod start;
+#[path = "window_store.rs"]
+mod store;
 
 #[cfg(any(test, feature = "measure"))]
 use folders::check_test_folder;
 use folders::{Tools, check_data_dir, check_lab};
 pub use policy::policy_check;
+use store::{Shell, save_settings, with_shell};
+pub use store::{ib_snapshot_stored, settings, store_ib_snapshot, store_zoom, zoom_percent};
 
 use crate::dialogs::{self, Confirm};
-use crate::{Launch, ShellError, TEST_BUILD, keys, writes};
+use crate::{Launch, ShellError, TEST_BUILD, keys};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
 use tauri::webview::{PageLoadEvent, PageLoadPayload};
 use tauri::{AppHandle, Manager, WebviewWindow};
 use webview2_com::Microsoft::Web::WebView2::Win32::{
@@ -123,90 +126,6 @@ impl Default for Settings {
             ib_snapshot: false,
         }
     }
-}
-
-struct Shell {
-    settings: Settings,
-    file: PathBuf,
-    /// First-run choices not yet written (writes.rs is configured only after `resolve`).
-    pending: bool,
-    created_data_dir: bool,
-}
-
-static SHELL: OnceLock<Mutex<Option<Shell>>> = OnceLock::new();
-static SAVING: Mutex<()> = Mutex::new(());
-
-fn with_shell<T>(f: impl FnOnce(&mut Shell) -> T) -> Option<T> {
-    let cell = SHELL.get_or_init(|| Mutex::new(None));
-    let mut guard = cell
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    guard.as_mut().map(f)
-}
-
-/// The settings in force (defaults before `resolve`).
-pub fn settings() -> Settings {
-    with_shell(|s| s.settings.clone()).unwrap_or_default()
-}
-
-/// The app zoom in force, on the 25% grid.
-pub fn zoom_percent() -> u16 {
-    keys::snap(settings().zoom)
-}
-
-/// Keeps a new zoom level and writes the settings file on a worker thread.
-pub fn store_zoom(percent: u16) {
-    if with_shell(|s| s.settings.zoom = keys::snap(percent)).is_some() {
-        std::thread::spawn(save_settings);
-    }
-}
-
-/// The stored read-only IB snapshot value (the next start's), or None before the settings are read.
-pub fn ib_snapshot_stored() -> Option<bool> {
-    with_shell(|s| s.settings.ib_snapshot)
-}
-
-/// The IB snapshot switch (ib_switch.rs, after the owner's native confirm): changes only `ib_snapshot` in the settings
-/// and writes the file now, rotate first. The window options and the running backend keep the value they started with.
-/// A test build never writes (its dialogs fail closed before this, and this refuses too); a failed write puts the old
-/// value back in memory, so a later zoom save cannot write a value the owner was told was not saved.
-pub fn store_ib_snapshot(on: bool) -> Result<(), String> {
-    if TEST_BUILD {
-        return Err("a test build never changes the IB snapshot setting".into());
-    }
-    let Some(before) = with_shell(|s| std::mem::replace(&mut s.settings.ib_snapshot, on)) else {
-        return Err("no settings are loaded".into());
-    };
-    let written = write_settings();
-    if written.is_err() {
-        with_shell(|s| s.settings.ib_snapshot = before);
-    }
-    written
-}
-
-/// `write_settings` for a caller that only logs the outcome.
-fn save_settings() {
-    let _ = write_settings();
-}
-
-/// Writes the current settings through writes.rs: the old file moves to `settings.json.1` (rotate), then the new
-/// one is written with `write_new`, so a crash in between leaves the old copy readable. One write at a time.
-fn write_settings() -> Result<(), String> {
-    let _one = SAVING
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some((settings, file)) = with_shell(|s| (s.settings.clone(), s.file.clone())) else {
-        return Err("no settings are loaded".into());
-    };
-    let result = serde_json::to_vec_pretty(&settings)
-        .map_err(|e| e.to_string())
-        .and_then(|bytes| {
-            writes::rotate(&file, 0, 1).map_err(|e| e.to_string())?;
-            writes::write_new(&file, &bytes).map_err(|e| e.to_string())
-        });
-    let detail = json!({ "file": file.display().to_string(), "error": result.as_ref().err() });
-    crate::crash::log("settings_saved", detail);
-    result
 }
 
 /// Removes every `WEBVIEW2_*` variable from this process, so only the builder's settings reach the engine and
@@ -383,10 +302,7 @@ fn finish(
         pending,
         created_data_dir,
     };
-    let cell = SHELL.get_or_init(|| Mutex::new(None));
-    *cell
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(shell);
+    store::install(Some(shell));
     Ok(options)
 }
 
@@ -460,11 +376,16 @@ pub fn setup(window: &WebviewWindow, launch: &Launch) -> Result<(), ShellError> 
 
 fn install_webview_hooks(window: &WebviewWindow) -> Result<(), ShellError> {
     let app = window.app_handle().clone();
+    let options = app.try_state::<WindowOptions>();
+    let ib_snapshot = ib_in_force(options.as_ref().map(|o| o.inner()), cfg!(feature = "smoke"))
+        .inspect_err(|e| {
+            crate::crash::log("bridge_ib_unknown", json!({ "error": e.to_string() }))
+        })?;
     crate::guard::guarded("new_window", |report| {
         window.with_webview(move |webview| {
             let (controller, environment) = (webview.controller(), webview.environment());
             // SAFETY: COM calls on the controller and environment Tauri hands to this closure on the UI thread.
-            let hooked = unsafe { webview_hooks(&controller, &environment, app) };
+            let hooked = unsafe { webview_hooks(&controller, &environment, app, ib_snapshot) };
             match &hooked {
                 Ok(()) => crate::crash::log(
                     "window_hooks",
@@ -485,8 +406,9 @@ unsafe fn webview_hooks(
     controller: &ICoreWebView2Controller,
     environment: &ICoreWebView2Environment,
     app: AppHandle,
+    ib_snapshot: bool,
 ) -> windows::core::Result<()> {
-    let script = HSTRING::from(shell_script(ib_in_force(&app)));
+    let script = HSTRING::from(shell_script(ib_snapshot));
     let failing = app.clone();
     let script_done = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
         move |result, _id| {
@@ -518,11 +440,17 @@ unsafe fn webview_hooks(
 
 /// The IB snapshot value in force for this start, as the shell object states it: the window options' (read from the
 /// settings before the window was built, and what the backend's environment follows). A smoke build always says off.
-fn ib_in_force(app: &AppHandle) -> bool {
-    !cfg!(feature = "smoke")
-        && app
-            .try_state::<WindowOptions>()
-            .is_some_and(|options| options.ib_snapshot)
+/// Options that are not there refuse the setup instead of stating off: the page would show the switch in a position
+/// the backend may not be in (V032 review).
+fn ib_in_force(options: Option<&WindowOptions>, smoke: bool) -> Result<bool, ShellError> {
+    if smoke {
+        return Ok(false);
+    }
+    options.map(|o| o.ib_snapshot).ok_or_else(|| {
+        ShellError::Refused(
+            "the window options are not set, so the IB snapshot in force is not known".into(),
+        )
+    })
 }
 
 /// The refusal text when the engine reports that the bridge script was not registered, or None when it was. The
@@ -667,9 +595,9 @@ pub fn on_page_load(window: WebviewWindow, payload: PageLoadPayload<'_>) {
     }
 }
 
-/// Shows the window the owner just started. The only `show()` in the crate, compiled only into
-/// the release: under smoke and measure this function does nothing, so no test or measurement run can ever put
-/// the window on screen (04 standing rule 4).
+/// Shows the window the owner just started. One of the crate's two `show()` calls (this reveal and
+/// `restore_minimised_start`), both compiled only into the release: under smoke and measure each does nothing, so no
+/// test or measurement run can ever put the window on screen (04 standing rule 4).
 #[cfg(not(any(feature = "smoke", feature = "measure")))]
 fn reveal(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(true) {

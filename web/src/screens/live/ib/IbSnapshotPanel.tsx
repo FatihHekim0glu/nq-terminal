@@ -130,6 +130,13 @@ function StateLine({ snapshot, failed, nowMs, receivedAtMs, state, shellIbSnapsh
   const age = snapshotAgeMs(snapshot, nowMs, receivedAtMs)
   const ageText = age === null ? IB.none : formatAge(age)
   if (state === 'disabled') return <OffLine snapshot={snapshot} shellIbSnapshot={shellIbSnapshot} />
+  const line = stateLineFor(state, snapshot, failed, ageText)
+  // The app's switch is off yet the backend reads TWS: it was attached (not started by this app) with its own setting.
+  if (shellIbSnapshot === false) return <>{line}<p className="live-message live-ib-state">{IB.stateOnAttached}</p></>
+  return line
+}
+
+function stateLineFor(state: 'unavailable' | 'refused' | 'stale' | 'live', snapshot: IbSnapshot, failed: boolean, ageText: string) {
   if (state === 'unavailable') {
     return <p role="status" className="live-message live-ib-state live-ib-warn"><b>{IB.stateUnreachable}</b> {fillCopy(IB.stateUnreachableNote, { message: snapshot.message })}</p>
   }
