@@ -1,5 +1,10 @@
 """Research endpoints (ARCHITECTURE s4 Research), GET only.
 
+Result cache (V032G): `/api/hypotheses` answers from `services/result_cache.py` through `cached_hypotheses`, as a
+price-free route (it reads no prices) that the merge step puts on `PERSIST_ROUTES`, so a launch reads the card list from
+disk instead of parsing every screen. The body is pinned on every file the cards were built from (FileCache records
+them), the screens folder listing and each run folder's result.json (`ResearchService` records them).
+
 Errors: an unknown name or an unrecorded cost is 404; a sealed allowlist that no longer fits its file is
 500 (nothing is served); any other missing or inconsistent research file is 503. Messages name files, never
 full paths. One `ResearchService` (and its FileCache) is kept per data root.
@@ -7,10 +12,14 @@ full paths. One `ResearchService` (and its FileCache) is kept per data root.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi import Path as PathParam
+from fastapi.responses import Response
+from pydantic import TypeAdapter
+
+from nq_terminal.api.data import get_result_cache, json_response
 
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.research import (
@@ -33,6 +42,7 @@ from nq_terminal.services.research import (
 
 router = APIRouter(prefix="/api", tags=["research"], responses=error_responses(404, 422, 500, 503))
 T = TypeVar("T")
+ROUTE_HYPOTHESES = "/api/hypotheses"  # the result cache's route key (the merge step lists it in PERSIST_ROUTES)
 NAME_PATTERN = r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}$"
 MAX_NAME = 80
 MAX_COST = 2
@@ -68,10 +78,24 @@ def registry(request: Request) -> RegistryView:
     return _answer(_service(request).registry)
 
 
+_CARDS = TypeAdapter(list[HypothesisCard])
+
+
+def cached_hypotheses(state: Any, query: Any = None) -> bytes:
+    """The serialised /api/hypotheses body through the result cache (disk too: it reads no prices). A refused read
+    (a missing or half-written registry) raises before anything is stored."""
+    service = service_for(state.settings.data_root)
+
+    def compute() -> bytes:
+        return _CARDS.dump_json(service.cards(), by_alias=True)
+
+    return get_result_cache(state).get(ROUTE_HYPOTHESES, {}, compute, price_free=True)
+
+
 @router.get("/hypotheses", response_model=list[HypothesisCard])
-def hypotheses(request: Request) -> list[HypothesisCard]:
+def hypotheses(request: Request) -> Response:
     """One card per registry row, joined to its screen and spec, with the live spec re-hash."""
-    return _answer(_service(request).cards)
+    return json_response(_answer(lambda: cached_hypotheses(request.app.state)))
 
 
 @router.get("/hypotheses/{name}", response_model=HypothesisDetail)

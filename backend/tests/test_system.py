@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 from datetime import datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -18,6 +19,7 @@ from nq_terminal.api import system
 from nq_terminal.app import create_app
 from nq_terminal.desktop import build_stamp, handshake, lifecycle
 from nq_terminal.desktop.lifecycle import Runtime
+from nq_terminal.services import gate_cursor, sealed_log
 from nq_terminal.settings import load_settings
 
 from conftest import api_client
@@ -202,3 +204,118 @@ def test_port_fixed_follows_the_bound_port_with_8798_standing_in(monkeypatch):
 
 def test_the_fixed_browser_port_is_the_launchers_8765():
     assert system.FIXED_BROWSER_PORT == 8765
+
+
+# ---------------------------------------------------------------- the sealed-log cursor (V032G, growth fix 1)
+# Every health poll used to re-parse the whole gate log (43 MB on 7 October 2026). The app now keeps a cursor on
+# app.state and re-reads only what was appended; these pin that the answer is the whole-file answer at every step.
+
+def whole_file_status(settings) -> dict:
+    """The sealed block as the gate's whole-file checks give it, with no cursor and no memo."""
+    return {"openings_pin_ok": system._pin_ok(oos_gate.check_openings_pin, settings.openings_path),
+            "sealed_log_pin_ok": system._pin_ok(oos_gate.check_sealed_log_pin, settings.oos_log_path),
+            "openings_closed": system._openings_closed(settings.openings_path)}
+
+
+def step_forward(path: Path) -> None:
+    """Give an edited file an mtime one second after its last one (an edit inside one clock tick that keeps the size
+    is what the (mtime_ns, size) memo cannot see, as for the result cache)."""
+    if path.exists():
+        stamp = path.stat().st_mtime_ns + 1_000_000_000
+        os.utime(path, ns=(stamp, stamp))
+
+
+def log_steps(log: Path, openings: Path):
+    original, opened = log.read_bytes(), openings.read_bytes()
+    sealed = [x for x in original.decode("utf-8").splitlines() if x]
+    extra = json.dumps({"caller": "x", "sealed": True, "reason": "nqt-test extra"})
+    other = json.dumps({"caller": "terminal", "reason": "nqt-test other", "rows": 3})
+    doc = json.loads(opened.decode("utf-8"))
+    doc["openings"][0]["closed"] = False
+    return [
+        ("other lines", lambda: log.write_bytes(original + (other + "\n").encode() * 5)),
+        ("crlf lines", lambda: log.write_bytes(log.read_bytes() + (other + "\r\n").encode() * 3)),
+        ("an extra sealed line", lambda: log.write_bytes(log.read_bytes() + (extra + "\n").encode())),
+        ("truncated back", lambda: log.write_bytes(original)),
+        ("a half-written sealed line", lambda: log.write_bytes(original + b'{"caller": "rebal_v0", "sealed": tr')),
+        ("the line finished", lambda: log.write_bytes(log.read_bytes() + b'ue}\n')),
+        ("restored", lambda: log.write_bytes(original)),
+        ("a sealed line edited", lambda: log.write_bytes(original.replace(b"NQ.V.0", b"NQ.V.9", 1))),
+        ("a sealed line removed", lambda: log.write_bytes(original.replace((sealed[0] + "\n").encode(), b"", 1))),
+        ("restored again", lambda: log.write_bytes(original)),
+        ("a refused fragment", lambda: log.write_bytes(original + b'"spec_sha256": "ab"}\n' + (other + "\n").encode())),
+        ("restored a third time", lambda: log.write_bytes(original)),
+        ("the log removed", lambda: log.unlink()),
+        ("the log back", lambda: log.write_bytes(original)),
+        ("the openings tampered", lambda: openings.write_text(json.dumps(doc, indent=1), encoding="utf-8")),
+        ("the openings back", lambda: openings.write_bytes(opened)),
+        ("not utf-8", lambda: log.write_bytes(original + b"\xff\n")),
+        ("restored last", lambda: log.write_bytes(original)),
+    ]
+
+
+def test_the_sealed_block_equals_the_whole_file_checks_across_appends_and_edits(data_root):
+    settings = load_settings({"NQT_FIXTURE_DIR": str(data_root)})
+    app = create_app(settings)
+    client = api_client(app)
+    log, openings = settings.oos_log_path, settings.openings_path
+    seen = set()
+    assert client.get("/api/health").json()["sealed"] == whole_file_status(settings)
+    for name, step in log_steps(log, openings):
+        step()
+        step_forward(log)
+        step_forward(openings)
+        got = client.get("/api/health").json()["sealed"]
+        assert got == whole_file_status(settings), name
+        assert system.sealed_status(settings, app.state).model_dump() == got, name
+        seen.add(got["sealed_log_pin_ok"])
+    assert seen == {True, False, None}, "the steps reach every answer the pin can give"
+
+
+def test_no_full_pass_of_the_log_after_the_first(data_root):
+    settings = load_settings({"NQT_FIXTURE_DIR": str(data_root)})
+    app = create_app(settings)
+    client = api_client(app)
+    for n in range(12):
+        with settings.oos_log_path.open("ab") as fh:
+            fh.write(json.dumps({"caller": "terminal", "reason": f"nqt-test {n}", "rows": n}).encode() + b"\n")
+        assert client.get("/api/health").json()["sealed"]["sealed_log_pin_ok"] is True
+    assert sealed_log.tracker_for(app.state).full_passes == 1
+
+
+def test_an_unchanged_log_and_openings_file_are_not_read_again(data_root, monkeypatch):
+    settings = load_settings({"NQT_FIXTURE_DIR": str(data_root)})
+    client = api_client(create_app(settings))
+    first = client.get("/api/health").json()["sealed"]
+    calls = []
+    for module, name in ((gate_cursor, "scan_sealed_log"), (oos_gate, "check_openings_pin"), (oos_gate, "load_openings")):
+        real = getattr(module, name)
+        monkeypatch.setattr(module, name, lambda *a, _real=real, _name=name, **k: calls.append(_name) or _real(*a, **k))
+    for _ in range(3):
+        assert client.get("/api/health").json()["sealed"] == first
+    assert calls == []
+
+
+def test_a_persisted_cursor_is_reused_by_a_second_app_and_dropped_when_the_prefix_changes(data_root, monkeypatch):
+    monkeypatch.setattr(sealed_log, "PERSIST_STEP_BYTES", 1)  # the fixture log is small; persist it like the real one
+    settings = load_settings({"NQT_FIXTURE_DIR": str(data_root)})
+    log = settings.oos_log_path
+    first = create_app(settings)
+    assert api_client(first).get("/api/health").json()["sealed"]["sealed_log_pin_ok"] is True
+    assert len(list((settings.state_dir / "cache").glob("*.bin"))) == 1
+    with log.open("ab") as fh:
+        fh.write(b'{"caller": "terminal", "reason": "nqt-test later", "rows": 1}\r\n')
+    second = create_app(settings)
+    assert api_client(second).get("/api/health").json()["sealed"] == whole_file_status(settings)
+    assert sealed_log.tracker_for(second.state).full_passes == 0, "the second app started from the stored cursor"
+    raw = log.read_bytes()
+    log.write_bytes(raw.replace(b"rebal", b"rebaL", 1))
+    third = create_app(settings)
+    sealed = api_client(third).get("/api/health").json()["sealed"]
+    assert sealed == whole_file_status(settings) and sealed["sealed_log_pin_ok"] is False
+    assert sealed_log.tracker_for(third.state).full_passes == 1, "a changed prefix is read again from the start"
+
+
+def test_the_sealed_status_without_an_app_is_the_whole_file_rule(data_root):
+    settings = load_settings({"NQT_FIXTURE_DIR": str(data_root)})
+    assert system.sealed_status(settings).model_dump() == whole_file_status(settings)

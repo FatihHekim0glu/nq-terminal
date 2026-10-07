@@ -60,6 +60,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from stat import S_ISREG
 from typing import Any, Callable, Iterable, Mapping, TypeVar
 
 import pandas as pd
@@ -379,6 +380,9 @@ class FileCache:
             self._drop(key)
             result_cache.record_missing(target)
             raise
+        if not S_ISREG(stat.st_mode):  # the stat the read needs anyway: no exists() and is_file() of their own
+            self._drop(key)
+            raise FileAccessError(f"{target.name} is not a regular file")
         cached = self._lookup(key, stat.st_mtime_ns, stat.st_size)
         if cached is not None:
             result_cache.record_file(target, cached.mtime_ns, cached.size)
@@ -411,13 +415,13 @@ class FileCache:
     # internals
 
     def _confine(self, path: Path) -> Path:
+        """The resolved path, once it is inside a root and not a refused type. That it is a regular file is checked
+        by the stat of `get`, one stat per read instead of three."""
         target = path.resolve()
         if not any(target.is_relative_to(root) for root in self._roots):
             raise FileAccessError(f"{path.name} is outside the terminal's read roots")
         if target.suffix.lower() in REFUSED_SUFFIXES:
             raise FileAccessError(f"{target.name}: price files are read only through the OOS gate")
-        if target.exists() and not target.is_file():
-            raise FileAccessError(f"{target.name} is not a regular file")
         return target
 
     def _extending(self, key: tuple[str, str], mtime_ns: int, size: int, parser: Callable[[bytes], T],

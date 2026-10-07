@@ -61,7 +61,6 @@ def test_without_a_cap_the_helper_changes_nothing(tmp_path):
 
 
 @pytest.mark.parametrize(("make", "label"), [
-    (lambda s: audit._files(_request(s)), "audit"),
     (lambda s: _events_cache(s), "events"),
     (lambda s: live._files(_request(s)), "live"),
     (lambda s: data.build_services(s, lambda *a, **k: None).files, "data"),
@@ -71,8 +70,15 @@ def test_every_cache_built_from_the_settings_honours_the_desktop_cap(desktop, ma
     assert make(desktop).max_bytes == DESKTOP_CAP, label
 
 
+def test_the_audit_cache_is_the_one_deliberate_exception_to_the_desktop_cap(desktop, browser):
+    """The audit log is append-only and a CompactLog weighs about 1.11 times its file, so a log near 128 MiB would never
+    be cached under the app-wide cap (V032G): the audit cache takes its own budget, in either mode."""
+    assert audit._files(_request(desktop)).max_bytes == audit.audit_cache_bytes()
+    assert audit._files(_request(browser)).max_bytes == audit.audit_cache_bytes()
+    assert audit.audit_cache_bytes() > DESKTOP_CAP
+
+
 @pytest.mark.parametrize(("make", "expected"), [
-    (lambda s: audit._files(_request(s)), files.DEFAULT_MAX_BYTES),
     (lambda s: live._files(_request(s)), files.DEFAULT_MAX_BYTES),
     (lambda s: data.build_services(s, lambda *a, **k: None).files, files.DEFAULT_MAX_BYTES),
     (lambda s: run_service_for(_state(s)).cache, CACHE_BYTES),

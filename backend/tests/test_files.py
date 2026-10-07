@@ -630,3 +630,59 @@ def test_real_result_files_sanitise_cleanly(run_id):
     if fills:
         assert fills[0]["ts"].endswith("Z") and isinstance(fills[0]["ts_epoch_s"], int)
         assert isinstance(fills[0]["commission"], str) and isinstance(fills[0]["commission_float"], float)
+
+
+# ---------------------------------------------------------------- confinement reuses the stat of the read (V032G)
+
+
+def test_a_cache_hit_stats_the_file_twice_at_most(tmp_path, monkeypatch):
+    """Born failing: the confinement ran exists() and is_file() (two stats) before the read's own stat: four per hit with
+    the one inside `resolve`, about 30 percent of the 142 us a hit cost on the real lab."""
+    path = _write(tmp_path / "a.json", "[1]")
+    cache = _cache(tmp_path)
+    cache.read_json(path)
+    calls: list[Path] = []
+    real = Path.stat
+
+    def counting(self, *args, **kwargs):
+        calls.append(self)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", counting)
+    assert cache.read_json(path) == (1,)
+    assert len(calls) <= 2, calls  # the resolve's own stat and the read's: the old confinement made four
+
+
+def test_a_folder_named_like_a_file_is_still_refused_and_a_missing_one_still_not_found(tmp_path):
+    (tmp_path / "d.json").mkdir()
+    cache = _cache(tmp_path)
+    with pytest.raises(FileAccessError, match="not a regular file"):
+        cache.read_json(tmp_path / "d.json")
+    with pytest.raises(FileNotFoundError):
+        cache.read_json(tmp_path / "missing.json")
+
+
+def test_a_refused_suffix_is_refused_before_any_stat_even_when_the_file_is_missing(tmp_path):
+    with pytest.raises(FileAccessError):
+        _cache(tmp_path).read_text(tmp_path / "gone.parquet")
+
+
+def test_a_file_turned_into_a_folder_is_refused_and_its_entry_does_not_serve(tmp_path):
+    path = _write(tmp_path / "x.json", "[1]")
+    cache = _cache(tmp_path)
+    assert cache.read_json(path) == (1,)
+    path.unlink()
+    path.mkdir()
+    with pytest.raises(FileAccessError):
+        cache.read_json(path)
+
+
+def test_the_confinement_is_still_one_method_a_caller_can_wrap(tmp_path):
+    """tests/test_home_cold_runs.py replaces `_confine` to refuse one path: `get` must still call it by that name."""
+    path = _write(tmp_path / "a.json", "[1]")
+    cache = _cache(tmp_path)
+    seen: list[str] = []
+    real = cache._confine
+    cache._confine = lambda p: (seen.append(Path(p).name), real(p))[1]  # type: ignore[method-assign]
+    cache.read_json(path)
+    assert seen == ["a.json"]
