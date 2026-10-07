@@ -201,7 +201,7 @@ The included allowance would absorb part or all of that, so the private-reposito
 |---|---|---|
 | Toolchains and caches under `D:\dev` | about 3.0 GB (Rust 886 MB, Cargo 1,198 MB, MinGW 939 MB), with 244 GB free on D: | measured 2 October 2026 (R15); no cost, C: is not used |
 | Tauri shell build, dependency tree | 417 packages in the spike's lockfile | measured (R15); a production shell adds several crates, so reviewing lockfile changes is a standing cost |
-| Release build on this PC | $0: the releases (0.1.0, 0.1.1, 0.1.2, 0.2.0, 0.2.1, 0.3.0) are built on this PC on the GNU host into `D:\dev\release\<version>`, by provisional owner decision 4 (`owner_decisions_windows.md`), which departs from 02 C3-13 (MSVC in CI). No CI workflow exists yet, so no MSVC build exists | The size of a local MSVC install was not checked: **unverified** |
+| Release build on this PC | $0: the releases (0.1.0, 0.1.1, 0.1.2, 0.2.0, 0.2.1, 0.3.0, 0.3.1) are built on this PC on the GNU host into `D:\dev\release\<version>`, by provisional owner decision 4 (`owner_decisions_windows.md`), which departs from 02 C3-13 (MSVC in CI). No CI workflow exists yet, so no MSVC build exists | The size of a local MSVC install was not checked: **unverified** |
 | WebView2 data folder | proposed on D: (03 section 7.1) | |
 | Fixed Version WebView2, only while a break is fixed (T8) | about 180 to 250 MB of disk on D: while pinned | L4 section 4.4 (from L4) |
 | Electricity for a PC that stays on in remote mode | not priced | The owner's PC is used daily already; the extra hours are unknown |
