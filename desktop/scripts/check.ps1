@@ -40,6 +40,10 @@
 # .cargo-lock under target\<profile>), nor may a pnpm or vite build of this web folder be running. A preflight failure prints
 # FAIL preflight lines and exits 3 without running a step. -SkipPreflight turns it off, -PreflightOnly runs just the preflight,
 # -WebDir names another web folder, -PreflightSelfTest runs the born-failing cases of the preflight itself.
+# Serialised with the backend tests: a backend pytest session holds D:\dev\locks\PYTEST.<pid>.lock while it runs (stale after 2 h).
+# Before every step that starts a backend or the smoke exe (test-smoke, test-measure, show-proof, parity) this script polls every
+# 30 s while a fresh lock exists, prints each wait, records the wait as a step, and fails the step after 2 h of waiting (exit 4 with
+# -PytestWaitOnly, which only waits: -PytestLockDir, -PytestWaitPollSeconds and -PytestWaitTimeoutSeconds name another folder and times).
 [CmdletBinding()]
 param(
     [string]$TargetDir = 'D:\dev\targets\check',
@@ -53,7 +57,11 @@ param(
     [switch]$SkipPreflight,
     [switch]$PreflightOnly,
     [int]$PreflightHoldSeconds = 0,
-    [switch]$PreflightSelfTest
+    [switch]$PreflightSelfTest,
+    [string]$PytestLockDir = $(if ($env:NQT_LOCK_DIR) { $env:NQT_LOCK_DIR } else { 'D:\dev\locks' }),
+    [int]$PytestWaitPollSeconds = 30,
+    [int]$PytestWaitTimeoutSeconds = 7200,
+    [switch]$PytestWaitOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -193,6 +201,7 @@ function Step-ShowProof {
     # must be caught by the same watch.
     param([string]$Feature)
     $name = "show-proof-$Feature"
+    if (-not (Wait-NoPytestLock 'show-proof')) { return }
     $code = Invoke-Logged -Name $name -File 'cargo' -Arguments @('test', '--locked', '--no-default-features',
         '--features', $Feature, '--test', 'hidden_window', '--', '--ignored', '--nocapture', '--test-threads=1',
         'a_build_that_calls_show_is_caught')
@@ -341,6 +350,7 @@ function Step-ReleaseScripts {
 function Step-Parity {
     # perf-5: the fixture backend started the way the shell starts it and the plain way holds the same private working set and thread count.
     # Fixture data, two spare ports, no window; the harness mode ends only the processes it started.
+    if (-not (Wait-NoPytestLock 'parity')) { return }
     $code = Invoke-Logged -Name 'parity' -File 'node' -WorkDir $Terminal -Arguments @('desktop/harness/run.mjs', '--mode', 'parity')
     Add-Result 'parity' ($code -eq 0) "exit $code, log $LogDir\parity.log"
 }
@@ -358,6 +368,64 @@ function Invoke-SupplyChainSteps {
     Step-ReleaseScripts
     Step-PreflightSelfTest
     Step-OrderScan
+}
+
+# ---- Serialised with the backend tests: the PYTEST lock of a pytest session ----
+$PytestLockStaleHours = 2
+
+function Get-PytestLocks {
+    # The PYTEST.<pid>.lock files in $Dir: Fresh were written within the stale window, Stale were not (a session that died).
+    # A lock is also stale at once when the process named in PYTEST.<pid>.lock is gone (a session killed without its cleanup);
+    # the two-hour age limit stays as the fallback for a reused pid.
+    param([string]$Dir, [datetime]$Now = (Get-Date))
+    $all = @()
+    if (Test-Path -LiteralPath $Dir) {
+        $all = @(Get-ChildItem -LiteralPath $Dir -Filter 'PYTEST.*.lock' -File -ErrorAction SilentlyContinue)
+    }
+    $fresh = @()
+    $stale = @()
+    foreach ($lock in $all) {
+        $why = $null
+        if (($Now - $lock.LastWriteTime).TotalHours -ge $PytestLockStaleHours) {
+            $why = ('last written {0:u}, older than {1} h' -f $lock.LastWriteTime, $PytestLockStaleHours)
+        } elseif ($lock.Name -match '^PYTEST\.(\d+)\.lock$' -and -not (Get-Process -Id ([int]$Matches[1]) -ErrorAction SilentlyContinue)) {
+            $why = ('process {0} is not running' -f $Matches[1])
+        }
+        if ($why) {
+            $stale += $lock | Add-Member -NotePropertyName Why -NotePropertyValue $why -PassThru -Force
+        } else {
+            $fresh += $lock
+        }
+    }
+    return [pscustomobject]@{ Fresh = @($fresh); Stale = @($stale) }
+}
+
+function Wait-NoPytestLock {
+    # Polls while a fresh PYTEST lock exists, saying so each time; true when the way is clear, false after the timeout.
+    param([string]$Step)
+    $started = Get-Date
+    $deadline = $started.AddSeconds($PytestWaitTimeoutSeconds)
+    $waited = $false
+    $names = ''
+    while ($true) {
+        $locks = Get-PytestLocks -Dir $PytestLockDir
+        foreach ($stale in $locks.Stale) {
+            Write-Host ("NOTE  pytest-lock  ignoring stale lock {0} ({1})" -f $stale.Name, $stale.Why)
+        }
+        if ($locks.Fresh.Count -eq 0) { break }
+        $names = ($locks.Fresh | ForEach-Object { $_.Name }) -join ', '
+        if ((Get-Date) -ge $deadline) {
+            Add-Result "pytest-wait-$Step" $false "PYTEST lock still held after $PytestWaitTimeoutSeconds s ($names); the step was not run"
+            return $false
+        }
+        $waited = $true
+        Write-Host ("WAIT  {0}  a backend pytest session holds {1} in {2}; next look in {3} s" -f $Step, $names, $PytestLockDir, $PytestWaitPollSeconds)
+        Start-Sleep -Seconds $PytestWaitPollSeconds
+    }
+    if ($waited) {
+        Add-Result "pytest-wait-$Step" $true ("waited {0} s for {1}" -f [int]((Get-Date) - $started).TotalSeconds, $names)
+    }
+    return $true
 }
 
 function Wait-NoBrowserRun {
@@ -589,6 +657,12 @@ if ($PreflightSelfTest) {
     if ($ok) { exit 0 } else { exit 1 }
 }
 
+if ($PytestWaitOnly) {
+    $clear = Wait-NoPytestLock 'wait-only'
+    Write-Host ("check.ps1: pytest wait only, {0}" -f $(if ($clear) { 'clear' } else { 'timed out' }))
+    if ($clear) { exit 0 } else { exit 4 }
+}
+
 $Lock = $null
 if (-not $SkipPreflight) {
     $problems = @(Get-PreflightProblems -Web $WebDir -Target $TargetDir -CheckDist (-not $SupplyChainOnly.IsPresent))
@@ -629,9 +703,9 @@ Step-Cargo 'clippy-smoke' (@('clippy', '--all-targets', '--locked') + $smoke + @
 Step-Cargo 'clippy-measure' (@('clippy', '--all-targets', '--locked') + $measure + @('--', '-D', 'warnings'))
 Step-Cargo 'test-default' @('test', '--locked')
 Step-PeInfoOfBuild 'pe-info-debug' @()
-Step-Cargo 'test-smoke' (@('test', '--locked') + $smoke)
+if (Wait-NoPytestLock 'test-smoke') { Step-Cargo 'test-smoke' (@('test', '--locked') + $smoke) }
 Step-PeInfoOfBuild 'pe-info-smoke-debug' $smoke
-Step-Cargo 'test-measure' (@('test', '--locked') + $measure)
+if (Wait-NoPytestLock 'test-measure') { Step-Cargo 'test-measure' (@('test', '--locked') + $measure) }
 Step-PeInfoOfBuild 'pe-info-measure-debug' $measure
 if ($ShowProof) { Step-ShowProof 'smoke'; Step-ShowProof 'measure' }
 Invoke-SupplyChainSteps

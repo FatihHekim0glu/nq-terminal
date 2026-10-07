@@ -10,6 +10,8 @@
 //!   500 ms; a backend swapped in behind the port is refused and the token never goes to it. A proof that is only
 //!   late is unverified, not swapped: the navigation is cancelled and retried off the UI thread (supervise_retry.rs).
 //! - Restarts at 1, 2 and 4 s; three crashes within 60 s stop the retries and ask Restart or Quit.
+//! - A backend that ends while its spawn-time proof is retried is an exit (with its exit code in the log), not a
+//!   refusal, when the failed proof carries no checked answer (`proof_failure`); a checked answer stays a refusal.
 //! - A refusal ends the loop and leaves no backend; the stopped page's Retry link then starts the loop again through
 //!   the same supervised spawn and checks (`retry_without_backend`), and one loop at most runs at a time.
 
@@ -25,10 +27,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::Threading::{
-    CreateEventW, INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    SetEvent, WaitForMultipleObjects,
+    CreateEventW, GetExitCodeProcess, INFINITE, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, SetEvent, WaitForMultipleObjects, WaitForSingleObject,
 };
 use windows::core::PCWSTR;
 
@@ -40,6 +42,11 @@ pub const CRASH_WINDOW_S: u64 = 60;
 pub const NAVIGATION_CHECK: Duration = Duration::from_millis(500);
 /// One request to the backend's shell routes.
 pub const LINK_TIMEOUT: Duration = Duration::from_secs(2);
+/// How long a spawn-time proof that got no checked answer waits for the backend to finish ending, so that an ending
+/// backend is told from a live one that has lost its port (a process's port can close a little before it ends).
+pub const EXIT_SETTLE: Duration = Duration::from_secs(3);
+/// The wrong-key answer to a fresh proof: a checked answer, never the sign of an ending backend.
+pub const PROOF_MISMATCH: &str = "the proof does not match the token";
 
 /// A live backend found through its lock. Dropping it only closes this shell's handle: it is never stopped.
 pub struct Attached {
@@ -140,9 +147,53 @@ pub(super) fn verify_target_for(
         return Err(Mismatch::PidOutsideJob(body.pid));
     }
     if !link::verify_mac(token, link::PROOF_KIND, &nonce, port, body.pid, &body.proof) {
-        return Err(Mismatch::Proof("the proof does not match the token".into()));
+        return Err(Mismatch::Proof(PROOF_MISMATCH.into()));
     }
     super::check::check_place(&body.root, &body.prefix, body.contract, expect)
+}
+
+/// Whether a failed spawn-time proof carries no checked answer, so that a backend which is ending can be its cause: it
+/// was late or cut off, found no listener, could not be read, or named one of the backend's `own` pids (which leave
+/// the job as they end). A foreign owner, a wrong proof and a wrong place are checked answers and stay refusals.
+pub fn unanswered(m: &Mismatch, own: &[u32]) -> bool {
+    match m {
+        Mismatch::Unverified(_) | Mismatch::Listener(None) => true,
+        Mismatch::Listener(Some(pid)) | Mismatch::PidOutsideJob(pid) => own.contains(pid),
+        Mismatch::Proof(why) => why != PROOF_MISMATCH,
+        _ => false,
+    }
+}
+
+/// The exit code of the first of `processes` (in the order given) that has ended within `settle`, or None while
+/// every one still runs.
+pub fn ended_code(processes: &[HANDLE], settle: Duration) -> Option<u32> {
+    if !signalled_within(processes, settle) {
+        return None;
+    }
+    processes.iter().find_map(|&process| {
+        // SAFETY: a zero wait on an open process handle.
+        let ended = unsafe { WaitForSingleObject(process, 0) } == WAIT_OBJECT_0;
+        let mut code = 0u32;
+        // SAFETY: the process has ended when `ended` holds; the handle is open and `code` is a valid out-pointer.
+        (ended && unsafe { GetExitCodeProcess(process, &mut code) }.is_ok()).then_some(code)
+    })
+}
+
+/// How a failed spawn-time proof on `port` ends: an exit, its exit code logged, when the reason carries no checked
+/// answer (`unanswered`) and one of the backend's `processes` has ended or ends within `EXIT_SETTLE`; the refusal
+/// itself otherwise, with its own reason.
+pub fn proof_failure(m: Mismatch, port: u16, processes: &[HANDLE], own: &[u32]) -> Failure {
+    let ended = unanswered(&m, own)
+        .then(|| ended_code(processes, EXIT_SETTLE))
+        .flatten();
+    let Some(code) = ended else {
+        return Failure::Refused(m);
+    };
+    crash::log(
+        "supervise_exit_during_proof",
+        json!({ "port": port, "code": code, "after": m.code() }),
+    );
+    Failure::Exited
 }
 
 /// The navigation check (05 G08): the backend has not ended, and its port passes the ownership check and a fresh

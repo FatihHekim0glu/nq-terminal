@@ -21,8 +21,10 @@ The start path (03 sections 2.2 and 2.4, Appendix A row 2):
 4. The app's start-up takes the lock (`desktop/lifecycle.py`); once the server is up, print one `NQT-READY {json}`
    line (`desktop/handshake.py`). Losing a race for the lock in the start-up also ends in `NQT-ATTACH` and exit 0.
 5. The HOME prewarm waits for the start gate (V021, `services/prewarm.StartGate`): the READY line printed and the
-   first identity proof answered (`api/desktop.py` marks it once the answer is sent); in launcher and browser modes
-   the gate also opens `PROOF_FALLBACK_S` seconds after READY, since no proof may come there.
+   first identity proof answered (`api/desktop.py` marks it once the answer is sent). In launcher mode the gate opens
+   on READY (`LAUNCHER_FALLBACK_S`, V031: the launcher's 400 ms proof poll held the prewarm back up to 532 ms, more
+   than the 500 ms allowed before HOME data); in browser mode it also opens `PROOF_FALLBACK_S` seconds after READY,
+   since no proof may come there.
 
 A shutdown waits at most `SHUTDOWN_GRACE_S` for open responses. Without the bound, an open live stream
 (`/api/live/stream`) would hold the shutdown until its lifetime ends; with it, the stream is cut and the browser
@@ -53,8 +55,14 @@ from nq_terminal.app import create_app  # noqa: E402
 from nq_terminal.desktop import handshake, lifecycle, lock, watchdog  # noqa: E402
 from nq_terminal.desktop.handshake import StdinChannel  # noqa: E402
 from nq_terminal.desktop.lifecycle import Runtime  # noqa: E402
-from nq_terminal.services.prewarm import PORT_BOUND_KEY, PROOF_FALLBACK_S, START_GATE_KEY, StartGate  # noqa: E402
-from nq_terminal.settings import BIND_HOST, MODE_DESKTOP, Settings, load_settings  # noqa: E402
+from nq_terminal.services.prewarm import (  # noqa: E402
+    LAUNCHER_FALLBACK_S,
+    PORT_BOUND_KEY,
+    PROOF_FALLBACK_S,
+    START_GATE_KEY,
+    StartGate,
+)
+from nq_terminal.settings import BIND_HOST, MODE_DESKTOP, MODE_LAUNCHER, Settings, load_settings  # noqa: E402
 
 SHUTDOWN_GRACE_S = 2
 TOKEN_WAIT_S = 10.0
@@ -143,9 +151,12 @@ def _run(server: Any, sock: socket.socket, app: FastAPI, channel: StdinChannel |
 
 
 def start_gate(settings: Settings) -> StartGate:
-    """The prewarm's start gate for this mode: the desktop shell always proves, the launchers and a browser start may
-    not, so those also open `PROOF_FALLBACK_S` seconds after READY."""
-    return StartGate(fallback_s=None if settings.mode == MODE_DESKTOP else PROOF_FALLBACK_S)
+    """The prewarm's start gate for this mode: the desktop shell always proves, so only its first proof opens the gate;
+    the launcher proves only at its next 400 ms poll, so its gate opens on READY (V031); a browser start may never
+    prove, so its gate also opens `PROOF_FALLBACK_S` seconds after READY."""
+    if settings.mode == MODE_DESKTOP:
+        return StartGate(fallback_s=None)
+    return StartGate(fallback_s=LAUNCHER_FALLBACK_S if settings.mode == MODE_LAUNCHER else PROOF_FALLBACK_S)
 
 
 def serve(settings: Settings, build: AppBuilder) -> int:
@@ -173,8 +184,9 @@ def serve(settings: Settings, build: AppBuilder) -> int:
     # uvicorn runs the lifespan startup before it starts listening, so the HOME prewarm polls this and begins only once
     # the port is bound (services/prewarm.py, api/home_prewarm.py).
     setattr(app.state, PORT_BOUND_KEY, lambda: server.started)
-    # V021: the prewarm starts only after READY and the first identity proof (desktop), or a few seconds after READY
-    # when no proof comes (launcher and browser), so the shell's first proof never meets the prewarm's imports.
+    # V021: the prewarm starts only after READY and the first identity proof (desktop), on READY (launcher, V031), or
+    # a few seconds after READY when no proof comes (browser), so the shell's first proof never meets the prewarm's
+    # imports.
     setattr(app.state, START_GATE_KEY, start_gate(settings))
     _announce_when_started(server, app, nonce)
     return _run(server, sock, app, channel)

@@ -9,6 +9,8 @@ Sources, all read-only through `FileCache` (confined to the data root; parquet r
   as `spec_rehash_ok: false`, never as an exception.
 - Hypothesis series (Basis A) come from the screen CSVs named in `constants.SERIES_SOURCES`; only the time
   column and the value columns for the asked cost are read, and a row on or after the fence is refused.
+- Registry freshness (V031, `services/registry_freshness.py`): the modification time of `results/registry.md`
+  against the newest of `results/screens/*.json` and `experiments/*.json` (drafts excluded); no file is opened for it.
 - Sealed files (`results/sealed/`, 2022+): CSVs only through `constants.SEALED_CSV_ALLOWLIST`, JSON with
   every price-like key removed at any depth, the markdown as text; every view carries the spent label.
   Confirmations come from `results/oos_openings.json` and each opening's sealed result, outside the family.
@@ -79,6 +81,7 @@ from nq_terminal.services.files import (
     sanitise,
     thaw,
 )
+from nq_terminal.services.registry_freshness import registry_freshness
 
 NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,79}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -399,7 +402,10 @@ class ResearchService:
 
     def registry(self) -> RegistryView:
         rows = self.registry_rows()
-        return RegistryView(counts=_counts(rows), rows=list(rows), acceptances=self.acceptances(rows))
+        fresh = registry_freshness(self.root)
+        return RegistryView(counts=_counts(rows), rows=list(rows), acceptances=self.acceptances(rows),
+                            generated_at=fresh.generated_at, newest_input_at=fresh.newest_input_at,
+                            newest_input_path=fresh.newest_input_path, stale=fresh.stale)
 
     def acceptances(self, rows: Sequence[RegistryRow]) -> AmendmentAcceptances:
         """The accepted amendments, each re-hashed now (`services.amendments`)."""

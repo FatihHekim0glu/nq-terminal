@@ -105,7 +105,10 @@ and the real backend alone is read for reference (`informational`).
   or a change of foreground window fails the run when its process is the launched shell or under it (its WebView2 children);
   other programs' windows and foreground changes are kept as `notes` in the record (owner decision, 3 October 2026). An event
   whose owner was not traced fails, and so does every event of a watch that names no launched shell. The shell's own inert
-  5 by 5 pixel event window is recorded and ignored.
+  5 by 5 pixel event window is recorded and ignored. The notes name each foreign owner and whether it is on the named list
+  (`KNOWN_FOREIGN` in `lib\winwatch.mjs`: the Logitech Options+ agent; `NQT_KNOWN_FOREIGN` adds image names for one PC, separated
+  by semicolons). The list only labels the record; it never lets an event of the launched shell's tree pass. The cargo smoke tests
+  apply the same rule (`src-tauri\tests\hidden_support\scope.rs`: the test process is the root).
 - A window may be shown only in the screen-2 mode: the guard (`screen2.mjs`) takes the second monitor's work area and the window's DWM
   frame, refuses any rectangle that touches the primary monitor, and the watch then expects exactly that one window. SW_SHOWMINNOACTIVE
   and SW_SHOWNOACTIVATE are the only show commands, and only for a window of the shell's own pid.

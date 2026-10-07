@@ -22,6 +22,11 @@ multiprocessing, standing in for a JOBS run), `exit_after_ready_s`, `exit_before
 `proof_delay_s` holds back the answer to the first `proof_delay_count` proofs (1 when absent) by that many seconds, as a
 backend whose first proof meets a slow first start does; `proof_lie` makes the proof route alone answer wrongly (`mac`:
 a proof under another key; `foreign_pid`: the pid `outside_pid`) while the READY line stays honest.
+`proof_exit_on` ends the fake with the code `proof_exit_code` (3 when absent) the moment that proof request (counted
+from 1) arrives, before it is answered: a backend that ends while the shell is still retrying its spawn-time proof.
+`proof_close_on` closes the listening socket when that proof request arrives (the request itself is still served) and
+ends the fake with `proof_exit_code` `proof_exit_after_s` seconds later: an ending backend whose port is already gone
+while its process has not yet ended, as the shell's next retried proof can find it.
 
 Started by a test as `python -E -s <this file> --swapped <port>`, it is the G08 impostor: it binds the port of a
 backend that has ended and reports every header it receives, without knowing any token.
@@ -97,14 +102,28 @@ class Fake:
         self.port, self.pid, self.session = 0, os.getpid(), None
         self.lab = Path.cwd().parent.parent
         self.proofs, self.proofs_lock = 0, threading.Lock()
+        self.server: ThreadingHTTPServer | None = None
 
     def proof_delay(self) -> float:
-        """How long this proof's answer is held back: `proof_delay_s` for the first `proof_delay_count` proofs."""
+        """How long this proof's answer is held back: `proof_delay_s` for the first `proof_delay_count` proofs. The
+        proof `proof_exit_on` ends the process instead, unanswered."""
         with self.proofs_lock:
             self.proofs += 1
             seen = self.proofs
+        code = int(self.mode.get("proof_exit_code", 3))
+        if seen == int(self.mode.get("proof_exit_on", 0)):
+            os._exit(code)
+        if seen == int(self.mode.get("proof_close_on", 0)):
+            threading.Thread(target=self.close_listener, name="fake-close", daemon=True).start()
+            threading.Timer(float(self.mode.get("proof_exit_after_s", 3.0)), os._exit, args=(code,)).start()
         late = seen <= int(self.mode.get("proof_delay_count", 1))
         return float(self.mode.get("proof_delay_s", 0)) if late else 0.0
+
+    def close_listener(self) -> None:
+        """Stops accepting and closes the listening socket; requests already accepted are still answered."""
+        if self.server is not None:
+            self.server.shutdown()
+            self.server.socket.close()
 
     def reported_pid(self) -> int:
         return int(self.mode.get("outside_pid", 0)) if self.mode.get("lie") == "pid_outside" else self.pid
@@ -191,7 +210,7 @@ def proof_body(fake: Fake, nonce: str, swapped: bool) -> dict:
 def serve(fake: Fake, port: int, swapped: bool) -> ThreadingHTTPServer:
     ThreadingHTTPServer.allow_reuse_address = swapped
     server = ThreadingHTTPServer(("127.0.0.1", port), handler_for(fake, swapped))
-    fake.port = server.server_address[1]
+    fake.port, fake.server = server.server_address[1], server
     threading.Thread(target=server.serve_forever, name="fake-http", daemon=True).start()
     return server
 

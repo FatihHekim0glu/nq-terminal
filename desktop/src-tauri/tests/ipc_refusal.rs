@@ -23,6 +23,9 @@
     reason = "test harness: it reads the locked crate sources and its own run files, and starts its own processes"
 )]
 
+#[path = "hidden_support/scope.rs"]
+mod scope;
+
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::os::windows::process::CommandExt;
@@ -261,12 +264,17 @@ fn start_watch() -> (Arc<AtomicBool>, JoinHandle<Vec<String>>) {
     let stop = Arc::new(AtomicBool::new(false));
     let stop2 = Arc::clone(&stop);
     let (baseline, first_fg) = (visible_windows(), foreground());
+    let root = scope::root_pid();
     let handle = std::thread::spawn(move || {
         let (mut failures, mut seen, mut fg) = (Vec::new(), HashSet::new(), first_fg);
         while !stop2.load(Ordering::SeqCst) {
             for h in visible_windows() {
                 let (pid, class, drawn) = describe(h);
-                if !baseline.contains(&h) && seen.insert(h) && (drawn || class != TAO_CLASS) {
+                if !baseline.contains(&h)
+                    && seen.insert(h)
+                    && (drawn || class != TAO_CLASS)
+                    && !scope::is_foreign_window(&scope::chain_of(pid), &class, root)
+                {
                     failures.push(format!(
                         "new window: pid {pid}, class {class}, drawn {drawn}"
                     ));
@@ -274,7 +282,10 @@ fn start_watch() -> (Arc<AtomicBool>, JoinHandle<Vec<String>>) {
             }
             if foreground() != fg {
                 fg = foreground();
-                failures.push(format!("foreground changed to {:?}", describe(fg)));
+                let now = describe(fg);
+                if !scope::is_foreign_window(&scope::chain_of(now.0), &now.1, root) {
+                    failures.push(format!("foreground changed to {now:?}"));
+                }
             }
             std::thread::sleep(SAMPLE);
         }

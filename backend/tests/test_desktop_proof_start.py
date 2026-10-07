@@ -9,12 +9,16 @@ What is proved here:
 - the proof route is a coroutine function that needs no worker thread, no lazy import and no file read: the identity
   fields are read once when the app is built;
 - the lifespan warms the worker thread pool before the server listens;
-- the prewarm's start gate opens only after READY and the first answered proof in desktop mode, and also a few seconds
-  after READY in launcher and browser modes, where no proof may come;
+- the prewarm's start gate opens only after READY and the first answered proof in desktop mode, on READY in launcher
+  mode (V031, `test_launcher_prewarm_timing.py` measured the launcher's poll), and also a few seconds after READY in
+  browser mode, where no proof may come;
 - through the real start path (`python -m nq_terminal`'s `serve`, hidden, its own state folder under D:/dev/tmp, the
   prewarm's tasks replaced by stand-ins that read nothing): the first task starts after the READY line and after the
   first proof was sent in full; a proof sent at READY answers within 250 ms while the stand-in task would hold the
-  interpreter lock; a launcher start with no proof begins the prewarm `PROOF_FALLBACK_S` after READY;
+  interpreter lock; that stand-in (calibrated to hold the lock about 0.5 s per call on any machine) does hold it: a
+  proof during it, and a first proof on the old start order (prewarm on the port-bound check), both break the 250 ms
+  budget (V031); a launcher start with no proof begins the prewarm on READY and a browser start `PROOF_FALLBACK_S`
+  after READY;
 - the trim stages agree with what the docstrings say: only the later prewarm stage trims (kept as measured in 0.2.0).
 
 Nothing here touches 127.0.0.1:8765, reads a price or starts a real prewarm task.
@@ -42,11 +46,21 @@ from nq_terminal.app import create_app
 from nq_terminal.desktop import handshake, lifecycle
 from nq_terminal.desktop.lifecycle import Runtime
 from nq_terminal.services import prewarm
-from nq_terminal.services.prewarm import PROOF_FALLBACK_S, START_GATE_KEY, StartGate
+from nq_terminal.services.prewarm import LAUNCHER_FALLBACK_S, PROOF_FALLBACK_S, START_GATE_KEY, StartGate
 from nq_terminal.settings import load_settings
 
-from conftest import (LOCAL, LOOPBACK, WindowWatch, api_client, bare_client, desktop_env, fresh_lock_dir,
-                      remove_lock_dir, spawn_backend, wait_until)
+from conftest import (
+    LOCAL,
+    LOOPBACK,
+    WindowWatch,
+    api_client,
+    bare_client,
+    desktop_env,
+    fresh_lock_dir,
+    remove_lock_dir,
+    spawn_backend,
+    wait_until,
+)
 
 TOKEN = "4d" * 32
 NONCE = "e1" * 32
@@ -54,6 +68,7 @@ PORT = 8797
 PROOF_BUDGET_S = 0.25  # the first proof at READY, with a busy prewarm waiting
 STAMP_WAIT_S = 20.0
 NO_PROOF_HOLD_S = 1.5  # how long the desktop test waits after READY before it proves
+ON_READY_SLACK_S = 0.25  # launcher mode: READY to the first task (the prewarm polls its gate every 50 ms)
 
 
 class Clock:
@@ -203,12 +218,23 @@ def test_the_launcher_and_browser_fallback_starts_the_prewarm_without_a_proof():
 
 @pytest.mark.parametrize(("env", "fallback"), [
     ({"NQT_DESKTOP": "1"}, None),
-    ({"NQT_STDIN_CONTROL": "1", "NQT_PORT": "9002"}, PROOF_FALLBACK_S),
+    ({"NQT_STDIN_CONTROL": "1", "NQT_PORT": "9002"}, LAUNCHER_FALLBACK_S),
     ({"NQT_PORT": "9003"}, PROOF_FALLBACK_S),
 ])
 def test_the_launcher_makes_the_gate_for_its_mode(env, fallback):
+    """Born failing on V021's launcher gate (`PROOF_FALLBACK_S`): V031 opens the launcher's gate on READY."""
     assert launcher.start_gate(load_settings(env)).fallback_s == fallback
     assert 1.0 <= PROOF_FALLBACK_S <= 5.0  # "a few seconds"
+    assert LAUNCHER_FALLBACK_S == 0.0
+
+
+def test_a_zero_fallback_opens_the_gate_on_ready_and_not_before():
+    clock = Clock()
+    gate = StartGate(fallback_s=LAUNCHER_FALLBACK_S, clock=clock)
+    clock.now += 10.0
+    assert gate() is False  # READY not printed yet: nothing opens it
+    gate.mark_ready()
+    assert gate() is True
 
 
 def test_the_prewarm_prefers_the_gate_over_the_port_bound_check():
@@ -261,12 +287,32 @@ from nq_terminal.api import home_prewarm
 from nq_terminal.app import create_app
 from nq_terminal.settings import load_settings
 
-KIND, CHUNK = sys.argv[1], int(sys.argv[2])
+KIND, HOLD_S, ORDER = sys.argv[1], float(sys.argv[2]), sys.argv[3]
 HOG_S = 4.0
+PROBE = 2_000_000
+PROBES = 7
 
 
-def stamp(label):
-    print("STAMP " + label + " " + repr(time.monotonic()), flush=True)
+def stamp(label, value=None):
+    print("STAMP " + label + " " + repr(time.monotonic() if value is None else value), flush=True)
+
+
+def calibrate():
+    """A chunk that holds the interpreter lock for about HOLD_S in one C call on this machine, whatever its speed.
+
+    The fastest of several probes sets the size: a probe taken while other programs load the machine is slow, and a
+    chunk sized from it would hold the lock for much less once the load is gone (the born-failing test below saw a
+    proof answered in 4 ms that way, under a full parallel run)."""
+    fastest = None
+    for _ in range(PROBES):
+        began = time.perf_counter()
+        sum(range(PROBE))
+        took = time.perf_counter() - began
+        fastest = took if fastest is None else min(fastest, took)
+    return max(PROBE, int(PROBE * HOLD_S / max(fastest, 1e-6)))
+
+
+CHUNK = calibrate() if KIND == "busy" else 0
 
 
 def record():
@@ -274,16 +320,23 @@ def record():
 
 
 def hog():
-    """Holds the interpreter lock in long C calls, as an import under a file rescan does."""
+    """Holds the interpreter lock in long C calls, as an import under a file rescan does; stamps the shortest hold."""
     stamp("TASK")
-    end = time.monotonic() + HOG_S
+    end, shortest = time.monotonic() + HOG_S, None
     while time.monotonic() < end:
+        began = time.perf_counter()
         sum(range(CHUNK))
+        took = time.perf_counter() - began
+        shortest = took if shortest is None else min(shortest, took)
+    stamp("HOLD", shortest)
     stamp("HOGDONE")
 
 
 home_prewarm.home_tasks = lambda state: [hog if KIND == "busy" else record]
 home_prewarm.later_tasks = lambda state: []
+if ORDER == "old":
+    # The start order before V021, for the born-failing check only: the prewarm begins once the port is bound.
+    home_prewarm.start_check = lambda state: getattr(state, entry.PORT_BOUND_KEY, None)
 plain_say = entry._say
 
 
@@ -323,7 +376,7 @@ def build(settings):
 
 sys.exit(entry.serve(load_settings(), build))
 '''
-HOG_CHUNK = 60_000_000  # sum(range(n)) holds the lock for about 0.45 s per call on the build machine
+HOLD_S = 0.5  # one stand-in C call holds the interpreter lock this long, calibrated in the child on this machine
 
 
 def stamps(backend) -> dict[str, float]:
@@ -356,6 +409,9 @@ def start_env(folder: Path, mode: str) -> dict[str, str]:
     if mode == "launcher":
         env.pop("NQT_DESKTOP")
         env.update({"NQT_STDIN_CONTROL": "1", "NQT_PORT": str(free_port())})
+    elif mode == "browser":
+        env.pop("NQT_DESKTOP")
+        env.update({"NQT_PORT": str(free_port())})
     return env
 
 
@@ -365,10 +421,11 @@ def started(request):
     made = []
     watch = WindowWatch().start()
 
-    def start(kind: str, mode: str = "desktop"):
-        folder = fresh_lock_dir(f"v021-{kind}-{mode}")
-        backend = spawn_backend(["-c", DRIVER, kind, str(HOG_CHUNK)], start_env(folder, mode), token=TOKEN,
-                                nonce=NONCE)
+    def start(kind: str, mode: str = "desktop", order: str = "gate"):
+        folder = fresh_lock_dir(f"v021-{kind}-{mode}-{order}")
+        reads_stdin = mode != "browser"
+        backend = spawn_backend(["-c", DRIVER, kind, str(HOLD_S), order], start_env(folder, mode),
+                                token=TOKEN if reads_stdin else None, nonce=NONCE if reads_stdin else None)
         made.append((backend, folder))
         kind_line, payload = backend.first_nqt_line()
         assert kind_line == "NQT-READY", backend.stderr_text()
@@ -404,7 +461,11 @@ def test_the_prewarm_starts_only_after_ready_and_the_first_proof(started):
 
 @windows_only
 def test_the_first_proof_at_ready_answers_within_250_ms_with_a_busy_prewarm_waiting(started):
-    """Born failing: the busy stand-in task already held the interpreter lock when the shell's first proof came."""
+    """Born failing: the busy stand-in task already held the interpreter lock when the shell's first proof came.
+
+    V031: the stand-in really holds the interpreter. Once the first proof has opened the gate and the stand-in runs, a
+    second proof meets it and takes longer than the budget, so this run is against a prewarm that would break the
+    budget if it had begun first (the old order, shown failing in the next test)."""
     backend, ready = started("busy")
     body, took = prove(ready["port"])
     assert handshake.verify_proof(body, TOKEN, NONCE, ready["port"]) is True
@@ -412,13 +473,46 @@ def test_the_first_proof_at_ready_answers_within_250_ms_with_a_busy_prewarm_wait
     assert wait_until(lambda: "TASK" in stamps(backend), STAMP_WAIT_S)  # and the prewarm did start after it
     seen = stamps(backend)
     assert seen["PROOFSENT"] <= seen["TASK"], seen
+    _, busy_took = prove(ready["port"])
+    assert busy_took >= PROOF_BUDGET_S, f"a proof during the stand-in took {busy_took * 1000:.0f} ms: it held nothing"
+    assert wait_until(lambda: "HOLD" in stamps(backend), STAMP_WAIT_S)
+    assert stamps(backend)["HOLD"] >= PROOF_BUDGET_S, stamps(backend)
 
 
 @windows_only
-def test_a_launcher_start_with_no_proof_begins_the_prewarm_a_few_seconds_after_ready(started):
-    """Born failing: the prewarm began before READY; now the launcher's fallback starts it PROOF_FALLBACK_S later."""
+def test_born_failing_on_the_old_start_order_the_same_busy_prewarm_breaks_the_250_ms_budget(started):
+    """The start order before V021 (the prewarm begins once the port is bound), with the same stand-in: the busy prewarm
+    starts before the shell has a proof to ask, so either READY comes later than the budget after it (the stand-in
+    starves the start itself, which is what a loaded machine showed) or the first proof at READY meets it and takes
+    longer than the budget. Either way the shell's first proof is held past 250 ms, so the test above fails on that
+    order. Which of the two shows depends on how the interpreter lock is shared out, so the test accepts both."""
+    backend, ready = started("busy", order="old")
+    assert wait_until(lambda: "TASK" in stamps(backend), STAMP_WAIT_S), backend.stderr_text()
+    body, took = prove(ready["port"])
+    assert handshake.verify_proof(body, TOKEN, NONCE, ready["port"]) is True
+    seen = stamps(backend)
+    assert seen["TASK"] < seen["PROOFSENT"], seen
+    held = max(took, seen["READY"] - seen["TASK"])
+    assert held >= PROOF_BUDGET_S, f"the old order held nothing: proof {took * 1000:.0f} ms; {seen}"
+
+
+@windows_only
+def test_a_launcher_start_with_no_proof_begins_the_prewarm_on_ready(started):
+    """Born failing on V021's order (the launcher's prewarm waited for its 400 ms proof poll or `PROOF_FALLBACK_S`):
+    V031 starts it on READY in launcher mode, and never before READY."""
     backend, ready = started("record", mode="launcher")
     assert ready["mode"] == "launcher" and ready["port"] != 8765
+    assert wait_until(lambda: "TASK" in stamps(backend), STAMP_WAIT_S), backend.stderr_text()
+    seen = stamps(backend)
+    assert "PROOFSENT" not in seen
+    assert 0.0 <= seen["TASK"] - seen["READY"] <= ON_READY_SLACK_S, seen
+
+
+@windows_only
+def test_a_browser_start_with_no_proof_begins_the_prewarm_a_few_seconds_after_ready(started):
+    """Browser mode (no launcher, no stdin) keeps V021's fallback: PROOF_FALLBACK_S after READY."""
+    backend, ready = started("record", mode="browser")
+    assert ready["mode"] == "browser" and ready["port"] != 8765
     assert wait_until(lambda: "TASK" in stamps(backend), STAMP_WAIT_S), backend.stderr_text()
     seen = stamps(backend)
     assert "PROOFSENT" not in seen

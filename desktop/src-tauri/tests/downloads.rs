@@ -22,6 +22,9 @@
     reason = "test harness: it builds its own run folders and fake lab, reads them back and starts its own processes"
 )]
 
+#[path = "hidden_support/scope.rs"]
+mod scope;
+
 use serde_json::Value;
 use std::collections::{BTreeSet, HashSet};
 use std::os::windows::process::CommandExt;
@@ -126,18 +129,26 @@ fn start_watch() -> Watch {
     let stop = Arc::new(AtomicBool::new(false));
     let stop2 = Arc::clone(&stop);
     let (baseline, first_fg) = (visible_windows(), foreground());
+    let root = scope::root_pid();
     let handle = std::thread::spawn(move || {
         let (mut failures, mut seen, mut fg) = (Vec::new(), HashSet::new(), first_fg);
         while !stop2.load(Ordering::SeqCst) {
             for h in visible_windows() {
                 let w = describe(h);
-                if !baseline.contains(&h) && seen.insert(h) && (w.drawn || w.class != TAO_CLASS) {
+                if !baseline.contains(&h)
+                    && seen.insert(h)
+                    && (w.drawn || w.class != TAO_CLASS)
+                    && !scope::is_foreign_window(&scope::chain_of(w.pid), &w.class, root)
+                {
                     failures.push(format!("new window: {w:?}"));
                 }
             }
             if foreground() != fg {
                 fg = foreground();
-                failures.push(format!("foreground changed to {:?}", describe(fg)));
+                let now = describe(fg);
+                if !scope::is_foreign_window(&scope::chain_of(now.pid), &now.class, root) {
+                    failures.push(format!("foreground changed to {now:?}"));
+                }
             }
             std::thread::sleep(SAMPLE);
         }

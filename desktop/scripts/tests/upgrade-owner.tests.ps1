@@ -13,13 +13,16 @@
   4. A default dry run against the real install (no -Go) changes nothing: the values of the product's two HKCU keys,
      every file of the install folder (path, size, SHA256, last write time), the folder's DACL and the list of the backup
      folder are the same before and after. The real install is only read; -Go is never passed. With no install of the
-     product for this user the step is skipped and says so.
+     product for this user the step is skipped and says so. The two installers are read, not pinned: the new one is this
+     tree's version from desktop\src-tauri\tauri.conf.json (the newest published release below it when that version is not
+     published yet) and the rollback one is the published release before it, from D:\dev\release (born failing with fake
+     release folders: version order, release builds only, no pair when there is no earlier release).
   It waits while D:\dev\locks\QUIET_MEASURE exists (a quiet measurement window), polling every 120 s.
 #>
 [CmdletBinding()]
 param(
     [string]$NewInstaller = '',
-    [string]$RollbackInstaller = 'D:\dev\release\0.1.1\nq-lab terminal_0.1.1_x64-setup.exe'
+    [string]$RollbackInstaller = ''
 )
 
 Set-StrictMode -Version Latest
@@ -31,6 +34,8 @@ $Product = 'nq-lab terminal'
 $UninstallKey = "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\$Product"
 $FolderKey = "Registry::HKEY_CURRENT_USER\Software\nqlab\$Product"
 $BackupRoot = 'D:\dev\backup'
+$ReleaseRoot = 'D:\dev\release'
+$TreeConf = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'src-tauri\tauri.conf.json'
 $Scratch = 'D:\dev\tmp'
 $Results = New-Object System.Collections.Generic.List[object]
 
@@ -144,18 +149,84 @@ function Test-SnapshotBornFailing {
     }
 }
 
+function Get-TreeVersion {
+    # The version this tree is built as: the version of desktop\src-tauri\tauri.conf.json.
+    param([string]$ConfPath)
+    return "$((Get-Content -LiteralPath $ConfPath -Raw | ConvertFrom-Json).version)"
+}
+
+function Get-ReleasePair {
+    # The two installers of the real dry run: Current is this tree's version (or, when that version is not published
+    # yet, the newest published one below it) and Previous is the published release before Current. A release is a folder
+    # named as a version under $ReleaseRoot that holds the product's own setup exe (not the measure or installtest build).
+    param([string]$ReleaseRoot, [string]$Product, [string]$TreeVersion)
+    $published = @()
+    foreach ($dir in @(Get-ChildItem -LiteralPath $ReleaseRoot -Directory -ErrorAction SilentlyContinue)) {
+        $version = $null
+        if (-not [version]::TryParse($dir.Name, [ref]$version)) { continue }
+        $installer = Join-Path $dir.FullName "${Product}_$($dir.Name)_x64-setup.exe"
+        if (Test-Path -LiteralPath $installer -PathType Leaf) { $published += [pscustomobject]@{ Version = $version; Name = $dir.Name; Installer = $installer } }
+    }
+    $published = @($published | Sort-Object Version)
+    $tree = $null
+    if (-not [version]::TryParse($TreeVersion, [ref]$tree)) { $tree = [version]'0.0.0' }
+    $current = $published | Where-Object { $_.Version -le $tree } | Select-Object -Last 1
+    $previous = if ($current) { $published | Where-Object { $_.Version -lt $current.Version } | Select-Object -Last 1 } else { $null }
+    return [pscustomobject]@{ Current = $current; Previous = $previous }
+}
+
+function Test-ReleasePairFromFakeVersions {
+    # Born failing: the dry run's two installers were pinned to 0.1.2 (new) and 0.1.1 (rollback); they are now read from the
+    # published releases and the version of this tree. Fake release folders only; the real D:\dev\release is not read here.
+    $id = [guid]::NewGuid().ToString('N').Substring(0, 12)
+    $root = Join-Path $Scratch "upgrade-owner-pair-$id"
+    $make = {
+        param([string]$Name, [string]$Version, [bool]$WithInstaller = $true, [string[]]$Others = @())
+        $dir = Join-Path $root $Name
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        if ($WithInstaller) { [System.IO.File]::WriteAllText((Join-Path $dir "${Product}_${Version}_x64-setup.exe"), "fake $Version`n") }
+        foreach ($other in $Others) { [System.IO.File]::WriteAllText((Join-Path $dir "$Product ${other}_${Version}_x64-setup.exe"), "fake $other $Version`n") }
+    }
+    try {
+        & $make '0.1.1' '0.1.1' $true @('measure')
+        & $make '0.1.2' '0.1.2' $true @('measure', 'installtest')
+        & $make '0.9.0' '0.9.0'
+        & $make '0.10.0' '0.10.0' $true @('measure')
+        & $make '0.11.0' '0.11.0' $false
+        & $make 'dec1-acl' '0.0.0' $false
+        $pair = Get-ReleasePair -ReleaseRoot $root -Product $Product -TreeVersion '0.10.0'
+        Add-Result 'the pair is this tree version and the published one before it, ordered as versions (0.10.0 after 0.9.0)' (($pair.Current.Name -eq '0.10.0') -and ($pair.Previous.Name -eq '0.9.0')) "current $($pair.Current.Name), previous $($pair.Previous.Name)"
+        Add-Result 'the installers are the release ones, never the measure or installtest builds' (($pair.Current.Installer -like "*\${Product}_0.10.0_x64-setup.exe") -and ($pair.Previous.Installer -like "*\${Product}_0.9.0_x64-setup.exe")) "$($pair.Current.Installer)"
+        $ahead = Get-ReleasePair -ReleaseRoot $root -Product $Product -TreeVersion '0.12.0'
+        Add-Result 'a tree version that is not published yet (or has no installer) falls back to the newest published one' (($ahead.Current.Name -eq '0.10.0') -and ($ahead.Previous.Name -eq '0.9.0')) "current $($ahead.Current.Name), previous $($ahead.Previous.Name)"
+        $first = Get-ReleasePair -ReleaseRoot $root -Product $Product -TreeVersion '0.1.1'
+        Add-Result 'the first published release has no previous one, so there is no pair to dry-run' (($first.Current.Name -eq '0.1.1') -and ($null -eq $first.Previous)) "current $($first.Current.Name)"
+        $old = Get-ReleasePair -ReleaseRoot $root -Product $Product -TreeVersion '0.0.1'
+        Add-Result 'a tree version older than every release has no current release' (($null -eq $old.Current) -and ($null -eq $old.Previous))
+        $none = Get-ReleasePair -ReleaseRoot (Join-Path $root 'absent') -Product $Product -TreeVersion '0.1.1'
+        Add-Result 'a missing release folder gives no pair and no error' (($null -eq $none.Current) -and ($null -eq $none.Previous))
+        $conf = Join-Path $root 'tauri.conf.json'
+        [System.IO.File]::WriteAllText($conf, '{ "productName": "x", "version": "7.8.9" }' + "`n")
+        Add-Result 'the version of this tree is read from tauri.conf.json' ((Get-TreeVersion $conf) -eq '7.8.9')
+        Add-Result 'the real tauri.conf.json of this tree has a version' ((Get-TreeVersion $TreeConf) -match '^\d+\.\d+\.\d+$') "$(Get-TreeVersion $TreeConf)"
+    } finally {
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+    }
+}
+
 function Test-RealDryRun {
     if (-not (Test-Path -LiteralPath $UninstallKey)) { Write-Host "SKIP  real dry run: no install of '$Product' for this user"; return }
     $location = "$((Get-ItemProperty -LiteralPath $UninstallKey).InstallLocation)".Trim().Trim('"')
-    $new = $NewInstaller
-    if (-not $new) {
-        $candidate = 'D:\dev\release\0.1.2\nq-lab terminal_0.1.2_x64-setup.exe'
-        $new = if (Test-Path -LiteralPath $candidate) { $candidate } else { $RollbackInstaller }
-    }
+    # The new installer is this tree's version (or the newest published one below it) and the rollback installer is the
+    # published release before it; -NewInstaller and -RollbackInstaller still override either.
+    $pair = Get-ReleasePair -ReleaseRoot $ReleaseRoot -Product $Product -TreeVersion (Get-TreeVersion $TreeConf)
+    $new = if ($NewInstaller) { $NewInstaller } elseif ($pair.Current) { $pair.Current.Installer } else { '' }
+    $rollback = if ($RollbackInstaller) { $RollbackInstaller } elseif ($pair.Previous) { $pair.Previous.Installer } else { '' }
+    if (-not $new -or -not $rollback) { Write-Host "SKIP  real dry run: fewer than two published releases under $ReleaseRoot for this tree's version and none given"; return }
     $before = Get-Snapshot @($UninstallKey, $FolderKey) $location $BackupRoot
-    $run = Invoke-Script @('-Installer', $new, '-RollbackInstaller', $RollbackInstaller)
+    $run = Invoke-Script @('-Installer', $new, '-RollbackInstaller', $rollback)
     $after = Get-Snapshot @($UninstallKey, $FolderKey) $location $BackupRoot
-    Add-Result 'a default dry run against the real install prints a dry-run plan' (($run.text -like '*DRY RUN*') -and ($run.code -in 0, 1)) "exit $($run.code); new installer $new"
+    Add-Result 'a default dry run against the real install prints a dry-run plan' (($run.text -like '*DRY RUN*') -and ($run.code -in 0, 1)) "exit $($run.code); new installer $new; rollback installer $rollback"
     Add-Result 'a default dry run changes nothing (HKCU key values, install folder files and DACL, backup folder list)' ($before -eq $after) "install folder $location"
     $outcome = [regex]::Match($run.text, '(?m)^(dry run: every check passed|refused: nothing was changed|upgraded |the upgrade failed)')
     Add-Result 'a default dry run ends with a dry-run or refused outcome, never an upgrade' ($outcome.Success -and $outcome.Value -cmatch '^(dry run|refused)') "outcome '$($outcome.Value)'"
@@ -167,6 +238,7 @@ Test-SelfTest
 Test-Usage
 Test-StateFolderRefusal
 Test-SnapshotBornFailing
+Test-ReleasePairFromFakeVersions
 Test-RealDryRun
 $failed = @($Results | Where-Object { -not $_.passed })
 Write-Host ("upgrade-owner tests: {0} checks, {1} failed" -f $Results.Count, $failed.Count)

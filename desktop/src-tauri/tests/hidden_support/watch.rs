@@ -19,6 +19,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::BOOL;
 
+#[path = "scope.rs"]
+pub mod scope;
+use scope::Link;
+
 const SAMPLE: Duration = Duration::from_millis(100);
 pub const TAO_CLASS: &str = "Tao Thread Event Target";
 
@@ -29,14 +33,47 @@ pub struct Seen {
     pub title: String,
     pub rect: (i32, i32, i32, i32),
     pub drawn: bool,
+    /// The owner process and its ancestors, nearest first, read when the event was seen (empty: not traced).
+    pub chain: Vec<Link>,
 }
 
+/// `new_visible` and `foreground_changes` hold what can fail a run: events of the test process tree and events whose
+/// owner was not traced. Events of other programs are in `foreign` (see scope.rs).
 #[derive(Debug, Default)]
 pub struct WatchReport {
     pub samples: u64,
     pub max_gap_ms: u128,
     pub new_visible: Vec<Seen>,
     pub foreground_changes: Vec<Seen>,
+    pub foreign: Vec<Seen>,
+}
+
+impl WatchReport {
+    /// Files a new window by its owner; true when it counts against the run.
+    pub fn record_window(&mut self, w: Seen, root: u32) -> bool {
+        let counts = !scope::is_foreign_window(&w.chain, &w.class, root);
+        if counts {
+            self.new_visible.push(w);
+        } else {
+            self.foreign.push(w);
+        }
+        counts
+    }
+
+    /// Files a foreground change by the owner of the window that took the foreground.
+    pub fn record_foreground(&mut self, w: Seen, root: u32) {
+        if scope::is_foreign_window(&w.chain, &w.class, root) {
+            self.foreign.push(w);
+        } else {
+            self.foreground_changes.push(w);
+        }
+    }
+
+    /// One line per foreign event: its owner, whether the owner is on the named list, and what was seen.
+    pub fn foreign_notes(&self) -> Vec<String> {
+        let note = |w: &Seen| scope::foreign_note(&w.chain, &w.class, &w.title);
+        self.foreign.iter().map(note).collect()
+    }
 }
 
 pub unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
@@ -90,8 +127,16 @@ pub fn describe(handle: isize) -> Seen {
             title: String::from_utf16_lossy(&title[..m]),
             rect: (r.left, r.top, r.right, r.bottom),
             drawn,
+            chain: Vec::new(),
         }
     }
+}
+
+/// `describe` plus the owner's ancestry, read now (the owner may be gone when the verdict is made).
+pub fn describe_traced(handle: isize) -> Seen {
+    let mut w = describe(handle);
+    w.chain = scope::chain_of(w.pid);
+    w
 }
 
 pub fn foreground() -> isize {
@@ -111,20 +156,23 @@ pub fn start_watch() -> Watch {
     let (stop2, drawn2) = (Arc::clone(&stop), Arc::clone(&drawn_seen));
     let baseline = visible_windows();
     let first_fg = foreground();
+    let root = scope::root_pid();
     let handle = std::thread::spawn(move || {
         let mut report = WatchReport::default();
         let (mut seen, mut fg, mut last) = (HashSet::new(), first_fg, Instant::now());
         while !stop2.load(Ordering::SeqCst) {
             for h in visible_windows() {
                 if !baseline.contains(&h) && seen.insert(h) {
-                    let w = describe(h);
-                    drawn2.fetch_or(w.drawn, Ordering::SeqCst);
-                    report.new_visible.push(w);
+                    let w = describe_traced(h);
+                    let drawn = w.drawn;
+                    if report.record_window(w, root) {
+                        drawn2.fetch_or(drawn, Ordering::SeqCst);
+                    }
                 }
             }
             let now = foreground();
             if now != fg {
-                report.foreground_changes.push(describe(now));
+                report.record_foreground(describe_traced(now), root);
                 fg = now;
             }
             report.samples += 1;
@@ -144,12 +192,16 @@ pub fn start_watch() -> Watch {
 impl Watch {
     pub fn finish(self) -> WatchReport {
         self.stop.store(true, Ordering::SeqCst);
-        self.handle.join().unwrap_or_default()
+        let report = self.handle.join().unwrap_or_default();
+        for note in report.foreign_notes() {
+            eprintln!("watch: ignored a foreign window: {note}");
+        }
+        report
     }
 }
 
-/// What fails a run: any drawn new window from any process, any foreground change, and any undrawn new window
-/// that is not tao's event target.
+/// What fails a run: any drawn new window of the test process tree (or of an owner not traced), any foreground
+/// change to one, and any undrawn new window that is not tao's event target. Other programs' events are in `foreign`.
 pub fn failures(report: &WatchReport) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for w in &report.new_visible {
@@ -173,7 +225,25 @@ pub fn seen(class: &str, drawn: bool) -> Seen {
         title,
         rect,
         drawn,
+        chain: Vec::new(),
     }
+}
+
+/// A window planted by `exe` (owner pid `pid`), whose parent process is `parent`, if any.
+pub fn seen_by(class: &str, drawn: bool, pid: u32, exe: &str, parent: Option<(u32, &str)>) -> Seen {
+    let mut w = seen(class, drawn);
+    w.pid = pid;
+    w.chain.push(Link {
+        pid,
+        exe: exe.into(),
+    });
+    if let Some((parent_pid, parent_exe)) = parent {
+        w.chain.push(Link {
+            pid: parent_pid,
+            exe: parent_exe.into(),
+        });
+    }
+    w
 }
 
 pub fn report(new_visible: Vec<Seen>, foreground_changes: Vec<Seen>) -> WatchReport {
@@ -182,6 +252,7 @@ pub fn report(new_visible: Vec<Seen>, foreground_changes: Vec<Seen>) -> WatchRep
         max_gap_ms: 100,
         new_visible,
         foreground_changes,
+        foreign: Vec::new(),
     }
 }
 
@@ -199,4 +270,70 @@ pub fn watch_judge_catches_planted_windows() {
             "a planted window passed: {planted:?}"
         );
     }
+}
+
+/// The scope rule (born failing: before it, a foreign window failed every run). Windows go through the same
+/// `record_*` calls the watch thread makes, with a root of 500 standing for the test process.
+#[test]
+pub fn watch_ignores_foreign_windows_and_still_fails_a_planted_own_window() {
+    const ROOT: u32 = 500;
+    let mut report = WatchReport::default();
+    let logi = seen_by("Logi", true, 900, "logioptionsplus_agent.exe", None);
+    let chat = seen_by(
+        "Chrome_WidgetWin_1",
+        true,
+        901,
+        "chatclient.exe",
+        Some((1, "explorer.exe")),
+    );
+    let stranger = seen_by(
+        "Notepad",
+        true,
+        902,
+        "notepad.exe",
+        Some((1, "explorer.exe")),
+    );
+    assert!(!report.record_window(logi, ROOT));
+    assert!(!report.record_window(chat.clone(), ROOT));
+    assert!(!report.record_window(stranger, ROOT));
+    report.record_foreground(chat, ROOT);
+    assert!(
+        failures(&report).is_empty(),
+        "foreign events failed the run: {:?}",
+        failures(&report)
+    );
+    let notes = report.foreign_notes();
+    assert_eq!(notes.len(), 4, "{notes:?}");
+    assert!(
+        notes[0].contains("logioptionsplus_agent.exe")
+            && notes[0].contains("known foreign program")
+    );
+    assert!(notes[2].contains("not on the list"), "{notes:?}");
+
+    let own = seen_by(
+        "Tauri Window",
+        true,
+        777,
+        "nq-lab-terminal.exe",
+        Some((ROOT, "test.exe")),
+    );
+    assert!(report.record_window(own.clone(), ROOT));
+    assert_eq!(
+        failures(&report).len(),
+        1,
+        "a planted own-tree window must still fail"
+    );
+    report.record_foreground(own, ROOT);
+    assert_eq!(
+        failures(&report).len(),
+        2,
+        "a foreground change to an own-tree window must still fail"
+    );
+
+    let mut gone = WatchReport::default();
+    assert!(
+        gone.record_window(seen("Tauri Window", true), ROOT),
+        "an untraced owner counts (fail closed)"
+    );
+    assert_eq!(failures(&gone).len(), 1);
 }

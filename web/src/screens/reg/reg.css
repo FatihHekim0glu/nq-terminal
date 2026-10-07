@@ -33,11 +33,15 @@
 .reg-screen .muted { color: var(--muted); }
 .reg-screen .name { color: var(--data); }
 
-/* Left rail on the raised grey, numbered rows, the selected round in list blue with white text (4.7). */
+/* Left rail on the raised grey, numbered rows, the selected round in list blue with white text (4.7). It never
+   scrolls on its own (V031, axe scrollable-region-focusable): the panel body is the panel's one Tab stop, so a rail
+   that scrolled inside it, with many rounds, was a scroll box no Tab reaches. It keeps its content height instead
+   and the panel body scrolls to the rest, as panelScroll.css does for the other inner scrollers. overflow: clip
+   stops a long label drawing past the 160 px without making a scroll box. */
 .reg-rail {
   flex: 0 0 160px;
-  min-height: 0;
-  overflow: auto;
+  min-height: min-content;
+  overflow: clip;
   background: var(--raised);
 }
 .reg-rail ul, .reg-crit-list { margin: 0; padding: 0; list-style: none; }
@@ -226,3 +230,10 @@
 @media (max-width: 700px) {
   .reg-crit-head, .reg-band, .mt-line, .mt-confirm-list li { white-space: normal; }
 }
+
+/* V031: the registry staleness banner. An empty region (a fresh registry) has no height, so it takes no room and
+   stays in the page for the live region to announce into (never display: none); the line wraps rather than clipping,
+   with the icon beside its first line. The warning colour is the existing token. */
+.reg-stale { display: flex; align-items: flex-start; flex: 0 0 auto; gap: 6px; min-width: 0; padding: 0 5px; color: var(--warn); }
+.reg-stale-icon { flex: 0 0 auto; margin-top: calc((var(--row-h) - 14px) / 2); }
+.reg-stale-text { min-width: 0; overflow-wrap: anywhere; }

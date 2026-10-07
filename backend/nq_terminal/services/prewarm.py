@@ -18,9 +18,12 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
 - `ready` (optional) is polled until it returns true before the first task (the lifespan hook runs before the
   listening socket exists). `python -m nq_terminal` hands it a `StartGate` (V021): the tasks begin only once the
   `NQT-READY` line is printed and the first identity proof has been answered, so the shell's first proof never shares
-  the interpreter with the prewarm's imports; in launcher and browser modes, where no proof may come, the gate also
-  opens `PROOF_FALLBACK_S` seconds after READY. A check that never turns true, or that raises, delays the start by at
-  most `ready_timeout` seconds and the tasks then run anyway.
+  the interpreter with the prewarm's imports. In launcher mode (`start.ps1`) the gate opens on READY
+  (`LAUNCHER_FALLBACK_S`, V031): the launcher proves by a poll every 400 ms, which held the prewarm back up to 532 ms
+  after READY when measured, more than the 500 ms allowed before HOME data, and the launcher retries a slow proof
+  anyway. In browser mode, where no proof may come, the gate also opens `PROOF_FALLBACK_S` seconds after READY. A
+  check that never turns true, or that raises, delays the start by at most `ready_timeout` seconds and the tasks then
+  run anyway.
 - `later` (optional) are tasks the first screen never asks for. They run after `tasks`, once the process has been quiet
   for `quiet_windows` readings in a row (`quiet`, by default `process_quiet_probe`: the whole process used at most a
   quarter of one core over a half-second window), or after `quiet_timeout` seconds, whichever comes first. On a first
@@ -54,7 +57,8 @@ SWITCH_ON = "1"
 THREAD_NAME = "nqt-prewarm"
 PORT_BOUND_KEY = "port_bound"  # app.state attribute: a zero-argument callable, true once the socket is bound
 START_GATE_KEY = "prewarm_gate"  # app.state attribute: the StartGate `python -m nq_terminal` makes (V021)
-PROOF_FALLBACK_S = 3.0  # launcher and browser modes: the prewarm starts this long after READY when no proof came
+PROOF_FALLBACK_S = 3.0  # browser mode: the prewarm starts this long after READY when no proof came
+LAUNCHER_FALLBACK_S = 0.0  # launcher mode: the prewarm starts on READY, not at the launcher's 400 ms proof poll (V031)
 READY_TIMEOUT_S = 15.0
 READY_POLL_S = 0.05
 QUIET_WINDOW_S = 0.5  # one reading of the process CPU
@@ -117,8 +121,9 @@ def process_quiet_probe(window: float = QUIET_WINDOW_S, share: float = QUIET_CPU
 
 class StartGate:
     """When the prewarm may begin (V021): after the READY line is printed and the first identity proof has been
-    answered. With `fallback_s` (launcher and browser modes, where no proof may come) it also opens that many seconds
-    after READY; without it (desktop mode) only the proof opens it, and the prewarm's own `ready_timeout` is the net.
+    answered. With `fallback_s` (browser mode, where no proof may come; 0 in launcher mode, so on READY) it also opens
+    that many seconds after READY; without it (desktop mode) only the proof opens it, and the prewarm's own
+    `ready_timeout` is the net.
 
     Calling the gate answers whether it is open. Thread safe: the event loop marks it, the prewarm thread asks."""
 

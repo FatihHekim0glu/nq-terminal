@@ -63,7 +63,8 @@ def _name() -> str:
 
 @router.get("/registry", response_model=RegistryView)
 def registry(request: Request) -> RegistryView:
-    """Every row of results/registry.csv, with counts taken from the file."""
+    """Every row of results/registry.csv, with counts taken from the file, and whether a screen or spec is newer than
+    results/registry.md (read from modification times only)."""
     return _answer(_service(request).registry)
 
 

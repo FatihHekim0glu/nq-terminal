@@ -54,6 +54,10 @@ The comparison is exact, field by field. It is not the formal `regress_check` fi
 
 In the Windows app, when the main window is minimised or hidden, the shell asks WebView2 to use its low memory target, and returns to normal when the window comes back. Focus alone changes nothing. A window that has never been shown counts as visible. If the installed WebView2 is too old to support the setting, the shell logs that once and carries on.
 
+## The registry staleness line
+
+The launcher writes to the ledger only through the research scripts, and the registry (`results/registry.csv` and `results/registry.md`) is rebuilt only by `scripts/registry.py`, never by the terminal. After a run or a new spec the REG screen can therefore show an older registry than the files beside it. From 0.3.1 REG (and HOME's REG cell) says so in one line when `results/registry.md` is older than the newest `*.json` in `results/screens` or `experiments` (drafts, `experiments/drafts` and any `.draft.` name, are left out), naming that file and its time, and the time the registry was built. The check reads file times only: it opens no file and writes nothing, and a missing registry report or an empty folder reads as current, never as stale. The line is empty, with no height, when the registry is current.
+
 ## Limits to know about
 
 - Parameter ranges in the launcher are sanity bounds of the terminal, not research bounds. A run that passes them is not thereby a sensible experiment.

@@ -11,15 +11,24 @@ never raised. The real call is made once on Windows, on this test process (it on
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import sys
 import threading
 from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.routing import iter_route_contexts
 
 from nq_terminal import memtrim
+from nq_terminal.api import actions as actions_api
+from nq_terminal.api import audit as audit_api
+from nq_terminal.api import commands as commands_api
 from nq_terminal.api import home_prewarm
+from nq_terminal.api import jobs as jobs_api
+from nq_terminal.api import runs as runs_api
+from nq_terminal.api import system as system_api
 from nq_terminal.app import create_app
 from nq_terminal.services import prewarm
 from nq_terminal.settings import load_settings
@@ -275,7 +284,7 @@ def test_the_background_polls_neither_reset_nor_start_a_quiet_period(calls):
             foreground(trim, path)
     assert trim.quiet_check() is True and calls == ["trim"]
     clock.advance(memtrim.QUIET_S * 2)
-    foreground(trim, "/api/health")
+    foreground(trim, path_of(system_api.health))
     assert trim.quiet_check() is False and calls == ["trim"], "a poll does not open a new quiet period"
 
 
@@ -283,9 +292,9 @@ def test_a_background_poll_in_flight_still_blocks_the_trim(calls):
     clock = Clock()
     trim = trimmer(clock)
     clock.advance(memtrim.QUIET_S + 1)
-    trim.activity.begin("/api/health")
+    trim.activity.begin(path_of(system_api.health))
     assert trim.quiet_check() is False and calls == []
-    trim.activity.end("/api/health")
+    trim.activity.end(path_of(system_api.health))
     assert trim.quiet_check() is True and calls == ["trim"]
 
 
@@ -411,8 +420,44 @@ def escaped_none(monkeypatch: pytest.MonkeyPatch) -> list[BaseException]:
 
 # ---------------------------------------------------------------- the 0.2.0 job indicator beside the 0.1.2 trim
 
-JOBS_LIST = "/api/jobs"
+# The paths come from the real app's router, never from literals here (V031, V020I seams review): a renamed jobs, health,
+# commands or event-tape route changes the derived path, so `memtrim.BACKGROUND_PATHS` no longer matches it and
+# `test_born_failing_every_background_path_is_the_get_route_of_its_poll` fails, instead of these tests going on to pass
+# against a path no page sends any more.
+BACKGROUND_ENDPOINTS = (system_api.health, commands_api.commands, audit_api.oos_log, jobs_api.list_jobs)
 INDICATOR_IDLE_S = 15.0  # web/src/screens/jobs/model.ts POLL_IDLE_MS: the indicator's read while no job is active
+JOB_ID = "a1b2"
+
+
+@functools.cache
+def real_routes() -> tuple[tuple[str, str, object], ...]:
+    """(method, path, endpoint) for every route of the real app, walked as FastAPI's OpenAPI generator walks them."""
+    return routes_of(create_app(load_settings({})))
+
+
+def routes_of(app) -> tuple[tuple[str, str, object], ...]:
+    return tuple((method, ctx.path, ctx.endpoint) for ctx in iter_route_contexts(app.routes)
+                 if ctx.path is not None for method in sorted(ctx.methods or ()))
+
+
+def path_of(endpoint, method: str = "GET", routes=None) -> str:
+    """The one path the app serves `endpoint` on for `method`; fails when there is none or more than one."""
+    found = {path for m, path, e in (real_routes() if routes is None else routes) if e is endpoint and m == method}
+    assert len(found) == 1, f"{method} {getattr(endpoint, '__name__', endpoint)}: {sorted(found)}"
+    return found.pop()
+
+
+def background_paths(routes=None) -> frozenset[str]:
+    """The GET paths the page's background polls are sent to, read from the router."""
+    return frozenset(path_of(endpoint, "GET", routes) for endpoint in BACKGROUND_ENDPOINTS)
+
+
+def jobs_list() -> str:
+    return path_of(jobs_api.list_jobs)
+
+
+def runs_list() -> str:
+    return path_of(runs_api.list_runs)
 
 
 def served(trim: memtrim.MemTrim, path: str, method: str = "GET") -> None:
@@ -423,17 +468,38 @@ def served(trim: memtrim.MemTrim, path: str, method: str = "GET") -> None:
     run_asgi(memtrim.ActivityMiddleware(endpoint, activity=trim.activity), path, method)
 
 
+def test_born_failing_every_background_path_is_the_get_route_of_its_poll():
+    """Each literal in `memtrim.BACKGROUND_PATHS` is the path the real router serves the poll's endpoint on."""
+    assert background_paths() == memtrim.BACKGROUND_PATHS
+    get_paths = {path for method, path, _ in real_routes() if method == "GET"}
+    assert memtrim.BACKGROUND_PATHS <= get_paths
+
+
+def test_born_failing_a_renamed_jobs_route_is_caught():
+    """Born failing on the literal paths: an app whose jobs router moved serves the job list somewhere else, and the
+    derived set no longer equals the trim's list, so the check above would fail on such a rename."""
+    moved = FastAPI()
+    for router in (system_api.router, commands_api.router, audit_api.router):
+        moved.include_router(router)
+    moved.include_router(jobs_api.router, prefix="/v2")
+    derived = background_paths(routes_of(moved))
+    assert derived != memtrim.BACKGROUND_PATHS
+    assert memtrim.BACKGROUND_PATHS - derived == {jobs_list()}
+    assert "/v2" + jobs_list() in derived
+
+
 def test_born_failing_the_job_indicators_idle_list_polls_do_not_keep_the_quiet_trim_away(calls):
     clock = Clock()
     trim = trimmer(clock)
-    served(trim, "/api/runs")  # the last real request at HOME
+    health = path_of(system_api.health)
+    served(trim, runs_list())  # the last real request at HOME
     for _ in range(int((memtrim.QUIET_S * 2) / INDICATOR_IDLE_S)):  # the indicator reads the list every 15 s, HOME mounted
         clock.advance(INDICATOR_IDLE_S)
-        served(trim, JOBS_LIST)
-        served(trim, "/api/health")
+        served(trim, jobs_list())
+        served(trim, health)
     assert trim.quiet_check() is True and calls == ["trim"], "the trim fires with the indicator mounted"
     clock.advance(INDICATOR_IDLE_S)
-    served(trim, JOBS_LIST)
+    served(trim, jobs_list())
     clock.advance(memtrim.QUIET_S * 2)
     assert trim.quiet_check() is False and calls == ["trim"], "an idle list poll does not open a new quiet period"
 
@@ -442,10 +508,10 @@ def test_a_queued_or_running_job_still_holds_the_trim_off_while_the_indicator_po
     clock = Clock()
     jobs = SimpleNamespace(running=1, queued=0)
     trim = trimmer(clock, busy=[lambda: jobs.running + jobs.queued > 0])
-    served(trim, "/api/runs")
+    served(trim, runs_list())
     for _ in range(int(memtrim.QUIET_S * 2 / 2)):
         clock.advance(2)
-        served(trim, JOBS_LIST)
+        served(trim, jobs_list())
         assert trim.quiet_check() is False
     assert calls == []
     jobs.running = 0
@@ -455,14 +521,17 @@ def test_a_queued_or_running_job_still_holds_the_trim_off_while_the_indicator_po
 def test_only_reading_the_job_list_is_a_background_poll(calls):
     clock = Clock()
     trim = trimmer(clock)
-    for path, method in (("/api/jobs", "POST"), ("/api/jobs/actions", "POST"), ("/api/jobs/a1b2", "GET"),
-                         ("/api/jobs/a1b2", "DELETE"), ("/api/jobs", "DELETE")):
+    one_job = path_of(jobs_api.read_job).replace("{job_id}", JOB_ID)
+    assert one_job == path_of(jobs_api.remove_job, "DELETE").replace("{job_id}", JOB_ID)
+    for path, method in ((path_of(jobs_api.queue_job, "POST"), "POST"),
+                         (path_of(actions_api.start_action, "POST"), "POST"),
+                         (one_job, "GET"), (one_job, "DELETE"), (jobs_list(), "DELETE")):
         generation = trim.activity.generation
         served(trim, path, method)
         assert trim.activity.generation != generation, f"{method} {path} is a foreground request"
     generation = trim.activity.generation
-    served(trim, JOBS_LIST, "GET")
-    assert trim.activity.generation == generation, "GET /api/jobs is a background poll"
+    served(trim, jobs_list(), "GET")
+    assert trim.activity.generation == generation, f"GET {jobs_list()} is a background poll"
 
 
 # ---------------------------------------------------------------- the log lines the harness reads (carried, 0.3.0)

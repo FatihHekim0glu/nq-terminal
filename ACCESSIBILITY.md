@@ -51,7 +51,14 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
 - **Target size.** Controls are at least 24 px, or meet the spacing exception (2.5.8). Panels cannot be resized by
   dragging, because a drag has no single-pointer equivalent (2.5.7).
 - **Live changes are announced.** Errors and notices go to a polite status line, so they are read without moving the
-  focus.
+  focus. On REG, a line says when the registry is older than the newest result or spec, in words with an icon and
+  never by colour alone; it is a polite live region with no control in it, and it is empty, with no height, while the
+  registry is current.
+- **Every scrolling region can be reached by keyboard.** A box that scrolls must be a Tab stop, or its content must
+  be reachable without it (2.1.1). Each panel body is its panel's one Tab stop and scrolls with the arrow keys. From
+  0.3.1 the round list of REG no longer scrolls inside the panel as a box of its own, which no Tab reached once the
+  registry held more rounds than the panel has room for (axe `scrollable-region-focusable`, found on HOME and REG with
+  the real registry); it keeps its content height and the panel body scrolls to every round.
 - **Zoom and reflow.** At 200% zoom, in a 1,366 by 768 window and in a 1,024 by 640 window, every maximised panel
   keeps every control reachable: through an overflow menu, a scrolling body, or both, and never by clipping a control
   away (1.4.4, 1.4.10). At 700 CSS pixels and narrower the panels stack in reading order and only the page scrolls
@@ -66,6 +73,7 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
 | --- | --- | --- |
 | axe, with the tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa` and `wcag22aa` | Playwright specs under `web/e2e` (`shell.spec.ts`, `home.spec.ts`, `panels.spec.ts`, `keys.spec.ts`, `perspective.spec.ts`, `visual/screens.spec.ts`, `launch.spec.ts`, `jobsbar.spec.ts`, the `flows` folder and others), through `@axe-core/playwright` | HOME, every screen, the command dropdown and the menus, in both looks and at 1,920 by 1,080 and 1,366 by 768. A scan must come back clean |
 | Colour contrast | `web/src/theme/contrast.test.ts`, with `tokens.test.ts`, `cvdSim.test.ts` and, for the amber classic look, `amberClassic.looks.test.ts` | Every text pair at 4.5:1 and every graphic pair at 3:1, in the default look, the amber classic look and both colour-vision schemes, with the negative cases that must fail |
+| REG staleness line and scroll regions | `web/e2e/reg-stale.spec.ts`, `web/src/screens/reg/RegScreen.stale.test.tsx`, `regStale.test.ts` and `reg.css.test.ts` | The line appears only for a stale registry, is polite, has an icon and no control, takes no room when the registry is current, and axe reports no `scrollable-region-focusable` on HOME or REG at the size of the real registry |
 | Windows contrast themes and more contrast | `web/src/theme/contrastModes.test.ts` and `web/e2e/contrast-modes.spec.ts`, with `web/src/charts/theme/chartContrast.test.ts` and the contrast-cue tests | Every rule of `forcedColors.css` and `contrastMore.css` sits inside its media query and uses system colour keywords or token values only, every selected, pressed, current and open state has a Highlight fill, and the chart tokens and dash cues follow the mode. 30 screens are opened with `page.emulateMedia({ forcedColors: 'active' })` and with `{ contrast: 'more' }` and scanned with axe, and the focus ring is checked. The detectors are tested born failing |
 | Keyboard flows | `web/e2e/keys.spec.ts`, `fkeys.spec.ts`, `flows/keyboard.spec.ts` and `web/e2e/desktop/40-keys.desktop.ts` | The key grammar, focus order, focus return after a menu closes, and the chart keys |
 | Zoom and reflow at 200% | `web/e2e/reflow-200.spec.ts`, `reflow-menus-200.spec.ts` and `web/e2e/desktop/50-zoom.desktop.ts` | Every panel maximised, in the 1,366 by 768, 1,024 by 640 and 1,920 by 1,080 windows at 200%: every control present and reachable, nothing overlapping, nothing cut off, nothing but a data grid scrolling sideways. The detectors are tested born failing with planted faults. `shell.spec.ts` also checks 400% zoom and 320 CSS pixels |

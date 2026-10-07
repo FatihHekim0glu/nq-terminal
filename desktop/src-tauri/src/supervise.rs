@@ -613,10 +613,13 @@ fn handshake(
 /// first proof can take longer than the link budget). The first attempt keeps the link budget; each retry follows the
 /// navigation check's rules (supervise_retry.rs: RETRY_ATTEMPTS more, RETRY_BUDGET each, RETRY_PAUSE between), and
 /// every attempt has a fresh nonce and the same owner checks, all before `deadline`. A wrong answer or a foreign owner
-/// ends it at once as a refusal; a backend that ends meanwhile is an exit.
+/// ends it at once as a refusal; a backend that ends meanwhile is an exit with its exit code logged, whatever the last
+/// attempt found (`run::proof_failure`). `exits` holds the interpreter's handle first, so that its own code is the one
+/// logged, and `own` the backend's pids (the interpreter's and the launcher's).
 fn prove_at_spawn(
     job: &Arc<Owned>,
     exits: [HANDLE; 2],
+    own: [u32; 2],
     port: u16,
     token: &str,
     expect: &Expect,
@@ -646,14 +649,8 @@ fn prove_at_spawn(
         proved
     };
     let pause = || signalled_within(&exits, retry::RETRY_PAUSE) || Instant::now() >= deadline;
-    let proved = retry::retry(1 + retry::RETRY_ATTEMPTS, once, pause);
-    match proved {
-        Ok(()) => Ok(()),
-        Err(Mismatch::Unverified(_)) if signalled_within(&exits, Duration::ZERO) => {
-            Err(Failure::Exited)
-        }
-        Err(m) => Err(Failure::Refused(m)),
-    }
+    retry::retry(1 + retry::RETRY_ATTEMPTS, once, pause)
+        .map_err(|m| run::proof_failure(m, port, &exits, &own))
 }
 
 /// Spawns the backend in its job and checks it through the session (03 section 2.2 steps 4 to 6): the READY MAC,
@@ -668,8 +665,17 @@ pub fn spawn(spec: &Spec, expect: &Expect) -> Result<Spawned, Failure> {
     let ready = handshake(&mut started, spec, &token, &nonce)?;
     check::check_ready(&ready, &token, &nonce, expect).map_err(Failure::Refused)?;
     let interpreter = admit(&started, &ready)?;
-    let exits = [started.launcher.raw(), interpreter.raw()];
-    prove_at_spawn(&started.job, exits, ready.port, &token, expect, deadline)?;
+    let exits = [interpreter.raw(), started.launcher.raw()];
+    let own = [ready.pid, started.launcher_pid];
+    prove_at_spawn(
+        &started.job,
+        exits,
+        own,
+        ready.port,
+        &token,
+        expect,
+        deadline,
+    )?;
     let job = started.job.clone();
     let owner_ok = move |pid| job_pids(job.raw()).contains(&pid);
     let session = link::session(ready.port, &token, &owner_ok, run::LINK_TIMEOUT)

@@ -41,10 +41,17 @@ every request that is not GET or HEAD, so no test needs a bypass in the app. `ba
 refusal, proof and session-route tests use it. No other file in this folder builds a TestClient. `secret_log_scan`
 records every token, session value and launch code the run makes and fails the run when a log record or a test
 backend's output names one.
+
+Serialised sessions (0.3.1). A session creates `PYTEST.<pid>.lock` in the locks folder (D:/dev/locks, or NQT_LOCK_DIR)
+while it runs and removes it at the end (`pytest_sessionstart` and `pytest_sessionfinish`, the xdist controller only);
+a lock older than two hours is stale. `desktop/scripts/check.ps1` waits while a fresh one exists before its real-backend
+smoke steps. A lock that cannot be written is reported in the terminal summary and never fails the session.
 """
 from __future__ import annotations
 
+import atexit
 import ctypes
+import datetime
 import hashlib
 import json
 import logging
@@ -91,6 +98,66 @@ MAIN_STATE_DIR = ROOT / "terminal" / "state"
 PROTECTED_DIRS = (RESULTS, ROOT / "backtests" / "output", ROOT / "data", ROOT / "live", ROOT / "experiments",
                   BACKEND / "tests" / "fixtures", REAL_STATE_DIR, MAIN_STATE_DIR)
 _NOTES: list[str] = []
+
+PYTEST_LOCK_DIR = Path(r"D:\dev\locks")
+PYTEST_LOCK_STALE_S = 2 * 60 * 60
+_SESSION_LOCK: list[Path] = []
+
+
+def session_lock_dir() -> Path:
+    """The locks folder: NQT_LOCK_DIR when set (the lock tests), else D:/dev/locks."""
+    return Path(os.environ.get("NQT_LOCK_DIR") or PYTEST_LOCK_DIR)
+
+
+def session_lock_path(pid: int, folder: Path | None = None) -> Path:
+    return (folder if folder is not None else session_lock_dir()) / f"PYTEST.{pid}.lock"
+
+
+def write_session_lock(folder: Path, pid: int) -> Path:
+    """Creates (or refreshes) this session's lock; the body says who holds it and since when."""
+    folder.mkdir(parents=True, exist_ok=True)
+    path = session_lock_path(pid, folder)
+    started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path.write_text(json.dumps({"pid": pid, "started": started, "argv": sys.argv[:12]}) + "\n", encoding="utf-8")
+    return path
+
+
+def remove_session_lock(path: Path) -> bool:
+    """Removes a lock; False when it was already gone."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def fresh_session_locks(folder: Path, now: float | None = None) -> list[Path]:
+    """The locks in `folder` that are not stale (modified within the last two hours)."""
+    moment = time.time() if now is None else now
+    found: list[Path] = []
+    for path in sorted(folder.glob("PYTEST.*.lock")) if folder.is_dir() else []:
+        try:
+            if moment - path.stat().st_mtime < PYTEST_LOCK_STALE_S:
+                found.append(path)
+        except FileNotFoundError:
+            continue  # removed between the listing and the stat
+    return found
+
+
+def pytest_sessionstart(session):
+    if hasattr(session.config, "workerinput"):
+        return  # an xdist worker: the controller process holds the session's lock
+    try:
+        _SESSION_LOCK.append(write_session_lock(session_lock_dir(), os.getpid()))
+    except OSError as error:
+        _NOTES.append(f"PYTEST lock not written ({error}); check.ps1 cannot see this session")
+        return
+    atexit.register(remove_session_lock, _SESSION_LOCK[0])  # a session that ends without sessionfinish
+
+
+def pytest_sessionfinish(session, exitstatus):
+    while _SESSION_LOCK:
+        remove_session_lock(_SESSION_LOCK.pop())
 
 
 def _digest(content: bytes | None) -> str:

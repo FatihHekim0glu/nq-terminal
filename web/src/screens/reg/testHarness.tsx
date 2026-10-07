@@ -47,15 +47,15 @@ export const ANSWERS: Readonly<Record<string, unknown>> = {
   '/api/hypotheses/za_v0_C3_gao_momentum': ZA_C3,
 }
 
-/** Stubs fetch; `override` replaces an answer with an error status. Returns the requests seen. */
-export function stubApi(override: Readonly<Record<string, number>> = {}): Seen[] {
+/** Stubs fetch; `override` replaces an answer with an error status, `bodies` replaces an answer's body. Returns the requests seen. */
+export function stubApi(override: Readonly<Record<string, number>> = {}, bodies: Readonly<Record<string, unknown>> = {}): Seen[] {
   const seen: Seen[] = []
   vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     seen.push({ url, method: init?.method ?? 'GET' })
     const status = override[url]
     if (status !== undefined) return Promise.resolve(json({ detail: `stub ${status} for ${url}` }, status))
-    const body = ANSWERS[url]
+    const body = url in bodies ? bodies[url] : ANSWERS[url]
     return Promise.resolve(body === undefined ? json({ detail: 'not found' }, 404) : json(body))
   })
   return seen

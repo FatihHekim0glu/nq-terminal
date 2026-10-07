@@ -1,10 +1,10 @@
 # Continuous integration
 
-The first workflow of this repository is `.github/workflows/ci.yml` (REL-03 of the release research). It runs the checks that need no private lab data, on a hosted Windows runner, for every push and every pull request to `main`. It is a safety net for the web app and the desktop scripts. It builds no installer, signs nothing and publishes nothing.
+The first workflow of this repository is `.github/workflows/ci.yml` (REL-03 of the release research). It runs the checks that need no private lab data, on a hosted Windows runner, for every push and every pull request to `main`. It is a safety net for the web app, the desktop scripts and the format of the Rust shell. It builds no installer, signs nothing and publishes nothing.
 
 ## What runs
 
-One job, `windows`, on `windows-latest`, with a 30 minute limit. The steps, in order:
+Two jobs, both on `windows-latest`. The first, `windows`, has a 30 minute limit; its steps, in order:
 
 | Step | Command (from the repository folder) | What it proves |
 |---|---|---|
@@ -21,6 +21,8 @@ One job, `windows`, on `windows-latest`, with a 30 minute limit. The steps, in o
 | Desktop harness tests | `node --test desktop/harness/tests/*.test.mjs` | The measurement harness's own tests. |
 | Release script self-tests | `scripts/tests/release_check.tests.ps1`, `scripts/tests/smoke_real.tests.ps1`, `desktop/scripts/install-test.ps1 -SelfTest`, `desktop/scripts/tests/install-test.tests.ps1` and `desktop/scripts/tests/upgrade-owner.tests.ps1` | The born-failing tests of the release scripts. They install nothing. The upgrade test reads the owner's real install only when one exists for the user, which a hosted runner never has, so that part skips itself and says so. `desktop/harness/tests/ci-workflow.test.mjs` fails when a new `*.tests.ps1` under `scripts/tests` or `desktop/scripts/tests` is not listed in the workflow. |
 
+The second job, `rust`, is described under "The Rust job" below.
+
 The same commands are the local stand-in: `desktop/scripts/check.ps1 -Web` runs the web group and the Rust set on the lab PC.
 
 ## What does not run
@@ -31,10 +33,18 @@ The same commands are the local stand-in: `desktop/scripts/check.ps1 -Web` runs 
 | `scripts/start/startPs1.test.ts` and `scripts/start/sessionPage.browser.test.ts` | Both start the lab's backend through `start.ps1`. |
 | The test "reads src/nq_lab/paper_plumbing.py and finds the same text" in `src/grids/JournalTable.model.test.ts` | It reads a Python source file of the lab. The other tests of that file run. |
 | Playwright (`e2e`, `e2e:offline`, `e2e:perf`, `e2e:desktop`) | Browser downloads and timing budgets belong to a quiet machine, not a shared runner. |
-| The Rust set, the NSIS build and the install test | Planned as REL-07 (a Rust job with the Cargo registry cached, then the installer built and installed as a standard user). |
+| Clippy, the Rust unit tests, the NSIS build and the install test | Only `cargo fmt --check` runs (the `rust` job). The rest is planned as REL-07 (the Cargo registry cached, clippy -D warnings and the unit tests, then the installer built and installed as a standard user), once the crate has had a first MSVC build; see "The Rust job". |
 | Measurements (gate G2) | They need the owner's PC, alone, in a quiet window. |
 
 The three excluded tests are named in the workflow, so a change that renames them shows up in review. Every other vitest test still runs.
+
+## The Rust job
+
+Job `rust` (`rust format check`, 15 minute limit) checks out the tree into `terminal`, installs the toolchain that `desktop/src-tauri/rust-toolchain.toml` pins (the channel is read from that file, with the `rustfmt` component and the minimal profile) and runs `cargo fmt --check` in `desktop/src-tauri`. It reads no secret, widens no permission and uses the same SHA-pinned checkout as the first job. The local half is the same command (`cargo fmt --check` in `desktop/src-tauri`, which `check.ps1` also runs as its `fmt` step); `desktop/harness/tests/ci-rust-job.test.mjs` runs it, parses the workflow and checks the rules below.
+
+Why only the format check. The task was to add clippy -D warnings and the unit tests as well if the crate builds with the default toolchain on `windows-latest`. The crate has never been built on the hosted MSVC host: every build so far, the shipped installers included, came from the GNU host of the lab PC, which has no MSVC and no way to try one (README, Known limits). The build script is written for the GNU linker (it hands gcc a `-B` prefix to shadow MinGW's default manifest), the tests link the same way, and a lint or test run needs the whole Tauri and WebView2 dependency tree compiled first. A first run of that job on a hosted runner could therefore fail for reasons that have nothing to do with the code, and a job that is red from the start teaches nobody to read it. So the job holds the one check that needs no build and is certain to behave the same on either host.
+
+When it grows. After the first MSVC build has been made and its result recorded (REL-07), add `cargo clippy --all-targets --locked -- -D warnings` and `cargo test --locked` to this job, with the Cargo registry cached, and change this section. `ci-rust-job.test.mjs` fails when a clippy, test or build step is added, so that change updates the test and this section together.
 
 ## Rules the workflow keeps
 
@@ -61,6 +71,6 @@ To move a pin, resolve the new tag to its commit (`gh api repos/<owner>/<name>/g
 
 ## Known limits
 
-- The workflow has not yet run on a hosted runner at the time of writing. Its commands were run locally in the way step 2 describes, on Node 24.13, where the hosted `24` resolves to a later 24.x that `jsdom` requires (`^24.15`).
+- The workflow has not yet run on a hosted runner at the time of writing, and the `rust` job in particular is untried there (its two steps were run locally as written: the channel read from the pin, and `cargo fmt --check`). Its commands were run locally in the way step 2 describes, on Node 24.13, where the hosted `24` resolves to a later 24.x that `jsdom` requires (`^24.15`).
 - `windows-latest` is the Windows Server image, which GitHub moves forward from time to time. A move can change the pre-installed Python or the `D:` drive, and the two steps that depend on them fail with a clear message.
 - The shipped installer is still built on the lab PC with the GNU toolchain. This workflow proves the source and the scripts, not the binary.

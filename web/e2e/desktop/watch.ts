@@ -7,13 +7,21 @@
 // area, not an unseen layered window), a new window that is not drawn and is not tao's event target (the shell's own message
 // window), or a change of the foreground window, when the event's process is the app this run started or under it (its
 // WebView2 children). The same events from any other process are notes in the report. An event whose owner could not be
-// traced fails (fail closed), and so does every event when the run names no app.
+// traced fails (fail closed), and so does every event when the run names no app. Foreign programs known to put windows up
+// during a run are named in KNOWN_FOREIGN (the same list as the harness watch, plus NQT_KNOWN_FOREIGN for this PC); a note
+// says whether its owner is on it.
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const TAO_CLASS = 'Tao Thread Event Target'
+/** Foreign programs known to put windows up during a run, by image name (compared without case). */
+export const KNOWN_FOREIGN: readonly string[] = ['logioptionsplus_agent.exe']
+/** More image names for this PC (semicolon separated), for programs that should not be named in this repository. */
+export const KNOWN_FOREIGN_ENV = 'NQT_KNOWN_FOREIGN'
+const knownNames = (): string[] =>
+  [...KNOWN_FOREIGN, ...(process.env[KNOWN_FOREIGN_ENV] ?? '').split(';').map((n) => n.trim()).filter((n) => n !== '')].map((n) => n.toLowerCase())
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const READY_WAIT_MS = 60_000
 const DONE_WAIT_MS = 10_000
@@ -61,6 +69,18 @@ export function processChain(pid: number): ProcessLink[] {
   return links
 }
 
+/**
+ * System host images and window classes (compared without case) that draw windows on behalf of other processes: a crash
+ * dialog (WerFault, started by the WER service), the console of a child spawned without CREATE_NO_WINDOW (Windows Terminal,
+ * OpenConsole, conhost), loader boxes (csrss) and dllhost. Such a window can be this run's own doing from outside its tree,
+ * so it always counts. Only the owner's image is judged. The same lists are in desktop/harness/lib/winwatch.mjs and in the
+ * Rust watches (hidden_support/scope.rs).
+ */
+export const SYSTEM_HOST_IMAGES: readonly string[] = ['werfault.exe', 'windowsterminal.exe', 'openconsole.exe', 'conhost.exe', 'csrss.exe', 'dllhost.exe']
+export const SYSTEM_HOST_CLASSES: readonly string[] = ['consolewindowclass', 'cascadia_hosting_window_class']
+const drawnByHost = (e: WatchEvent): boolean =>
+  SYSTEM_HOST_IMAGES.includes((e.chain?.[0]?.name ?? '').toLowerCase()) || SYSTEM_HOST_CLASSES.includes((e.class ?? '').toLowerCase())
+
 /** True when the event's window belongs to the tree under `rootPid` (the app this run started). */
 export const ownedBy = (e: WatchEvent, rootPid: number): boolean => (e.chain ?? []).some((link) => link.pid === rootPid)
 
@@ -72,11 +92,17 @@ export interface WatchReport {
 
 /** Another program's event: the run's app is known, the event's owner was traced, and its ancestry does not hold that app. */
 const foreign = (e: WatchEvent, rootPid?: number): boolean =>
-  rootPid !== undefined && e.chain !== undefined && e.chain.length > 0 && !ownedBy(e, rootPid)
+  rootPid !== undefined && e.chain !== undefined && e.chain.length > 0 && !ownedBy(e, rootPid) && !drawnByHost(e)
+
+/** The note's label for a foreign event: its owner image, and whether the image is on the named list. */
+const foreignLabel = (e: WatchEvent): string => {
+  const owner = e.chain?.[0]?.name ?? e.process ?? '?'
+  return knownNames().includes(owner.toLowerCase()) ? `known foreign program: ${owner}` : `foreign program not on the list: ${owner}`
+}
 
 const describe = (e: WatchEvent, rootPid?: number): string => {
   const traced = e.chain !== undefined && e.chain.length > 0
-  const owner = rootPid === undefined ? '' : !traced ? ' [owner not traced]' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ancestry ${(e.chain ?? []).map((l) => `${l.name}:${l.pid}`).join(' < ')}]`
+  const owner = rootPid === undefined ? '' : !traced ? ' [owner not traced]' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ${foreignLabel(e)}; ancestry ${(e.chain ?? []).map((l) => `${l.name}:${l.pid}`).join(' < ')}]`
   return `${e.process ?? '?'} (pid ${e.pid ?? '?'}) class ${JSON.stringify(e.class ?? '')} title ${JSON.stringify(e.title ?? '')} rect ${JSON.stringify(e.rect ?? [])}${owner}`
 }
 

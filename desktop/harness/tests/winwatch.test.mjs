@@ -51,3 +51,61 @@ test('the expected screen-2 window is allowed, inert windows are ignored, and a 
   assert.equal(w.inertWindows.length, 1)
   assert.equal(summariseWatch([ready], { rootPid: APP }).clean, false)
 })
+
+test("foreign notes are labelled against the named list of known foreign programs, which is recorded in the summary", async () => {
+  const { KNOWN_FOREIGN, KNOWN_FOREIGN_ENV } = await import('../lib/winwatch.mjs')
+  assert.deepEqual(KNOWN_FOREIGN, ['logioptionsplus_agent.exe'])
+  assert.equal(KNOWN_FOREIGN_ENV, 'NQT_KNOWN_FOREIGN')
+  const logi = { pid: 901, exe: 'Logioptionsplus_Agent.EXE' }
+  const chat = { pid: 902, exe: 'ChatClient.exe' }
+  const events = () => [
+    win({ pid: 901, exe: 'Logioptionsplus_Agent.EXE', chain: [logi, explorer] }),
+    win({ pid: 902, exe: 'ChatClient.exe', chain: [chat, explorer] }),
+    win({ chain: [chrome, explorer] }),
+    focus({ pid: 902, exe: 'ChatClient.exe', chain: [chat, explorer] }),
+  ]
+  const w = watchOf(...events())
+  assert.equal(w.clean, true)
+  assert.equal(w.notes.length, 4)
+  assert.deepEqual(w.foreignSeen, [
+    { exe: 'Logioptionsplus_Agent.EXE', known: true, count: 1 },
+    { exe: 'ChatClient.exe', known: false, count: 2 },
+    { exe: 'chrome.exe', known: false, count: 1 },
+  ])
+  const saved = process.env.NQT_KNOWN_FOREIGN
+  process.env.NQT_KNOWN_FOREIGN = ' chatclient.exe ; ;other.exe'
+  try {
+    assert.deepEqual(watchOf(...events()).foreignSeen.map((r) => r.known), [true, true, false], 'this PC adds known names through the environment')
+  } finally {
+    if (saved === undefined) delete process.env.NQT_KNOWN_FOREIGN
+    else process.env.NQT_KNOWN_FOREIGN = saved
+  }
+})
+
+test('a planted window of the run app tree still fails when a known foreign program is on screen too', () => {
+  const logi = { pid: 901, exe: 'logioptionsplus_agent.exe' }
+  const w = watchOf(win({ pid: 901, chain: [logi, explorer] }), win({ pid: 4242, chain: [webview, app, explorer] }))
+  assert.equal(w.clean, false)
+  assert.equal(w.newWindows.length, 1)
+  assert.equal(w.foreignSeen.length, 1)
+})
+
+test('a window a system host draws for the run from outside its tree still fails (crash dialog, terminal, console, loader box)', () => {
+  const svchost = { pid: 800, exe: 'svchost.exe' }
+  const terminal = { pid: 830, exe: 'WindowsTerminal.exe' }
+  const planted = [
+    win({ pid: 810, exe: 'WerFault.exe', cls: '#32770', chain: [{ pid: 810, exe: 'WerFault.exe' }, svchost] }),
+    win({ pid: 830, exe: 'WindowsTerminal.exe', cls: 'CASCADIA_HOSTING_WINDOW_CLASS', chain: [terminal, explorer] }),
+    win({ pid: 850, exe: 'conhost.exe', cls: 'ConsoleWindowClass', chain: [{ pid: 850, exe: 'conhost.exe' }, explorer] }),
+    win({ pid: 860, exe: 'csrss.exe', cls: '#32770', chain: [{ pid: 860, exe: 'CSRSS.EXE' }] }),
+    focus({ pid: 830, exe: 'WindowsTerminal.exe', cls: 'CASCADIA_HOSTING_WINDOW_CLASS', chain: [terminal, explorer] }),
+  ]
+  for (const event of planted) {
+    const w = watchOf(event)
+    assert.equal(w.clean, false, JSON.stringify(event))
+    assert.equal(w.notes.length, 0, JSON.stringify(event))
+  }
+  const byClass = watchOf(win({ pid: 900, cls: 'ConsoleWindowClass', chain: [chrome, explorer] }))
+  assert.equal(byClass.clean, false, 'a console class counts whichever process draws it')
+  assert.equal(watchOf(win({ chain: [chrome, { pid: 5, exe: 'conhost.exe' }] })).clean, true, 'only the owner image is judged')
+})

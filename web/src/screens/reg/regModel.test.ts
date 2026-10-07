@@ -63,6 +63,7 @@ describe('buildRegRows: one row per registry row, in file order', () => {
     const lonely: Schemas['RegistryView'] = {
       counts: { rows: 2, registered: 2, passed: 1, failed: 1, checks: 0, edges: 2, overlays: 0, passed_edges: 1 },
       acceptances: REGISTRY.acceptances,
+      generated_at: null, newest_input_at: null, newest_input_path: null, stale: false,
       rows: [
         { ...REGISTRY.rows[0]!, name: 'x_v0', verdict: 'PASS [note]' },
         { ...REGISTRY.rows[0]!, name: 'y_v0', verdict: 'FAIL' },
@@ -79,6 +80,7 @@ describe('buildRegRows: one row per registry row, in file order', () => {
     const view: Schemas['RegistryView'] = {
       counts: { rows: 1, registered: 0, passed: 0, failed: 0, checks: 1, edges: 0, overlays: 0, passed_edges: 0 },
       acceptances: REGISTRY.acceptances,
+      generated_at: null, newest_input_at: null, newest_input_path: null, stale: false,
       rows: [{ ...REGISTRY.rows[1]! }],
     }
     expect(buildRegRows(view, [])[0]!.badge).toBe('CHECK')

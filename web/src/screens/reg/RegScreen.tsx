@@ -11,7 +11,8 @@
 // eight rows (the basket, also in HOME's REG cell); 95) Compare n then replaces the views with RegCompare,
 // their served Basis A screen series, and 97) Settings can clear the basket. While the record watch has
 // marked a registry row (roadmap 16), a Seen column first on the board shows NEW or CHG for it. The
-// registry's own error and loading lines are PanelFault and PanelLoading. Read only.
+// registry's own error and loading lines are PanelFault and PanelLoading. A polite status line (RegStaleBanner, V031)
+// says when the registry is older than the newest result or spec. Read only.
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
@@ -38,6 +39,7 @@ import { buildRegRows, confirmationRows, criteria, filterRows, roundGroups, toCs
 import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
 import RegCompare from './RegCompare'
+import RegStaleBanner from './RegStaleBanner'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, RuleNote, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
 import { needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
@@ -241,6 +243,7 @@ export default function RegScreen(props: ScreenProps) {
           onSelect={(id) => setView(id as RegView)}
         />
       ) : null}
+      <RegStaleBanner registry={registry.data} />
       {registry.isError ? (
         <PanelFault error={registry.error} failedText={REG.failed} onRetry={() => void registry.refetch()} className="reg-msg" />
       ) : rows === null ? (

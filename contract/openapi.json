@@ -12729,18 +12729,63 @@
           "counts": {
             "$ref": "#/components/schemas/RegistryCounts"
           },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "when results/registry.md was last written (its modification time, UTC); null when the file is missing",
+            "title": "Generated At"
+          },
+          "newest_input_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the newest modification time (UTC) among results/screens/*.json and experiments/*.json, drafts excluded; null when there is none",
+            "title": "Newest Input At"
+          },
+          "newest_input_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "that file, as a path under the data root",
+            "title": "Newest Input Path"
+          },
           "rows": {
             "items": {
               "$ref": "#/components/schemas/RegistryRow"
             },
             "title": "Rows",
             "type": "array"
+          },
+          "stale": {
+            "description": "true when that file is newer than results/registry.md (both known): the registry has not been rebuilt since",
+            "title": "Stale",
+            "type": "boolean"
           }
         },
         "required": [
           "counts",
           "rows",
-          "acceptances"
+          "acceptances",
+          "generated_at",
+          "newest_input_at",
+          "newest_input_path",
+          "stale"
         ],
         "title": "RegistryView",
         "type": "object"
@@ -19363,7 +19408,7 @@
   },
   "info": {
     "title": "nq-lab terminal",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -24493,7 +24538,7 @@
     },
     "/api/registry": {
       "get": {
-        "description": "Every row of results/registry.csv, with counts taken from the file.",
+        "description": "Every row of results/registry.csv, with counts taken from the file, and whether a screen or spec is newer than\nresults/registry.md (read from modification times only).",
         "operationId": "registry_api_registry_get",
         "responses": {
           "200": {

@@ -123,3 +123,36 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "install-test.tests.ps1 exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\upgrade-owner.tests.ps1
           if ($LASTEXITCODE -ne 0) { throw "upgrade-owner.tests.ps1 exit $LASTEXITCODE" }
+
+  # The Rust shell's format check (docs/desktop/ci.md, "The Rust job"). Only rustfmt runs here: the crate has been built
+  # on the GNU host of the lab PC alone, so clippy and the unit tests wait for a first MSVC build (REL-07).
+  rust:
+    name: rust format check
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      # rust-toolchain.toml pins the channel and lists rustfmt; the channel is read from it so the pin lives in one place.
+      - name: Install the pinned toolchain
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --component rustfmt --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+          rustup show active-toolchain
+          if ($LASTEXITCODE -ne 0) { throw "rustup show active-toolchain exit $LASTEXITCODE" }
+
+      - name: Rust format check
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo fmt --check
+          if ($LASTEXITCODE -ne 0) { throw "cargo fmt --check exit $LASTEXITCODE" }

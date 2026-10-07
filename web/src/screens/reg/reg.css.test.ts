@@ -101,3 +101,27 @@ describe('short panel (max-height: 560px): keeps [PRE-REG]/[POST HOC] provenance
     expect(block).toMatch(/\.reg-notes li[^{]*\{[^}]*white-space:\s*normal/)
   })
 })
+
+// V031 (axe scrollable-region-focusable on HOME and REG, real data): with many rounds the round rail scrolled on its
+// own, and the roving model leaves only one Tab stop per panel (the grid), so a scroll box no Tab reaches. The rail now
+// grows to its content and the panel body, the panel's Tab stop, scrolls to it, as panelScroll.css does for the other
+// inner scrollers; where the rounds fit, nothing moves.
+describe('.reg-rail: the panel body scrolls it, never an inner scroller (V031)', () => {
+  const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '')
+
+  it('does not scroll on its own', () => {
+    const rule = ruleFor(stripped, '.reg-rail')
+    expect(rule, '.reg-rail rule').toBeTruthy()
+    expect(rule ?? '').not.toMatch(/overflow(-y)?\s*:\s*(auto|scroll)/)
+  })
+
+  it('keeps at least its content height so the panel body can scroll to every round', () => {
+    expect(ruleFor(stripped, '.reg-rail') ?? '').toMatch(/min-height\s*:\s*min-content/)
+  })
+
+  it('keeps the raised grey and the 160 px width where the rounds fit', () => {
+    const rule = ruleFor(stripped, '.reg-rail') ?? ''
+    expect(rule).toMatch(/flex:\s*0 0 160px/)
+    expect(rule).toMatch(/background:\s*var\(--raised\)/)
+  })
+})

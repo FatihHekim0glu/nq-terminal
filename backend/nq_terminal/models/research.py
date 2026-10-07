@@ -80,6 +80,13 @@ class RegistryView(ResponseModel):
     counts: RegistryCounts
     rows: list[RegistryRow]
     acceptances: AmendmentAcceptances
+    generated_at: str | None = Field(description="when results/registry.md was last written (its modification time, "
+                                                 "UTC); null when the file is missing")
+    newest_input_at: str | None = Field(description="the newest modification time (UTC) among results/screens/*.json "
+                                                    "and experiments/*.json, drafts excluded; null when there is none")
+    newest_input_path: str | None = Field(description="that file, as a path under the data root")
+    stale: bool = Field(description="true when that file is newer than results/registry.md (both known): the registry "
+                                    "has not been rebuilt since")
 
 
 class PassCheck(ResponseModel):
