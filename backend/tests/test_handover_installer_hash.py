@@ -1,11 +1,11 @@
 """The owner-facing installer hash and size must come from the final build, never from a self-test build.
 
 Every rebuild changes the installer's SHA256 and size, and only the final build's SHA256SUMS in the default folder
-`D:\\dev\\release\\0.2.1` is what the owner checks. A value copied from another folder (a ReleaseDir self-test) makes
+`D:\\dev\\release\\0.3.0` is what the owner checks. A value copied from another folder (a ReleaseDir self-test) makes
 the owner's check fail and reads as a tampered copy. So the owner-facing documents carry the final build's hash.
 
-The 0.2.1 installer was built and published as `desktop-v0.2.1`. Its SHA256 and size are the current values and
-must be the same everywhere. The 0.1.0, 0.1.1, 0.1.2 and 0.2.0 hashes are history and are the only other hashes allowed.
+The 0.3.0 installer was built and published as `desktop-v0.3.0`. Its SHA256 and size are the current values and
+must be the same everywhere. The 0.1.0, 0.1.1, 0.1.2, 0.2.0 and 0.2.1 hashes are history and are the only other hashes allowed.
 """
 from __future__ import annotations
 
@@ -22,9 +22,10 @@ HISTORY_HASHES = {
     "3b45f791bc94bf3df3a9e6c3400ff6e56fc289478f651ed59b1e95c013602efc",  # the 0.1.1 installer
     "3ab330927d6b1e1c617163a5ff8089baae8e2da4ac553b2b6527cedf4569f377",  # the 0.1.2 installer
     "ff7266397131e15d101fa0b38105b0d0f7b855ba1d22f4a688906a4ef2feeb51",  # the 0.2.0 installer
+    "34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20",  # the 0.2.1 installer
 }
-CURRENT_SHA = "34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20"
-CURRENT_BYTES = "3,257,242"
+CURRENT_SHA = "bb2c264a121bdbfa8ef643f781d1ec7ab803caacae19e44b7a728484bbefec8f"
+CURRENT_BYTES = "3,257,107"
 HEX64 = re.compile(r"\b[0-9a-fA-F]{64}\b")
 VALUE = r"[0-9a-fA-F]{64}"
 
@@ -71,27 +72,27 @@ def test_no_owner_document_carries_a_build_hash_other_than_the_history_or_the_cu
 
 def test_owner_verification_step_expects_the_current_value_for_the_current_version():
     step = _verification_step()
-    assert "D:\\dev\\release\\0.2.1" in step
-    assert "nq-lab terminal_0.2.1_x64-setup.exe" in step
+    assert "D:\\dev\\release\\0.3.0" in step
+    assert "nq-lab terminal_0.3.0_x64-setup.exe" in step
     assert _current_value().lower() not in HISTORY_HASHES
     assert _current_value() == CURRENT_SHA
 
 
 def test_tag_message_carries_the_current_value():
     text = HANDOVER.read_text(encoding="utf-8")
-    tag_line = next(line for line in text.splitlines() if "tag -a desktop-v0.2.1" in line)
+    tag_line = next(line for line in text.splitlines() if "tag -a desktop-v0.3.0" in line)
     assert _current_value() in tag_line
 
 
 def test_smartscreen_verification_expects_the_current_value():
     text = SMARTSCREEN.read_text(encoding="utf-8")
     assert _current_value() in text
-    assert "nq-lab terminal_0.2.1_x64-setup.exe" in text
+    assert "nq-lab terminal_0.3.0_x64-setup.exe" in text
 
 
 def test_readme_install_table_and_handover_name_the_same_current_value():
     readme = README.read_text(encoding="utf-8")
-    row = next(line for line in readme.splitlines() if line.startswith("| `") and "0.2.1_x64-setup.exe" in line)
+    row = next(line for line in readme.splitlines() if line.startswith("| `") and "0.3.0_x64-setup.exe" in line)
     assert _current_value() in row
     assert CURRENT_BYTES in row
     assert CURRENT_BYTES in HANDOVER.read_text(encoding="utf-8") or CURRENT_BYTES in readme

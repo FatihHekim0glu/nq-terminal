@@ -1,8 +1,8 @@
 # G2 placeholder values for the hand-over documents
 
-## Release 0.3.0 (the 0.3.0 re-measure, under load), measured values for the documents written after the tag
+## Release 0.3.0 (the 0.3.0 re-measure, under load), values written after the tag
 
-The 0.3.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections E1 to E6) and `verdict.md`; every one is PROVISIONAL (taken under load by the owner's full-speed order, with the W0B reproduction not reproduced), and cold HOME is over its ceiling on this reading, so G2 is not stated for 0.3.0 until cold HOME is re-measured in a quiet slot or set beside 0.2.1 in an A/B. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` keep 0.2.1 as the latest release until the 0.3.0 tag exists. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.3.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
+The 0.3.0 documents carry no visible placeholder. The measured values below come from `results.md` (sections E1 to E6) and `verdict.md`; every one is PROVISIONAL (taken under load by the owner's full-speed order, with the W0B reproduction not reproduced), and cold HOME is over its ceiling on this reading, so G2 is not stated for 0.3.0 until cold HOME is re-measured in a quiet slot or set beside 0.2.1 in an A/B. The README release rows, `SECURITY.md`, the hand-over and `smartscreen.md` take 0.3.0 as the latest release since the tag; 0.2.1 stays the published G2 verdict. The build-dependent values (the installer SHA256 and size, the tag and its commit, the commit list and date, the install and upgrade records and the release check result) are written after the tag, from the release folder `D:\dev\release\0.3.0` rebuilt on the tagged commit (`SHA256SUMS`, `PROVENANCE.json`) and the records of the release check. A renamed-product installer's hash (the install test builds) is evidence, never an owner value to write.
 
 | Value | Measured (0.3.0), PROVISIONAL | Source |
 | --- | --- | --- |
@@ -11,7 +11,13 @@ The 0.3.0 documents carry no visible placeholder. The measured values below come
 | warm rows | warm HOME 735.1 ms, EQ second run of the line 40.6 ms, REG second run of the line 86.8 ms (medians of 4); 0.2.1 read 550.7, 41.3 and 56.7 ms | `results.md` section E2 |
 | launch reliability | 40 hidden launches of the smoke build on the real backend: 40 checked, 0 refused, 0 late-proof retries; READY to the first identity proof 3.2 ms median, 4.7 ms p95, 4.8 ms largest, against the 2,000 ms of the first try (0.2.1: 3.1, 3.2 and 4.7 ms over 120); spawn to READY 1,393.9 ms against 1,146.2 ms | `results.md` section E5 |
 | soak | not run on 0.3.0: the partial soaks of 0.2.0 and 0.1.2 stand, and the 2 h soak of 0.1.0 stays the G2 soak evidence | `results.md` section E6 |
-| installer bytes, SHA256, tag and commit, commits and date, install and upgrade records, release check result | written after the tag, as for 0.2.1 below | the release folder and the release check |
+| installer SHA256 | `bb2c264a121bdbfa8ef643f781d1ec7ab803caacae19e44b7a728484bbefec8f`, the release installer's hash as `SHA256SUMS` lists it, written after the tag | `D:\dev\release\0.3.0\SHA256SUMS` |
+| installer bytes | 3,257,107 bytes, the size of that file (the released asset is `nq-lab.terminal_0.3.0_x64-setup.exe`) | the same file |
+| tag and commit | `desktop-v0.3.0`, an annotated tag on `b85a2dc`, pushed; the GitHub Release is published and marked latest, and the re-downloaded asset hash matches | `PROVENANCE.json`, `git rev-parse desktop-v0.3.0^{commit}` |
+| commits and date | `ec16aff, 51294c5, b85a2dc` and `2026-10-07`, in the commit list of `handover_windows.md` | `git log` |
+| install and upgrade records | 7 October 2026: install test on the renamed product 54 of 54, upgrade 0.2.1 to 0.3.0 on the renamed product 105 of 105, the owner's real install unchanged | `terminal\state\release`, `checks/2026-10-05_install-upgrade-test.md` |
+| release check result | 7 October 2026: `release_check.ps1 -Tag desktop-v0.3.0 -RequireSmokeApp -RequireInstall` PASS, no WARN, two NOTEs about the renamed-product records; backend 4,513 passed, crosscheck PASS 2,495, FAIL 0, smoke 18 and smoke-app 5 passed, QA package 333 passed | `terminal\state\release`, `scripts\release_check.ps1` |
+| known limitation of 0.3.0 | the first launch measured 6,116 ms (PROVISIONAL, under load) against the 5,000 ms ceiling, cause not separated from load, lab growth, a WebView2 update and the lab's move to E:; disclosed in the release notes; 0.3.1 is meant to address it | `results.md` section E3, `handover_windows.md` section 8 |
 
 ## Release 0.2.1 (the 0.2.1 re-measure), values written after the tag
 
