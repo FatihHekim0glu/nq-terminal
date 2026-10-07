@@ -471,9 +471,20 @@ fn junction(link: &Path, target: &Path) {
     assert!(status.success(), "mklink /J {} failed", link.display());
 }
 
-/// A fake lab under D:\dev\tmp\w4b-supervise\<name>-<stamp>: the venv junction, the fake package and its mode file.
+/// The calls of `run_suffix` in this process so far.
+static RUN_SUFFIXES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The part of a fake lab's folder name that makes it this call's own: the clock, this process and a per-process
+/// count. The clock alone repeats between parallel test threads (the count) and between test binaries started in the
+/// same tick (the process id).
+pub fn run_suffix() -> String {
+    let n = RUN_SUFFIXES.fetch_add(1, Ordering::Relaxed);
+    format!("{}-{}-{n}", stamp(), std::process::id())
+}
+
+/// A fake lab under D:\dev\tmp\w4b-supervise\<name>-<suffix>: the venv junction, the fake package and its mode file.
 pub fn fake_lab(name: &str, mode: &Value) -> FakeLab {
-    let run = PathBuf::from(RUN_ROOT).join(format!("{name}-{}", stamp()));
+    let run = PathBuf::from(RUN_ROOT).join(format!("{name}-{}", run_suffix()));
     let lab = run.join("lab");
     let package = lab.join("terminal").join("backend").join("nq_terminal");
     std::fs::create_dir_all(package.join("desktop")).expect("fake package folders");

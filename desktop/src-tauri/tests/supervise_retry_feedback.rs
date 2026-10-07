@@ -157,6 +157,26 @@ fn a_retry_whose_backend_exited_meanwhile_keeps_its_exit_code() {
 }
 
 /// The shared state starts with no exit code known, which is what a retry with no backend ever reports.
+/// Several tests of this file build a fake lab with the same name at the same moment on parallel threads, and the
+/// clock alone can repeat between them: two labs then met in one folder and the second venv junction failed (seen in
+/// the 0.3.2 release run). Every call must get a folder of its own.
+#[test]
+fn fake_lab_folders_never_repeat_across_parallel_tests() {
+    let threads: Vec<_> = (0..8)
+        .map(|_| std::thread::spawn(|| (0..500).map(|_| support::run_suffix()).collect::<Vec<_>>()))
+        .collect();
+    let names: Vec<String> = threads
+        .into_iter()
+        .flat_map(|t| t.join().expect("a suffix thread"))
+        .collect();
+    let distinct: std::collections::HashSet<&String> = names.iter().collect();
+    assert_eq!(
+        distinct.len(),
+        names.len(),
+        "a fake lab folder name repeated"
+    );
+}
+
 #[test]
 fn no_exit_code_is_known_before_a_backend_has_exited() {
     assert_eq!(shared_without_backend().last_exit(), None);
