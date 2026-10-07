@@ -52,7 +52,6 @@ test('a window a system host draws for the run from outside its tree still fails
     win({ pid: 810, chain: [link(810, 'WerFault.exe'), link(800, 'svchost.exe')], class: '#32770' }),
     win({ pid: 830, chain: [link(830, 'WindowsTerminal.exe'), link(820, 'explorer.exe')], class: 'CASCADIA_HOSTING_WINDOW_CLASS' }),
     win({ pid: 850, chain: [link(850, 'conhost.exe')], class: 'ConsoleWindowClass' }),
-    { event: 'foreground', pid: 830, process: 'WindowsTerminal', class: 'CASCADIA_HOSTING_WINDOW_CLASS', title: '', chain: [link(830, 'WindowsTerminal.exe')] },
   ]
   for (const event of planted) {
     assert.equal(judge([event], APP).length, 1, JSON.stringify(event))
@@ -62,4 +61,46 @@ test('a window a system host draws for the run from outside its tree still fails
   assert.equal(judge([byClass], APP).length, 1, 'a console class counts whichever process draws it')
   const underHost = win({ pid: 900, chain: [link(900, 'notepad.exe'), link(5, 'conhost.exe')] })
   assert.deepEqual(judge([underHost], APP), [], 'only the owner image is judged')
+})
+
+// ---- the owner's own terminal (V032, 0.3.1 audit; owner decision of 3 October 2026). watch.ps1's lines carry no window
+// handle, so a host window is told apart by its process id and class: one that a `new` line named during the run is the
+// run's own doing; a focus change to any other host window is the owner's own terminal and stays a note.
+
+const wt = [link(830, 'WindowsTerminal.exe'), link(820, 'explorer.exe')]
+const wtNew = (over) => win({ pid: 830, process: 'WindowsTerminal', class: 'CASCADIA_HOSTING_WINDOW_CLASS', chain: wt, ...over })
+const wtFocus = (over) => ({ event: 'foreground', pid: 830, process: 'WindowsTerminal', class: 'CASCADIA_HOSTING_WINDOW_CLASS', title: 'pwsh', chain: wt, ...over })
+
+test("born failing: a focus change to the owner's own terminal that was open before the run is a note, not a failure", () => {
+  const verdict = assess([wtFocus({})], APP)
+  assert.deepEqual(verdict.failures, [])
+  assert.equal(verdict.notes.length, 1)
+  assert.match(verdict.notes[0], /host window present before the run: WindowsTerminal\.exe/)
+  assert.deepEqual(judge([wtFocus({})], APP), [])
+})
+
+test('a terminal or console window that appears during the run still fails, and so does a focus change to it afterwards', () => {
+  assert.equal(judge([wtNew({})], APP).length, 1)
+  assert.equal(judge([wtNew({}), wtFocus({})], APP).length, 2)
+  assert.deepEqual(assess([wtNew({}), wtFocus({})], APP).notes, [])
+  const console_ = win({ pid: 850, class: 'ConsoleWindowClass', chain: [link(850, 'conhost.exe')] })
+  const consoleFocus = wtFocus({ pid: 850, class: 'ConsoleWindowClass', chain: [link(850, 'conhost.exe')] })
+  assert.equal(judge([console_, consoleFocus], APP).length, 2)
+})
+
+test("a focus change to another terminal process or class than the one that appeared is the owner's own window", () => {
+  assert.equal(judge([wtNew({}), wtFocus({ pid: 831, chain: [link(831, 'WindowsTerminal.exe')] })], APP).length, 1, 'only the new window fails')
+  assert.equal(judge([wtNew({}), wtFocus({ class: 'OtherClass' })], APP).length, 1)
+})
+
+test('a focus change to a host window with no process id or class fails closed, and so does one with no traced owner', () => {
+  assert.equal(judge([wtFocus({ pid: undefined })], APP).length, 1)
+  assert.equal(judge([wtFocus({ class: undefined })], APP).length, 1)
+  assert.equal(judge([wtFocus({ chain: [] })], APP).length, 1)
+  assert.equal(judge([wtFocus({ chain: undefined })], APP).length, 1)
+})
+
+test("a focus change to a host window under the run's own app tree still fails", () => {
+  const under = [link(850, 'conhost.exe'), link(APP, 'nq-lab-terminal.exe')]
+  assert.equal(judge([wtFocus({ pid: 850, chain: under })], APP).length, 1)
 })

@@ -54,6 +54,19 @@ The design notes are in [`docs/UI_SPEC.md`](docs/UI_SPEC.md), section 9, with th
   focus. On REG, a line says when the registry is older than the newest result or spec, in words with an icon and
   never by colour alone; it is a polite live region with no control in it, and it is empty, with no height, while the
   registry is current.
+- **The IB snapshot switch.** In the desktop app, Options holds the read-only IB snapshot switch (0.3.2): a native
+  button with `role="switch"` and `aria-checked`, named by its visible text, with its note as the description. The
+  state is said in words (On or Off in this session) and the note says that a change is confirmed in the app's own
+  dialog and applies at the next start, so the state never depends on colour. After a click a polite status line says
+  to answer the dialog; Escape closes Options and returns focus to the Options button. When the snapshot is off, the
+  LIVE state line, a status region, names where the switch is. The confirmation and refusal dialogs are native Windows
+  dialogs that a screen reader reads, and a refusal names the settings that are wrong and never shows their values.
+- **The stopped page.** The line that says the backend has stopped is a status region, and the exit code is part of
+  that same announced line, so a code that is read late is spoken with the sentence instead of being written silently
+  into a plain paragraph after it (4.1.3).
+- **A minimised start.** From 0.3.2 the app honours a start that asks for a minimised window (`Start-Process
+  -WindowStyle Minimized`, or a shortcut set to run minimised): it opens minimised and does not take the focus, and
+  a window that was maximised comes back maximised when it is restored.
 - **Every scrolling region can be reached by keyboard.** A box that scrolls must be a Tab stop, or its content must
   be reachable without it (2.1.1). Each panel body is its panel's one Tab stop and scrolls with the arrow keys. From
   0.3.1 the round list of REG no longer scrolls inside the panel as a box of its own, which no Tab reached once the
@@ -137,6 +150,9 @@ pending. Their templates and status are in [`docs/desktop/checks/`](docs/desktop
   is no light theme.
 - **No automatic test with real assistive technology.** Everything listed under How it is tested runs in a browser
   engine, not in a screen reader or a magnifier.
+- **The IB snapshot switch and its dialogs are not yet heard.** The switch, its status line and the app's native
+  confirmation and refusal dialogs are tested in the browser engine and in unit tests; whether Narrator and NVDA read
+  them well, and whether Escape and focus behave in the installed app, is an owner check that has not been run.
 - **One test machine.** The app and the browser terminal have been tested on one PC. Other displays, scales and
   keyboard layouts may show faults this project has not seen.
 

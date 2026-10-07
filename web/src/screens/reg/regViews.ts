@@ -28,3 +28,10 @@ export function needsDetails(view: RegView): boolean {
 export function needsDeflated(view: RegView, compact: boolean): boolean {
   return !compact || view !== 'board'
 }
+
+/** Whether the Deflated Sharpe request may go out now. The route imports scipy.stats on a first launch (0.4 to 0.6 s),
+ *  so a panel that wants it (`wanted`: needsDeflated) asks only once the registry has answered and the hypotheses have
+ *  answered or failed (the last of HOME's REG requests): the import then follows HOME's data, never competing with it. */
+export function deflatedRequestable(wanted: boolean, registryLoaded: boolean, cardsSettled: boolean): boolean {
+  return wanted && registryLoaded && cardsSettled
+}

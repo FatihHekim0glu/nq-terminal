@@ -184,7 +184,7 @@ pub fn install(window: &WebviewWindow, launch: &Launch) -> Result<(), ShellError
     clippy::disallowed_methods,
     reason = "unit tests make and remove fixture files under D:\\dev; not shipped code"
 )]
-mod test_support {
+pub(crate) mod test_support {
     use super::*;
     use std::sync::Once;
 

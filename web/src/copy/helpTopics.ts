@@ -344,7 +344,7 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
       'Countdowns to the decision at 15:55:05 ET and the order at 15:59:30 ET, and the roll date.',
       'Target against actual, from performance rows only.',
       "The paper book against its expectation (LV6, [POST HOC]), served by the backend: the paper and model cumulative P&L as a fraction of K placed on a cone, with a toggle between Backtest start (the hypothesis's own bootstrap cone) and Live start (a cone resampled from the paper book's own sessions, shown once it has 30 sessions with a value).",
-      "READ ONLY IB snapshot: the masked paper account, net liquidation, positions, open orders (view only) and today's executions, when NQT_IB_READONLY=1 is set; otherwise it says it is off.",
+      "READ ONLY IB snapshot: the masked paper account, net liquidation, positions, open orders (view only) and today's executions, when NQT_IB_READONLY=1 is set (in the desktop app: Options, IB snapshot (read only), confirm, then the next start); otherwise it says it is off.",
     ],
     data: 'GET /api/live/status and GET /api/live/performance, polled every 2 seconds; GET /api/analytics/paper-expectation for the expectation card, re-read every 60 seconds; GET /api/ib/snapshot, polled every 10 seconds while LIVE is open (a paper TWS or Gateway on this machine, client id 95).',
     honesty: 'Plumbing rows never feed a performance chart. The terminal has no order path.',

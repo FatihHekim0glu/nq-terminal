@@ -17,15 +17,22 @@ GP bars) go through the same route functions and the bar service's own cache; th
 Order (02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch, with an empty state folder; W5C
 D4: no work HOME does not show runs during the HOME window): what HOME asks for, in the order it needs it, then what
 HOME never asks for. First the `warm` task, which reads no price and writes no gate line: it imports
-`nq_lab.sizing_stats` (and with it `scipy.stats`), `scipy.cluster.hierarchy` and `scipy.spatial.distance`, and builds
-the XNYS calendar once through `data.last_sessions`. Those modules stay lazy imports off the start path (D1.1); paying
-for them here, after the port is bound, takes about 1.15 s off HOME's EQ panel request on a first launch. Then the
-run index (price-free; HOME's GP panel requests /api/runs through `useGpData`, and a first launch has no persisted
-index, so a request that raced a later task would build it cold from the heads of the result files while HOME loads).
-Then the price-reading tasks: MON two-day and universe, GP bars. Then, as `later` tasks that wait until the process is
-quiet (`services/prewarm.py`): the ledger (price-free and persisted to disk; it serves RecordWatch and LEDG, never HOME:
+`scipy.cluster.hierarchy` and `scipy.spatial.distance` (neither loads `scipy.stats`) and builds the XNYS calendar once
+through `data.last_sessions`. Those modules stay lazy imports off the start path (D1.1). No HOME request needs
+`scipy.stats` (V032): HOME's EQ panel reads the screen's stored alpha fit and builds no relative fit
+(`tearsheet.home_panel`), and HOME's REG list routes (registry, hypotheses, multiple-testing, confirmations) are numpy
+only. The one HOME request that imports it is REG's deflated Sharpe: a REG panel that is not compact (the owner's
+2400 x 1350 window) asks for it, and the web sends that request only after the registry and the hypotheses have
+answered (`deflatedRequestable`), that is after HOME's last data response, so the import (about 0.55 s) falls inside
+that request and not in front of HOME's data. `scipy.stats` (with `nq_lab.sizing_stats`) otherwise loads in the first
+later task, `warm_stats`, once HOME is served; a first launch that opens EQ, DES or RISK before then pays that import
+once inside the request. Then the run index (price-free; HOME's GP panel requests
+/api/runs through `useGpData`, and a first launch has no persisted index, so a request that raced a later task would
+build it cold from the heads of the result files while HOME loads). Then the price-reading tasks: MON two-day and
+universe, GP bars. Then, as `later` tasks that wait until the process is quiet (`services/prewarm.py`): `warm_stats`
+(price-free, no gate line), the ledger (price-free and persisted to disk; it serves RecordWatch and LEDG, never HOME:
 HOME's REG panel reads the registry, hypotheses, multiple-testing and confirmations, not the ledger), the deflated
-Sharpe (no HOME panel asks for it; 1.2 s cold) and EQ's bootstrap (HOME's EQ panel asks for /panel, the full EQ screen
+Sharpe (a wide REG panel asks for it after HOME's data, which then finds it computed; 1.2 s cold) and EQ's bootstrap (HOME's EQ panel asks for /panel, the full EQ screen
 for the bootstrap, and the EQ Enter unit of DEC1 depends on it being warm). On a first launch they would otherwise take
 the interpreter from HOME's own requests while HOME loads. On a usual launch the deflated Sharpe and the ledger come
 from disk at once.
@@ -79,15 +86,23 @@ def two_day_symbols() -> list[str]:
 
 
 def _warm(state: Any) -> Task:
-    """Price-free warm-up: the analytics imports and the XNYS calendar HOME's EQ panel would otherwise pay for. No
-    serve call, no gate line; `state` is not read."""
+    """Price-free warm-up during HOME: scipy's cluster and spatial modules (with scipy.linalg; no scipy.stats) and the
+    XNYS calendar. No serve call, no gate line; `state` is not read."""
     def run() -> object:
-        importlib.import_module("nq_lab.sizing_stats")  # pulls in scipy.stats
         importlib.import_module("scipy.cluster.hierarchy")
         importlib.import_module("scipy.spatial.distance")
         from nq_terminal.api import data
         return data.last_sessions()
     return _named("warm", run)
+
+
+def _warm_stats(state: Any) -> Task:
+    """Price-free warm-up after HOME: `nq_lab.sizing_stats`, which loads scipy.stats (EQ's tear sheet and bootstrap,
+    DES, RISK and the deflated Sharpe need it; no HOME request does). No serve call, no gate line; `state` is not
+    read."""
+    def run() -> object:
+        return importlib.import_module("nq_lab.sizing_stats")
+    return _named("warm_stats", run)
 
 
 def _two_day(state: Any) -> Task:
@@ -147,8 +162,9 @@ def home_tasks(state: Any) -> list[Task]:
 
 
 def later_tasks(state: Any) -> list[Task]:
-    """What no HOME panel asks for but the next screens do; run once HOME is served and the process is quiet."""
-    return [_ledger(state), _deflated(state), _eq_bootstrap(state)]
+    """What HOME's first paint does not wait for but the next screens do; run once HOME is served and the process is quiet.
+    `warm_stats` comes first: scipy.stats is what the deflated Sharpe, EQ's bootstrap and the next screens import."""
+    return [_warm_stats(state), _ledger(state), _deflated(state), _eq_bootstrap(state)]
 
 
 def home_prewarm_allowed(app: FastAPI, environ: dict[str, str] | None = None) -> bool:

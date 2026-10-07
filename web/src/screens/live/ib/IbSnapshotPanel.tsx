@@ -1,11 +1,12 @@
 // LIVE's IB snapshot panel (PRD U3, DL6; ARCHITECTURE section 8; read only). One GET, /api/ib/snapshot, polled gently:
 // the masked account, net liquidation, positions, the open orders TWS lists (view only) and today's executions.
-// Every state is said in words: off (NQT_IB_READONLY not set), TWS not reachable, refused (a guard stopped the read),
+// Every state is said in words: off (NQT_IB_READONLY not set; in the desktop app, where the Options switch is), TWS not reachable, refused (a guard stopped the read),
 // stale (last values, with their age), a failed read, and live. There is no control here; nothing on this panel can place, change or withdraw anything.
 //
 // The status line's TWS segment reads ibLiveStore: this panel sets it to true only while the snapshot is live (an ok
 // body whose time proves it fresh) and back to false when it goes stale, fails or unmounts.
 import { useEffect, useMemo, useState } from 'react'
+import { getBridge } from '../../../bridge'
 import { IB } from '../../../copy/ib'
 import { fillCopy } from '../../../copy/workspace'
 import PlainTable, { type PlainColumn } from '../PlainTable'
@@ -75,6 +76,11 @@ export interface IbSnapshotViewProps {
   readonly nowMs: number
   /** When the browser received the body, on the same clock; the age then ignores the server's clock (skew, lag). */
   readonly receivedAtMs?: number
+  /**
+   * The desktop app's own IB snapshot setting for this session (null in a browser): with it the off state says where
+   * the Options switch is instead of naming a variable, and says when the backend was attached rather than started.
+   */
+  readonly shellIbSnapshot?: boolean | null
 }
 
 function Tables({ snapshot }: { readonly snapshot: IbSnapshot }) {
@@ -105,18 +111,25 @@ function Tables({ snapshot }: { readonly snapshot: IbSnapshot }) {
   )
 }
 
-function StateLine({ snapshot, failed, nowMs, receivedAtMs, state }: {
+/** The off state: in the desktop app it names the Options switch (or the attached backend); in a browser the variable. */
+function OffLine({ snapshot, shellIbSnapshot }: { readonly snapshot: IbSnapshot; readonly shellIbSnapshot: boolean | null }) {
+  if (shellIbSnapshot === null) {
+    return <p role="status" className="live-message live-ib-state"><b>{IB.stateOff}</b> {fillCopy(IB.stateOffNote, { message: snapshot.message })}</p>
+  }
+  return <p role="status" className="live-message live-ib-state"><b>{IB.stateOffDesktop}</b> {shellIbSnapshot ? IB.stateOffAttached : IB.stateOffNoteDesktop}</p>
+}
+
+function StateLine({ snapshot, failed, nowMs, receivedAtMs, state, shellIbSnapshot }: {
   readonly snapshot: IbSnapshot
   readonly failed: boolean
   readonly nowMs: number
   readonly receivedAtMs: number | undefined
   readonly state: 'disabled' | 'unavailable' | 'refused' | 'stale' | 'live'
+  readonly shellIbSnapshot: boolean | null
 }) {
   const age = snapshotAgeMs(snapshot, nowMs, receivedAtMs)
   const ageText = age === null ? IB.none : formatAge(age)
-  if (state === 'disabled') {
-    return <p role="status" className="live-message live-ib-state"><b>{IB.stateOff}</b> {fillCopy(IB.stateOffNote, { message: snapshot.message })}</p>
-  }
+  if (state === 'disabled') return <OffLine snapshot={snapshot} shellIbSnapshot={shellIbSnapshot} />
   if (state === 'unavailable') {
     return <p role="status" className="live-message live-ib-state live-ib-warn"><b>{IB.stateUnreachable}</b> {fillCopy(IB.stateUnreachableNote, { message: snapshot.message })}</p>
   }
@@ -138,7 +151,7 @@ function StateLine({ snapshot, failed, nowMs, receivedAtMs, state }: {
 }
 
 /** The panel's content for a given state; the container below feeds it from the query. */
-export function IbSnapshotView({ snapshot, failed, detail, nowMs, receivedAtMs }: IbSnapshotViewProps) {
+export function IbSnapshotView({ snapshot, failed, detail, nowMs, receivedAtMs, shellIbSnapshot = null }: IbSnapshotViewProps) {
   const state = ibViewState(snapshot, failed, nowMs, receivedAtMs)
   return (
     <section className="live-routes live-ib" aria-label={IB.title}>
@@ -150,7 +163,7 @@ export function IbSnapshotView({ snapshot, failed, detail, nowMs, receivedAtMs }
       {state === 'error' ? <p role="alert" className="live-message live-guard">{fillCopy(IB.loadError, { detail: detail ?? IB.none })}</p> : null}
       {snapshot !== null && state !== 'loading' && state !== 'error' ? (
         <>
-          <StateLine snapshot={snapshot} failed={failed} nowMs={nowMs} receivedAtMs={receivedAtMs} state={state} />
+          <StateLine snapshot={snapshot} failed={failed} nowMs={nowMs} receivedAtMs={receivedAtMs} state={state} shellIbSnapshot={shellIbSnapshot} />
           {state === 'live' || state === 'stale' ? <Tables snapshot={snapshot} /> : null}
         </>
       ) : null}
@@ -182,5 +195,5 @@ export default function IbSnapshotPanel() {
     setIbSnapshotLive(live)
     return () => setIbSnapshotLive(false)
   }, [live])
-  return <IbSnapshotView snapshot={snapshot} failed={failed} detail={malformed ? IB.badBody : (query.error?.detail ?? null)} nowMs={nowMs} receivedAtMs={receivedAtMs} />
+  return <IbSnapshotView snapshot={snapshot} failed={failed} detail={malformed ? IB.badBody : (query.error?.detail ?? null)} nowMs={nowMs} receivedAtMs={receivedAtMs} shellIbSnapshot={getBridge().ibSnapshot} />
 }

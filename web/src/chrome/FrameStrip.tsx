@@ -6,10 +6,11 @@
 // the saved workspaces (roadmap #14; SAVE NAME, LOAD NAME): a workspace on screen owns the layout, so its
 // tab is the active one and carries the mark. On the right the READ ONLY and
 // NO ORDER PATH chips, always shown, then DEMO DATA in the demo only (src/demo/boot.tsx marks the
-// page), and `≡ Options` (event tape, colour scheme, theme, Undo layout change, Reset this layout). The two chips
+// page), and `≡ Options` (event tape, colour scheme, theme, Undo layout change, Reset this layout, and in the desktop
+// app the IB snapshot (read only) switch, which asks the app and applies at the next start). The two chips
 // are plain text; DEMO DATA is a key with a tooltip that opens the About this demo lines on the HELP page
 // (U01). No window glyphs: the browser tab has its own.
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { Suspense, lazy, useRef, useState, type KeyboardEvent } from 'react'
 import { findMnemonic, type MnemonicCode } from '../commands/registry'
 import { DEMO_DATA, FRAME_STRIP, isDemoPage } from '../copy/chrome'
 import { LAYOUT } from '../copy/layout'
@@ -106,6 +107,10 @@ function DemoKey({ onDemo }: { readonly onDemo: () => void }) {
   )
 }
 
+// The read-only IB snapshot switch (desktop app only, O10) is a chunk of its own, loaded when Options opens: it reads the
+// bridge and its own copy, which the first-paint shell does not carry (scripts/shellBudget.test.ts).
+const IbSwitch = lazy(() => import('./IbSwitch'))
+
 function Options({ tapeOn, scheme, look = 'standard', onTape, onScheme, onLook, onUndo, onReset }: Pick<FrameStripProps, 'tapeOn' | 'scheme' | 'look' | 'onTape' | 'onScheme' | 'onLook' | 'onUndo' | 'onReset'>) {
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement>(null)
@@ -137,6 +142,7 @@ function Options({ tapeOn, scheme, look = 'standard', onTape, onScheme, onLook, 
             ))}
           </div>
           {onLook ? <LookOptions look={look} onLook={onLook} /> : null}
+          <Suspense fallback={null}><IbSwitch /></Suspense>
         </div>
       ) : null}
     </div>

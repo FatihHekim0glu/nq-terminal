@@ -233,11 +233,30 @@ function shippedCode(text) {
   return code.split('\n').filter((line) => !/^\s*\/\//.test(line)).join('\n')
 }
 
+/** Files that a source declares as a unit-test module of its own: `#[cfg(test)]` then `#[path = "name.rs"]`. They are never compiled into the shipped exe. */
+function testOnlyFiles(files) {
+  const declared = new Set()
+  for (const file of files) {
+    for (const match of fs.readFileSync(file, 'utf8').matchAll(/#\[cfg\(test\)\]\s*#\[path = "([^"]+\.rs)"\]/g)) declared.add(match[1])
+  }
+  return declared
+}
+
+test('a unit-test module kept in a file of its own is declared under cfg(test), so the literal scan may skip it and nothing else', () => {
+  const declared = testOnlyFiles(rustFiles(RUST_SOURCES))
+  assert.ok(declared.has('window_tests.rs'), 'window.rs declares window_tests.rs under cfg(test)')
+  for (const name of declared) {
+    assert.ok(fs.existsSync(path.join(RUST_SOURCES, name)), `${name} exists next to the sources`)
+  }
+})
+
 test('no shipped Rust code holds a D:\\dev or C:\\Users literal: it would sit in rodata, missed by the scan only when a letter follows it (born failing)', () => {
   const files = rustFiles(RUST_SOURCES)
   assert.ok(files.length > 10, 'the Rust sources were found')
+  const skipped = testOnlyFiles(files)
   const hits = []
   for (const file of files) {
+    if (skipped.has(path.basename(file))) continue
     shippedCode(fs.readFileSync(file, 'utf8')).split('\n').forEach((line, index) => {
       if (/[Dd]:[\\/]+dev(?![A-Za-z0-9_])/.test(line) || /[Cc]:[\\/]+[Uu]sers(?![A-Za-z0-9_])/.test(line)) hits.push(`${path.basename(file)} (code line ${index + 1}): ${line.trim()}`)
     })

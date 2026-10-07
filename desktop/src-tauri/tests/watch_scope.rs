@@ -13,8 +13,8 @@
 mod scope;
 
 use scope::{
-    KNOWN_FOREIGN, KNOWN_FOREIGN_ENV, Link, chain_in, chain_of, extra_known_foreign, foreign_note,
-    is_foreign, is_foreign_window, is_known_foreign, is_known_foreign_with, root_pid,
+    HostWindows, KNOWN_FOREIGN, KNOWN_FOREIGN_ENV, Link, chain_in, chain_of, extra_known_foreign,
+    foreign_note, is_foreign, is_foreign_window, is_known_foreign, is_known_foreign_with, root_pid,
 };
 use std::collections::HashMap;
 use std::os::windows::process::CommandExt;
@@ -193,4 +193,67 @@ fn a_window_drawn_for_the_run_by_a_system_host_outside_its_tree_still_counts() {
         root
     ));
     assert!(is_foreign_window(&other, "#32770", root));
+}
+
+// ------------------------------------------------------------------------------------------------ the owner's own terminal
+
+/// Born failing (V032, 0.3.1 audit; owner decision of 3 October 2026): a host window that was already open when the watch
+/// started (the owner's own Windows Terminal) is not the run's doing, so a focus change to it is filed apart. A host window
+/// that appeared during the run, and a focus change to it, still count.
+#[test]
+fn a_focus_change_to_a_host_window_open_before_the_run_does_not_count() {
+    let hosts = HostWindows::default();
+    let terminal = [link(830, "WindowsTerminal.exe"), link(820, "explorer.exe")];
+    assert!(
+        !hosts.foreground_counts(500, &terminal, "CASCADIA_HOSTING_WINDOW_CLASS", 20),
+        "the owner's own terminal was there before the run"
+    );
+    let console = [link(850, "conhost.exe")];
+    assert!(!hosts.foreground_counts(501, &console, "ConsoleWindowClass", 20));
+    // By class alone: a foreign program drawing a console frame is a host window too.
+    let other = [link(6, "notepad.exe")];
+    assert!(!hosts.foreground_counts(502, &other, "ConsoleWindowClass", 20));
+}
+
+#[test]
+fn a_host_window_that_appeared_during_the_run_counts_and_so_does_a_focus_change_to_it() {
+    let mut hosts = HostWindows::default();
+    let terminal = [link(830, "WindowsTerminal.exe"), link(820, "explorer.exe")];
+    // The window itself is judged by the rule that was already there.
+    assert!(!is_foreign_window(
+        &terminal,
+        "CASCADIA_HOSTING_WINDOW_CLASS",
+        20
+    ));
+    hosts.note_new(500, &terminal, "CASCADIA_HOSTING_WINDOW_CLASS");
+    assert!(hosts.foreground_counts(500, &terminal, "CASCADIA_HOSTING_WINDOW_CLASS", 20));
+    assert!(
+        !hosts.foreground_counts(777, &terminal, "CASCADIA_HOSTING_WINDOW_CLASS", 20),
+        "another window of the same terminal process is judged by its own handle"
+    );
+}
+
+#[test]
+fn a_focus_change_that_cannot_be_traced_or_dated_counts_fail_closed() {
+    let hosts = HostWindows::default();
+    let terminal = [link(830, "WindowsTerminal.exe")];
+    assert!(
+        hosts.foreground_counts(500, &[], "Any", 20),
+        "no owner traced"
+    );
+    assert!(
+        hosts.foreground_counts(0, &terminal, "CASCADIA_HOSTING_WINDOW_CLASS", 20),
+        "no handle: it cannot be shown to be older than the run"
+    );
+}
+
+#[test]
+fn the_run_tree_counts_and_another_program_does_not_whatever_the_host_list() {
+    let mut hosts = HostWindows::default();
+    let under_run = [link(850, "conhost.exe"), link(20, "watch_scope.exe")];
+    assert!(hosts.foreground_counts(1, &under_run, "ConsoleWindowClass", 20));
+    let chat = [link(902, "chatclient.exe"), link(1, "explorer.exe")];
+    assert!(!hosts.foreground_counts(2, &chat, "Chrome_WidgetWin_1", 20));
+    hosts.note_new(2, &chat, "Chrome_WidgetWin_1"); // not a host window: nothing is kept
+    assert!(!hosts.foreground_counts(2, &chat, "Chrome_WidgetWin_1", 20));
 }

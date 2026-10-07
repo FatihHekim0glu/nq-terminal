@@ -41,7 +41,7 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 
 ## Status
 
-As of 4 October 2026:
+As of 7 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 84 API paths.
 - **Windows desktop app, 0.3.1.** Released on 7 October 2026 as the annotated tag desktop-v0.3.1, on commit `94c881d`: an

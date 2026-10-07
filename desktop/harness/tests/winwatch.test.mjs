@@ -109,3 +109,64 @@ test('a window a system host draws for the run from outside its tree still fails
   assert.equal(byClass.clean, false, 'a console class counts whichever process draws it')
   assert.equal(watchOf(win({ chain: [chrome, { pid: 5, exe: 'conhost.exe' }] })).clean, true, 'only the owner image is judged')
 })
+
+// ---- the owner's own terminal (V032, 0.3.1 audit; owner decision of 3 October 2026)
+// A host window counts when the run could have caused it: a host window that appeared during the run (a crash dialog, a
+// console) fails, and so does a focus change to it. A focus change to a host window that was already open when the watch
+// started (the owner alt-tabs to their own Windows Terminal) is another program's doing: a note.
+
+const wt = { pid: 830, exe: 'WindowsTerminal.exe' }
+const wtWin = (over) => win({ hwnd: 500, pid: 830, exe: 'WindowsTerminal.exe', cls: 'CASCADIA_HOSTING_WINDOW_CLASS', chain: [wt, explorer], ...over })
+const wtFocus = (over) => focus({ to: 500, pid: 830, exe: 'WindowsTerminal.exe', cls: 'CASCADIA_HOSTING_WINDOW_CLASS', chain: [wt, explorer], ...over })
+
+test("born failing: a focus change to the owner's own terminal that was open before the run is a note, not a failure", () => {
+  const w = watchOf(wtFocus({}))
+  assert.equal(w.clean, true)
+  assert.equal(w.foregroundChanges.length, 0)
+  assert.equal(w.notes.length, 1)
+  assert.equal(w.hostBeforeRun.length, 1, 'the report says the host window was there before the run')
+  assert.deepEqual(w.foreignSeen, [{ exe: 'WindowsTerminal.exe', known: false, count: 1 }])
+})
+
+test('a console or terminal window that appears during the run still fails, whoever started it', () => {
+  const conhost = { pid: 850, exe: 'conhost.exe' }
+  for (const event of [wtWin({}), win({ hwnd: 501, pid: 850, exe: 'conhost.exe', cls: 'ConsoleWindowClass', chain: [conhost, explorer] })]) {
+    const w = watchOf(event)
+    assert.equal(w.clean, false, JSON.stringify(event))
+    assert.equal(w.newWindows.length, 1)
+    assert.equal(w.notes.length, 0)
+  }
+})
+
+test('a focus change to a host window that appeared during the run fails too (the crash dialog takes focus)', () => {
+  const w = watchOf(wtWin({}), wtFocus({}))
+  assert.equal(w.clean, false)
+  assert.equal(w.newWindows.length, 1)
+  assert.equal(w.foregroundChanges.length, 1)
+  assert.equal(w.hostBeforeRun.length, 0)
+})
+
+test('a focus change to a host window that appeared during the run fails even when the window itself was an allowed one', () => {
+  const frame = wtWin({})
+  const w = summariseWatch([ready, frame, wtFocus({}), summary], { rootPid: APP, allow: (e) => e === frame })
+  assert.equal(w.foregroundChanges.length, 1)
+})
+
+test('a focus change to a host window whose handle is not known fails closed, and so does one with no owner traced', () => {
+  assert.equal(watchOf(wtFocus({ to: undefined })).clean, false, 'no handle: it cannot be shown to be older than the run')
+  assert.equal(watchOf(wtFocus({ to: null })).clean, false)
+  assert.equal(watchOf(wtFocus({ chain: [] })).clean, false)
+  assert.equal(watchOf(wtFocus({ chain: undefined })).clean, false)
+})
+
+test("a focus change to another handle of the same terminal is judged by its own handle", () => {
+  const w = watchOf(wtWin({ hwnd: 500 }), wtFocus({ to: 777 }))
+  assert.equal(w.newWindows.length, 1)
+  assert.equal(w.foregroundChanges.length, 0, 'window 777 was open before the run')
+  assert.equal(w.hostBeforeRun.length, 1)
+})
+
+test("a focus change to a host window under the run's own app tree still fails", () => {
+  const w = watchOf(wtFocus({ chain: [{ pid: 850, exe: 'conhost.exe' }, app, explorer] }))
+  assert.equal(w.foregroundChanges.length, 1)
+})

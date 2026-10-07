@@ -48,7 +48,11 @@ export async function startWatch(outFile) {
  * System host images (compared without case) and window classes that draw windows on behalf of other processes: WerFault
  * (started by the WER service for a crashing process), Windows Terminal, OpenConsole and conhost (the console of a child
  * spawned without CREATE_NO_WINDOW), csrss (loader and hard-error boxes) and dllhost. Such a window can be this run's own
- * doing from outside its tree, so it always counts. Only the owner's image is judged, never the rest of its ancestry. The
+ * doing from outside its tree, so a host window that APPEARS during the run always counts, and so does a focus change to it.
+ * A focus change to a host window that was already open when the watch started (the owner's own Windows Terminal) does not:
+ * the run did not cause it, so it is a note (owner decision, 3 October 2026; `hostBeforeRun` in the summary). A focus change
+ * whose window handle is not known cannot be shown to be older than the run, so it counts. Only the owner's image is
+ * judged, never the rest of its ancestry. The
  * Rust watches (src-tauri/tests/hidden_support/scope.rs) and web/e2e/desktop/watch.ts carry the same lists.
  */
 export const SYSTEM_HOST_IMAGES = ['werfault.exe', 'windowsterminal.exe', 'openconsole.exe', 'conhost.exe', 'csrss.exe', 'dllhost.exe']
@@ -58,8 +62,15 @@ const drawnByHost = (e) => SYSTEM_HOST_IMAGES.includes(String(e.chain?.[0]?.exe 
 /** True when the event's ancestry (winwatch.py's `chain`, nearest first) holds `rootPid`, the app this run started. */
 export const ownedBy = (e, rootPid) => (e.chain ?? []).some((link) => link.pid === rootPid)
 
+/** Handles of the host-drawn windows that appeared during the run (new windows, allowed or inert ones too). */
+const hostBorn = (events) => new Set(events.filter((e) => (e.type === 'new_window' || e.type === 'inert_window') && drawnByHost(e) && e.hwnd != null).map((e) => e.hwnd))
+
+/** A focus change to a host window that was already open when the watch started: the run did not cause it. */
+const hostBeforeRun = (e, born) => e.type === 'foreground' && drawnByHost(e) && e.to != null && !born.has(e.to)
+
 /** Another program's event: the run's app is known, the event's owner was traced, and its ancestry does not hold that app. */
-const foreign = (e, rootPid) => rootPid != null && Array.isArray(e.chain) && e.chain.length > 0 && !ownedBy(e, rootPid) && !drawnByHost(e)
+const foreign = (e, rootPid, born = new Set()) =>
+  rootPid != null && Array.isArray(e.chain) && e.chain.length > 0 && !ownedBy(e, rootPid) && (!drawnByHost(e) || hostBeforeRun(e, born))
 
 /** Every foreign owner in `notes`, nearest process image, with whether it is on the named list and how many events it had. */
 function foreignOwners(notes) {
@@ -77,7 +88,8 @@ function foreignOwners(notes) {
  * Splits the events into what fails a run and what does not. `allow(event)` names a new window that is expected
  * (the screen-2 mode's own frame): it moves to `allowed`. `rootPid` is the app this run started: a new window or a
  * foreground change traced to another process moves to `notes`; the rest (this run's tree, an owner not traced, or
- * any event when `rootPid` is not given) stays a failure in `newWindows` or `foregroundChanges`.
+ * any event when `rootPid` is not given) stays a failure in `newWindows` or `foregroundChanges`. A focus change to a host
+ * window that was open before the run is a note too (`hostBeforeRun` lists those; see SYSTEM_HOST_IMAGES).
  */
 export function summariseWatch(events, { allow = () => false, rootPid = null } = {}) {
   const ready = events.find((e) => e.type === 'ready') ?? null
@@ -85,11 +97,13 @@ export function summariseWatch(events, { allow = () => false, rootPid = null } =
   const counted = events.filter((e) => e.type === 'new_window' && !allow(e))
   const allowed = events.filter((e) => e.type === 'new_window' && allow(e))
   const changes = events.filter((e) => e.type === 'foreground')
-  const notes = [...counted, ...changes].filter((e) => foreign(e, rootPid))
-  const newWindows = counted.filter((e) => !foreign(e, rootPid))
-  const foregroundChanges = changes.filter((e) => !foreign(e, rootPid))
+  const born = hostBorn(events)
+  const notes = [...counted, ...changes].filter((e) => foreign(e, rootPid, born))
+  const newWindows = counted.filter((e) => !foreign(e, rootPid, born))
+  const foregroundChanges = changes.filter((e) => !foreign(e, rootPid, born))
+  const beforeRun = changes.filter((e) => foreign(e, rootPid, born) && hostBeforeRun(e, born))
   const inertWindows = events.filter((e) => e.type === 'inert_window')
-  return { ready, summary, rootPid, newWindows, allowed, inertWindows, foregroundChanges, notes, foreignSeen: foreignOwners(notes), clean: newWindows.length === 0 && foregroundChanges.length === 0 && summary !== null }
+  return { ready, summary, rootPid, newWindows, allowed, inertWindows, foregroundChanges, notes, hostBeforeRun: beforeRun, foreignSeen: foreignOwners(notes), clean: newWindows.length === 0 && foregroundChanges.length === 0 && summary !== null }
 }
 
 export async function stopWatch(w, opts = {}) {

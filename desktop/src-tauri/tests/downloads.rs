@@ -132,13 +132,18 @@ fn start_watch() -> Watch {
     let root = scope::root_pid();
     let handle = std::thread::spawn(move || {
         let (mut failures, mut seen, mut fg) = (Vec::new(), HashSet::new(), first_fg);
+        let mut hosts = scope::HostWindows::default();
         while !stop2.load(Ordering::SeqCst) {
             for h in visible_windows() {
                 let w = describe(h);
-                if !baseline.contains(&h)
-                    && seen.insert(h)
+                if baseline.contains(&h) {
+                    continue;
+                }
+                let chain = scope::chain_of(w.pid);
+                hosts.note_new(h, &chain, &w.class);
+                if seen.insert(h)
                     && (w.drawn || w.class != TAO_CLASS)
-                    && !scope::is_foreign_window(&scope::chain_of(w.pid), &w.class, root)
+                    && !scope::is_foreign_window(&chain, &w.class, root)
                 {
                     failures.push(format!("new window: {w:?}"));
                 }
@@ -146,7 +151,7 @@ fn start_watch() -> Watch {
             if foreground() != fg {
                 fg = foreground();
                 let now = describe(fg);
-                if !scope::is_foreign_window(&scope::chain_of(now.pid), &now.class, root) {
+                if hosts.foreground_counts(fg, &scope::chain_of(now.pid), &now.class, root) {
                     failures.push(format!("foreground changed to {now:?}"));
                 }
             }

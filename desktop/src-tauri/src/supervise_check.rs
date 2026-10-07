@@ -451,7 +451,8 @@ pub fn exit_note(code: Option<u32>) -> Option<String> {
 /// announcement: it waits, bounded (50 looks, 100 ms apart), for the stopped page, because the first navigation is a
 /// full load that eval can overtake (the webview is then still on the outgoing page, which is a reason to wait, not
 /// to give up), and it changes nothing on any other page. A script that ran in the outgoing document dies with it;
-/// the shell therefore evals it again a few times (see `WindowSink::exited`).
+/// the shell therefore evals it again a few times (see `WindowSink::exited`). It writes only when the line differs,
+/// so a repeat replaces nothing (a selection in the line survives, and the live region is not told again).
 pub fn exit_note_script(code: Option<u32>) -> String {
     let text = serde_json::to_string(&exit_note(code).unwrap_or_default())
         .unwrap_or_else(|_| "\"\"".into());
@@ -459,7 +460,7 @@ pub fn exit_note_script(code: Option<u32>) -> String {
         "(function(){{var n=0;function go(){{var e=document.getElementById('{EXIT_NOTE_ID}');\
 if(!location.pathname.endsWith('stopped.html')||!e||document.readyState==='loading')\
 {{if(++n<50)setTimeout(go,100);return;}}\
-e.textContent={text};}}go();}})();"
+if(e.textContent!=={text}){{e.textContent={text};}}}}go();}})();"
     )
 }
 
@@ -632,6 +633,17 @@ mod tests {
             exited.contains(&format!(r#"id="{EXIT_NOTE_ID}""#)),
             "{exited}"
         );
+        // The code is part of the announced reason line (role=status), so a screen reader hears it when it is written.
+        let status = exited
+            .split(r#"id="exited-text""#)
+            .nth(1)
+            .and_then(|rest| rest.split("</p>").next())
+            .expect("the exited reason line");
+        assert!(
+            status.contains(&format!(r#"id="{EXIT_NOTE_ID}""#))
+                && status.contains(r#"role="status""#),
+            "the exit code must sit inside the announced #exited-text line: {status}"
+        );
         let script = exit_note_script(Some(3));
         assert!(script.contains(EXIT_NOTE_ID), "{script}");
         assert!(script.contains("The backend ended with exit code 3."));
@@ -649,6 +661,19 @@ mod tests {
         assert!(
             known.contains("++n<50"),
             "the wait must be bounded: {known}"
+        );
+    }
+
+    #[test]
+    fn a_repeated_script_writes_only_when_the_line_differs() {
+        let known = exit_note_script(Some(7));
+        let text = "\"The backend ended with exit code 7.\"";
+        let guarded = format!("if(e.textContent!=={text}){{e.textContent={text};}}");
+        assert!(known.contains(&guarded), "{known}");
+        let unknown = exit_note_script(None);
+        assert!(
+            unknown.contains("if(e.textContent!==\"\"){e.textContent=\"\";}"),
+            "{unknown}"
         );
     }
 }

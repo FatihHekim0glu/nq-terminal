@@ -42,7 +42,7 @@ import RegCompare from './RegCompare'
 import RegStaleBanner from './RegStaleBanner'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, RuleNote, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
-import { needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
+import { deflatedRequestable, needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
 import { RegViewBody, useEvidenceData } from './RegViewBody'
 import './reg.css'
 
@@ -110,13 +110,14 @@ function exportRows(rows: readonly RegRow[]): void {
 }
 
 /** `withDsr`: whether this render needs SV3's Deflated Sharpe (needsDeflated: the active view and
- *  whether the panel is compact), so a narrow panel showing only the board never asks for it. */
+ *  whether the panel is compact), so a narrow panel showing only the board never asks for it. It goes out only after the
+ *  registry and the hypotheses have settled (deflatedRequestable): the route imports scipy.stats on a first launch. */
 function useRegData(withDsr: boolean) {
   const registry = useRegistry()
   const cards = useHypotheses()
   const mt = useMultipleTesting()
   const confirmations = useConfirmations()
-  const deflated = useDeflated(withDsr)
+  const deflated = useDeflated(deflatedRequestable(withDsr, !!registry.data, !!cards.data || cards.isError))
   const rows = useMemo(
     () => (registry.data && (cards.data || cards.isError) ? withDeflated(buildRegRows(registry.data, cards.data ?? []), deflated.data) : null),
     [registry.data, cards.data, cards.isError, deflated.data],

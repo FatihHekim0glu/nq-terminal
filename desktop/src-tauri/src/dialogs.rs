@@ -8,8 +8,9 @@
 //! Entry points: the lab picker (`pick_lab`), the lab refusal (`folder_refused`), the WebView2 data folder choice
 //! (`choose_webview_dir`), the policy refusal (`policy_refused`), the fatal stop (`fatal`), Restart or Quit
 //! (`restart_or_quit`), the close confirm (`confirm_close_running_job`), the browser update (`browser_update_restart`),
-//! the rebuild confirm (`confirm_rebuild`), the reload offer for a page that never painted (`offer_reload`) and the
-//! two save dialogs (`save_diagnostics`, `save_download`).
+//! the rebuild confirm (`confirm_rebuild`), the reload offer for a page that never painted (`offer_reload`), the two
+//! save dialogs (`save_diagnostics`, `save_download`), and the IB snapshot switch's confirm (`confirm_ib_snapshot`)
+//! and its note for an unchanged value or a refusal (`ib_snapshot_note`).
 
 #![allow(
     dead_code,
@@ -265,6 +266,40 @@ pub fn confirm_rebuild<R: Runtime>(owner: Owner<'_, R>, command: &str) -> Confir
     confirm(owner, "confirm_rebuild", &text, "Rebuild", true)
 }
 
+/// The IB snapshot switch in Options (ib_switch.rs): turn the read-only snapshot on or off for the next start. `text`
+/// says what changes and which IB names would be passed (names only). Turning it on draws Cancel first, so a stray Enter
+/// never turns it on. Test builds: Cancel, so a test build never writes.
+pub fn confirm_ib_snapshot<R: Runtime>(owner: Owner<'_, R>, on: bool, text: &str) -> Confirm {
+    let yes = if on { "Turn on" } else { "Turn off" };
+    confirm(owner, "confirm_ib_snapshot", text, yes, on)
+}
+
+/// A word about the IB snapshot switch with only an OK button: the value is already stored, or turning it on was
+/// refused (the names and why, never a value). Test builds: nothing shown (logged only).
+pub fn ib_snapshot_note<R: Runtime>(owner: Owner<'_, R>, text: &str) {
+    if TEST_BUILD {
+        refused("ib_snapshot_note");
+        return;
+    }
+    #[cfg(not(any(feature = "smoke", feature = "measure")))]
+    {
+        let dialog = rfd::MessageDialog::new()
+            .set_title(TITLE)
+            .set_level(rfd::MessageLevel::Info)
+            .set_description(text)
+            .set_buttons(rfd::MessageButtons::Ok);
+        let dialog = match owner {
+            Some(window) => dialog.set_parent(window),
+            None => dialog,
+        };
+        dialog.show();
+    }
+    #[cfg(any(feature = "smoke", feature = "measure"))]
+    {
+        let _ = (owner, text);
+    }
+}
+
 fn save(dialog: &str, suggested_name: &str) -> Option<PathBuf> {
     if TEST_BUILD {
         refused(dialog);
@@ -373,6 +408,19 @@ mod tests {
         assert_eq!(diagnostics, None);
         let download = without_ui("save_download", || save_download("export.csv"));
         assert_eq!(download, None);
+        for on in [true, false] {
+            let ib = without_ui("confirm_ib_snapshot", || {
+                confirm_ib_snapshot(none, on, "planted IB switch")
+            });
+            assert_eq!(
+                ib,
+                Confirm::Cancel,
+                "a test build must never confirm the IB switch"
+            );
+        }
+        without_ui("ib_snapshot_note", || {
+            ib_snapshot_note(none, "planted IB note")
+        });
         without_ui("policy_refused", || policy_refused("planted policy"));
         without_ui("folder_refused", || {
             folder_refused("planted folder refusal")

@@ -439,9 +439,20 @@ def build(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = No
                      relative=rel, stored_alpha=stored, validity=val)
 
 
+def _stored_covers(stored: StoredAlpha | None) -> bool:
+    """True when the screen's stored fit fills both alpha tiles, so `_alpha_tiles` reads no relative fit."""
+    return stored is not None and stored.alpha_annual_pct is not None and stored.t_min is not None
+
+
 def home_panel(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = None) -> HomePanel:
     """HOME [B]: equity against the benchmark, underwater and the rolling Sharpe over the long window, with the
-    tear sheet's alpha tiles (the screen's stored fit [PRE-REG] where it records one, else the terminal's own)."""
+    tear sheet's alpha tiles (the screen's stored fit [PRE-REG] where it records one, else the terminal's own).
+
+    The terminal's own relative fit is built only when the stored fit does not cover both tiles (`_stored_covers`):
+    the fit is what reaches `nq_lab.sizing_stats` and with it `scipy.stats` (`analytics/relative.py`), and HOME's own
+    EQ panel (volmanaged_v0) records both values at every cost, so on a first launch that panel imports no
+    `scipy.stats` (V032; the later prewarm task `warm_stats` loads it). The body is the same either way: the tiles read
+    the stored values whenever both are present."""
     u = units(s)
     long = rolling.windows_for(s.periods)[1]
     eq, dd = equity_view(s, u), drawdown_view(s, u)
@@ -453,4 +464,4 @@ def home_panel(s: SessionSeries, context: Context, *, stored: StoredAlpha | None
                      rolling_unit=rolling.WINDOW_UNIT[s.periods], rolling_unit_label=u.ratio,
                      drawdown_unit=dd.unit, sharpe=num(_perf().sharpe(s.r, s.periods)), bench_sharpe=num(bench_sharpe),
                      max_drawdown=dd.max_drawdown, bench_max_drawdown=dd.bench_max_drawdown,
-                     alpha=_alpha_tiles(s, relative_view(s, u), stored))
+                     alpha=_alpha_tiles(s, None if _stored_covers(stored) else relative_view(s, u), stored))

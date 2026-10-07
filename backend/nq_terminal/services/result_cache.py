@@ -71,6 +71,8 @@ from pathlib import Path
 from stat import S_ISDIR
 from typing import Any, Callable, Iterable, Mapping
 
+from nq_terminal.settings import RESEARCH_DIRS  # the one list of folders the terminal never writes
+
 LOG = logging.getLogger(__name__)
 
 MEMORY_BYTES = 64 * 1024**2
@@ -98,7 +100,6 @@ FORMAT = 2
 DISK_SUFFIX = ".bin"
 TMP_SUFFIX = ".tmp"
 DISK_NAME = re.compile(r"[0-9a-f]{64}(?:\.[0-9a-f]{32}\.tmp|\.bin)")
-RESEARCH_DIRS = (("results",), ("data",), ("live",), ("backtests", "output"))
 
 GateVersion = Callable[[str, str, str], "tuple[int, int] | None"]
 
@@ -489,6 +490,15 @@ class ResultCache:
     def stats(self) -> ResultCacheStats:
         with self._lock:
             return ResultCacheStats(**self._counts, entries=len(self._entries), bytes=self._bytes)
+
+    def forget(self, route: str, query: Mapping[str, Any] | None) -> None:
+        """Drop one key: its memory entry and its disk file. Every other key and every flight in progress is left
+        alone; the next `get` for the key computes again (a body the caller found unusable must not be served again)."""
+        key = self._key(route, query)
+        with self._lock:
+            self._pop_locked(key)
+        if self._persists(route):
+            self._discard(self.disk_name(route, query))
 
     def clear(self) -> None:
         """Forget the memory entries (the disk entries stay; each is re-validated before use)."""

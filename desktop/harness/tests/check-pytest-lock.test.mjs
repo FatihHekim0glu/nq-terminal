@@ -27,6 +27,7 @@ function plant(dir, pid, ageMs = 0) {
   fs.utimesSync(file, t, t)
   return file
 }
+const STALE_BY_AGE = (pid) => new RegExp(String.raw`stale lock PYTEST\.${pid}\.lock.*older than 2 h`, 'i')
 const waitOnly = (dir, extra = []) => ['-PytestWaitOnly', '-PytestLockDir', dir, '-PytestWaitPollSeconds', '1', ...extra]
 const run = (dir, extra) => spawnSync('powershell', [...PS, ...waitOnly(dir, extra)], { encoding: 'utf8', windowsHide: true, timeout: 120_000 })
 
@@ -53,12 +54,14 @@ test('a fresh PYTEST lock holds the wait, names the lock and the poll, and a tim
   assert.match(r.stdout, /FAIL .*pytest-wait.*still held/i)
 })
 
-test('a lock older than two hours is stale: the wait ignores it and says so', () => {
+test('a lock older than two hours is stale for its age: the wait ignores it and the reason says so', () => {
+  // A live pid, so that only the age rule can make this lock stale (a pid that is not running would do it on its own).
   const dir = locksFolder('stale')
-  plant(dir, 4243, 2 * HOUR_MS + 60_000)
+  plant(dir, process.pid, 2 * HOUR_MS + 60_000)
   const r = run(dir, ['-PytestWaitTimeoutSeconds', '5'])
   assert.equal(r.status, 0, r.stdout + r.stderr)
-  assert.match(r.stdout, /stale/i)
+  assert.match(r.stdout, STALE_BY_AGE(process.pid))
+  assert.doesNotMatch(r.stdout, /not running/)
   assert.doesNotMatch(r.stdout, /WAIT /)
 })
 
@@ -105,4 +108,43 @@ test('every step that starts a backend or the smoke exe waits for the lock first
   for (const guarded of ['test-smoke', 'test-measure', 'parity', 'show-proof']) {
     assert.match(CHECK_TEXT, new RegExp(`Wait-NoPytestLock '${guarded}[^']*'`), `${guarded} waits for the PYTEST lock`)
   }
+})
+
+// ---- 0.3.1 audit: a locks folder that cannot be read warned only on the Node side; check.ps1 passed it over silently
+
+test('born failing: a locks folder that cannot be read is a NOTE, as in the harness, and the step goes on without waiting', () => {
+  const dir = locksFolder('unreadable')
+  const notAFolder = path.join(dir, 'file.txt') // a file where the folder should be: listing it fails
+  fs.writeFileSync(notAFolder, 'x')
+  const r = run(notAFolder, ['-PytestWaitTimeoutSeconds', '5'])
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.match(r.stdout, /NOTE +pytest-lock +cannot read the locks folder .*file\.txt/)
+  assert.match(r.stdout, /does not wait/)
+  assert.doesNotMatch(r.stdout, /WAIT /)
+  assert.match(r.stdout, /PASS .*pytest-wait.*locks folder unreadable, not waited/i, 'the run summary records it')
+})
+
+test('a locks folder that is missing stays silent, as in the harness (nothing holds a lock there)', () => {
+  const dir = locksFolder('missing')
+  const r = run(path.join(dir, 'no-such-folder'), ['-PytestWaitTimeoutSeconds', '5'])
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.doesNotMatch(r.stdout, /NOTE|WAIT|pytest-wait/)
+})
+
+test('an unreadable locks folder warns and does not abort, in both implementations, because pytest also skips a lock it cannot write', () => {
+  const harness = fs.readFileSync(fileURLToPath(new URL('../lib/pytestlock.mjs', import.meta.url)), 'utf8')
+  for (const [name, text] of [['check.ps1', CHECK_TEXT], ['pytestlock.mjs', harness]]) {
+    assert.match(text, /warns and does not abort/, `${name} says why an unreadable folder is only a warning`)
+  }
+})
+
+// ---- 0.3.1 audit: the stale-by-age test used a pid that is not running, so it proved nothing about the age rule
+
+test('a dead pid with a lock over two hours old is stale for its age first (the age check runs before the pid check)', () => {
+  const dir = locksFolder('age-dead')
+  const pid = deadPid()
+  plant(dir, pid, 2 * HOUR_MS + 60_000)
+  const r = run(dir, ['-PytestWaitTimeoutSeconds', '5'])
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.match(r.stdout, new RegExp(`stale lock PYTEST\\.${pid}\\.lock.*older than 2 h`, 'i'))
 })

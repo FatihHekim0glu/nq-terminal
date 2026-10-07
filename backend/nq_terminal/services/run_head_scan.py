@@ -17,7 +17,9 @@ that does not decode, a large member whose frame is not the writer's, a duplicat
 A member mark inside a nested value of some other layout leaves the member before it unbalanced, so that member does not
 decode or its frame fails. The one thing taken on trust is the inside of a large member whose frame is intact: a file
 damaged there, which a full decode calls unreadable, gives its head here. The writer never leaves one (a write cut short
-loses the closing brace, and that file goes to the full decoder); the run's detail view still decodes the whole file.
+loses the closing brace, and that file goes to the full decoder); the run's detail view still decodes the whole file,
+and when that decode fails `RunService` records the run as unreadable in `run_views.RunViewIndex`, so the next listing
+shows it so (until the file changes).
 
 Decoding a member follows `run_curves.kept_from`: orjson, unless it refuses the bytes (NaN and Infinity tokens) or the
 value holds a float of magnitude at least 2**63 (an integer wider than 64 bits), when the standard decoder reads them.

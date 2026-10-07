@@ -16,7 +16,13 @@ main:not(:has(.reason:target)) #exited {
   color: var(--data);
 }
 
-/* The exit code line is filled in by the shell when it knows the code; with none it takes no room. */
+/* The exit code is filled in by the shell when it knows the code. It sits inside the announced reason line
+   (role=status), so a screen reader hears it when it is written; with none it takes no room. The space before it is
+   drawn here, so the line's own text (which the announcement copies into the title) stays the bare reason. */
 .exit-code:empty {
   display: none;
+}
+
+.exit-code:not(:empty)::before {
+  content: " ";
 }

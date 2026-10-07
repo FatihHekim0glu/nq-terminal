@@ -16,7 +16,8 @@ out as the research writer lays them out (`many_runs_lab.py`), with no wall-cloc
   that keeps the list off disk) reads again only the result files of the affected groups of the per-run index the
   state folder's cache keeps, and serves the change.
 - A corrupt or foreign index file is ignored and rebuilt, and the body is unchanged; another lab's index never answers.
-- results/ and experiments/ of the lab are byte-identical after the tests.
+- results/ and experiments/ of the lab are byte-identical after the tests (checked when the lab fixture is torn down, so
+  it holds on every xdist worker; `test_cold_runs_guard.py`).
 """
 from __future__ import annotations
 
@@ -69,14 +70,15 @@ def _grow(base: Path, name: str, count: int, *, edges: bool = True) -> Path:
     return base
 
 
-_BEFORE: dict[str, dict[str, str]] = {}
-
-
 @pytest.fixture(scope="module")
 def grown(tmp_path_factory) -> Path:
+    """The grown lab, shared by this module's tests. The byte-identical check runs in the teardown, so it holds on every
+    worker that built the lab (under xdist each worker has its own copy and runs only some of the tests)."""
     base = _grow(tmp_path_factory.mktemp("grown"), "lab", GROWN)
-    _BEFORE["grown"] = _tree_digest(base / "lab" / "fixtures")
-    return base
+    before = _tree_digest(base / "lab" / "fixtures")
+    assert before and any(name.startswith("experiments/") for name in before)
+    yield base
+    assert _tree_digest(base / "lab" / "fixtures") == before, "results/ or experiments/ changed"
 
 
 @pytest.fixture()
@@ -352,12 +354,3 @@ def test_an_index_file_from_another_lab_is_never_served(small, tmp_path, monkeyp
     second = _fresh(other, state=state)
     row = next(r for r in json.loads(second.client.get(INDEX).content) if r["run_id"] == "nt_grow_v1_r00001")
     assert row["n_trades"] == 777
-
-
-# ---------------------------------------------------------------- research files untouched
-
-
-def test_zz_results_and_experiments_are_byte_identical_after_the_tests(grown):
-    before = _BEFORE["grown"]
-    assert before and any(name.startswith("experiments/") for name in before)
-    assert _tree_digest(grown / "lab" / "fixtures") == before

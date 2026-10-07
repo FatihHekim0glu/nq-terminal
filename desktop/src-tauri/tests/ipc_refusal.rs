@@ -267,13 +267,18 @@ fn start_watch() -> (Arc<AtomicBool>, JoinHandle<Vec<String>>) {
     let root = scope::root_pid();
     let handle = std::thread::spawn(move || {
         let (mut failures, mut seen, mut fg) = (Vec::new(), HashSet::new(), first_fg);
+        let mut hosts = scope::HostWindows::default();
         while !stop2.load(Ordering::SeqCst) {
             for h in visible_windows() {
                 let (pid, class, drawn) = describe(h);
-                if !baseline.contains(&h)
-                    && seen.insert(h)
+                if baseline.contains(&h) {
+                    continue;
+                }
+                let chain = scope::chain_of(pid);
+                hosts.note_new(h, &chain, &class);
+                if seen.insert(h)
                     && (drawn || class != TAO_CLASS)
-                    && !scope::is_foreign_window(&scope::chain_of(pid), &class, root)
+                    && !scope::is_foreign_window(&chain, &class, root)
                 {
                     failures.push(format!(
                         "new window: pid {pid}, class {class}, drawn {drawn}"
@@ -283,7 +288,7 @@ fn start_watch() -> (Arc<AtomicBool>, JoinHandle<Vec<String>>) {
             if foreground() != fg {
                 fg = foreground();
                 let now = describe(fg);
-                if !scope::is_foreign_window(&scope::chain_of(now.0), &now.1, root) {
+                if hosts.foreground_counts(fg, &scope::chain_of(now.0), &now.1, root) {
                     failures.push(format!("foreground changed to {now:?}"));
                 }
             }

@@ -199,6 +199,8 @@ impl Drop for PageServer {
 
 #[derive(Clone, Debug)]
 pub struct Seen {
+    /// The window handle (0 when not known, as in a planted test window).
+    pub hwnd: isize,
     pub pid: u32,
     pub class: String,
     pub title: String,
@@ -217,11 +219,14 @@ pub struct WatchReport {
     pub new_visible: Vec<Seen>,
     pub foreground_changes: Vec<Seen>,
     pub foreign: Vec<Seen>,
+    /// The host windows that appeared during the run (see `scope::HostWindows`).
+    pub hosts: scope::HostWindows,
 }
 
 impl WatchReport {
     /// Files a new window by its owner; true when it counts against the run.
     pub fn record_window(&mut self, w: Seen, root: u32) -> bool {
+        self.hosts.note_new(w.hwnd, &w.chain, &w.class);
         let counts = !scope::is_foreign_window(&w.chain, &w.class, root);
         if counts {
             self.new_visible.push(w);
@@ -231,12 +236,16 @@ impl WatchReport {
         counts
     }
 
-    /// Files a foreground change by the owner of the window that took the foreground.
+    /// Files a foreground change by the owner of the window that took the foreground; a host window that was already open
+    /// when the watch started (the owner's own terminal) does not count (`scope::HostWindows`).
     pub fn record_foreground(&mut self, w: Seen, root: u32) {
-        if scope::is_foreign_window(&w.chain, &w.class, root) {
-            self.foreign.push(w);
-        } else {
+        if self
+            .hosts
+            .foreground_counts(w.hwnd, &w.chain, &w.class, root)
+        {
             self.foreground_changes.push(w);
+        } else {
+            self.foreign.push(w);
         }
     }
 
@@ -292,6 +301,7 @@ pub fn describe(handle: isize) -> Seen {
         let area = i64::from((r.right - r.left).max(0)) * i64::from((r.bottom - r.top).max(0));
         let drawn = IsWindowVisible(hwnd).as_bool() && cloaked == 0 && area > 0 && !undrawn_layer;
         Seen {
+            hwnd: handle,
             pid,
             class: String::from_utf16_lossy(&class[..n]),
             title: String::from_utf16_lossy(&title[..m]),
@@ -390,6 +400,7 @@ pub fn failures_allowing(report: &WatchReport, allowed: impl Fn(&Seen) -> bool) 
 fn the_crash_watch_ignores_foreign_windows_and_fails_a_planted_own_one() {
     const ROOT: u32 = 500;
     let window = |class: &str, pid: u32, exe: &str, parent: u32| Seen {
+        hwnd: 0,
         pid,
         class: class.into(),
         title: String::new(),
@@ -804,4 +815,42 @@ pub fn kill_renderers(data_dir: &Path) -> Vec<u32> {
         .lines()
         .filter_map(|l| l.trim().parse().ok())
         .collect()
+}
+
+/// Born failing (V032, 0.3.1 audit): the crash watch had no host-window rule, so the owner's alt-tab to a Windows
+/// Terminal that was already open failed a crash run. Same rule as hidden_support/watch.rs.
+#[test]
+fn the_crash_watch_ignores_a_focus_change_to_a_host_window_open_before_the_run() {
+    const ROOT: u32 = 500;
+    let terminal = |hwnd: isize| Seen {
+        hwnd,
+        pid: 880,
+        class: "CASCADIA_HOSTING_WINDOW_CLASS".into(),
+        title: String::new(),
+        rect: (0, 0, 1, 1),
+        drawn: true,
+        chain: vec![
+            Link {
+                pid: 880,
+                exe: "windowsterminal.exe".into(),
+            },
+            Link {
+                pid: 1,
+                exe: "explorer.exe".into(),
+            },
+        ],
+    };
+    let mut report = WatchReport::default();
+    report.record_foreground(terminal(700), ROOT);
+    assert!(
+        failures(&report).is_empty(),
+        "a host window older than the run failed it: {:?}",
+        failures(&report)
+    );
+    assert_eq!(report.foreign.len(), 1);
+    // A host window that appeared during the run still counts, and so does a focus change to it.
+    let mut born = WatchReport::default();
+    born.record_window(terminal(701), ROOT);
+    born.record_foreground(terminal(701), ROOT);
+    assert_eq!(failures(&born).len(), 2, "{:?}", failures(&born));
 }

@@ -22,6 +22,8 @@ pub mod rebuild;
 #[cfg(not(feature = "smoke"))]
 #[path = "window_settings.rs"]
 pub mod settings_file;
+#[path = "window_start.rs"]
+pub mod start;
 
 #[cfg(any(test, feature = "measure"))]
 use folders::check_test_folder;
@@ -67,10 +69,19 @@ const PICK_ATTEMPTS: usize = 5;
 pub const ATTRIBUTION_URL: &str = "https://www.tradingview.com/";
 const ATTRIBUTION_HOST: &str = "www.tradingview.com";
 const ATTRIBUTION_QUERY: &str = "utm_medium=lwc-link&utm_campaign=lwc-chart";
-/// The shell object the page reads (03 section 4.5), frozen and not writable. Version 2: the shell reports how each save ended (writes_download.rs).
-pub const SHELL_SCRIPT: &str = "(() => { if (window.top !== window) return; \
-const shell = Object.freeze({ bridgeVersion: 2, platform: 'windows', keys: 'pc' }); \
-Object.defineProperty(window, '__NQT_SHELL__', { value: shell, writable: false, configurable: false, enumerable: false }); })();";
+/// The bridge version the shell object states. 2: the shell reports how each save ended (writes_download.rs). 3: it
+/// also states whether the read-only IB snapshot is on in this session (`ibSnapshot`, for the Options switch).
+pub const BRIDGE_VERSION: u32 = 3;
+
+/// The shell object the page reads (03 section 4.5), frozen and not writable. `ib_snapshot` is the value in force for
+/// this start (the settings read before the window was built); a change made with the switch applies at the next start.
+pub fn shell_script(ib_snapshot: bool) -> String {
+    format!(
+        "(() => {{ if (window.top !== window) return; \
+const shell = Object.freeze({{ bridgeVersion: {BRIDGE_VERSION}, platform: 'windows', keys: 'pc', ibSnapshot: {ib_snapshot} }}); \
+Object.defineProperty(window, '__NQT_SHELL__', {{ value: shell, writable: false, configurable: false, enumerable: false }}); }})();"
+    )
+}
 
 /// Everything the window builder needs before the window exists.
 #[derive(Clone, Debug)]
@@ -150,14 +161,42 @@ pub fn store_zoom(percent: u16) {
     }
 }
 
-/// Writes the current settings through writes.rs: the old file moves to `settings.json.1` (rotate), then the new
-/// one is written with `write_new`, so a crash in between leaves the old copy readable.
+/// The stored read-only IB snapshot value (the next start's), or None before the settings are read.
+pub fn ib_snapshot_stored() -> Option<bool> {
+    with_shell(|s| s.settings.ib_snapshot)
+}
+
+/// The IB snapshot switch (ib_switch.rs, after the owner's native confirm): changes only `ib_snapshot` in the settings
+/// and writes the file now, rotate first. The window options and the running backend keep the value they started with.
+/// A test build never writes (its dialogs fail closed before this, and this refuses too); a failed write puts the old
+/// value back in memory, so a later zoom save cannot write a value the owner was told was not saved.
+pub fn store_ib_snapshot(on: bool) -> Result<(), String> {
+    if TEST_BUILD {
+        return Err("a test build never changes the IB snapshot setting".into());
+    }
+    let Some(before) = with_shell(|s| std::mem::replace(&mut s.settings.ib_snapshot, on)) else {
+        return Err("no settings are loaded".into());
+    };
+    let written = write_settings();
+    if written.is_err() {
+        with_shell(|s| s.settings.ib_snapshot = before);
+    }
+    written
+}
+
+/// `write_settings` for a caller that only logs the outcome.
 fn save_settings() {
+    let _ = write_settings();
+}
+
+/// Writes the current settings through writes.rs: the old file moves to `settings.json.1` (rotate), then the new
+/// one is written with `write_new`, so a crash in between leaves the old copy readable. One write at a time.
+fn write_settings() -> Result<(), String> {
     let _one = SAVING
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let Some((settings, file)) = with_shell(|s| (s.settings.clone(), s.file.clone())) else {
-        return;
+        return Err("no settings are loaded".into());
     };
     let result = serde_json::to_vec_pretty(&settings)
         .map_err(|e| e.to_string())
@@ -165,8 +204,9 @@ fn save_settings() {
             writes::rotate(&file, 0, 1).map_err(|e| e.to_string())?;
             writes::write_new(&file, &bytes).map_err(|e| e.to_string())
         });
-    let detail = json!({ "file": file.display().to_string(), "error": result.err() });
+    let detail = json!({ "file": file.display().to_string(), "error": result.as_ref().err() });
     crate::crash::log("settings_saved", detail);
+    result
 }
 
 /// Removes every `WEBVIEW2_*` variable from this process, so only the builder's settings reach the engine and
@@ -446,6 +486,7 @@ unsafe fn webview_hooks(
     environment: &ICoreWebView2Environment,
     app: AppHandle,
 ) -> windows::core::Result<()> {
+    let script = HSTRING::from(shell_script(ib_in_force(&app)));
     let failing = app.clone();
     let script_done = AddScriptToExecuteOnDocumentCreatedCompletedHandler::create(Box::new(
         move |result, _id| {
@@ -468,11 +509,20 @@ unsafe fn webview_hooks(
     // SAFETY: the caller's contract; the handlers live as long as the webview holds them.
     unsafe {
         let core = controller.CoreWebView2()?;
-        core.AddScriptToExecuteOnDocumentCreated(&HSTRING::from(SHELL_SCRIPT), &script_done)?;
+        core.AddScriptToExecuteOnDocumentCreated(&script, &script_done)?;
         core.add_NewWindowRequested(&new_window, &mut token)?;
         environment.add_NewBrowserVersionAvailable(&update, &mut token)?;
     }
     Ok(())
+}
+
+/// The IB snapshot value in force for this start, as the shell object states it: the window options' (read from the
+/// settings before the window was built, and what the backend's environment follows). A smoke build always says off.
+fn ib_in_force(app: &AppHandle) -> bool {
+    !cfg!(feature = "smoke")
+        && app
+            .try_state::<WindowOptions>()
+            .is_some_and(|options| options.ib_snapshot)
 }
 
 /// The refusal text when the engine reports that the bridge script was not registered, or None when it was. The
@@ -625,6 +675,18 @@ fn reveal(window: &WebviewWindow) {
     if window.is_visible().unwrap_or(true) {
         return;
     }
+    if start::this_start() == start::Reveal::Minimised {
+        match reveal_minimised(window) {
+            Ok(maximised) => {
+                start::mark_pending();
+                let detail = json!({ "minimised": true, "restore_maximised": maximised });
+                crate::crash::log("window_revealed", detail);
+                return;
+            }
+            // A window left hidden would be lost: fall back to the ordinary show.
+            Err(e) => crate::crash::log("show_minimised_failed", json!({ "error": e })),
+        }
+    }
     #[allow(
         clippy::disallowed_methods,
         reason = "the one sanctioned show(), release only"
@@ -635,8 +697,70 @@ fn reveal(window: &WebviewWindow) {
     }
 }
 
+/// The release reveal of a minimised start (window_start.rs): the window's own placement set to minimised without
+/// activation, so tao's show (which applies a saved maximised state with SW_MAXIMIZE and takes the focus) is not used.
+/// A saved maximised state comes back when the owner restores the window. Ok(whether it restores maximised).
+#[cfg(not(any(feature = "smoke", feature = "measure")))]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "release only: the minimised start's reveal, shown minimised and never activated"
+)]
+fn reveal_minimised(window: &WebviewWindow) -> Result<bool, String> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowPlacement, SW_SHOWMINNOACTIVE, SetWindowPlacement, WINDOWPLACEMENT,
+    };
+    let maximised = window.is_maximized().unwrap_or(false);
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    let mut placement = WINDOWPLACEMENT {
+        length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: reads and sets the placement of this process's own live window with a correctly sized structure.
+    unsafe {
+        GetWindowPlacement(hwnd, &mut placement).map_err(|e| e.to_string())?;
+        placement.showCmd = SW_SHOWMINNOACTIVE.0 as u32;
+        placement.flags = start::placement_flags(placement.flags, maximised);
+        SetWindowPlacement(hwnd, &placement).map_err(|e| e.to_string())?;
+    }
+    // The minimise message has just made tao read "not maximised"; the window-state plugin would save that at close.
+    start::keep_maximised_flag(hwnd, maximised);
+    Ok(maximised)
+}
+
 #[cfg(any(feature = "smoke", feature = "measure"))]
 fn reveal(_window: &WebviewWindow) {
+    const _: () = assert!(crate::TEST_BUILD);
+}
+
+/// A second launch after a minimised start (release only): the window was put on screen outside tao, so it is
+/// restored natively first and only then shown through tao (whose own restore would hide a window tao thinks hidden).
+#[cfg(not(any(feature = "smoke", feature = "measure")))]
+#[allow(
+    clippy::disallowed_methods,
+    reason = "release only (single-instance plugin): restores the window a minimised start revealed, for focus_existing"
+)]
+fn restore_minimised_start(window: &WebviewWindow) {
+    use windows::Win32::UI::WindowsAndMessaging::{IsIconic, SW_RESTORE, ShowWindow};
+    if let Ok(hwnd) = window.hwnd() {
+        // SAFETY: plain calls on this process's own live window.
+        unsafe {
+            if IsIconic(hwnd).as_bool() {
+                let _ = ShowWindow(hwnd, SW_RESTORE);
+            }
+        }
+    }
+    let shown = window.show();
+    if let Err(e) = shown {
+        crate::crash::log("show_failed", json!({ "error": e.to_string() }));
+    }
+}
+
+#[cfg(any(feature = "smoke", feature = "measure"))]
+#[allow(
+    dead_code,
+    reason = "called only by the release's single-instance plugin, through focus_existing"
+)]
+fn restore_minimised_start(_window: &WebviewWindow) {
     const _: () = assert!(crate::TEST_BUILD);
 }
 
@@ -653,6 +777,9 @@ pub fn focus_existing(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(crate::MAIN_LABEL)
         && window.is_visible().unwrap_or(false)
     {
+        if start::take_pending() {
+            restore_minimised_start(&window);
+        }
         #[allow(
             clippy::disallowed_methods,
             reason = "release only (single-instance plugin): the second launch restores the window that is already showing"
@@ -663,155 +790,5 @@ pub fn focus_existing(app: &AppHandle) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_failed_bridge_registration_is_a_refusal_and_a_good_one_is_not() {
-        let failed: windows::core::Result<()> = Err(windows::core::Error::from_hresult(
-            windows::core::HRESULT(0x8000_4005_u32 as i32),
-        ));
-        let text = bridge_script_refusal(&failed).expect("a failure is a refusal");
-        assert!(text.contains("bridge"), "{text}");
-        assert_eq!(bridge_script_refusal(&Ok(())), None);
-    }
-
-    #[test]
-    fn only_the_attribution_address_is_opened() {
-        for good in [
-            "https://www.tradingview.com/",
-            "https://www.tradingview.com/?utm_medium=lwc-link&utm_campaign=lwc-chart&utm_source=127.0.0.1",
-        ] {
-            assert!(is_attribution(good), "refused {good}");
-        }
-        for bad in [
-            "http://www.tradingview.com/",
-            "https://www.tradingview.com.evil.example/",
-            "https://evil.example/?https://www.tradingview.com/",
-            "https://user@www.tradingview.com/",
-            "https://www.tradingview.com:8443/",
-            "https://www.tradingview.com/chart/",
-            "https://www.tradingview.com/?q=1",
-            "https://www.tradingview.com/#x",
-            "https://tradingview.com/",
-            "file:///C:/Windows/System32/calc.exe",
-            "not a url",
-            "",
-        ] {
-            assert!(!is_attribution(bad), "accepted {bad}");
-        }
-    }
-
-    #[test]
-    fn settings_default_and_round_trip() {
-        let empty: Settings = serde_json::from_str("{}").expect("an empty file parses");
-        assert_eq!(empty, Settings::default());
-        assert_eq!(
-            (empty.zoom, empty.ib_snapshot, empty.lab),
-            (100, false, None)
-        );
-        let full = Settings {
-            lab: Some(PathBuf::from(r"C:\Users\Owner\nq-lab")),
-            webview_data_dir: Some(PathBuf::from(PROPOSED_WEBVIEW_DIR)),
-            zoom: 150,
-            ib_snapshot: true,
-        };
-        let text = serde_json::to_string(&full).expect("serialises");
-        assert_eq!(serde_json::from_str::<Settings>(&text).ok(), Some(full));
-    }
-
-    #[test]
-    fn the_title_names_the_lab() {
-        let lab = Path::new(r"C:\Users\Owner\nq-lab");
-        assert_eq!(
-            title_for("nq-lab terminal", Some(lab)),
-            r"nq-lab terminal (C:\Users\Owner\nq-lab)"
-        );
-        assert_eq!(title_for("nq-lab terminal", None), "nq-lab terminal");
-    }
-
-    #[test]
-    fn a_missing_lab_is_a_hard_error_only_when_needed() {
-        assert!(matches!(
-            check_lab_setting(None, true),
-            Err(ShellError::Refused(_))
-        ));
-        assert!(check_lab_setting(None, false).is_ok());
-        assert!(check_lab_setting(Some(Path::new(r"D:\dev\tmp\no-such-lab")), false).is_err());
-    }
-
-    #[test]
-    fn measure_needs_an_absolute_run_folder() {
-        assert!(matches!(measure_paths(None), Err(ShellError::NotReady(_))));
-        assert!(matches!(
-            measure_paths(Some(r"runs\one".into())),
-            Err(ShellError::Refused(_))
-        ));
-        let dir = PathBuf::from(r"D:\dev\tmp\nqt-measure-run");
-        let (wv, config) = measure_paths(Some(dir.clone().into())).expect("absolute");
-        assert_eq!((wv, config), (dir.join("wv"), dir.join("config")));
-    }
-
-    #[test]
-    fn measure_run_folder_stays_on_d_and_out_of_research_folders() {
-        for bad in [
-            r"C:\Users\someone\nq-lab\results\run1",
-            r"C:\runs\one",
-            r"D:\nq-lab\results\run1",
-            r"D:\nq-lab\DATA\run1",
-            r"D:\nq-lab\live\run1",
-            r"D:\nq-lab\backtests\run1",
-            r"D:\nq-lab\results.\run1",
-            r"D:\dev\tmp\..\results\run1",
-        ] {
-            assert!(
-                matches!(measure_paths(Some(bad.into())), Err(ShellError::Refused(_))),
-                "{bad} must be refused"
-            );
-        }
-        assert!(measure_paths(Some(r"D:\dev\tmp\run-results-data".into())).is_ok());
-    }
-
-    #[test]
-    fn a_resolved_folder_may_sit_on_another_data_drive_but_never_on_c_or_in_a_research_folder() {
-        // D:\dev is a junction to E:\dev on a PC whose big folders moved: the name is on D:, the real folder is not.
-        for ok in [r"E:\dev\tmp\run-results-data", r"D:\dev\tmp\run1"] {
-            assert_eq!(folders::resolved_fault(Path::new(ok)), None, "{ok}");
-        }
-        for bad in [
-            r"C:\Users\someone\run1",
-            r"c:\runs\one",
-            r"E:\nq-lab\results\run1",
-            r"E:\nq-lab\Data\run1",
-            r"D:\nq-lab\live.\run1",
-        ] {
-            assert!(
-                folders::resolved_fault(Path::new(bad)).is_some(),
-                "{bad} must be refused"
-            );
-        }
-    }
-
-    #[test]
-    fn the_shell_script_freezes_the_three_fields() {
-        for part in [
-            "bridgeVersion: 2",
-            "platform: 'windows'",
-            "keys: 'pc'",
-            "Object.freeze",
-            "writable: false",
-            "configurable: false",
-        ] {
-            assert!(SHELL_SCRIPT.contains(part), "missing {part}");
-        }
-    }
-
-    #[test]
-    fn policy_refusal_names_the_hive() {
-        let r = policy::PolicyRefusal {
-            hive: "HKLM",
-            value: "AdditionalBrowserArguments".into(),
-        };
-        assert!(r.to_string().contains("HKLM"));
-    }
-}
+#[path = "window_tests.rs"]
+mod tests;

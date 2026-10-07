@@ -35,7 +35,7 @@ from typing import Any
 from nq_terminal.desktop import sessions
 from nq_terminal.models import workspaces as models
 from nq_terminal.models.workspaces import DOC_NAMES, SCHEMA, DocumentError, InvalidDocument, UnknownDocument
-from nq_terminal.services.result_cache import RESEARCH_DIRS
+from nq_terminal.settings import RESEARCH_DIRS
 
 LOG = logging.getLogger(__name__)
 

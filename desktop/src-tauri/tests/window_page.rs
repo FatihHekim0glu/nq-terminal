@@ -4,7 +4,8 @@
 //! The smoke exe starts with `--lab` naming a complete fake lab under the run folder (never the real lab) and
 //! `--attach-url` naming the static test page on 127.0.0.1:8810, with a WebView2 data folder that does not exist yet.
 //! Checked under the global window and foreground watch:
-//! - `window.__NQT_SHELL__` is `{bridgeVersion: 2, platform: 'windows', keys: 'pc'}`, frozen and not writable;
+//! - `window.__NQT_SHELL__` is `{bridgeVersion: 3, platform: 'windows', keys: 'pc', ibSnapshot: false}` (a smoke build states the IB
+//!   snapshot off), frozen and not writable;
 //! - `window.open` and a look-alike link are refused (logged `new_window_denied`, no new target, no window);
 //! - the attribution link reaches the system-browser handler, which the smoke build mocks (logged, nothing launched);
 //! - the title shows the lab path;
@@ -48,7 +49,8 @@ fn events<'a>(log: &'a [Value], name: &str) -> Vec<&'a Value> {
 
 /// The shell object: the three fields, frozen, not writable, not configurable, and unchanged by the page.
 fn check_shell_object(result: &Value) {
-    let expected = json!({ "bridgeVersion": 2, "platform": "windows", "keys": "pc" });
+    let expected =
+        json!({ "bridgeVersion": 3, "platform": "windows", "keys": "pc", "ibSnapshot": false });
     assert_eq!(result["shell"]["value"], expected, "{result}");
     assert_eq!(result["shell"]["frozen"], json!(true), "{result}");
     assert_eq!(result["shell"]["writable"], json!(false), "{result}");

@@ -118,6 +118,7 @@ export function browserBridge(info: ShellInfo): ShellBridge {
     bridgeVersion: info.bridgeVersion,
     platform: info.platform,
     keys: info.keys,
+    ibSnapshot: info.ibSnapshot,
     saveFile: (fileName, blob) => saveFile(info, fileName, blob),
     copyText,
     copyImage,

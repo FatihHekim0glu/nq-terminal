@@ -27,6 +27,7 @@ import { createInterface } from 'node:readline'
 import { execFileSync, spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { isMainModule } from '../../../desktop/scripts/main-module.mjs'
 
 const LAB = 'C:\\Users\\Fatih Hekimoglu\\nq-lab'
 const TERMINAL = `${LAB}\\terminal`
@@ -873,4 +874,4 @@ async function main() {
   return CFG.dry ? dryRun() : measure()
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) process.exitCode = await main()
+if (isMainModule(import.meta.url)) process.exitCode = await main()

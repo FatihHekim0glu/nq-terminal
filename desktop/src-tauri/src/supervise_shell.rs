@@ -61,6 +61,35 @@ const EXIT_NOTE_REPEATS: u32 = 12;
 const EXIT_NOTE_PAUSE: Duration = Duration::from_millis(250);
 /// The number of the latest "exited" report; a repeat loop of an older one stops.
 static EXIT_NOTE_GENERATION: AtomicU64 = AtomicU64::new(0);
+/// The number of the latest stopped page; the announcement repeats of an older one stop.
+static ANNOUNCE_GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// The number of a new "exited" report, which also ends every repeat loop of an older one.
+fn next_exit_generation(counter: &AtomicU64) -> u64 {
+    counter.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+/// Runs `eval` again `repeats` times, `pause` apart, while `counter` still holds `generation`; returns how many times
+/// it ran. A newer exit bumps the counter, which ends this loop before its next eval, so an earlier exit's code can
+/// never overwrite a later one.
+fn repeat_exit_note(
+    generation: u64,
+    counter: &AtomicU64,
+    repeats: u32,
+    pause: Duration,
+    mut eval: impl FnMut(),
+) -> u32 {
+    let mut ran = 0;
+    for _ in 0..repeats {
+        std::thread::sleep(pause);
+        if counter.load(Ordering::SeqCst) != generation {
+            return ran;
+        }
+        eval();
+        ran += 1;
+    }
+    ran
+}
 
 fn eval_exit_note<R: Runtime>(window: &WebviewWindow<R>, script: &str) {
     if let Err(e) = window.eval(script) {
@@ -77,6 +106,34 @@ impl<R: Runtime> WindowSink<R> {
         if let Err(e) = self.window.eval(retry::status_script(text)) {
             crash::log("supervise_status_failed", json!({ "error": e.to_string() }));
         }
+    }
+
+    /// The first announcement can run in the outgoing document (the navigation from the app page is a full load) and
+    /// die with it, taking its wait along. It is evaluated again a few times, off this thread, like the exit note;
+    /// the again-script changes nothing on a page that already holds the announcement or whose focus moved on, and a
+    /// newer stopped page ends the older repeats.
+    fn announce_again(&self, code: &str) {
+        let generation = next_exit_generation(&ANNOUNCE_GENERATION);
+        let script = announce::announce_again_script(code);
+        let window = self.window.clone();
+        std::thread::spawn(move || {
+            let eval = || {
+                if let Err(e) = window.eval(&script) {
+                    crash::log(
+                        "supervise_announce_failed",
+                        json!({ "error": e.to_string() }),
+                    );
+                }
+            };
+            let counter = &ANNOUNCE_GENERATION;
+            repeat_exit_note(
+                generation,
+                counter,
+                EXIT_NOTE_REPEATS,
+                EXIT_NOTE_PAUSE,
+                eval,
+            );
+        });
     }
 
     /// Whether the window already shows the stopped page's unverified section.
@@ -115,7 +172,9 @@ impl<R: Runtime> Sink for WindowSink<R> {
         });
         if let Err(e) = shown {
             crash::log("supervise_stopped_page_failed", json!({ "error": e }));
+            return;
         }
+        self.announce_again(code);
     }
 
     /// The "exited" reason, then the exit code in words on the page (nothing when the code is unknown; an earlier
@@ -127,19 +186,30 @@ impl<R: Runtime> Sink for WindowSink<R> {
     /// earlier code can never overwrite a later one.
     fn exited(&self, exit_code: Option<u32>) {
         self.stopped("exited");
-        let generation = EXIT_NOTE_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+        let generation = next_exit_generation(&EXIT_NOTE_GENERATION);
         let script = check::exit_note_script(exit_code);
         eval_exit_note(&self.window, &script);
         let window = self.window.clone();
         std::thread::spawn(move || {
-            for _ in 0..EXIT_NOTE_REPEATS {
-                std::thread::sleep(EXIT_NOTE_PAUSE);
-                if EXIT_NOTE_GENERATION.load(Ordering::SeqCst) != generation {
-                    return;
-                }
-                eval_exit_note(&window, &script);
-            }
+            let eval = || eval_exit_note(&window, &script);
+            let counter = &EXIT_NOTE_GENERATION;
+            repeat_exit_note(
+                generation,
+                counter,
+                EXIT_NOTE_REPEATS,
+                EXIT_NOTE_PAUSE,
+                eval,
+            );
         });
+    }
+
+    /// Off the UI thread (the navigation handler spawned this call): the native question, then the settings write.
+    fn ib_switch(&self, on: bool) {
+        let outcome = super::ib_switch::ask(&self.window, on);
+        crash::log(
+            "ib_switch_done",
+            json!({ "on": on, "outcome": format!("{outcome:?}") }),
+        );
     }
 
     fn reload(&self, uri: &str) {
@@ -182,9 +252,21 @@ impl<R: Runtime> Sink for WindowSink<R> {
     }
 }
 
+/// The address the webview shows, empty when it cannot be read.
+fn page_source(webview: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2) -> String {
+    let mut source = PWSTR::null();
+    // SAFETY: a COM getter on the webview WebView2 hands the handler on the UI thread; the string is taken and freed.
+    match unsafe { webview.Source(&mut source) } {
+        Ok(()) => webview2_com::take_pwstr(source),
+        Err(_) => String::new(),
+    }
+}
+
 /// Every top-level navigation passes `navigation_verdict` (NavigationStarting, which WebView2 raises for the main
 /// frame only); a refused one is cancelled and the stopped page shown from another thread, and one whose proof was
-/// only late is cancelled and retried from another thread (the UI thread waits at most the 500 ms budget).
+/// only late is cancelled and retried from another thread (the UI thread waits at most the 500 ms budget). An IB
+/// switch address is cancelled too, and goes to the native question from another thread only when the page that
+/// asked is the current backend's own page.
 fn install_navigation_check<R: Runtime>(
     window: &WebviewWindow<R>,
     shared: Arc<Shared>,
@@ -193,7 +275,7 @@ fn install_navigation_check<R: Runtime>(
     use webview2_com::{NavigationStartingEventHandler, take_pwstr};
     crate::guard::guarded("navigation", |report| {
         window.with_webview(move |platform| {
-            let handler = NavigationStartingEventHandler::create(Box::new(move |_, args| {
+            let handler = NavigationStartingEventHandler::create(Box::new(move |sender, args| {
                 let Some(args) = args else { return Ok(()) };
                 let mut uri = PWSTR::null();
                 // SAFETY: a COM call on the event arguments WebView2 hands this handler on the UI thread.
@@ -224,6 +306,29 @@ fn install_navigation_check<R: Runtime>(
                             .spawn(move || run::retry_without_backend(shared, sink));
                         if let Err(e) = spawned {
                             crash::log("supervise_retry_failed", json!({ "error": e.to_string() }));
+                        }
+                    }
+                    Verdict::IbSwitch(on) => {
+                        // The page that asked is the webview's address now (NavigationStarting comes before the
+                        // address changes): only the current backend's own page reaches the dialog.
+                        let source = sender.as_ref().map(page_source).unwrap_or_default();
+                        if shared.ib_switch_allowed(&source) {
+                            // Logged, never relied on: whether a button's location.assign counts as user initiated.
+                            let mut user = windows::core::BOOL(0);
+                            // SAFETY: as above.
+                            let read = unsafe { args.IsUserInitiated(&mut user) }.is_ok();
+                            let initiated = read.then_some(user.as_bool());
+                            crash::log(
+                                "ib_switch_request",
+                                json!({ "on": on, "user_initiated": initiated }),
+                            );
+                            let sink = sink.clone();
+                            std::thread::spawn(move || sink.ib_switch(on));
+                        } else {
+                            crash::log(
+                                "ib_switch_refused",
+                                json!({ "on": on, "reason": "origin" }),
+                            );
                         }
                     }
                     Verdict::Allow | Verdict::Cancel => {}
@@ -440,4 +545,63 @@ pub fn start<R: Runtime>(
         page_server: None,
         shared: Some(shared),
     })
+}
+
+#[cfg(test)]
+mod exit_note_tests {
+    use super::*;
+
+    #[test]
+    fn the_repeats_cover_a_full_page_load() {
+        const { assert!(EXIT_NOTE_REPEATS >= 1) };
+        assert!(
+            EXIT_NOTE_PAUSE * EXIT_NOTE_REPEATS >= Duration::from_secs(2),
+            "the repeats must outlast the stopped page's load"
+        );
+    }
+
+    #[test]
+    fn with_no_newer_exit_the_note_is_evaluated_again_every_time() {
+        let counter = AtomicU64::new(0);
+        let generation = next_exit_generation(&counter);
+        let mut evals = 0;
+        let ran = repeat_exit_note(
+            generation,
+            &counter,
+            EXIT_NOTE_REPEATS,
+            Duration::ZERO,
+            || evals += 1,
+        );
+        assert_eq!((ran, evals), (EXIT_NOTE_REPEATS, EXIT_NOTE_REPEATS));
+    }
+
+    #[test]
+    fn a_newer_exit_ends_the_older_loop_before_its_next_eval() {
+        let counter = AtomicU64::new(0);
+        let older = next_exit_generation(&counter);
+        let mut evals = 0;
+        let ran = repeat_exit_note(older, &counter, EXIT_NOTE_REPEATS, Duration::ZERO, || {
+            evals += 1;
+            // A second exit arrives while the first loop runs.
+            let newer = next_exit_generation(&counter);
+            assert!(newer > older);
+        });
+        assert_eq!(
+            (ran, evals),
+            (1, 1),
+            "the older code must never be written again"
+        );
+    }
+
+    #[test]
+    fn an_older_loop_that_starts_late_writes_nothing() {
+        let counter = AtomicU64::new(0);
+        let older = next_exit_generation(&counter);
+        let _newer = next_exit_generation(&counter);
+        let mut evals = 0;
+        let ran = repeat_exit_note(older, &counter, EXIT_NOTE_REPEATS, Duration::ZERO, || {
+            evals += 1
+        });
+        assert_eq!((ran, evals), (0, 0));
+    }
 }

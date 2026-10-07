@@ -68,7 +68,9 @@ def run_service_for(state: Any) -> RunService:
                 settings = state.settings
                 cache = file_cache(settings.file_cache_bytes, roots=[settings.data_root], max_bytes=CACHE_BYTES)
                 service = RunService(data_root=settings.data_root, project_root=settings.root, cache=cache,
-                                     state_dir=settings.state_dir)  # V031B: the run list's per-run index
+                                     state_dir=settings.state_dir,  # V031B: the run list's per-run index
+                                     # V032: a run found unreadable drops the cached list, so the next list shows it
+                                     on_unreadable=lambda: get_result_cache(state).forget(result_cache.ROUTE_RUNS, {}))
                 state.run_service = service
     return service
 

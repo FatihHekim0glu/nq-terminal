@@ -9,6 +9,9 @@
 //! - Navigation: `Shared::navigation_verdict` re-runs the ownership check and a fresh proof off the UI thread within
 //!   500 ms; a backend swapped in behind the port is refused and the token never goes to it. A proof that is only
 //!   late is unverified, not swapped: the navigation is cancelled and retried off the UI thread (supervise_retry.rs).
+//! - The two exact IB switch addresses (ib_switch.rs) are recognised before the shell's own pages pass: always
+//!   cancelled, and `Verdict::IbSwitch` only while a backend is current (supervise_shell.rs then checks that the page
+//!   that asked is that backend's own page).
 //! - Restarts at 1, 2 and 4 s; three crashes within 60 s stop the retries and ask Restart or Quit.
 //! - A backend that ends while its spawn-time proof is retried is an exit (with its exit code in the log), not a
 //!   refusal, when the failed proof carries no checked answer (`proof_failure`); a checked answer stays a refusal.
@@ -16,6 +19,7 @@
 //!   the same supervised spawn and checks (`retry_without_backend`), and one loop at most runs at a time.
 
 use super::check::{Expect, Failure, Mismatch, Spec};
+use super::ib_switch;
 use super::retry::{self, Approval};
 use super::{Owned, Spawned, signalled_within};
 use crate::link;
@@ -365,6 +369,11 @@ pub trait Sink: Send + Sync {
     fn still_unverified(&self) {
         self.stopped(Mismatch::Unverified(String::new()).code());
     }
+    /// The backend's page asked to turn the read-only IB snapshot on or off for the next start (ib_switch.rs). The
+    /// window asks the owner natively; the default does nothing.
+    fn ib_switch(&self, on: bool) {
+        let _ = on;
+    }
 }
 
 /// What a top-level navigation may do.
@@ -381,6 +390,26 @@ pub enum Verdict {
     /// The Retry link was followed with no backend to check: cancelled, and a new supervised backend started when no
     /// loop is running (`retry_without_backend`).
     Gone,
+    /// One of the two exact IB switch addresses while a backend is current: cancelled, and the switch asked for (on
+    /// or off) only when the page that asked is that backend's own page (`Shared::ib_switch_allowed`).
+    IbSwitch(bool),
+}
+
+/// The IB switch rule on its own: None when `uri` is not one of the two exact addresses; otherwise the switch while a
+/// backend is current, and a plain cancel when none is.
+pub fn ib_switch_verdict(uri: &str, backend_current: bool) -> Option<Verdict> {
+    let on = ib_switch::request(uri)?;
+    Some(if backend_current {
+        Verdict::IbSwitch(on)
+    } else {
+        Verdict::Cancel
+    })
+}
+
+/// Whether `source` (the address of the page that started a navigation) is a page of the backend on `port`.
+pub fn is_backend_page(source: &str, port: u16) -> bool {
+    let origin = link::origin(port);
+    source == origin || source.starts_with(&format!("{origin}/"))
 }
 
 /// What the loop, the navigation check and the close share.
@@ -456,6 +485,10 @@ impl Shared {
         if retry::is_retry_request(uri) {
             return self.retry_target(None);
         }
+        // Before the shell's own pages pass: the two switch addresses are on tauri.localhost too.
+        if let Some(verdict) = ib_switch_verdict(uri, self.current().is_some()) {
+            return verdict;
+        }
         if uri.starts_with("http://tauri.localhost/") || uri == "about:blank" {
             return Verdict::Allow;
         }
@@ -474,6 +507,13 @@ impl Shared {
             Err(Mismatch::Unverified(_)) => self.retry_target(Some(uri)),
             Err(m) => Verdict::Refuse(m),
         }
+    }
+
+    /// Whether an IB switch request came from the current backend's own page (`source` is the webview's address when
+    /// the navigation started): the shell's pages and any other origin never reach the dialog.
+    pub fn ib_switch_allowed(&self, source: &str) -> bool {
+        self.current()
+            .is_some_and(|b| is_backend_page(source, b.port()))
     }
 
     /// Where a retried proof sends the window: `uri`, or the backend's page for the Retry link.
@@ -505,12 +545,14 @@ impl Shared {
     }
 }
 
-/// How a retry ends: on to `uri` when the proof passed; the "exited" section when the backend has ended meanwhile;
-/// an announcement in place when it was late every time; the refusal's own section otherwise.
+/// How a retry ends: on to `uri` when the proof passed; the "exited" section through `exited` with no code when the
+/// backend has ended meanwhile (so an earlier exit's code line is cleared, which a fragment-only navigation to the same
+/// section would leave standing); an announcement in place when it was late every time; the refusal's own section
+/// otherwise.
 pub fn conclude_retry(sink: &dyn Sink, uri: &str, done: Result<(), Mismatch>, backend_gone: bool) {
     match done {
         Ok(()) => sink.reload(uri),
-        Err(_) if backend_gone => sink.stopped("exited"),
+        Err(_) if backend_gone => sink.exited(None),
         Err(Mismatch::Unverified(_)) => sink.still_unverified(),
         Err(m) => sink.stopped(m.code()),
     }

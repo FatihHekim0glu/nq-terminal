@@ -9,12 +9,14 @@ The registry response says when the registry was last written and whether a resu
 
 REG shows a banner from `stale`; the default look does not change when it is false. Nothing here writes a research
 file: the fixture labs are built under pytest's tmp_path, and the real lab's results/ and experiments/ files are the
-same, byte for byte and to the nanosecond of their modification times, after the real-lab reads.
+same, byte for byte and to the nanosecond of their modification times, after the real-lab reads, unless another process
+wrote the real lab during the test (then the test skips and names the paths: `unexplained_changes`).
 """
 from __future__ import annotations
 
 import hashlib
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -174,10 +176,37 @@ def test_the_freshness_fields_are_in_the_contract():
     assert set(FIELDS) <= set(schema["properties"]) and set(FIELDS) <= set(schema.get("required", []))
 
 
-def test_the_real_lab_registry_answers_with_its_freshness_and_writes_nothing():
+Snapshot = dict[str, tuple[int, int, str]]
+
+
+def unexplained_changes(before: Snapshot, after: Snapshot, started_ns: int) -> list[str]:
+    """Paths that differ between two snapshots and cannot be put down to another process writing during the test.
+
+    A path that was removed, or whose new modification time is at or after `started_ns` (taken before the first
+    snapshot), may be the live lab's own work: research runs and the registry build write results/ and experiments/
+    while the suite runs. A path whose bytes or time changed but whose time stayed before `started_ns`, and a path that
+    appeared with an older time, are not explained that way."""
+    out = []
+    for path in sorted(set(before) | set(after)):
+        old, new = before.get(path), after.get(path)
+        if old == new or new is None:
+            continue
+        if new[1] < started_ns:
+            out.append(path)
+    return out
+
+
+def _times(paths: list[Path]) -> Snapshot:
+    return {str(p): (0, p.stat().st_mtime_ns, "") for p in paths if p.exists()}
+
+
+def test_the_real_lab_registry_answers_with_its_freshness_and_this_run_writes_nothing():
+    """Read only. Another process may write the real lab during the test (research runs do); that is reported as a skip
+    naming the paths. The conftest guard over results/ and experiments/ already fails any write made by this process."""
     folders = (ROOT / "results" / "screens", ROOT / "experiments")
     watched = [ROOT / "results" / "registry.md", ROOT / "results" / "registry.csv"]
-    before = snapshot(*folders), {str(p): p.stat().st_mtime_ns for p in watched if p.exists()}
+    started = time.time_ns()
+    before, before_times = snapshot(*folders), _times(watched)
     with api_client(create_app(load_settings({})), base_url=LOCAL, client=LOOPBACK) as client:
         response = client.get("/api/registry")
     if response.status_code == 503:  # the registry is being rebuilt at this moment
@@ -189,4 +218,91 @@ def test_the_real_lab_registry_answers_with_its_freshness_and_writes_nothing():
     if body["newest_input_path"] is not None:
         assert body["newest_input_path"].startswith(("results/screens/", "experiments/"))
         assert not Path(body["newest_input_path"]).is_absolute() and "\\" not in body["newest_input_path"]
-    assert (snapshot(*folders), {str(p): p.stat().st_mtime_ns for p in watched if p.exists()}) == before
+    after, after_times = snapshot(*folders), _times(watched)
+    wrong = unexplained_changes(before, after, started) + unexplained_changes(before_times, after_times, started)
+    assert wrong == [], f"changed without a write during the test: {wrong}"
+    moved = [p for p in set(before) | set(after) if before.get(p) != after.get(p)]
+    moved += [p for p in set(before_times) | set(after_times) if before_times.get(p) != after_times.get(p)]
+    if moved:
+        pytest.skip(f"the live lab wrote {sorted(moved)} during the test")
+
+
+def _snap(**files: tuple[int, str]) -> Snapshot:
+    return {name: (10, mtime, digest) for name, (mtime, digest) in files.items()}
+
+
+STARTED = 1_000
+
+
+def test_unchanged_files_are_not_a_change():
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(5, "x")), STARTED) == []
+
+
+def test_a_file_written_since_the_start_is_explained():
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(STARTED, "y")), STARTED) == []
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(5, "x"), b=(STARTED + 7, "z")), STARTED) == []
+
+
+def test_a_file_that_disappeared_is_explained():
+    assert unexplained_changes(_snap(a=(5, "x"), b=(6, "y")), _snap(a=(5, "x")), STARTED) == []
+
+
+def test_born_failing_bytes_that_changed_under_an_old_time_are_not_explained():
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(5, "y")), STARTED) == ["a"]
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(6, "x")), STARTED) == ["a"]
+
+
+def test_born_failing_a_new_file_with_an_old_time_is_not_explained():
+    assert unexplained_changes(_snap(a=(5, "x")), _snap(a=(5, "x"), b=(7, "z")), STARTED) == ["b"]
+
+
+# ---------------------------------------------------------------- a time that cannot be shown is unknown, never an error
+
+BAD_NS = (-5_000_000_000 * 10**9, 2**62 * 10**9, 10**30, -(10**30))  # before 1970, far future, beyond datetime
+
+
+@pytest.mark.parametrize("bad", BAD_NS)
+def test_born_failing_an_out_of_range_registry_time_is_unknown_never_an_error(lab, monkeypatch, bad):
+    from nq_terminal.services import registry_freshness as module
+
+    real = module._mtime_ns
+    monkeypatch.setattr(module, "_mtime_ns", lambda path: bad if path.name == "registry.md" else real(path))
+    fresh = registry_freshness(lab)
+    assert fresh.generated_at is None and fresh.stale is False
+    assert fresh.newest_input_path is not None and fresh.newest_input_at is not None  # the inputs are still reported
+
+
+@pytest.mark.parametrize("bad", BAD_NS)
+def test_born_failing_an_out_of_range_input_time_is_unknown_never_an_error(lab, monkeypatch, bad):
+    from nq_terminal.services import registry_freshness as module
+
+    monkeypatch.setattr(module, "_newest_input", lambda root: (bad, SCREEN))
+    fresh = registry_freshness(lab)
+    assert fresh.newest_input_at is None and fresh.newest_input_path == SCREEN
+    assert fresh.generated_at == iso(BASE_NS) and fresh.stale is False
+
+
+def test_born_failing_the_route_answers_for_a_registry_with_an_out_of_range_time(lab, monkeypatch):
+    from nq_terminal.services import registry_freshness as module
+
+    real = module._mtime_ns
+    monkeypatch.setattr(module, "_mtime_ns", lambda path: BAD_NS[0] if path.name == "registry.md" else real(path))
+    with api_client(create_app(load_settings({"NQT_FIXTURE_DIR": str(lab)})), base_url=LOCAL,
+                    client=LOOPBACK) as client:
+        response = client.get("/api/registry")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["generated_at"] is None and body["stale"] is False and body["counts"]["rows"] == 1
+
+
+@pytest.mark.parametrize("seconds", [-5_000_000_000, 1, 253_402_300_800])
+def test_a_file_stamped_out_of_range_on_disk_is_unknown_never_an_error(lab, seconds):
+    """The real file system, where it accepts the stamp (NTFS keeps a pre-1970 one as a negative nanosecond count)."""
+    target = lab / "results" / "registry.md"
+    try:
+        os.utime(target, ns=(max(seconds, 0) * 10**9, seconds * 10**9))
+    except (OSError, OverflowError, ValueError):
+        pytest.skip("this file system refuses the stamp")
+    fresh = registry_freshness(lab)
+    assert fresh.generated_at is None or fresh.generated_at.endswith("Z")
+    assert not (fresh.stale and fresh.generated_at is None)

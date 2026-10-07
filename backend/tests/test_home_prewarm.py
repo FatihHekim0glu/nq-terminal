@@ -29,14 +29,17 @@ from test_result_cache_routes import LOCAL, LOOPBACK, Lab
 from conftest import api_client
 
 WAIT_S = 20.0
-# The price-free warm-up first (scipy and the XNYS calendar, which HOME's EQ panel request would otherwise pay for),
-# then what HOME asks for, in the order it needs it (the run index first of the reads: HOME's GP panel requests
-# /api/runs); then the entries HOME never asks for (the ledger, which serves RecordWatch and LEDG, the deflated Sharpe,
-# EQ's bootstrap), which a first launch must not compute while HOME is loading (02 section 4.1 item 3: the first launch).
+# The price-free warm-up first (scipy's cluster and spatial modules and the XNYS calendar, none of which loads
+# scipy.stats), then what HOME asks for, in the order it needs it (the run index first of the reads: HOME's GP panel
+# requests /api/runs); then the entries HOME never asks for: `warm_stats` (nq_lab.sizing_stats and with it scipy.stats,
+# which no HOME request needs since V032: HOME's EQ panel reads the screen's stored fit), the ledger (RecordWatch,
+# LEDG), the deflated Sharpe and EQ's bootstrap, which a first launch must not compute while HOME is loading (02
+# section 4.1 item 3: the first launch).
 HOME_FIRST = ["warm", "runs", "two_day", "universe", "gp_bars"]
-AFTER_HOME = ["ledger", "deflated", "eq_bootstrap"]
+AFTER_HOME = ["warm_stats", "ledger", "deflated", "eq_bootstrap"]
 TASK_NAMES = HOME_FIRST + AFTER_HOME
-WARM_MODULES = ["nq_lab.sizing_stats", "scipy.cluster.hierarchy", "scipy.spatial.distance"]
+WARM_MODULES = ["scipy.cluster.hierarchy", "scipy.spatial.distance"]
+STATS_MODULES = ["nq_lab.sizing_stats"]
 
 
 @pytest.fixture(autouse=True)
@@ -54,7 +57,25 @@ def app_stub(*, fixture_mode: bool, ready=None) -> SimpleNamespace:
 
 
 def named(state, name: str):
-    return next(task for task in home_prewarm.home_tasks(state) if task.__name__ == name)
+    tasks = home_prewarm.home_tasks(state) + home_prewarm.later_tasks(state)
+    return next(task for task in tasks if task.__name__ == name)
+
+
+def record_imports(monkeypatch: pytest.MonkeyPatch, into: list[str]) -> None:
+    """Every `importlib.import_module` call the prewarm module itself makes from here on appends the module name to
+    `into` (the module still loads). Calls from inside the imported packages (scipy loads its own submodules this
+    way on a first import) are not the task's own and are left out."""
+    import importlib
+    import sys
+
+    real_import = importlib.import_module
+
+    def record(name, package=None):
+        if sys._getframe(1).f_globals.get("__name__") == home_prewarm.__name__:
+            into.append(name)
+        return real_import(name, package)
+
+    monkeypatch.setattr(importlib, "import_module", record)
 
 
 def count_rows(monkeypatch: pytest.MonkeyPatch) -> list[int]:
@@ -102,29 +123,101 @@ def test_the_task_list_is_the_home_layout_in_order_and_builds_without_any_read()
 
 
 def test_home_task_order():
-    """W5C D4: the warm task heads the HOME list; only the ledger moves to the front of the later list, because HOME's
-    REG reads the registry, hypotheses, multiple-testing and confirmations, never the ledger. The run index stays in the
-    HOME list (right after warm): HOME's GP panel requests /api/runs (useGpData), and on a first launch there is no
-    persisted run index, so a request that raced a later task would build it cold during HOME."""
+    """W5C D4: the warm task heads the HOME list. The later list starts with `warm_stats` (V032: scipy.stats, which no
+    HOME request needs any more), then the ledger, because HOME's REG reads the registry, hypotheses, multiple-testing
+    and confirmations, never the ledger. The run index stays in the HOME list (right after warm): HOME's GP panel
+    requests /api/runs (useGpData), and on a first launch there is no persisted run index, so a request that raced a
+    later task would build it cold during HOME."""
     state = SimpleNamespace()
     assert [t.__name__ for t in home_prewarm.home_tasks(state)] == ["warm", "runs", "two_day", "universe", "gp_bars"]
-    assert [t.__name__ for t in home_prewarm.later_tasks(state)] == ["ledger", "deflated", "eq_bootstrap"]
+    assert [t.__name__ for t in home_prewarm.later_tasks(state)] == ["warm_stats", "ledger", "deflated",
+                                                                     "eq_bootstrap"]
 
 
 def test_born_failing_nothing_home_never_asks_for_waits_but_the_run_index_is_warm_before_home_asks():
-    """The ledger (RecordWatch, LEDG), the deflated Sharpe (1.2 s cold, asked for by no HOME panel) and
-    EQ's bootstrap (HOME's EQ panel asks for /panel) wait until every HOME task ran."""
+    """scipy.stats (`warm_stats`), the ledger (RecordWatch, LEDG), the deflated Sharpe (1.2 s cold; a wide REG panel
+    asks for it only after HOME's data, see test_home_first_launch_imports) and EQ's bootstrap (HOME's EQ panel asks
+    for /panel) wait until every HOME task ran."""
     names = [t.__name__ for t in home_prewarm.home_tasks(SimpleNamespace())]
     later = [t.__name__ for t in home_prewarm.later_tasks(SimpleNamespace())]
-    assert names[0] == "warm"
+    assert names[0] == "warm" and later[0] == "warm_stats"
     assert names == HOME_FIRST and later == AFTER_HOME, "what HOME never asks for waits for a quiet process"
 
 
-def test_warm_task_reads_no_price(tmp_path, monkeypatch):
-    """The warm task imports the analytics modules HOME's EQ panel needs and builds the XNYS calendar once, with no
-    serve call, no gate line and no bump of the process serve counter."""
-    import importlib
+def test_born_failing_the_warm_task_leaves_scipy_stats_to_the_later_stage(monkeypatch):
+    """V032: HOME's requests need no scipy.stats, so the HOME-stage warm task must not import nq_lab.sizing_stats (it
+    loads scipy.stats at module level); `warm_stats`, the first later task, imports exactly that and nothing else."""
+    imported: list[str] = []
+    record_imports(monkeypatch, imported)
+    monkeypatch.setattr(data, "last_sessions", lambda *a, **k: [])
+    named(SimpleNamespace(), "warm")()
+    assert "nq_lab.sizing_stats" not in imported and not any(n.startswith("scipy.stats") for n in imported)
+    imported.clear()
+    named(SimpleNamespace(), "warm_stats")()
+    assert imported == STATS_MODULES
 
+
+def test_warm_stats_reads_no_price(tmp_path, monkeypatch):
+    """`warm_stats` imports nq_lab.sizing_stats with no serve call, no gate line and no bump of the serve counter."""
+    from nq_terminal.services import result_cache
+
+    lab = Lab(tmp_path, "warm_stats").build()
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the warm_stats task must not serve a price")
+
+    lab.app.state.serve_fn = refuse
+    imported: list[str] = []
+    record_imports(monkeypatch, imported)
+    serves, lines = result_cache.serve_count(), len(gate_lines(lab))
+    named(lab.app.state, "warm_stats")()
+    assert imported == STATS_MODULES
+    assert result_cache.serve_count() == serves and len(gate_lines(lab)) == lines
+
+
+def test_born_failing_scipy_stats_is_imported_after_the_home_stage_and_before_the_ledger(tmp_path, monkeypatch):
+    """The real lists through the real prewarm thread (quiet always true): one event list fed by the stage hook, the
+    import recorder and the ledger's route callable. The sizing_stats import comes after STAGE_TASKS (HOME's stage is
+    over) and before the ledger starts (warm_stats is the first later task)."""
+    from nq_terminal.api import runs as runs_api
+
+    lab = Lab(tmp_path, "order").build()
+    events: list[str] = []
+    lock = threading.Lock()
+
+    def note(event: str) -> None:
+        with lock:
+            events.append(event)
+
+    class Recorder(list):
+        def append(self, name: str) -> None:  # type: ignore[override]
+            note(f"import:{name}")
+            super().append(name)
+
+    record_imports(monkeypatch, Recorder())
+    real_ledger = runs_api.cached_ledger
+
+    def ledger(state):
+        note("ledger")
+        return real_ledger(state)
+
+    monkeypatch.setattr(runs_api, "cached_ledger", ledger)
+    state = lab.app.state
+    thread = prewarm.start_prewarm(home_prewarm.home_tasks(state), True, later=home_prewarm.later_tasks(state),
+                                   quiet=lambda: True, on_stage=lambda stage: note(f"stage:{stage}"))
+    assert thread is not None
+    thread.join(WAIT_S * 3)
+    assert not thread.is_alive()
+    stats = events.index("import:nq_lab.sizing_stats")
+    assert events.count("import:nq_lab.sizing_stats") == 1
+    assert events.index(f"stage:{prewarm.STAGE_TASKS}") < stats < events.index("ledger")
+    assert events.index("import:scipy.cluster.hierarchy") < events.index(f"stage:{prewarm.STAGE_TASKS}")
+    assert events[-1] == f"stage:{prewarm.STAGE_LATER}"
+
+
+def test_warm_task_reads_no_price(tmp_path, monkeypatch):
+    """The warm task imports scipy's cluster and spatial modules (no scipy.stats) and builds the XNYS calendar once,
+    with no serve call, no gate line and no bump of the process serve counter."""
     from nq_terminal.services import result_cache
 
     lab = Lab(tmp_path, "warm").build()
@@ -134,13 +227,7 @@ def test_warm_task_reads_no_price(tmp_path, monkeypatch):
 
     lab.app.state.serve_fn = refuse
     imported: list[str] = []
-    real_import = importlib.import_module
-
-    def record(name, package=None):
-        imported.append(name)
-        return real_import(name, package)
-
-    monkeypatch.setattr(importlib, "import_module", record)
+    record_imports(monkeypatch, imported)
     sessions: list[int] = []
     real_last = data.last_sessions
 
@@ -152,6 +239,7 @@ def test_warm_task_reads_no_price(tmp_path, monkeypatch):
     serves, lines = result_cache.serve_count(), len(gate_lines(lab))
     named(lab.app.state, "warm")()
     assert [name for name in imported if name in WARM_MODULES] == WARM_MODULES
+    assert "nq_lab.sizing_stats" not in imported, "scipy.stats is the later stage's warm_stats, not HOME's warm"
     assert sessions == [1], "the XNYS calendar is built through the route's own helper"
     assert result_cache.serve_count() == serves and len(gate_lines(lab)) == lines
 

@@ -72,7 +72,10 @@ async function main() {
   }
   const pytestWait = usesRealData(args) ? await waitBeforeRealData() : null
   const outDir = args.opt('out', null) ?? newRunFolder(mode + (args.flag('dry') ? '-dry' : ''))
-  if (pytestWait?.waited || pytestWait?.ignored.length) fs.writeFileSync(path.join(outDir, 'pytest-wait.json'), JSON.stringify(pytestWait, null, 2) + '\n')
+  if (pytestWait?.waited || pytestWait?.ignored.length) {
+    fs.mkdirSync(outDir, { recursive: true }) // --out names a folder that the modes only create later
+    fs.writeFileSync(path.join(outDir, 'pytest-wait.json'), JSON.stringify(pytestWait, null, 2) + '\n')
+  }
   const provenance = readProvenance()
   const cBefore = cFreeMB()
   console.log(`output ${outDir}`)

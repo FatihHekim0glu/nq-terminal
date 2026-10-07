@@ -18,8 +18,9 @@ kind of line (05 G02), and a cache hit logs nothing, exactly as for a page reque
 - `ready` (optional) is polled until it returns true before the first task (the lifespan hook runs before the
   listening socket exists). `python -m nq_terminal` hands it a `StartGate` (V021): the tasks begin only once the
   `NQT-READY` line is printed and the first identity proof has been answered, so the shell's first proof never shares
-  the interpreter with the prewarm's imports. In launcher mode (`start.ps1`) the gate opens on READY
-  (`LAUNCHER_FALLBACK_S`, V031): the launcher proves by a poll every 400 ms, which held the prewarm back up to 532 ms
+  the interpreter with the prewarm's imports (the app's first task imports scipy's cluster and spatial modules;
+  since V032 scipy.stats waits for a later task, `api/home_prewarm.py`). In launcher mode (`start.ps1`) the gate
+  opens on READY (`LAUNCHER_FALLBACK_S`, V031): the launcher proves by a poll every 400 ms, which held the prewarm back up to 532 ms
   after READY when measured, more than the 500 ms allowed before HOME data, and the launcher retries a slow proof
   anyway. In browser mode, where no proof may come, the gate also opens `PROOF_FALLBACK_S` seconds after READY. A
   check that never turns true, or that raises, delays the start by at most `ready_timeout` seconds and the tasks then

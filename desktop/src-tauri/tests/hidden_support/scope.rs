@@ -6,8 +6,10 @@
 //! window (the Logitech Options+ helper program, a chat or overlay program, anything the owner opens) is filed apart in the
 //! report's `foreign` list and never fails a run. The owner's process is read when the event is seen, from one Toolhelp
 //! snapshot, because the window may be gone by the time the verdict is made. Windows that system hosts draw for a run from
-//! outside its tree (WerFault, Windows Terminal, conhost, csrss, dllhost; a console or Windows Terminal window class) always
-//! count (`SYSTEM_HOST_IMAGES`, `SYSTEM_HOST_CLASSES`). An event whose owner cannot be traced (the
+//! outside its tree (WerFault, Windows Terminal, conhost, csrss, dllhost; a console or Windows Terminal window class) count
+//! when they appear during the run (`SYSTEM_HOST_IMAGES`, `SYSTEM_HOST_CLASSES`), and so does a focus change to one of
+//! them. A focus change to a host window that was already open when the watch started (the owner's own Windows Terminal)
+//! does not: the run did not cause it (`HostWindows`, owner decision of 3 October 2026). An event whose owner cannot be traced (the
 //! process has already gone, or the foreground is nobody's) fails closed: it is counted like an own window.
 //!
 //! `KNOWN_FOREIGN` names the programs seen on this PC so far, and NQT_KNOWN_FOREIGN (image names separated by semicolons)
@@ -18,7 +20,7 @@
     reason = "each test binary that includes this file uses a part of it"
 )]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Foreign programs known to put windows up during a run, by image name (compared without case).
 pub const KNOWN_FOREIGN: [&str; 1] = ["logioptionsplus_agent.exe"];
@@ -76,6 +78,43 @@ pub fn is_foreign_window(chain: &[Link], class: &str, root: u32) -> bool {
         && !SYSTEM_HOST_CLASSES
             .iter()
             .any(|name| class.eq_ignore_ascii_case(name))
+}
+
+/// Whether the window is one a system host draws: its owner's image is on `SYSTEM_HOST_IMAGES`, or its class is on
+/// `SYSTEM_HOST_CLASSES` (whichever process draws it).
+fn is_host_window(chain: &[Link], class: &str) -> bool {
+    is_system_host(chain)
+        || SYSTEM_HOST_CLASSES
+            .iter()
+            .any(|name| class.eq_ignore_ascii_case(name))
+}
+
+/// The host windows that appeared during the run, by handle, so that a focus change can be told from the owner's own use
+/// of a terminal that was already open. Call `note_new` for every new window the watch reports (before judging the focus
+/// of the same tick) and `foreground_counts` for every change of the foreground window. `is_foreign_window` stays the
+/// rule for a new window.
+#[derive(Debug, Default)]
+pub struct HostWindows {
+    born: HashSet<isize>,
+}
+
+impl HostWindows {
+    /// Records a window the watch saw appear; only a host window is kept.
+    pub fn note_new(&mut self, hwnd: isize, chain: &[Link], class: &str) {
+        if is_host_window(chain, class) {
+            self.born.insert(hwnd);
+        }
+    }
+
+    /// Whether a change of the foreground window to `hwnd` counts against the run: an owner that cannot be traced and
+    /// the run's own tree count; another program's window does not; a host window counts only when it appeared during
+    /// the run, and one with no handle (0) counts because it cannot be shown to be older than the run.
+    pub fn foreground_counts(&self, hwnd: isize, chain: &[Link], class: &str, root: u32) -> bool {
+        if chain.is_empty() || chain.iter().any(|link| link.pid == root) {
+            return true;
+        }
+        is_host_window(chain, class) && (hwnd == 0 || self.born.contains(&hwnd))
+    }
 }
 
 /// The image names this PC adds through NQT_KNOWN_FOREIGN.

@@ -3,7 +3,7 @@
   Silent per-user install and uninstall of a Tauri NSIS installer, with the window watch on (04 D5.4, D5.1).
 
 .DESCRIPTION
-  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.3.1\<name>_0.3.1_x64-setup.exe
+  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.3.2\<name>_0.3.2_x64-setup.exe
   powershell -NoProfile -File desktop\scripts\install-test.ps1 -SelfTest [-Installer <installer>]
 
   The install goes to <InstallRoot>\<Run> (default D:\dev\d5\install\<run>), never anywhere else, and the app is
@@ -69,7 +69,7 @@
   inherited and no broad writer, no shortcut, the app not started, and the stand-in state hashes as seeded. After each
   uninstall: no file left, the uninstall entry gone, the stand-in state unchanged (the silent uninstaller keeps data).
   The seeded state is removed at the end. The old version must be strictly lower than the new one.
-  -BuildRenamed <ref> builds the renamed-product installer of a git ref (a tag such as desktop-v0.3.1, or HEAD) in a
+  -BuildRenamed <ref> builds the renamed-product installer of a git ref (a tag such as desktop-v0.3.2, or HEAD) in a
   temporary detached worktree under D:\dev\wt, with CARGO_TARGET_DIR -TargetDir (default D:\dev\targets\v012), into
   <BuildOut>\<version>-<commit>\ laid out as build-release.ps1 lays out a release folder (installer, nsis\installtest,
   payload\installtest, BUILD.json); -BuildVersion sets a higher version for the build (an upgrade target from a tree

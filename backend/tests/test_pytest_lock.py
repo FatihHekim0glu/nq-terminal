@@ -123,3 +123,110 @@ def test_a_pytest_session_creates_its_lock_and_removes_it_at_the_end(tmp_path: P
     assert "1 passed" in run.stdout, run.stdout[-2000:]
     assert folder.is_dir(), "the session made the locks folder"
     assert list(folder.glob("PYTEST.*.lock")) == [], "the lock is removed at session end"
+
+
+# ---------------------------------------------------------------- a live session keeps its lock fresh (V032)
+
+
+def _age(path: Path, seconds: float) -> float:
+    when = time.time() - seconds
+    os.utime(path, (when, when))
+    return when
+
+
+def _wait_until(condition, timeout: float = 20.0) -> bool:
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if condition():
+            return True
+        time.sleep(0.01)
+    return condition()
+
+
+def test_born_failing_one_refresh_moves_the_lock_time_forward(tmp_path: Path):
+    path = write_session_lock(tmp_path, os.getpid())
+    old = _age(path, 90 * 60)
+    conftest.refresh_session_lock(path)
+    assert path.stat().st_mtime > old + 60 * 60
+    assert fresh_session_locks(tmp_path) == [path]
+
+
+def test_born_failing_a_refresher_keeps_a_session_past_two_hours_fresh(tmp_path: Path):
+    """Without a refresh a lock written at the start of a long session reads as stale after two hours."""
+    path = write_session_lock(tmp_path, os.getpid())
+    _age(path, 2 * HOUR + 600)
+    assert fresh_session_locks(tmp_path) == []
+    refresher = conftest.LockRefresher(path, interval_s=0.01)
+    refresher.start()
+    try:
+        assert _wait_until(lambda: fresh_session_locks(tmp_path) == [path])
+    finally:
+        refresher.stop()
+
+
+def test_a_stopped_refresher_leaves_the_lock_alone(tmp_path: Path):
+    path = write_session_lock(tmp_path, os.getpid())
+    refresher = conftest.LockRefresher(path, interval_s=0.01)
+    refresher.start()
+    refresher.stop()
+    assert not refresher.alive()
+    before = _age(path, 600)
+    time.sleep(0.2)
+    assert path.stat().st_mtime == pytest.approx(before, abs=1.0)
+
+
+def test_a_refresh_that_fails_is_one_note_and_never_an_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    path = tmp_path / "PYTEST.1.lock"  # not written: the refresh cannot find it
+    notes: list[str] = []
+    monkeypatch.setattr(conftest, "_NOTES", notes)
+    refresher = conftest.LockRefresher(path, interval_s=60)
+    refresher.run_once()
+    refresher.run_once()
+    assert len(notes) == 1 and "PYTEST.1.lock" in notes[0] and "not refreshed" in notes[0], notes
+
+
+def test_the_refresh_interval_is_far_below_the_stale_limit():
+    assert 0 < conftest.PYTEST_LOCK_REFRESH_S <= conftest.PYTEST_LOCK_STALE_S / 6
+
+
+def test_the_session_hooks_start_and_stop_the_refresher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    class Config:
+        pass
+
+    class Session:
+        config = Config()
+
+    monkeypatch.setenv("NQT_LOCK_DIR", str(tmp_path))
+    monkeypatch.setattr(conftest, "_SESSION_LOCK", [])
+    monkeypatch.setattr(conftest, "_LOCK_REFRESHERS", [])
+    monkeypatch.setattr(conftest, "PYTEST_LOCK_REFRESH_S", 0.01)
+    conftest.pytest_sessionstart(Session())
+    (lock,) = conftest._SESSION_LOCK
+    (refresher,) = conftest._LOCK_REFRESHERS
+    assert refresher.alive()
+    _age(lock, 2 * HOUR + 600)
+    assert _wait_until(lambda: fresh_session_locks(tmp_path) == [lock])
+    conftest.pytest_sessionfinish(Session(), 0)
+    assert not refresher.alive() and not lock.exists() and conftest._LOCK_REFRESHERS == []
+
+
+def test_born_failing_a_lock_that_cannot_be_written_is_said_at_once_and_noted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                                              capsys: pytest.CaptureFixture):
+    class Config:
+        pass
+
+    class Session:
+        config = Config()
+
+    def refuse(folder, pid):
+        raise PermissionError(13, "Access is denied")
+
+    notes: list[str] = []
+    monkeypatch.setattr(conftest, "_NOTES", notes)
+    monkeypatch.setattr(conftest, "_SESSION_LOCK", [])
+    monkeypatch.setattr(conftest, "_LOCK_REFRESHERS", [])
+    monkeypatch.setattr(conftest, "write_session_lock", refuse)
+    conftest.pytest_sessionstart(Session())
+    err = capsys.readouterr().err
+    assert "PYTEST lock not written" in err and "cannot see this session" in err
+    assert len(notes) == 1 and conftest._SESSION_LOCK == [] and conftest._LOCK_REFRESHERS == []

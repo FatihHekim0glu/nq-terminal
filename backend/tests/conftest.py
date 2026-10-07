@@ -45,8 +45,10 @@ backend's output names one.
 Serialised sessions (0.3.1). A session creates `PYTEST.<pid>.lock` in the locks folder (D:/dev/locks, or NQT_LOCK_DIR)
 while it runs and removes it at the end (`pytest_sessionstart` and `pytest_sessionfinish`, the xdist controller only);
 a lock older than two hours is stale, and so is one whose process is not running (`fresh_session_locks`, as in check.ps1).
-`desktop/scripts/check.ps1` waits while a fresh one exists before its real-backend smoke steps. A lock that cannot be written
-or removed (a PermissionError) is reported in the terminal summary and never fails the session.
+A thread of the controller process touches the lock every ten minutes (`LockRefresher`), so a session that outlasts two
+hours still counts as running. `desktop/scripts/check.ps1` waits while a fresh one exists before its real-backend smoke
+steps. A lock that cannot be written is said on stderr at once and again in the terminal summary; one that cannot be
+refreshed or removed is a note in the summary. None of them fails the session.
 """
 from __future__ import annotations
 
@@ -102,7 +104,9 @@ _NOTES: list[str] = []
 
 PYTEST_LOCK_DIR = Path(r"D:\dev\locks")
 PYTEST_LOCK_STALE_S = 2 * 60 * 60
+PYTEST_LOCK_REFRESH_S = 10 * 60  # a long session touches its lock this often, well inside the stale limit
 _SESSION_LOCK: list[Path] = []
+_LOCK_REFRESHERS: list["LockRefresher"] = []
 
 
 def session_lock_dir() -> Path:
@@ -115,12 +119,52 @@ def session_lock_path(pid: int, folder: Path | None = None) -> Path:
 
 
 def write_session_lock(folder: Path, pid: int) -> Path:
-    """Creates (or refreshes) this session's lock; the body says who holds it and since when."""
+    """Creates this session's lock; the body says who holds it and since when. `refresh_session_lock` keeps it fresh."""
     folder.mkdir(parents=True, exist_ok=True)
     path = session_lock_path(pid, folder)
     started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     path.write_text(json.dumps({"pid": pid, "started": started, "argv": sys.argv[:12]}) + "\n", encoding="utf-8")
     return path
+
+
+def refresh_session_lock(path: Path) -> None:
+    """Moves the lock's modification time to now; OSError when the file is gone or cannot be changed."""
+    os.utime(path, None)
+
+
+class LockRefresher:
+    """A daemon thread that touches the session's lock every `interval_s` until stopped (a failure is noted once)."""
+
+    def __init__(self, path: Path, interval_s: float):
+        self._path, self._interval_s = Path(path), interval_s
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._noted = False
+
+    def run_once(self) -> None:
+        try:
+            refresh_session_lock(self._path)
+        except OSError as error:
+            if not self._noted:
+                self._noted = True
+                _NOTES.append(f"PYTEST lock {self._path.name} not refreshed ({error}); it goes stale after two hours")
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval_s):
+            self.run_once()
+
+    def start(self) -> "LockRefresher":
+        self._thread = threading.Thread(target=self._run, name="pytest-lock-refresh", daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
 
 
 def remove_session_lock(path: Path) -> bool:
@@ -189,12 +233,17 @@ def pytest_sessionstart(session):
     try:
         _SESSION_LOCK.append(write_session_lock(session_lock_dir(), os.getpid()))
     except OSError as error:
-        _NOTES.append(f"PYTEST lock not written ({error}); check.ps1 cannot see this session")
+        text = f"PYTEST lock not written ({error}); check.ps1 and the harness cannot see this session"
+        sys.stderr.write(text + "\n")  # at once: the waiting scripts cannot see the lock for the whole session
+        _NOTES.append(text)
         return
     atexit.register(remove_session_lock, _SESSION_LOCK[0])  # a session that ends without sessionfinish
+    _LOCK_REFRESHERS.append(LockRefresher(_SESSION_LOCK[0], PYTEST_LOCK_REFRESH_S).start())
 
 
 def pytest_sessionfinish(session, exitstatus):
+    while _LOCK_REFRESHERS:
+        _LOCK_REFRESHERS.pop().stop()
     while _SESSION_LOCK:
         remove_session_lock(_SESSION_LOCK.pop())
 

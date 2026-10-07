@@ -73,8 +73,12 @@ export function processChain(pid: number): ProcessLink[] {
  * System host images and window classes (compared without case) that draw windows on behalf of other processes: a crash
  * dialog (WerFault, started by the WER service), the console of a child spawned without CREATE_NO_WINDOW (Windows Terminal,
  * OpenConsole, conhost), loader boxes (csrss) and dllhost. Such a window can be this run's own doing from outside its tree,
- * so it always counts. Only the owner's image is judged. The same lists are in desktop/harness/lib/winwatch.mjs and in the
- * Rust watches (hidden_support/scope.rs).
+ * so a host window that appears during the run always counts, and so does a focus change to it. A focus change to a host
+ * window that was already open when the watch started (the owner's own Windows Terminal) does not: the run did not cause
+ * it, so it is a note (owner decision, 3 October 2026). watch.ps1's lines carry no window handle, so a host window is told
+ * apart by its process id and class: one named by a `new` line is the run's own. A focus change with no process id or
+ * class cannot be shown to be older than the run, so it counts. Only the owner's image is judged. The same lists are in
+ * desktop/harness/lib/winwatch.mjs and in the Rust watches (hidden_support/scope.rs).
  */
 export const SYSTEM_HOST_IMAGES: readonly string[] = ['werfault.exe', 'windowsterminal.exe', 'openconsole.exe', 'conhost.exe', 'csrss.exe', 'dllhost.exe']
 export const SYSTEM_HOST_CLASSES: readonly string[] = ['consolewindowclass', 'cascadia_hosting_window_class']
@@ -90,30 +94,44 @@ export interface WatchReport {
   readonly maxGapMs: number
 }
 
+/** The key that tells one host window from another in watch.ps1's lines (no handle there): its process id and class. */
+const hostKey = (e: WatchEvent): string | null => (e.pid === undefined || e.class === undefined ? null : `${e.pid}|${e.class.toLowerCase()}`)
+
+/** The host windows (by `hostKey`) that a `new` line named during the run. */
+const bornHosts = (events: readonly WatchEvent[]): ReadonlySet<string> =>
+  new Set(events.filter((e) => e.event === 'new' && drawnByHost(e)).map(hostKey).filter((k): k is string => k !== null))
+
+/** A focus change to a host window that was already open when the watch started: the run did not cause it. */
+const hostBeforeRun = (e: WatchEvent, born: ReadonlySet<string>): boolean => {
+  const key = hostKey(e)
+  return e.event === 'foreground' && drawnByHost(e) && key !== null && !born.has(key)
+}
+
 /** Another program's event: the run's app is known, the event's owner was traced, and its ancestry does not hold that app. */
-const foreign = (e: WatchEvent, rootPid?: number): boolean =>
-  rootPid !== undefined && e.chain !== undefined && e.chain.length > 0 && !ownedBy(e, rootPid) && !drawnByHost(e)
+const foreign = (e: WatchEvent, rootPid: number | undefined, born: ReadonlySet<string>): boolean =>
+  rootPid !== undefined && e.chain !== undefined && e.chain.length > 0 && !ownedBy(e, rootPid) && (!drawnByHost(e) || hostBeforeRun(e, born))
 
 /** The note's label for a foreign event: its owner image, and whether the image is on the named list. */
-const foreignLabel = (e: WatchEvent): string => {
+const foreignLabel = (e: WatchEvent, born: ReadonlySet<string>): string => {
   const owner = e.chain?.[0]?.name ?? e.process ?? '?'
+  if (hostBeforeRun(e, born)) return `host window present before the run: ${owner}`
   return knownNames().includes(owner.toLowerCase()) ? `known foreign program: ${owner}` : `foreign program not on the list: ${owner}`
 }
 
-const describe = (e: WatchEvent, rootPid?: number): string => {
+const describe = (e: WatchEvent, rootPid: number | undefined, born: ReadonlySet<string>): string => {
   const traced = e.chain !== undefined && e.chain.length > 0
-  const owner = rootPid === undefined ? '' : !traced ? ' [owner not traced]' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ${foreignLabel(e)}; ancestry ${(e.chain ?? []).map((l) => `${l.name}:${l.pid}`).join(' < ')}]`
+  const owner = rootPid === undefined ? '' : !traced ? ' [owner not traced]' : ownedBy(e, rootPid) ? ' [this run\'s app tree]' : ` [NOT this run's app tree; ${foreignLabel(e, born)}; ancestry ${(e.chain ?? []).map((l) => `${l.name}:${l.pid}`).join(' < ')}]`
   return `${e.process ?? '?'} (pid ${e.pid ?? '?'}) class ${JSON.stringify(e.class ?? '')} title ${JSON.stringify(e.title ?? '')} rect ${JSON.stringify(e.rect ?? [])}${owner}`
 }
 
 /** The finding an event stands for (a drawn new window, an undrawn one that is not tao's, a foreground change), or null. */
-function finding(e: WatchEvent, rootPid?: number): string | null {
+function finding(e: WatchEvent, rootPid: number | undefined, born: ReadonlySet<string>): string | null {
   if (e.event === 'new') {
-    if (e.drawn === true) return `a window was drawn: ${describe(e, rootPid)}`
-    if (e.class !== TAO_CLASS) return `an unexpected undrawn window appeared: ${describe(e, rootPid)}`
+    if (e.drawn === true) return `a window was drawn: ${describe(e, rootPid, born)}`
+    if (e.class !== TAO_CLASS) return `an unexpected undrawn window appeared: ${describe(e, rootPid, born)}`
     return null
   }
-  if (e.event === 'foreground') return `the foreground window changed to: ${describe(e, rootPid)}`
+  if (e.event === 'foreground') return `the foreground window changed to: ${describe(e, rootPid, born)}`
   return null
 }
 
@@ -131,9 +149,10 @@ export interface Verdict {
 export function assess(events: readonly WatchEvent[], rootPid?: number): Verdict {
   const failures: string[] = []
   const notes: string[] = []
+  const born = bornHosts(events)
   for (const e of events) {
-    const line = finding(e, rootPid)
-    if (line !== null) (foreign(e, rootPid) ? notes : failures).push(line)
+    const line = finding(e, rootPid, born)
+    if (line !== null) (foreign(e, rootPid, born) ? notes : failures).push(line)
   }
   return { failures, notes }
 }

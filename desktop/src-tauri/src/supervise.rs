@@ -8,10 +8,16 @@
 //! grandchild are in the job from their first instruction (fallback: CREATE_SUSPENDED, assign, resume). TOKEN and
 //! NONCE go on stdin; a reader thread drains stdout and stderr into backend.log through writes.rs from the first byte,
 //! and the handshake is the first `NQT-` line only. The checks are in supervise_check.rs, the attach, the watch and
-//! the restarts in supervise_run.rs, and the window side in supervise_shell.rs.
+//! the restarts in supervise_run.rs, the window side in supervise_shell.rs, and the on-screen IB snapshot switch
+//! (two exact addresses the navigation check recognises, then a native confirm) in ib_switch.rs, with the fault rules
+//! that refuse a switch the backend would refuse in supervise_ib_faults.rs.
 
 #[path = "supervise_check.rs"]
 pub mod check;
+#[path = "supervise_ib_faults.rs"]
+pub mod ib_faults;
+#[path = "ib_switch.rs"]
+pub mod ib_switch;
 #[path = "supervise_retry.rs"]
 pub mod retry;
 #[path = "supervise_run.rs"]

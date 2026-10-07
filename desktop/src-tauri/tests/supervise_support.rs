@@ -85,6 +85,16 @@ pub mod window {
         pub lab: Option<std::path::PathBuf>,
         pub ib_snapshot: bool,
     }
+
+    /// No settings file in the supervision tests: the IB switch has nothing to compare with.
+    pub fn ib_snapshot_stored() -> Option<bool> {
+        None
+    }
+
+    /// Never writes: the supervision tests have no settings file.
+    pub fn store_ib_snapshot(_on: bool) -> Result<(), String> {
+        Err("test support: no settings file".into())
+    }
 }
 
 #[path = "../src/reads.rs"]
@@ -261,6 +271,26 @@ pub mod dialogs {
             serde_json::json!({ "dialog": "confirm_close_running_job" }),
         );
         Confirm::Cancel
+    }
+
+    /// Fails closed, as src/dialogs.rs does in a test build: the IB switch is never confirmed.
+    pub fn confirm_ib_snapshot<R: Runtime>(
+        _owner: Owner<'_, R>,
+        _on: bool,
+        _text: &str,
+    ) -> Confirm {
+        super::crash::log(
+            "dialog_refused",
+            serde_json::json!({ "dialog": "confirm_ib_snapshot" }),
+        );
+        Confirm::Cancel
+    }
+
+    pub fn ib_snapshot_note<R: Runtime>(_owner: Owner<'_, R>, _text: &str) {
+        super::crash::log(
+            "dialog_refused",
+            serde_json::json!({ "dialog": "ib_snapshot_note" }),
+        );
     }
 }
 

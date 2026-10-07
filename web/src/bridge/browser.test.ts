@@ -22,9 +22,15 @@ describe('the browser bridge carries the shell facts it was built with', () => {
   })
 
   it('reports an injected shell as it is: the save and copy code is the same in every shell', () => {
-    const bridge = browserBridge({ bridgeVersion: 1, platform: 'windows', keys: 'pc' })
+    const bridge = browserBridge({ bridgeVersion: 1, platform: 'windows', keys: 'pc', ibSnapshot: null })
     expect(bridge.bridgeVersion).toBe(1)
     expect(bridge.platform).toBe('windows')
+  })
+
+  it('carries the IB snapshot state the shell stated, null in a browser', () => {
+    expect(browserBridge(BROWSER_SHELL).ibSnapshot).toBeNull()
+    expect(browserBridge({ bridgeVersion: 3, platform: 'windows', keys: 'pc', ibSnapshot: true }).ibSnapshot).toBe(true)
+    expect(browserBridge({ bridgeVersion: 3, platform: 'windows', keys: 'pc', ibSnapshot: false }).ibSnapshot).toBe(false)
   })
 })
 
@@ -78,7 +84,7 @@ describe('saveFile: the object-URL anchor of today', () => {
 })
 
 describe('saveFile in a shell that reports how each save ended (bridgeVersion 2)', () => {
-  const SHELL_V2 = { bridgeVersion: 2, platform: 'windows', keys: 'pc' } as const
+  const SHELL_V2 = { bridgeVersion: 2, platform: 'windows', keys: 'pc', ibSnapshot: null } as const
   const outcomeEvent = (uri: string, outcome: unknown) =>
     new CustomEvent(SAVE_OUTCOME_EVENT, { detail: { uri, outcome } })
 
@@ -99,6 +105,13 @@ describe('saveFile in a shell that reports how each save ended (bridgeVersion 2)
     expect(ended).toBeNull()
     window.dispatchEvent(outcomeEvent('blob:one', 'saved'))
     expect(await result).toBe('saved')
+  })
+
+  it('waits for the shell in a shell of bridgeVersion 3 too (the IB switch version keeps the save outcomes)', async () => {
+    clickSpy('blob:three')
+    const result = browserBridge({ bridgeVersion: 3, platform: 'windows', keys: 'pc', ibSnapshot: false }).saveFile('a.csv', new Blob(['x']))
+    window.dispatchEvent(outcomeEvent('blob:three', 'cancelled'))
+    expect(await result).toBe('cancelled')
   })
 
   it.each(['saved', 'cancelled', 'failed'] as const)('ends as %s when the shell says so for its object URL', async (said) => {
@@ -178,7 +191,7 @@ describe('saveFile in a shell that reports how each save ended (bridgeVersion 2)
 
   it('leaves a shell of bridgeVersion 1, which cannot report, saying saved at the click', async () => {
     clickSpy()
-    expect(await browserBridge({ bridgeVersion: 1, platform: 'windows', keys: 'pc' }).saveFile('a.csv', new Blob(['x']))).toBe('saved')
+    expect(await browserBridge({ bridgeVersion: 1, platform: 'windows', keys: 'pc', ibSnapshot: null }).saveFile('a.csv', new Blob(['x']))).toBe('saved')
   })
 })
 

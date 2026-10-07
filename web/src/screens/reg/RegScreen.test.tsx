@@ -211,6 +211,33 @@ describe('REG: registry board', () => {
     expect(seen.some((s) => s.url === '/api/analytics/deflated')).toBe(false)
   })
 
+  it('a wide REG asks for SV3 only after the registry and the hypotheses have answered, so its scipy.stats import follows the last HOME response', async () => {
+    stubWidth(1400)
+    stubApi()
+    const seen: { url: string }[] = []
+    const answer = vi.mocked(globalThis.fetch).getMockImplementation()!
+    let release: () => void = () => {}
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const order: string[] = []
+    vi.mocked(globalThis.fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      seen.push({ url })
+      order.push("ask "+url)
+      if (url === '/api/hypotheses') await held
+      const response = await answer(input, init)
+      order.push("got "+url)
+      return response
+    })
+    mountScreen(<RegScreen params={panelParams('REG')} context={null} />)
+    await waitFor(() => expect(seen.some((s) => s.url === '/api/hypotheses')).toBe(true))
+    await new Promise((r) => setTimeout(r, 80))
+    expect(seen.some((s) => s.url === '/api/analytics/deflated')).toBe(false)
+    release()
+    await waitFor(() => expect(seen.some((s) => s.url === '/api/analytics/deflated')).toBe(true))
+    expect(order.indexOf('ask /api/analytics/deflated')).toBeGreaterThan(order.indexOf('got /api/hypotheses'))
+    expect(order.indexOf('ask /api/analytics/deflated')).toBeGreaterThan(order.indexOf('got /api/registry'))
+  })
+
   it('shows the DSR of each registered trial ([POST HOC]) in its own column, and none for a check row', async () => {
     stubWidth(1400)
     stubApi()

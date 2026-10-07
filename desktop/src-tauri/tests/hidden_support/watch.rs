@@ -28,6 +28,8 @@ pub const TAO_CLASS: &str = "Tao Thread Event Target";
 
 #[derive(Clone, Debug)]
 pub struct Seen {
+    /// The window handle (0 when not known, as in a planted test window).
+    pub hwnd: isize,
     pub pid: u32,
     pub class: String,
     pub title: String,
@@ -46,11 +48,14 @@ pub struct WatchReport {
     pub new_visible: Vec<Seen>,
     pub foreground_changes: Vec<Seen>,
     pub foreign: Vec<Seen>,
+    /// The host windows that appeared during the run (see `scope::HostWindows`).
+    pub hosts: scope::HostWindows,
 }
 
 impl WatchReport {
     /// Files a new window by its owner; true when it counts against the run.
     pub fn record_window(&mut self, w: Seen, root: u32) -> bool {
+        self.hosts.note_new(w.hwnd, &w.chain, &w.class);
         let counts = !scope::is_foreign_window(&w.chain, &w.class, root);
         if counts {
             self.new_visible.push(w);
@@ -60,12 +65,16 @@ impl WatchReport {
         counts
     }
 
-    /// Files a foreground change by the owner of the window that took the foreground.
+    /// Files a foreground change by the owner of the window that took the foreground; a host window that was already open
+    /// when the watch started (the owner's own terminal) does not count (`scope::HostWindows`).
     pub fn record_foreground(&mut self, w: Seen, root: u32) {
-        if scope::is_foreign_window(&w.chain, &w.class, root) {
-            self.foreign.push(w);
-        } else {
+        if self
+            .hosts
+            .foreground_counts(w.hwnd, &w.chain, &w.class, root)
+        {
             self.foreground_changes.push(w);
+        } else {
+            self.foreign.push(w);
         }
     }
 
@@ -122,6 +131,7 @@ pub fn describe(handle: isize) -> Seen {
         let area = i64::from((r.right - r.left).max(0)) * i64::from((r.bottom - r.top).max(0));
         let drawn = IsWindowVisible(hwnd).as_bool() && cloaked == 0 && area > 0 && !undrawn_layer;
         Seen {
+            hwnd: handle,
             pid,
             class: String::from_utf16_lossy(&class[..n]),
             title: String::from_utf16_lossy(&title[..m]),
@@ -220,6 +230,7 @@ pub fn failures(report: &WatchReport) -> Vec<String> {
 pub fn seen(class: &str, drawn: bool) -> Seen {
     let (title, rect) = (String::new(), (0, 0, 1, 1));
     Seen {
+        hwnd: 0,
         pid: 1,
         class: class.into(),
         title,
@@ -253,6 +264,7 @@ pub fn report(new_visible: Vec<Seen>, foreground_changes: Vec<Seen>) -> WatchRep
         new_visible,
         foreground_changes,
         foreign: Vec::new(),
+        hosts: scope::HostWindows::default(),
     }
 }
 

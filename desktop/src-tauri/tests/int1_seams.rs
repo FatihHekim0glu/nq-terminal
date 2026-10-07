@@ -388,7 +388,7 @@ fn check_store_and_export(port: u16, dirs: &Dirs) {
         serde_json::from_str(first[2].as_str().unwrap_or("null")).unwrap_or(Value::Null);
     assert_eq!(
         shell_object,
-        json!({ "bridgeVersion": 2, "platform": "windows", "keys": "pc" }),
+        json!({ "bridgeVersion": 3, "platform": "windows", "keys": "pc", "ibSnapshot": false }),
         "the object the shell injects is not the one detect.ts reads"
     );
     assert_eq!(

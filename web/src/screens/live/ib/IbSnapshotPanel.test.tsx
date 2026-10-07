@@ -55,6 +55,32 @@ describe('IbSnapshotView states', () => {
     expect(screen.queryByText(/Net liquidation/)).toBeNull()
   })
 
+  it('disabled in the desktop app: names the Options switch, not the variable, and drops the backend message', () => {
+    render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={false} />)
+    const state = screen.getByRole('status')
+    expect(state.textContent).toContain(IB.stateOffDesktop)
+    expect(state.textContent).toContain('Options')
+    expect(state.textContent).toContain('IB snapshot (read only)')
+    expect(state.textContent).not.toContain('NQT_IB_READONLY')
+    expect(state.textContent).not.toContain(DISABLED_SNAPSHOT.message)
+    expect(screen.queryAllByRole('table')).toHaveLength(0)
+  })
+
+  it('disabled while the app has it on: says the backend was attached, not started by this app', () => {
+    render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot />)
+    const state = screen.getByRole('status')
+    expect(state.textContent).toContain(IB.stateOffAttached)
+    expect(state.textContent).toMatch(/attached, not started by this app/)
+    expect(state.textContent).not.toContain('NQT_IB_READONLY')
+  })
+
+  it('disabled in a browser keeps the variable wording and the backend message', () => {
+    render(<IbSnapshotView snapshot={DISABLED_SNAPSHOT} failed={false} detail={null} nowMs={NOW_FRESH_MS} shellIbSnapshot={null} />)
+    const state = screen.getByRole('status')
+    expect(state.textContent).toContain(IB.stateOff)
+    expect(state.textContent).toContain(DISABLED_SNAPSHOT.message)
+  })
+
   it('unavailable: says TWS not reachable with the server message, no table', () => {
     view(UNAVAILABLE_SNAPSHOT)
     const state = screen.getByRole('status')

@@ -36,7 +36,9 @@ export function pytestLocks(dir, { now = Date.now(), isAlive = pidAlive } = {}) 
   try {
     names = fs.readdirSync(dir)
   } catch (error) {
-    // A missing folder holds nothing; any other failure is reported by the caller instead of passing silently.
+    // A missing folder holds nothing; any other failure is reported by the caller instead of passing silently. The report
+    // warns and does not abort, because pytest also skips its lock when it cannot write one (backend/tests/conftest.py);
+    // the same rule is in desktop/scripts/check.ps1 (Get-PytestLocks).
     return error?.code === 'ENOENT' ? { fresh, stale } : { fresh, stale, unreadable: `${error?.code ?? 'error'} ${error?.message ?? ''}`.trim() }
   }
   for (const name of names.sort()) {

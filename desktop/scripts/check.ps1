@@ -377,10 +377,22 @@ function Get-PytestLocks {
     # The PYTEST.<pid>.lock files in $Dir: Fresh were written within the stale window, Stale were not (a session that died).
     # A lock is also stale at once when the process named in PYTEST.<pid>.lock is gone (a session killed without its cleanup);
     # the two-hour age limit stays as the fallback for a reused pid.
+    # A folder that is missing holds nothing and says nothing. A folder that exists but cannot be listed (access denied, a
+    # file where the folder should be, a broken junction) is returned in Unreadable, so the caller can say so. This warns and does not abort,
+    # because pytest also skips its lock when it cannot write one (backend/tests/conftest.py).
     param([string]$Dir, [datetime]$Now = (Get-Date))
     $all = @()
+    $unreadable = $null
     if (Test-Path -LiteralPath $Dir) {
-        $all = @(Get-ChildItem -LiteralPath $Dir -Filter 'PYTEST.*.lock' -File -ErrorAction SilentlyContinue)
+        if (-not (Test-Path -LiteralPath $Dir -PathType Container)) {
+            $unreadable = 'not a folder'
+        } else {
+            try {
+                $all = @(Get-ChildItem -LiteralPath $Dir -Filter 'PYTEST.*.lock' -File -ErrorAction Stop)
+            } catch {
+                $unreadable = $_.Exception.Message
+            }
+        }
     }
     $fresh = @()
     $stale = @()
@@ -397,7 +409,7 @@ function Get-PytestLocks {
             $fresh += $lock
         }
     }
-    return [pscustomobject]@{ Fresh = @($fresh); Stale = @($stale) }
+    return [pscustomobject]@{ Fresh = @($fresh); Stale = @($stale); Unreadable = $unreadable }
 }
 
 function Wait-NoPytestLock {
@@ -407,8 +419,14 @@ function Wait-NoPytestLock {
     $deadline = $started.AddSeconds($PytestWaitTimeoutSeconds)
     $waited = $false
     $names = ''
+    $noteGiven = $false
     while ($true) {
         $locks = Get-PytestLocks -Dir $PytestLockDir
+        if ($locks.Unreadable -and -not $noteGiven) {
+            $noteGiven = $true
+            Write-Host ("NOTE  pytest-lock  cannot read the locks folder {0} ({1}); the {2} does not wait" -f $PytestLockDir, $locks.Unreadable, $Step)
+            Add-Result "pytest-wait-$Step" $true 'locks folder unreadable, not waited'
+        }
         foreach ($stale in $locks.Stale) {
             Write-Host ("NOTE  pytest-lock  ignoring stale lock {0} ({1})" -f $stale.Name, $stale.Why)
         }

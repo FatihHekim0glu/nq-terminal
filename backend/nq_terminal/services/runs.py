@@ -21,6 +21,8 @@ Reading
 - The run list (V031B) reads each run's `summary` through `run_views.RunViewIndex` when the service has a state
   folder: groups of views kept in the state folder's cache, so a later start that must rebuild the list reads again
   only the group of a run that was added, changed or removed.
+  A full decode that fails for a run the list showed as readable is recorded in that index (`run_views`), so the
+  next listing shows it as unreadable; `on_unreadable` lets the owner of a cached list drop it.
 
 Badges (ARCHITECTURE 3.1): probe when `data.lookahead_probe` exists or the name holds `_probe_`; anchor for
 `_regress_` and `_haltfix_`; ledgered by joining `results/ledger.csv`; unusable when `balance_check.ok` is not
@@ -80,7 +82,7 @@ from nq_terminal.services.research import ResearchService, service_for_root
 from nq_terminal.services.run_curves import CURVE_PARSERS, CURVE_SNAPSHOTS, CURVE_TRADES
 from nq_terminal.services.run_curves import kept_from
 from nq_terminal.services.run_head_scan import framed_head
-from nq_terminal.services.run_views import RunViewIndex
+from nq_terminal.services.run_views import RunViewIndex, file_key
 
 RESCAN_S = 5.0
 CACHE_BYTES = 1024**3
@@ -461,7 +463,8 @@ class RunService:
 
     def __init__(self, *, data_root: Path, project_root: Path, cache: FileCache | None = None,
                  clock: Callable[[], float] = time.monotonic, rescan_s: float = RESCAN_S,
-                 research: ResearchService | None = None, state_dir: Path | None = None):
+                 research: ResearchService | None = None, state_dir: Path | None = None,
+                 on_unreadable: Callable[[], None] | None = None):
         self.data_root = Path(data_root)
         self.project_root = Path(project_root)
         self._research = research
@@ -470,15 +473,32 @@ class RunService:
         self.index = RunIndex(self.data_root / "backtests" / "output", clock=clock, rescan_s=rescan_s)
         # V031B: the run list's per-run index in the state folder's cache (None: every view is read from its file)
         self.views = RunViewIndex(state_dir=state_dir, data_root=self.data_root) if state_dir is not None else None
+        # told once when a full decode finds a run unreadable that the run list showed as readable, so the owner of a
+        # cached run list (the app's result cache) can drop it; None: nobody caches the list above this service
+        self._on_unreadable = on_unreadable
 
     # ----- reading
 
     def _read(self, entry: RunEntry, section: str) -> Any:
         parser = _PARSERS[section]
+        noted = self.views.unreadable_text(entry.run_id, entry.result) if self.views is not None else None
+        if noted is not None and section == "summary":
+            raise RunUnreadable(noted)  # a full decode already failed on this very file (see `_note_decode_failure`)
+        before = file_key(entry.result) if self.views is not None and section != "summary" else None
         try:
             return self.cache.get(entry.result, parser, kind=f"runs:{section}")
         except (FileDecodeError, FileAccessError, OSError) as exc:
-            raise RunUnreadable(unreadable(entry.run_id, RESULT_FILE, exc)) from exc
+            message = unreadable(entry.run_id, RESULT_FILE, exc)
+            if isinstance(exc, FileDecodeError) and before is not None:
+                self._note_decode_failure(entry, before, message)
+            raise RunUnreadable(message) from exc
+
+    def _note_decode_failure(self, entry: RunEntry, key: tuple[int, int], message: str) -> None:
+        """A section read decoded the whole file and failed. The run list's summary may have come from the framed fast
+        path, which never decodes the large members, so record the failure under the file's (mtime_ns, size) as it
+        was before the read: the next listing shows the run as unreadable, as before V031B, until the file changes."""
+        if self.views.note_unreadable(entry.run_id, key, message) and self._on_unreadable is not None:
+            self._on_unreadable()
 
     def _head(self, run_id: str) -> tuple[RunEntry, Mapping[str, Any]]:
         entry = self.index.get(run_id)

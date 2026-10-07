@@ -18,6 +18,7 @@ export function fakeBridge(overrides: Partial<ShellBridge> = {}): ShellBridge {
     bridgeVersion: 9,
     platform: 'windows',
     keys: 'pc',
+    ibSnapshot: null,
     saveFile: vi.fn(() => savedResult()),
     copyText: vi.fn(async () => true),
     copyImage: vi.fn(async () => true),

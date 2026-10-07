@@ -1,7 +1,10 @@
 // Two source scans over web/src (roadmap D3.2; 02 C3-1, 03 section 4.5):
 //  1. The page has no channel to the shell. The shell injects one read-only object (bridge/detect.ts) and the
 //     page never calls a command, so any use of a webview command bridge in web/src fails.
-//  2. Saving a file and writing the clipboard happen in one place. `URL.createObjectURL` and
+//  2. The shell's own host (tauri.localhost) is named in one file only, bridge/ibSwitch.ts: the two exact addresses
+//     of the Options IB snapshot switch, which the shell's navigation check recognises and cancels before it asks the
+//     owner natively. Any other mention would be a new way to reach the shell.
+//  3. Saving a file and writing the clipboard happen in one place. `URL.createObjectURL` and
 //     `navigator.clipboard` (and ClipboardItem, which only the clipboard takes) may appear only inside
 //     web/src/bridge/** and chrome/download.ts, so a screen that planted its own anchor or clipboard call
 //     would skip the bridge and with it the shell's save dialog.
@@ -46,6 +49,15 @@ const posix = (path: string): string => relative(WEB, path).split('\\').join('/'
 /** Every use of a shell command channel in `text`, as `file: what`. */
 function findShellIpc(file: string, text: string): string[] {
   return IPC_USES.filter(([, pattern]) => pattern.test(text)).map(([what]) => `${file}: ${what}`)
+}
+
+const SHELL_HOST = /tauri\.localhost/i
+const SHELL_HOST_HOME = 'src/bridge/ibSwitch.ts'
+
+/** Every mention of the shell's own host in `text` outside the one file that may name it. */
+function findShellHost(file: string, text: string): string[] {
+  if (file === SHELL_HOST_HOME) return []
+  return SHELL_HOST.test(text) ? [`${file}: the shell host`] : []
 }
 
 const BRIDGE_HOMES = (file: string): boolean => file.startsWith('src/bridge/') || file === 'src/chrome/download.ts'
@@ -95,6 +107,29 @@ describe('no shell IPC in web/src', () => {
 
   it('does not flag words that only contain the letters, or the injected object the page reads', () => {
     expect(findShellIpc('src/x.ts', 'const principal = recipient.ipcode; const reinvoked = 1; window.__NQT_SHELL__')).toEqual([])
+  })
+})
+
+describe('the shell host is named only by the IB switch addresses', () => {
+  it('finds tauri.localhost in src/bridge/ibSwitch.ts and nowhere else', () => {
+    expect(files.flatMap(({ file, text }) => findShellHost(file, text))).toEqual([])
+    const home = files.find((f) => f.file === SHELL_HOST_HOME)
+    expect(home?.text).toMatch(SHELL_HOST)
+  })
+
+  it.each([
+    ['a planted address in a screen', 'src/screens/live/LiveScreen.tsx', "location.assign('http://tauri.localhost/ib-snapshot/on')"],
+    ['a planted address in the frame, in capitals', 'src/chrome/FrameStrip.tsx', "const URI = 'http://TAURI.LOCALHOST/x'"],
+    ['a planted address elsewhere in the bridge', 'src/bridge/browser.ts', "window.location.href = 'http://tauri.localhost/'"],
+    ['a look-alike file', 'src/bridge/ibSwitch2.ts', "'http://tauri.localhost/ib-snapshot/off'"],
+  ])('born failing: flags %s', (_label, file, snippet) => {
+    expect(findShellHost(file, snippet)).toHaveLength(1)
+  })
+
+  it('the IB switch file names no shell command channel', () => {
+    const home = files.find((f) => f.file === SHELL_HOST_HOME)
+    expect(home).toBeDefined()
+    expect(findShellIpc(SHELL_HOST_HOME, home?.text ?? '')).toEqual([])
   })
 })
 

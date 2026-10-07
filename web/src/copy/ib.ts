@@ -12,6 +12,12 @@ export const IB = {
   stateOff: 'IB snapshot off (NQT_IB_READONLY not set)',
   stateOffNote:
     'The terminal does not connect to TWS unless NQT_IB_READONLY=1 is set when it starts. It has no order path either way. {message}',
+  // In the desktop app the switch is in Options; the backend's own message names a variable the app sets for itself.
+  stateOffDesktop: 'IB snapshot off',
+  stateOffNoteDesktop:
+    'To read the paper account, open Options at the top right, turn on IB snapshot (read only), confirm, then start the terminal again. It has no order path either way.',
+  stateOffAttached:
+    'IB snapshot (read only) is on in this app, but this backend was already running when the app started (attached, not started by this app), so it was started without the snapshot. Close the other terminal and start the app again to read the paper account.',
   stateUnreachable: 'TWS not reachable',
   stateUnreachableNote: 'The read-only snapshot could not reach TWS or IB Gateway: {message} The paper book above is unaffected.',
   stateRefused: 'IB snapshot refused',

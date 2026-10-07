@@ -11,6 +11,12 @@ export interface ShellInfo {
   readonly bridgeVersion: number
   readonly platform: ShellPlatform
   readonly keys: ShellKeys
+  /**
+   * Whether the read-only IB snapshot is on in this session, as a shell of bridgeVersion 3 or later states it (the
+   * value the terminal started with; the Options switch changes it for the next start). Null in a browser and in an
+   * older shell, which have no switch.
+   */
+  readonly ibSnapshot: boolean | null
 }
 
 declare global {
@@ -20,7 +26,10 @@ declare global {
   }
 }
 
-export const BROWSER_SHELL: ShellInfo = Object.freeze({ bridgeVersion: 0, platform: 'browser', keys: 'pc' })
+export const BROWSER_SHELL: ShellInfo = Object.freeze({ bridgeVersion: 0, platform: 'browser', keys: 'pc', ibSnapshot: null })
+
+/** The first bridgeVersion whose shell states the IB snapshot state (and recognises the Options switch). */
+export const IB_SWITCH_FROM = 3
 
 const SHELL_PLATFORMS: readonly ShellPlatform[] = ['windows', 'macos']
 const SHELL_KEYS: readonly ShellKeys[] = ['pc', 'mac']
@@ -36,12 +45,13 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
  */
 export function detectShell(injected: unknown): ShellInfo {
   if (!isRecord(injected)) return BROWSER_SHELL
-  const { bridgeVersion, platform, keys } = injected
+  const { bridgeVersion, platform, keys, ibSnapshot } = injected
   if (typeof bridgeVersion !== 'number' || !Number.isInteger(bridgeVersion) || bridgeVersion < 1) return BROWSER_SHELL
   const known = SHELL_PLATFORMS.find((candidate) => candidate === platform)
   if (known === undefined) return BROWSER_SHELL
   const injectedKeys = SHELL_KEYS.find((candidate) => candidate === keys)
-  return Object.freeze({ bridgeVersion, platform: known, keys: injectedKeys ?? (known === 'macos' ? 'mac' : 'pc') })
+  const ib = bridgeVersion >= IB_SWITCH_FROM && typeof ibSnapshot === 'boolean' ? ibSnapshot : null
+  return Object.freeze({ bridgeVersion, platform: known, keys: injectedKeys ?? (known === 'macos' ? 'mac' : 'pc'), ibSnapshot: ib })
 }
 
 /** Reads the injected object from `scope` (the window); a missing or throwing global is the browser. */

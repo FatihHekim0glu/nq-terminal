@@ -20,7 +20,8 @@ NQT_FIXTURE_DIR  folder laid out like the project root (results/, live/, ...) th
 NQT_STATE_DIR    the backend's own state folder (default terminal/state, git-ignored); the result cache keeps
                  its persisted bodies in <state>/cache. A given value is resolved strictly (it must be an existing
                  folder) and refused when it is a UNC or device path, the project root or any parent of it, or a
-                 folder under results/, data/, live/ or backtests/output/. Tests point it at a temporary folder.
+                 folder under results/, experiments/, data/, live/ or backtests/output/ (one list, RESEARCH_DIRS, which
+                 the result cache and the workspace store share). Tests point it at a temporary folder.
 
 Derived (NQT_TWO_DAY_WINDOW above can only turn it off in the other forms):
 two_day_keeps_year  False in desktop mode, True in the browser and launcher forms. In the app, MON's two-day sparkline
@@ -46,7 +47,7 @@ WEB_DIST = TERMINAL_DIR / "web" / "dist"
 FIXTURES_DIR = TERMINAL_DIR / "backend" / "tests" / "fixtures"
 TERMINAL_STATE_DIR = TERMINAL_DIR / "state"
 DEFAULT_STATE_DIR = TERMINAL_STATE_DIR  # read at call time, so the test harness can point it elsewhere
-RESEARCH_DIRS = (("results",), ("data",), ("live",), ("backtests", "output"))
+RESEARCH_DIRS = (("results",), ("experiments",), ("data",), ("live",), ("backtests", "output"))  # never written
 DEV_PORT = 5173  # Vite dev server (start.ps1 -Dev), which proxies /api
 DESKTOP_PORT = 0  # a backend the app starts binds a free port; the launchers keep 8765
 DESKTOP_CACHE_BYTES = 512 * 1024**2  # 02 O5: the app shares the PC with WebView2

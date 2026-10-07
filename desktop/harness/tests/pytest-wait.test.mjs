@@ -80,7 +80,7 @@ test('a dead pid lock is ignored at once, and the harness says so', async () => 
   const r = await waitNoPytestLock({ dir, step: 'real-data', log: (l) => lines.push(l), sleep: async () => { throw new Error('must not sleep') } })
   assert.equal(r.waited, false)
   assert.equal(r.ignored.length, 1)
-  assert.match(lines.join('\n'), new RegExp(`ignoring stale lock PYTEST\.${dead}\.lock.*not running`, 'i'))
+  assert.match(lines.join('\n'), new RegExp(`ignoring stale lock PYTEST\\.${dead}\\.lock.*not running`, 'i'))
 })
 
 test('a live lock holds the wait, names the lock and the poll, and the wait ends when the lock is removed', async () => {
@@ -93,7 +93,7 @@ test('a live lock holds the wait, names the lock and the poll, and the wait ends
   assert.equal(r.waited, true)
   assert.equal(polls, 2)
   assert.deepEqual(r.names, [`PYTEST.${process.pid}.lock`])
-  assert.match(lines.join('\n'), new RegExp(`WAIT .*first-launch.*PYTEST\.${process.pid}\.lock`))
+  assert.match(lines.join('\n'), new RegExp(`WAIT .*first-launch.*PYTEST\\.${process.pid}\\.lock`))
   assert.match(lines.join('\n'), /next look in/)
   assert.match(lines[lines.length - 1], /waited \d+ s for PYTEST\./i, 'the wait is reported with its length')
 })
@@ -103,7 +103,7 @@ test('a lock that is never released fails the wait with the lock named, after th
   plant(dir, process.pid)
   await assert.rejects(
     waitNoPytestLock({ dir, step: 'real-data', pollMs: 1, timeoutMs: 30, log: () => {} }),
-    new RegExp(`PYTEST lock still held after .*PYTEST\.${process.pid}\.lock`),
+    new RegExp(`PYTEST lock still held after .*PYTEST\\.${process.pid}\\.lock`),
   )
 })
 
@@ -149,7 +149,37 @@ test('run.mjs --first-launch waits on a live lock before it starts anything, and
   const env = { ...process.env, NQT_LOCK_DIR: dir, NQT_PYTEST_WAIT_TIMEOUT_S: '2', NQT_PYTEST_WAIT_POLL_S: '1' }
   const r = spawnSync(process.execPath, [RUN, '--first-launch'], { encoding: 'utf8', windowsHide: true, timeout: 60_000, env })
   assert.equal(r.status, 1, r.stdout + r.stderr)
-  assert.match(r.stdout, new RegExp(`WAIT .*PYTEST\.${process.pid}\.lock`))
+  assert.match(r.stdout, new RegExp(`WAIT .*PYTEST\\.${process.pid}\\.lock`))
   assert.match(r.stderr, /PYTEST lock still held/)
   assert.doesNotMatch(r.stdout, /^output /m, 'no output folder was made: nothing was started')
+})
+
+// ---- 0.3.1 audit: pytest-wait.json was written into an --out folder that may not exist yet
+
+test('born failing: a wait that ignored a stale lock records it in an --out folder that does not exist yet', () => {
+  const dir = scratch('out-stale')
+  const dead = deadPid()
+  plant(dir, dead)
+  const installer = path.join(dir, 'x_x64-setup.exe')
+  fs.writeFileSync(installer, Buffer.alloc(1024))
+  const out = path.join(dir, 'new-folder', 'run-1') // two levels that nobody has created
+  const env = { ...process.env, NQT_LOCK_DIR: dir }
+  const r = spawnSync(process.execPath, [RUN, '--mode', 'installer', '--real-data', '--dry', '--installer', installer, '--out', out], { encoding: 'utf8', windowsHide: true, timeout: 60_000, env })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.ok(!r.stderr.includes('ENOENT'), r.stderr)
+  assert.ok(r.stdout.includes(`ignoring stale lock PYTEST.${dead}.lock`), r.stdout)
+  const wait = JSON.parse(fs.readFileSync(path.join(out, 'pytest-wait.json'), 'utf8'))
+  assert.equal(wait.waited, false)
+  assert.deepEqual(wait.ignored.map((lock) => lock.name), [`PYTEST.${dead}.lock`])
+})
+
+test('a run with no lock to wait for or ignore writes no pytest-wait.json', () => {
+  const dir = scratch('out-none')
+  const installer = path.join(dir, 'x_x64-setup.exe')
+  fs.writeFileSync(installer, Buffer.alloc(1024))
+  const out = path.join(dir, 'new-folder')
+  const env = { ...process.env, NQT_LOCK_DIR: dir }
+  const r = spawnSync(process.execPath, [RUN, '--mode', 'installer', '--real-data', '--dry', '--installer', installer, '--out', out], { encoding: 'utf8', windowsHide: true, timeout: 60_000, env })
+  assert.equal(r.status, 0, r.stdout + r.stderr)
+  assert.ok(!fs.existsSync(path.join(out, 'pytest-wait.json')))
 })

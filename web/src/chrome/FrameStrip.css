@@ -49,6 +49,12 @@ button.frame-flag { margin: 0; border: 0; border-radius: 0; font-family: inherit
 .frame-options-list button:hover { background: var(--hover-menu); }
 .frame-options-list button[aria-pressed="true"] { background: var(--list-sel); font-weight: 700; }
 .frame-options-list :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* The IB snapshot switch (desktop app only): its state is said in words by the note under it, never by colour alone;
+   the checked switch also takes the pressed look of the toggles above. The status line stays rendered while empty, so
+   a screen reader hears it when the request is made. */
+.frame-ib-switch { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--list-border); }
+.frame-options-list button[aria-checked="true"] { background: var(--list-sel); font-weight: 700; }
+.frame-ib-note { margin: 0; padding: 0 10px; max-width: 24em; color: var(--data); font-size: var(--fs-small); white-space: normal; }
 
 @media (max-width: 700px) {
   .frame-strip { flex-wrap: wrap; height: auto; padding-top: 4px; align-items: center; }

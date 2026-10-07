@@ -3,7 +3,8 @@
 Read only: `os.scandir` and `stat`, no file is opened, nothing is written. Inputs are the `*.json` files directly in
 `results/screens/` and `experiments/` (a subfolder such as `experiments/drafts/` is never entered, and a name holding
 `.draft.` in any case is a draft and never counts). `stale` is true only when both times are known and the newest input
-is newer than the registry report; a missing or unreadable file gives a null time, never an error and never `stale`.
+is newer than the registry report; a missing or unreadable file, or a stamp that cannot be shown (before 1970, or far in the
+future), gives a null time, never an error and never `stale`.
 Times are UTC to the second, in the form the other `*_utc` fields use; the comparison uses nanoseconds.
 """
 from __future__ import annotations
@@ -29,9 +30,14 @@ class RegistryFreshness:
     stale: bool
 
 
-def _utc(mtime_ns: int) -> str:
-    stamp = datetime.fromtimestamp(mtime_ns / 1e9, tz=timezone.utc)
-    return stamp.isoformat(timespec="seconds").replace("+00:00", "Z")
+def _utc(mtime_ns: int) -> str | None:
+    """The time as UTC text to the second; None when it cannot be shown (a stamp before 1970 or far in the future, as
+    archives and copies that drop their timestamps leave, makes `fromtimestamp` raise on Windows)."""
+    try:
+        stamp = datetime.fromtimestamp(mtime_ns / 1e9, tz=timezone.utc)
+        return stamp.isoformat(timespec="seconds").replace("+00:00", "Z")
+    except (OSError, OverflowError, ValueError):
+        return None
 
 
 def _mtime_ns(path: Path) -> int | None:
@@ -71,9 +77,13 @@ def registry_freshness(root: Path) -> RegistryFreshness:
     or unreadable file: an unknown time is null and never makes the registry stale)."""
     generated = _mtime_ns(Path(root).joinpath(*REGISTRY_REPORT))
     newest = _newest_input(Path(root))
+    generated_at = None if generated is None else _utc(generated)
+    newest_input_at = None if newest is None else _utc(newest[0])
     return RegistryFreshness(
-        generated_at=None if generated is None else _utc(generated),
-        newest_input_at=None if newest is None else _utc(newest[0]),
+        generated_at=generated_at,
+        newest_input_at=newest_input_at,
         newest_input_path=None if newest is None else newest[1],
-        stale=generated is not None and newest is not None and newest[0] > generated,
+        # a time that cannot be shown is unknown, and an unknown time never makes the registry stale
+        stale=(generated_at is not None and newest_input_at is not None and newest is not None
+               and generated is not None and newest[0] > generated),
     )

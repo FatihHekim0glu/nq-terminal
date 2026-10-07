@@ -81,20 +81,38 @@ def test_other_layouts_go_to_the_full_decoder_and_answer_as_before(edges, name):
         _same_as_head(raw)
 
 
-def test_the_fast_path_never_decodes_a_large_member(monkeypatch):
-    doc = result_doc("nt_big", random.Random(3), probe_data=True, kind="book", ok=True)
+LARGE_ONLY_MARKS = (b'"entry_ts"', b'"exit_ts"', b'"net_r"', b'"px"', b'"equity"')  # inside large members only
+
+
+def _doc_with_large_members(kind: str) -> dict:
+    """A document whose trades, fills and strategy log are each several KB (the seed alone may leave two empty)."""
+    doc = result_doc("nt_big", random.Random(3), probe_data=True, kind=kind, ok=True)
+    doc["trades"] = [{"entry_ts": 1_420_070_400_000_000_000 + i, "exit_ts": 1_420_070_400_000_000_900 + i,
+                      "qty": 1, "pnl": 1.25, "net_r": 0.5, "note": "trades [x]"} for i in range(200)]
+    doc["fills"] = [{"ts": t["entry_ts"], "px": "100.25", "qty": 1} for t in doc["trades"]]
+    doc["n_trades"], doc["pnl_total"] = len(doc["trades"]), 250.0
+    return doc
+
+
+@pytest.mark.parametrize("kind", ["book", "sized", "intraday"])
+def test_the_fast_path_never_decodes_a_large_member(monkeypatch, kind):
+    doc = _doc_with_large_members(kind)
     raw = writer_bytes(doc, crlf=True)
-    seen: list[int] = []
+    spans = {key: end - start for key, start, end in scan._members(raw) if key in runs.LARGE_KEYS}
+    assert set(spans) == set(runs.LARGE_KEYS) and min(spans.values()) > 4096, spans
+    seen: list[bytes] = []
     real = scan.decode
 
     def decode(part: bytes):
-        seen.append(len(part))
+        seen.append(bytes(part))
         return real(part)
 
     monkeypatch.setattr(scan, "decode", decode)
-    assert _framed(raw) is not None
-    large = sum(len(json.dumps(doc[k], indent=1)) for k in runs.LARGE_KEYS)
-    assert sum(seen) < len(raw) - large
+    assert _framed(raw) is not None and seen
+    for part in seen:
+        assert not any(mark in part for mark in LARGE_ONLY_MARKS), part[:80]
+    assert sum(len(part) for part in seen) + sum(spans.values()) <= len(raw)
+    assert sum(len(part) for part in seen) < min(spans.values())
 
 
 def _close_trades_inline(raw: bytes) -> bytes:
