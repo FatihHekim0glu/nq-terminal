@@ -15,7 +15,7 @@
 <p align="center">
   <a href="#safety-model"><img src="https://img.shields.io/badge/read%20only-no%20order%20path-870F1E?style=flat-square&labelColor=191919" alt="read only: no order path"></a>
   <a href="#try-the-demo"><img src="https://img.shields.io/badge/demo-runs%20in%20the%20browser-FFB000?style=flat-square&labelColor=191919" alt="demo: runs in the browser"></a>
-  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.3.1%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.3.1 for Windows, unsigned"></a>
+  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.3.2%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.3.2 for Windows, unsigned"></a>
   <a href="#how-it-is-built"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
 </p>
 
@@ -41,11 +41,15 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 
 ## Status
 
-As of 7 October 2026:
+As of 8 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 84 API paths.
-- **Windows desktop app, 0.3.1.** Released on 7 October 2026 as the annotated tag desktop-v0.3.1, on commit `94c881d`: an
-  unsigned, per-user installer of 3,259,240 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It brings
+- **Windows desktop app, 0.3.2.** Released on 8 October 2026 as the annotated tag desktop-v0.3.2, on commit `e948719`: an
+  unsigned, per-user installer of 3,268,015 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It brings
+  an on-screen switch for the read-only IB snapshot (Options, then IB snapshot; it takes effect at the next start and
+  adds no order path), a health check that reads only the new tail of the research gate log, a HOME that no longer
+  loads the statistics library in its own start-up work (on the same lab and evening the first launch measured 3,961 ms
+  against 6,336 ms on 0.2.1), and a minimised start that stays minimised. 0.3.1 brought
   a faster first launch (the run list that HOME waits on now reads only the head of each result file and keeps an index
   of what it read, so the first launch measured 3,989 ms against 6,116 ms on 0.3.0, inside the 5,000 ms ceiling), a
   registry staleness line on REG, and the backend's exit code on the stopped page. 0.3.0 added
@@ -59,25 +63,32 @@ As of 7 October 2026:
   list quietly (every 15 s while idle, every 2 s while a job is active) and announces a finished job, an anchor badge
   with a one-click re-run, and a low WebView2 memory target while the window is minimised or hidden. The job indicator's
   reads of the job list count as background polls, so the quiet-period trim still fires at HOME. The earlier releases
-  stay available: 0.3.0 (`desktop-v0.3.0`, commit `b85a2dc`, 3,257,107 bytes), 0.2.1 (`desktop-v0.2.1`, commit `3b22af0`, 3,257,242 bytes), 0.2.0 (`desktop-v0.2.0`, commit `19658fe`, 3,256,246 bytes), 0.1.2 (`desktop-v0.1.2`, commit `5153496`, 3,254,474 bytes), which trims the backend's working set
+  stay available: 0.3.1 (`desktop-v0.3.1`, commit `94c881d`, 3,259,240 bytes), 0.3.0 (`desktop-v0.3.0`, commit `b85a2dc`, 3,257,107 bytes), 0.2.1 (`desktop-v0.2.1`, commit `3b22af0`, 3,257,242 bytes), 0.2.0 (`desktop-v0.2.0`, commit `19658fe`, 3,256,246 bytes), 0.1.2 (`desktop-v0.1.2`, commit `5153496`, 3,254,474 bytes), which trims the backend's working set
   after the HOME prewarm and in quiet periods, 0.1.1 (`desktop-v0.1.1`, 3,253,307 bytes), which capped the maths thread
   pools of the backend server, and 0.1.0 (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes).
 - **Known limitation of 0.3.0, closed in 0.3.1.** The first launch of 0.3.0 measured 6,116 ms (PROVISIONAL, taken under
   load) against the 5,000 ms ceiling, over it in every counted launch. 0.3.1 measured 3,989 ms at CPU gates under 10%,
   inside the ceiling in every launch. Every row of 0.3.1 is inside its ceiling, but the harness's W0B reproduction did
-  not reproduce (927 and 935 ms against 918 ms), so no G2 verdict is stated for 0.3.1 and
-  0.2.1 stays the published G2 verdict. The first launch is still about 0.7 s slower than 0.2.1's quiet reading, over the 3.5 s target
-  ([hand-over](docs/desktop/handover_windows.md), section 8).
+  not reproduce (927 and 935 ms against 918 ms), so no G2 verdict was stated for 0.3.1 ([hand-over](docs/desktop/handover_windows.md), section 8).
+- **Known limitation of 0.3.1, closed in 0.3.2.** With no reproduced reference, 0.3.1 and 0.3.0 stated no G2 verdict
+  and 0.2.1 stayed the published one. For 0.3.2 the harness's reference was moved to this PC as it was on 7 October 2026
+  (the reference program, which runs none of the terminal's code, had slowed after a WebView2 update, a reboot and the
+  lab's move to E:), two checks against it passed before the rows were taken, and every row of 0.3.2 is inside its ceiling
+  in every launch, so the G2 verdict for 0.3.2 reads AUTOMATED PASS, OWNER ROWS PENDING. The first launch (3,966 ms) is
+  still about 0.66 s slower than 0.2.1's quiet reading of 5 October and over the 3.5 s target; on the same lab and
+  evening 0.3.2 is 2.4 s faster than 0.2.1. Two things follow from the design: the IB switch applies at the next start,
+  and the first EQ, DES or RISK tear sheet opened before the backend's warm-up has loaded the statistics library pays
+  that load once, about 0.4 to 0.6 s ([hand-over](docs/desktop/handover_windows.md), section 8).
 - **Known limitation of 0.2.0, fixed in 0.2.1.** About 1 start in 240 stopped on the shell's identity check: the first
   start after a Windows Defender signature update can take the backend longer than the shell's 2 s link budget. It
   existed since 0.1.x and 0.2.1 fixes it; on 0.2.0, close the app and open it again.
 - **Gate G2 (speed and memory on Windows).** **AUTOMATED PASS, OWNER ROWS PENDING.** Whole-app idle memory at HOME
-  reads 196.1 MB on 0.2.1 (179.8 to 199.9 MB, trim on, read 73 s after HOME ready; 197.1 MB on 0.2.0 and 199.0 MB on 0.1.2), inside both the
+  reads 206.0 MB on 0.3.2 (185.3 to 206.6 MB, trim on, read 73 s after HOME ready; 210.4 MB on 0.3.1, 196.1 MB on 0.2.1, 197.1 MB on 0.2.0 and 199.0 MB on 0.1.2), inside both the
   500 MB ceiling and the 400 MB target. On 0.1.1 it read 477.3 MB at HOME ready plus 2.5 s, another reading point, and on 0.1.0 505.4 MB,
-  over the ceiling. Every other row re-measured on 0.2.1 is inside its ceiling at the median and in every single launch, among them
-  first-launch cold HOME at 3,304 ms. The 2-hour soak (largest sample 705.8 MB, a partial run, not all day) and the drift run were taken on
+  over the ceiling. Every other row re-measured on 0.3.2 is inside its ceiling at the median and in every single launch, among them
+  first-launch cold HOME at 3,966 ms. The 2-hour soak (largest sample 705.8 MB, a partial run, not all day) and the drift run were taken on
   0.1.0 and not repeated since; 0.2.0 added a 30-minute partial soak (largest sample 619.9 MB) and the first minimise
-  readings of the new memory target, and no soak was run on 0.2.1. The owner-attended checks (screen readers, real keyboard,
+  readings of the new memory target, and no soak was run on 0.2.1 or 0.3.2. The owner-attended checks (screen readers, real keyboard,
   visible run, SmartScreen first run and others) are still pending. Source: [G2 verdict](docs/desktop/g2_windows/verdict.md).
 - **macOS app.** Not built. It waits for its own gate (G1). On macOS and Linux, use the web terminal or the demo.
 
@@ -154,6 +165,7 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 
 | Release | File | Size | SHA256 |
 |---|---|---:|---|
+| `desktop-v0.3.2` | `nq-lab terminal_0.3.2_x64-setup.exe` | 3,268,015 bytes | `bed93b22d4089d269752db584e3a7f631fcfe7cfc2a238c9601ec0707edcd5fd` |
 | `desktop-v0.3.1` | `nq-lab terminal_0.3.1_x64-setup.exe` | 3,259,240 bytes | `e972b9b56fcc517fd8c5c449c5612c24cd4d1cb9923ba28507945d60d1af72fc` |
 | `desktop-v0.3.0` | `nq-lab terminal_0.3.0_x64-setup.exe` | 3,257,107 bytes | `bb2c264a121bdbfa8ef643f781d1ec7ab803caacae19e44b7a728484bbefec8f` |
 | `desktop-v0.2.1` | `nq-lab terminal_0.2.1_x64-setup.exe` | 3,257,242 bytes | `34144639ef1a6c633d3ced581bf80362434a3cbd35f806fc229f932a25b1cd20` |
@@ -165,7 +177,7 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 **2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.3.1_x64-setup.exe' | Format-List Algorithm,Hash
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.3.2_x64-setup.exe' | Format-List Algorithm,Hash
 ```
 
 PowerShell prints the hash in capitals; compare it with the value above without regard to case. If it differs by one
@@ -561,11 +573,12 @@ annualise geometrically. Every chart names its return basis and unit.
 **The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2), from
 performance and drawdowns to research integrity and live paper monitoring.
 
-**Latest full run.** The release records of the 0.3.1 tree (7 October 2026) read: backend 4,587 passed, crosscheck strict
-PASS 2,495, FAIL 0, smoke 18 and smoke-app 5 passed, QA 333 passed, the install test on a renamed-product build 54 of
-54 and the upgrade from 0.3.0 to 0.3.1 on a renamed-product build 105 of 105 (the owner's real install unchanged), and
-`release_check.ps1 -Tag desktop-v0.3.1 -RequireSmokeApp -RequireInstall` PASS with no WARN ([hand-over](docs/desktop/handover_windows.md),
-section 7). The release records of the 0.3.0 tree (7 October 2026) read: backend 4,513 passed, crosscheck PASS 2,495, FAIL 0, install
+**Latest full run.** The release records of the 0.3.2 tree (8 October 2026) read: backend 4,932 passed, crosscheck strict
+PASS 2,495, FAIL 0, smoke and smoke-app passed, QA 333 passed, the install test on a renamed-product build 54 of
+54 and the upgrade from 0.3.1 to 0.3.2 on a renamed-product build 105 of 105 (the owner's real install unchanged), and
+`release_check.ps1 -Tag desktop-v0.3.2 -RequireSmokeApp -RequireInstall` PASS with no WARN ([hand-over](docs/desktop/handover_windows.md),
+section 7). The release records of the 0.3.1 tree (7 October 2026) read: backend 4,587 passed, crosscheck PASS 2,495, FAIL 0, install
+54 of 54 and upgrade 105 of 105. The release records of the 0.3.0 tree (7 October 2026) read: backend 4,513 passed, crosscheck PASS 2,495, FAIL 0, install
 54 of 54 and upgrade 105 of 105. The release records of the 0.2.1 tree (5 October 2026) read: backend 4,377 passed, crosscheck PASS 2,495, FAIL 0, install
 54 of 54 and upgrade 105 of 105. The release records of the 0.2.0 tree read: backend 4,357 passed, crosscheck PASS 2,495, FAIL 0, install
 54 of 54 and upgrade 105 of 105. The release records of the 0.1.2 tree read: backend 4,201 passed, crosscheck PASS 2,495, FAIL 0, install

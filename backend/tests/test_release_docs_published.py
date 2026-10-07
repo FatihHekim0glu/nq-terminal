@@ -7,9 +7,11 @@ check reads it from there: when a new release is published its version, tag and 
 the figures it quotes. The build that is not yet published is not read here (test_release_version.py holds that one
 together).
 
-0.3.1 is published as `desktop-v0.3.1` (a faster first launch, the REG staleness line, the exit code on the stopped page); 0.3.0 is the
-previous release and its values stay as history. 0.2.1 stays the latest stated G2 verdict, because neither 0.3.0 nor 0.3.1 states
-one. 0.3.0 was published as `desktop-v0.3.0` (contrast themes, launcher fixes, carried fixes), 0.2.1 as `desktop-v0.2.1` (a
+0.3.2 is published as `desktop-v0.3.2` (the on-screen IB snapshot switch, a health check that reads only the new tail of the gate log, HOME without
+`scipy.stats`, a minimised start kept minimised); 0.3.1 is the previous release and its values stay as history. 0.3.2 holds the latest stated
+G2 verdict (AUTOMATED PASS, OWNER ROWS PENDING), because neither 0.3.0 nor 0.3.1 states one and 0.2.1 is the verdict before it. 0.3.1 was
+published as `desktop-v0.3.1` (a faster first launch, the REG staleness line, the exit code on the stopped page), 0.3.0 as `desktop-v0.3.0`
+(contrast themes, launcher fixes, carried fixes), 0.2.1 as `desktop-v0.2.1` (a
 start that survives a slow first identity proof) and 0.2.0 as `desktop-v0.2.0` (research launcher, job indicator, memory target).
 0.1.1 caps the maths thread pools of the desktop backend server (`nq_terminal/threadcaps.py`). The G2 files record the
 0.1.1 re-measure of 4 October 2026 next to the 0.1.0 (W5C) and W5B figures. The three build-dependent values (installer SHA256, installer bytes and tag) were filled in after the build and the
@@ -21,12 +23,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-PUBLISHED_VERSION = "0.3.1"
+PUBLISHED_VERSION = "0.3.2"
 PUBLISHED_TAG = f"desktop-v{PUBLISHED_VERSION}"
-PUBLISHED_SHA256 = "e972b9b56fcc517fd8c5c449c5612c24cd4d1cb9923ba28507945d60d1af72fc"
-PUBLISHED_BYTES = "3,259,240"
-PREVIOUS_VERSION = "0.3.0"
-PREVIOUS_SHA256 = "bb2c264a121bdbfa8ef643f781d1ec7ab803caacae19e44b7a728484bbefec8f"
+PUBLISHED_SHA256 = "bed93b22d4089d269752db584e3a7f631fcfe7cfc2a238c9601ec0707edcd5fd"
+PUBLISHED_BYTES = "3,268,015"
+PREVIOUS_VERSION = "0.3.1"
+PREVIOUS_SHA256 = "e972b9b56fcc517fd8c5c449c5612c24cd4d1cb9923ba28507945d60d1af72fc"
 INSTALLER = f"nq-lab terminal_{PUBLISHED_VERSION}_x64-setup.exe"
 
 TERMINAL = Path(__file__).resolve().parents[2]
@@ -124,18 +126,54 @@ def test_the_finisher_placeholders_of_the_0_3_1_wave_were_all_filled():
     assert "261150c, 66345da, 062e88f, 710eb81, 94c881d" in _text(HANDOVER), "the 0.3.1 commit list is filled"
 
 
+def test_the_finisher_placeholders_of_the_0_3_2_wave_were_all_filled():
+    needle = "{{" + "V032"
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
+        assert needle not in _text(path), path.name
+    commits = "899b7d2, b39ca54, 31938d0, 3494143, 8f95b8b, 50701d6, 06a0768, 640fbab, e948719"
+    assert commits in _text(HANDOVER), "the 0.3.2 commit list is filled"
+
+
+def test_the_0_3_1_reference_limitation_is_marked_closed_in_0_3_2_with_the_history_kept():
+    readme = _text(README).split("## Status")[1].split("## Highlights")[0]
+    assert "Known limitation of 0.3.1, closed in 0.3.2" in readme
+    assert "Known limitation of 0.3.0, closed in 0.3.1" in readme, "the 0.3.0 entry stays as history"
+    assert "3,966 ms" in readme, "the 0.3.2 first-launch figure"
+    assert "3,989 ms" in readme, "the 0.3.1 reading stays as history"
+    assert "AUTOMATED PASS, OWNER ROWS PENDING" in readme
+
+
+def test_the_g2_verdict_of_0_3_2_is_stated_and_the_published_state_is_written():
+    verdict_head = _text(VERDICT).split("## Release 0.3.2")[0]
+    assert "has been published since 8 October 2026 (tag `desktop-v0.3.2`" in verdict_head
+    assert "the latest stated G2 verdict of a published release" in verdict_head
+    verdict_032 = _text(VERDICT).split("## Release 0.3.2")[1].split("## Release 0.3.1")[0]
+    assert "**AUTOMATED PASS, OWNER ROWS PENDING.**" in verdict_032
+    assert "Until the 0.3.2 tag exists" not in verdict_032
+    assert "Release 0.3.2 has been published since 8 October 2026" in verdict_032
+    results_head = _text(RESULTS).split("## G1.")[0]
+    assert "Until 0.3.2 is published" not in results_head
+    assert "0.3.2 has been published since 8 October 2026" in results_head
+
+
+def test_the_warm_stats_fallback_decision_is_recorded_in_the_release_procedure():
+    procedure = _text(HANDOVER).split("## 7. Release procedure")[1].split("## 8. ")[0]
+    assert "move `warm_stats` to the end of the HOME tasks" in procedure
+    assert "it was not applied" in procedure
+    assert "`warm_stats` read 0.00 s in every first launch" in procedure
+    assert "2,375 ms sooner than 0.2.1" in procedure
+
+
 def test_the_first_launch_limitation_of_0_3_0_is_marked_closed_in_0_3_1_with_the_history_kept():
     troubleshooting = _text(HANDOVER).split("## 8. Troubleshooting")[1].split("## 9. ")[0]
     assert "Known limitation of 0.3.0, fixed in 0.3.1" in troubleshooting
     assert "3,989 ms" in troubleshooting, "the 0.3.1 first-launch figure"
     assert "6,116 ms" in troubleshooting, "the 0.3.0 reading stays as history"
     assert "PROVISIONAL" in troubleshooting
-    assert "0.2.1 stays the published G2 verdict" in troubleshooting
     readme = _text(README).split("## Status")[1].split("## Highlights")[0]
     assert "Known limitation of 0.3.0, closed in 0.3.1" in readme
     assert "3,989 ms" in readme
     assert "6,116 ms" in readme
-    assert "0.2.1 stays the published G2 verdict" in readme
 
 
 def test_no_g2_verdict_is_stated_for_0_3_1_and_the_published_state_is_written():
