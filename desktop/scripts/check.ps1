@@ -345,6 +345,9 @@ function Step-ReleaseScripts {
     Add-Result 'install-test-tests' ($code -eq 0) "exit $code, log $LogDir\install-test-tests.log"
     $code = Invoke-Logged -Name 'upgrade-owner-tests' -File 'powershell' -WorkDir $Terminal -Arguments ($shell + @((Join-Path $PSScriptRoot 'tests\upgrade-owner.tests.ps1')))
     Add-Result 'upgrade-owner-tests' ($code -eq 0) "exit $code, log $LogDir\upgrade-owner-tests.log"
+    # close-app.ps1: the window, process and log rules and the run over fake ports; the real ports only on an image no process has.
+    $code = Invoke-Logged -Name 'close-app-tests' -File 'powershell' -WorkDir $Terminal -Arguments ($shell + @((Join-Path $PSScriptRoot 'tests\close-app.tests.ps1')))
+    Add-Result 'close-app-tests' ($code -eq 0) "exit $code, log $LogDir\close-app-tests.log"
 }
 
 function Step-Parity {
