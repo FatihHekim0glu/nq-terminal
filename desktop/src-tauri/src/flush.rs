@@ -178,6 +178,8 @@ pub fn on_close(window: &WebviewWindow) -> OnClose {
     if RUNNING.swap(true, Ordering::SeqCst) {
         return OnClose::StillHolding;
     }
+    // Read on the UI thread, before the flush thread starts: the handle the fallback posts to.
+    let hwnd = window.hwnd().ok().map(|h| h.0 as isize);
     let window = window.clone();
     let spawned = std::thread::Builder::new()
         .name("nqt-flush".into())
@@ -194,10 +196,12 @@ pub fn on_close(window: &WebviewWindow) -> OnClose {
             );
             DONE.store(true, Ordering::SeqCst);
             RUNNING.store(false, Ordering::SeqCst);
-            if let Err(e) = window.close() {
+            let close = || window.close().map_err(|e| e.to_string());
+            let (route, error) = reclose(close, || hwnd.is_some_and(post_close));
+            if let Some(error) = error {
                 crate::crash::log(
                     "store_flush_close_failed",
-                    json!({ "error": e.to_string() }),
+                    json!({ "error": error, "fallback": route.name() }),
                 );
             }
         });
@@ -212,6 +216,49 @@ pub fn on_close(window: &WebviewWindow) -> OnClose {
 /// The close went on (or was cancelled): the next close request flushes again.
 pub fn rearm() {
     DONE.store(false, Ordering::SeqCst);
+}
+
+/// How the held close went on after the flush.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reclose {
+    /// The window was closed again through the event loop.
+    Closed,
+    /// The event loop's route failed, and WM_CLOSE was posted to the window itself.
+    Posted,
+    /// Neither worked: the close is lost, and only a new close request ends the app.
+    Lost,
+}
+
+impl Reclose {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Closed => "closed",
+            Self::Posted => "posted",
+            Self::Lost => "lost",
+        }
+    }
+}
+
+/// Closes the window again after the flush. The event loop's route can fail (for example once tao's event target
+/// window is gone), and the close it held would then be swallowed, so the fallback posts WM_CLOSE to the window
+/// itself; `DONE` is already set, so that request goes straight on. The error is the event loop's, when it failed.
+pub fn reclose(
+    close: impl FnOnce() -> Result<(), String>,
+    post: impl FnOnce() -> bool,
+) -> (Reclose, Option<String>) {
+    match close() {
+        Ok(()) => (Reclose::Closed, None),
+        Err(error) if post() => (Reclose::Posted, Some(error)),
+        Err(error) => (Reclose::Lost, Some(error)),
+    }
+}
+
+/// Posts WM_CLOSE to the app window.
+fn post_close(hwnd: isize) -> bool {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    // SAFETY: posting a message to the app window's handle; a handle that is gone only makes the post fail.
+    unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0)) }.is_ok()
 }
 
 #[cfg(test)]
@@ -318,6 +365,34 @@ mod tests {
         assert_eq!(Outcome::TimedOut(3).pending(), 3);
         assert_eq!(Outcome::Unavailable(2).pending(), 2);
         assert_eq!(Outcome::Nothing.pending(), 0);
+    }
+
+    #[test]
+    fn a_reclose_through_the_event_loop_needs_no_fallback() {
+        let mut posted = false;
+        let route = reclose(
+            || Ok(()),
+            || {
+                posted = true;
+                true
+            },
+        );
+        assert_eq!(route, (Reclose::Closed, None));
+        assert!(!posted, "the fallback ran although the close worked");
+    }
+
+    #[test]
+    fn a_failed_reclose_posts_the_close_to_the_window_itself() {
+        let route = reclose(|| Err("event loop gone".into()), || true);
+        assert_eq!(route, (Reclose::Posted, Some("event loop gone".into())));
+        assert_eq!(route.0.name(), "posted");
+    }
+
+    #[test]
+    fn a_reclose_with_no_route_left_is_reported_lost() {
+        let route = reclose(|| Err("event loop gone".into()), || false);
+        assert_eq!(route, (Reclose::Lost, Some("event loop gone".into())));
+        assert_eq!(Reclose::Lost.name(), "lost");
     }
 
     #[test]

@@ -455,11 +455,16 @@ impl Supervisor {
                 );
             }
             let cancel = crate::dialogs::Confirm::Cancel;
-            if link::close_needs_confirm(&running)
-                && crate::dialogs::confirm_close_running_job(owner) == cancel
-            {
-                let kept = "a backtest is running and the close was cancelled";
-                return Err(ShellError::Refused(kept.into()));
+            if link::close_needs_confirm(&running) {
+                // A close parked on the question (a minimised window may leave it unseen) shows in the log.
+                crash::log(
+                    "close_confirm_asked",
+                    json!({ "count_read": running.is_ok() }),
+                );
+                if crate::dialogs::confirm_close_running_job(owner) == cancel {
+                    let kept = "a backtest is running and the close was cancelled";
+                    return Err(ShellError::Refused(kept.into()));
+                }
             }
         }
         shared.stop();

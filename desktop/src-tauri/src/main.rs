@@ -25,6 +25,7 @@
 #[cfg(all(feature = "smoke", feature = "measure"))]
 compile_error!("smoke and measure are separate builds: enable at most one of them");
 
+mod close_relay;
 mod crash;
 mod dialogs;
 mod flush;
@@ -215,6 +216,7 @@ fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
         builder = builder.additional_browser_args(&args);
     }
     let main = builder.build()?;
+    relay_helper_closes(app, &main);
     window_fit::refit(&main);
     keys::install(&main, &launch)?;
     window::setup(&main, &launch)?;
@@ -230,6 +232,18 @@ fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
     app.manage(supervisor);
     app.manage(launch);
     Ok(())
+}
+
+/// A close request sent to one of the UI thread's helper windows goes on to the app window (close_relay.rs). Runs on
+/// the UI thread, after tao's event target and the single-instance window exist.
+fn relay_helper_closes(app: &tauri::App, main: &tauri::WebviewWindow) {
+    match main.hwnd() {
+        Ok(handle) => close_relay::install(
+            windows::Win32::Foundation::HWND(handle.0),
+            &app.config().identifier,
+        ),
+        Err(e) => crash::log("close_relay_failed", json!({ "error": e.to_string() })),
+    }
 }
 
 /// The window sizes for the display it opens on (window_fit.rs); a test build keeps its exact sizes.
