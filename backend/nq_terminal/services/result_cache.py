@@ -71,7 +71,7 @@ from pathlib import Path
 from stat import S_ISDIR
 from typing import Any, Callable, Iterable, Mapping
 
-from nq_terminal.settings import RESEARCH_DIRS  # the one list of folders the terminal never writes
+from nq_terminal.settings import inside_research_folder  # the one rule for the folders the terminal never writes
 
 LOG = logging.getLogger(__name__)
 
@@ -605,7 +605,7 @@ class ResultCache:
         state = self._state_dir.resolve()
         folder = (state / CACHE_FOLDER).resolve()
         root = ROOT.resolve()
-        if folder.parent != state or any(folder.is_relative_to(root.joinpath(*parts)) for parts in RESEARCH_DIRS):
+        if folder.parent != state or inside_research_folder(folder, root):
             raise ResultCacheError(f"the result cache folder may not be {folder}")
         return folder
 

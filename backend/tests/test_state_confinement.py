@@ -32,8 +32,9 @@ def lab(tmp_path: Path, monkeypatch) -> Path:
 
 def test_there_is_one_list_and_it_names_experiments():
     assert settings_module.RESEARCH_DIRS == FOLDERS
-    assert rc.RESEARCH_DIRS is settings_module.RESEARCH_DIRS
-    assert ("experiments",) in rc.RESEARCH_DIRS
+    # the result cache checks its folder with the one shared rule, which reads the one list (V033)
+    assert rc.inside_research_folder is settings_module.inside_research_folder
+    assert ("experiments",) in settings_module.RESEARCH_DIRS
 
 
 @pytest.mark.parametrize("parts", FOLDERS, ids=IDS)

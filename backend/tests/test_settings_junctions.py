@@ -13,6 +13,7 @@ import pytest
 
 import nq_lab.config
 from nq_terminal import settings as settings_module
+from nq_terminal.services import result_cache as rc
 from nq_terminal.services import workspaces as ws
 from nq_terminal.settings import SettingsError, inside_research_folder, load_settings
 
@@ -120,3 +121,17 @@ def test_the_workspace_folder_is_refused_behind_a_research_junction(junctioned_l
 
 def test_the_workspace_folder_is_accepted_beside_junctioned_research_folders(junctioned_lab):
     assert ws.WorkspaceStore(junctioned_lab / "state")._workspace_folder() == (junctioned_lab / "state" / ws.FOLDER).resolve()
+
+
+@pytest.mark.parametrize("parts", FOLDERS, ids=IDS)
+def test_the_result_cache_folder_is_refused_behind_a_research_junction(junctioned_lab, parts):
+    """V032C LOW: the result cache compared its folder with the research folders as written only, so a state folder
+    behind a research junction resolved past the check; it now uses the shared helper, as settings and workspaces do."""
+    cache = rc.ResultCache(state_dir=junctioned_lab.joinpath(*parts, "sub"))
+    with pytest.raises(rc.ResultCacheError):
+        cache._cache_folder()
+
+
+def test_the_result_cache_folder_is_accepted_beside_junctioned_research_folders(junctioned_lab):
+    cache = rc.ResultCache(state_dir=junctioned_lab / "state")
+    assert cache._cache_folder() == (junctioned_lab / "state" / rc.CACHE_FOLDER).resolve()
