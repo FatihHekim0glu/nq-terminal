@@ -3,7 +3,7 @@
   Silent per-user install and uninstall of a Tauri NSIS installer, with the window watch on (04 D5.4, D5.1).
 
 .DESCRIPTION
-  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.3.2\<name>_0.3.2_x64-setup.exe
+  powershell -NoProfile -File desktop\scripts\install-test.ps1 -Installer D:\dev\release\0.3.3\<name>_0.3.3_x64-setup.exe
   powershell -NoProfile -File desktop\scripts\install-test.ps1 -SelfTest [-Installer <installer>]
 
   The install goes to <InstallRoot>\<Run> (default D:\dev\d5\install\<run>), never anywhere else, and the app is

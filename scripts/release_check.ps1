@@ -3,7 +3,7 @@
   Refuses a release tag unless the day's green records and the artefacts all describe the tree as it is now.
 
 .DESCRIPTION
-  powershell -NoProfile -File terminal\scripts\release_check.ps1 -Tag desktop-v0.3.2 [-ReleaseDir D:\dev\release\0.3.2]
+  powershell -NoProfile -File terminal\scripts\release_check.ps1 -Tag desktop-v0.3.3 [-ReleaseDir D:\dev\release\0.3.3]
 
   It never creates the tag and never pushes: the owner does that after it passes (04 D5.4; 05 S08, G07).
 
