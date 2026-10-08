@@ -65,6 +65,12 @@ MUTATIONS: dict[str, Callable[[bytes, list[str]], bytes]] = {
     "a row whose error is not text": _edit(_row({"error": 5})),
     "a row holding both a view and an error": _edit(_row({"view": {}, "error": "x"})),
     "a row that is a list": _edit(_row([])),
+    "a row whose view is an empty object": _edit(_row({"view": {}})),
+    "a view without the terminal meta": _edit(_row({"view": {"config": {}}})),
+    "a view whose meta is a list": _edit(_row({"view": {run_views.META: []}})),
+    "a view whose meta holds no kind": _edit(_row({"view": {run_views.META: {}}})),
+    "a view whose kind is not a run kind": _edit(_row({"view": {run_views.META: {"kind": "nonsense"}}})),
+    "a view whose kind is a number": _edit(_row({"view": {run_views.META: {"kind": 7}}})),
     "a top level that is a list": lambda body, ids: b"[]",
     "invalid utf-8": lambda body, ids: b"\xff\xfe{",
 }
@@ -112,7 +118,8 @@ def test_the_same_process_does_not_fail_twice(small, tmp_path):
 
 
 def test_load_accepts_view_rows_and_error_rows_for_exactly_the_expected_ids():
-    body = json.dumps({"a": {"view": {"n": 1}}, "b": {"error": "unreadable: truncated"}}).encode("utf-8")
+    view = {run_views.META: {"kind": "intraday"}, "n": 1}
+    body = json.dumps({"a": {"view": view}, "b": {"error": "unreadable: truncated"}}).encode("utf-8")
     loaded = run_views._load(body, ["a", "b"])
     assert loaded["b"] == "unreadable: truncated" and loaded["a"]["n"] == 1
 
@@ -123,3 +130,28 @@ def test_load_accepts_view_rows_and_error_rows_for_exactly_the_expected_ids():
 def test_load_refuses_anything_else(body):
     with pytest.raises((ValueError, KeyError, TypeError, AttributeError, UnicodeDecodeError)):
         run_views._load(body, ["a", "b"])
+
+
+def test_the_view_constants_are_the_run_service_ones():
+    """run_views cannot import runs (runs imports it), so the two spellings are pinned here."""
+    from typing import get_args
+
+    from nq_terminal.models.runs import RunKind
+    from nq_terminal.services import runs as runs_service
+
+    assert run_views.META == runs_service.META
+    assert set(run_views.KINDS) == set(get_args(RunKind))
+
+
+@pytest.mark.parametrize("kind", ["book", "sized", "intraday"])
+def test_load_accepts_a_view_with_each_run_kind(kind):
+    body = json.dumps({"a": {"view": {run_views.META: {"kind": kind}, "n_trades": 1}}}).encode("utf-8")
+    assert run_views._load(body, ["a"])["a"][run_views.META]["kind"] == kind
+
+
+@pytest.mark.parametrize("view", [{}, {"config": {}}, {run_views.META: []}, {run_views.META: {}},
+                                  {run_views.META: {"kind": "nonsense"}}, {run_views.META: {"kind": 7}}])
+def test_load_refuses_a_view_without_a_run_kind(view):
+    body = json.dumps({"a": {"view": view}}).encode("utf-8")
+    with pytest.raises(ValueError):
+        run_views._load(body, ["a"])

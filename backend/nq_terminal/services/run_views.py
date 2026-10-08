@@ -19,8 +19,9 @@ lists and objects), so it comes back from JSON exactly as it went in.
 
 The cache checks a file's header, length and sha256, not what the body means, so a body is validated where it is read: it
 must be an object whose keys are exactly the group's ids, each row holding exactly one of an error text and a view
-object. A body that is not is dropped from memory and disk (`ResultCache.forget`), logged by file name only, and the group
-is read again from its result files.
+object, and each view carrying its run kind (`view[META]["kind"]`, which the run list reads). A body that is not is
+dropped from memory and disk (`ResultCache.forget`), logged by file name only, and the group is read again from its
+result files.
 
 A summary read by the framed fast path (`run_head_scan`) never decodes the large members, so a result file that is
 corrupt inside `trades`, `fills` or `strategy_log` is first listed as readable. When a detail or section read then fails
@@ -49,6 +50,10 @@ GROUPS = 8  # a change re-reads an eighth of the runs; each group is one disk wr
 ROUTE = "/api/runs#views"  # the groups' route name in their own cache; never served
 MEMORY_BYTES = 16 * 1024**2
 VIEW, ERROR = "view", "error"
+# The summary view's own marker and its run kinds (`runs.META`, `models.runs.RunKind`). runs imports this module, so the
+# two spellings are pinned equal by a test instead of imported; the run list reads `view[META]["kind"]` of every row.
+META = "__terminal_meta__"
+KINDS = frozenset({"intraday", "sized", "book"})
 
 View = Mapping[str, Any] | str  # a summary view, or the text of the error that made the run unreadable
 FileKey = tuple[int, int]  # (mtime_ns, size) of a result file
@@ -82,9 +87,14 @@ def _row_view(row: Any) -> View:
         if not isinstance(row[ERROR], str):
             raise ValueError("a group row's error is not text")
         return row[ERROR]
-    if not isinstance(row.get(VIEW), dict):
+    view = row.get(VIEW)
+    if not isinstance(view, dict):
         raise ValueError("a group row's view is not an object")
-    return freeze(row[VIEW])
+    meta = view.get(META)
+    kind = meta.get("kind") if isinstance(meta, dict) else None
+    if not isinstance(kind, str) or kind not in KINDS:
+        raise ValueError("a group row's view holds no run kind")
+    return freeze(view)
 
 
 def _load(body: bytes, expected_ids: Iterable[str]) -> dict[str, View]:
