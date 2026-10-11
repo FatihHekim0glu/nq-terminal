@@ -1,0 +1,257 @@
+# The CI build of the Windows shell on MSVC (04 D5.4; grade G-22; owner decision O20): the release feature set of the
+# Tauri shell, built from one commit with --locked, bundled as a per-user NSIS installer, put through
+# desktop/scripts/artefact-check.mjs, summed in SHA256SUMS and kept as a workflow artefact.
+#
+# What it does not do. It runs on dispatch only: no tag, no push, no schedule, until the owner accepts a CI-built MSVC
+# release in place of the local GNU build (O20, register decision 4). It makes no GitHub release, signs nothing and holds
+# no secret; the installer a person ships is still the one that scripts/release_check.ps1 and
+# desktop/scripts/publish-release.ps1 handle on the lab PC. The measure, installtest and smoke builds of
+# desktop/scripts/build-release.ps1 are not made here; this is the release feature set alone, so the artefact folder
+# has a release build and the artefact check reads exactly that.
+#
+# Rules (docs/desktop/02_decision.md C3-2): a read-only token, no secrets, every action pinned by its full commit SHA, no
+# cache (a release build restores nothing a past run could have planted), nothing pasted from an input into a script.
+# The one job with write permissions is the attestation: it exists only when the repository variable NQT_ATTEST is "on",
+# holds id-token: write and attestations: write and nothing else, and runs two actions, the artefact download and the
+# attestation. It signs the files the build job made, by their digests, through GitHub's artefact attestations (SLSA
+# Build L2 when the build runs in this hosted, isolated environment).
+name: desktop-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to build (it must equal the version of Cargo.toml and tauri.conf.json), for example 0.3.3
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: MSVC release build, artefact check and checksums
+    runs-on: windows-2025
+    timeout-minutes: 75
+    steps:
+      # The folder is named terminal, as in ci.yml: the lab holds this tree as nq-lab/terminal.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # The same checks as the first step of build-release.ps1 (Test-Sources): the version asked for is the version of
+      # both files, and the lock file holds no updater plugin.
+      - name: Check the version and the lock file
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        env:
+          NQT_VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:NQT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw "the version is not three numbers: '$($env:NQT_VERSION)'" }
+          $conf = Get-Content -Raw -Path tauri.conf.json | ConvertFrom-Json
+          if ($conf.version -ne $env:NQT_VERSION) { throw "tauri.conf.json version is $($conf.version), not $($env:NQT_VERSION)" }
+          $cargo = (Select-String -Path Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if ($cargo -ne $env:NQT_VERSION) { throw "Cargo.toml version is $cargo, not $($env:NQT_VERSION)" }
+          if ($conf.bundle.createUpdaterArtifacts -ne $false) { throw 'bundle.createUpdaterArtifacts is not false' }
+          if ((Get-Content -Raw -Path Cargo.lock) -match 'name = "tauri-plugin-updater"') { throw 'Cargo.lock holds tauri-plugin-updater (no updater, 03 section 14)' }
+
+      # rust-toolchain.toml pins the channel; RUSTUP_TOOLCHAIN carries it to every later step, including the cargo that
+      # cargo-tauri starts from another folder. The host must be MSVC: that is the point of this workflow.
+      - name: Install the pinned toolchain
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+          "RUSTUP_TOOLCHAIN=$channel" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $env:RUSTUP_TOOLCHAIN = $channel
+          $host_line = (rustc -vV) | Where-Object { $_ -like 'host:*' }
+          if ($LASTEXITCODE -ne 0) { throw "rustc -vV exit $LASTEXITCODE" }
+          Write-Host $host_line
+          if ($host_line -ne 'host: x86_64-pc-windows-msvc') { throw "the host is '$host_line', not x86_64-pc-windows-msvc" }
+
+      # The version is the one the local release builds and the notices were made with (docs/desktop/d0_results.md).
+      - name: Install cargo-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          cargo install tauri-cli --version 2.12.1 --locked
+          if ($LASTEXITCODE -ne 0) { throw "cargo install tauri-cli exit $LASTEXITCODE" }
+          $installed = (cargo tauri --version) -join ' '
+          if ($LASTEXITCODE -ne 0) { throw "cargo tauri --version exit $LASTEXITCODE" }
+          if ($installed -notmatch '2\.12\.1') { throw "cargo-tauri is '$installed', not 2.12.1" }
+
+      # The release feature set carries no smoke and no measure feature and tauri has no devtools (the check of
+      # build-release.ps1, Test-FeatureSet; -i makes cargo print the features of that one package).
+      - name: Check the feature set
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = (cargo tree -e features --locked -i nq-lab-terminal) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "cargo tree (root) exit $LASTEXITCODE" }
+          $tauri = (cargo tree -e features --locked -i tauri) -join "`n"
+          if ($LASTEXITCODE -ne 0) { throw "cargo tree (tauri) exit $LASTEXITCODE" }
+          if ($root -match 'feature "(smoke|measure)"') { throw 'the release feature set carries a smoke or measure feature' }
+          if ($tauri -match 'feature "devtools"') { throw 'the release feature set enables tauri devtools' }
+          $names = @([regex]::Matches($root, 'feature "([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+          Write-Host "release feature set: root features [$($names -join ', ')]"
+
+      # Rust panic locations and debug info carry source paths, and the runner's are C:\Users\runneradmin\... and
+      # D:\a\...; the artefact check fails a binary that holds a C:\Users path. The same remaps as build-release.ps1
+      # (rustc applies the last matching one, so the catch-all folders come first).
+      - name: Build the release installer
+        working-directory: terminal/desktop
+        shell: pwsh
+        env:
+          NQT_TARGET: ${{ runner.temp }}/nqt-target
+          NQT_SOURCE: ${{ github.workspace }}/terminal
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE '.cargo' }
+          $rustupHome = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $env:USERPROFILE '.rustup' }
+          $target = [System.IO.Path]::GetFullPath($env:NQT_TARGET)
+          $pairs = @(
+            @($env:RUNNER_TEMP, '/temp'), @($env:GITHUB_WORKSPACE, '/work'), @($env:USERPROFILE, '/home/user'),
+            @($cargoHome, '/cargo'), @($rustupHome, '/rustup'), @([System.IO.Path]::GetFullPath($env:NQT_SOURCE), '/src'), @($target, '/target')
+          )
+          $existing = @()
+          if ($env:CARGO_ENCODED_RUSTFLAGS) { $existing = @($env:CARGO_ENCODED_RUSTFLAGS -split [char]0x1f | Where-Object { $_ }) }
+          elseif ($env:RUSTFLAGS) { $existing = @($env:RUSTFLAGS -split '\s+' | Where-Object { $_ }) }
+          $remaps = @($pairs | Where-Object { $_[0] } | ForEach-Object { "--remap-path-prefix=$($_[0].TrimEnd('\'))=$($_[1])" })
+          Remove-Item env:RUSTFLAGS -ErrorAction SilentlyContinue
+          $env:CARGO_ENCODED_RUSTFLAGS = (@($existing) + $remaps) -join [string][char]0x1f
+          $env:CARGO_TARGET_DIR = $target
+          cargo tauri build --bundles nsis -- --locked
+          if ($LASTEXITCODE -ne 0) { throw "cargo tauri build exit $LASTEXITCODE" }
+
+      # The folder the artefact check reads (its layout is the one build-release.ps1 makes): the installer, the exe
+      # under payload\release, the generated installer script with its hooks, the configuration the build used and a
+      # PROVENANCE.json that records the commit, the tools and the embedded WebView2 bootstrapper, whose Microsoft
+      # signature is read by webview2-bootstrapper.ps1. Windows PowerShell 5.1 runs it, because that script reads the
+      # signature with a module the PowerShell 7 module path hides (see ci.yml).
+      - name: Assemble the release folder
+        working-directory: terminal
+        shell: powershell
+        env:
+          NQT_VERSION: ${{ inputs.version }}
+          NQT_TARGET: ${{ runner.temp }}/nqt-target
+          NQT_OUT: ${{ runner.temp }}/nqt-release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = Join-Path $env:NQT_TARGET 'release'
+          $out = $env:NQT_OUT
+          New-Item -ItemType Directory -Force -Path (Join-Path $out 'payload\release'), (Join-Path $out 'nsis\release'), (Join-Path $out 'config') | Out-Null
+          $installers = @(Get-ChildItem -Path (Join-Path $release 'bundle\nsis') -Filter "*_$($env:NQT_VERSION)_x64-setup.exe")
+          if ($installers.Count -ne 1) { throw "the build left $($installers.Count) installers for $($env:NQT_VERSION), expected 1" }
+          Copy-Item -LiteralPath $installers[0].FullName -Destination $out
+          Copy-Item -LiteralPath (Join-Path $release 'nq-lab-terminal.exe') -Destination (Join-Path $out 'payload\release')
+          $loader = Join-Path $release 'WebView2Loader.dll'
+          if (Test-Path -LiteralPath $loader) { Copy-Item -LiteralPath $loader -Destination (Join-Path $out 'payload\release') }
+          $nsi = Join-Path $release 'nsis\x64\installer.nsi'
+          Copy-Item -LiteralPath $nsi -Destination (Join-Path $out 'nsis\release')
+          Copy-Item -LiteralPath 'desktop\src-tauri\windows\nsis\hooks.nsh' -Destination (Join-Path $out 'nsis\release')
+          Copy-Item -LiteralPath 'desktop\src-tauri\tauri.conf.json' -Destination (Join-Path $out 'config')
+          $recordText = powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\webview2-bootstrapper.ps1 -Nsi $nsi | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "the embedded WebView2 bootstrapper is not validly signed by Microsoft Corporation: $recordText" }
+          $tools = [ordered]@{ rustc = ((rustc -V) -join ' '); cargo = ((cargo -V) -join ' '); cargo_tauri = ((cargo tauri --version) -join ' ') }
+          $provenance = [ordered]@{
+            version = $env:NQT_VERSION
+            built_utc = (Get-Date).ToUniversalTime().ToString('o')
+            builder = 'github-hosted windows-2025, MSVC'
+            image_version = $env:ImageVersion
+            commit = $env:GITHUB_SHA
+            ref = $env:GITHUB_REF
+            run_id = $env:GITHUB_RUN_ID
+            workflow = $env:GITHUB_WORKFLOW_REF
+            feature_set = 'release (default features)'
+            tools = $tools
+            installers = [ordered]@{ release = $installers[0].Name }
+            webview2_bootstrapper = ($recordText | ConvertFrom-Json)
+          }
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText((Join-Path $out 'PROVENANCE.json'), (($provenance | ConvertTo-Json -Depth 6) + "`n"), $utf8)
+
+      - name: Artefact check
+        working-directory: terminal
+        shell: pwsh
+        env:
+          NQT_OUT: ${{ runner.temp }}/nqt-release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node desktop/scripts/artefact-check.mjs $env:NQT_OUT
+          if ($LASTEXITCODE -ne 0) { throw "artefact-check.mjs exit $LASTEXITCODE" }
+
+      # sha256sum style, every file of the folder but SHA256SUMS itself, PROVENANCE.json included; read back at once so a
+      # file that changed after the sums were written fails here.
+      - name: Write and verify SHA256SUMS
+        shell: pwsh
+        env:
+          NQT_OUT: ${{ runner.temp }}/nqt-release
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = (Resolve-Path -LiteralPath $env:NQT_OUT).Path.TrimEnd('\')
+          $files = @(Get-ChildItem -LiteralPath $out -Recurse -File | Where-Object { $_.FullName -ne (Join-Path $out 'SHA256SUMS') } | Sort-Object FullName)
+          if ($files.Count -lt 5) { throw "only $($files.Count) files to sum" }
+          $lines = @($files | ForEach-Object { '{0} *{1}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant(), $_.FullName.Substring($out.Length + 1).Replace('\', '/') })
+          [System.IO.File]::WriteAllText((Join-Path $out 'SHA256SUMS'), (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+          foreach ($line in (Get-Content -LiteralPath (Join-Path $out 'SHA256SUMS'))) {
+            $hash, $name = $line -split ' \*', 2
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $out $name)).Hash.ToLowerInvariant()
+            if ($actual -ne $hash) { throw "$name does not match its recorded sum" }
+          }
+          Write-Host "SHA256SUMS: $($files.Count) files"
+
+      - name: Upload the release folder
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nq-lab-terminal-${{ inputs.version }}-msvc
+          path: ${{ runner.temp }}/nqt-release
+          if-no-files-found: error
+          retention-days: 14
+
+  # Owner decision O20: signs what the build job made, and only when the repository variable NQT_ATTEST is "on" AND the
+  # run is on refs/heads/main: a dispatch from any other branch runs that branch's own copy of this file, and its build
+  # must never get a provenance attestation that verifies like a main build (docs/desktop/ci.md has the verify command,
+  # which pins the source ref and this workflow). The only job of this file with write permissions: id-token and attestations, nothing else. It checks nothing out and
+  # runs no script; the two actions below are its whole body.
+  attest:
+    name: attest the build
+    needs: [build]
+    if: ${{ vars.NQT_ATTEST == 'on' && github.ref == 'refs/heads/main' }}
+    runs-on: windows-2025
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the release folder
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nq-lab-terminal-${{ inputs.version }}-msvc
+          path: nqt-release
+
+      - name: Attest the installer, the exe and the checksums
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            nqt-release/*_x64-setup.exe
+            nqt-release/payload/release/nq-lab-terminal.exe
+            nqt-release/SHA256SUMS

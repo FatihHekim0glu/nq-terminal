@@ -420,7 +420,8 @@ mod tests {
         assert!(sddl.starts_with("D:P"), "not protected: {sddl}");
         let aces: Vec<&str> = sddl.split('(').skip(1).collect();
         assert_eq!(aces.len(), 3, "{sddl}");
-        for trustee in [sid.as_str(), "SY", "BA"] {
+        let own = crate::reads::sddl_alias_of(&sid).unwrap_or(sid.as_str());
+        for trustee in [own, "SY", "BA"] {
             assert!(
                 aces.iter().any(|a| a.ends_with(&format!(";{trustee})"))),
                 "{trustee} in {sddl}"
