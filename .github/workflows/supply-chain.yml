@@ -1,0 +1,214 @@
+# Supply-chain watch (grade G-06): the advisory checks of the three dependency graphs this repository owns, and an SBOM
+# of each, every week and whenever a lock file changes. Read-only token, no secrets, every action pinned by its full
+# commit SHA, every tool pinned to an exact version, nothing built, signed or published. docs/desktop/ci.md lists it.
+#
+# Why a push trigger as well as the schedule: a schedule or dispatch trigger runs only from the default branch
+# (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows), so a workflow
+# added on a branch would never run before it is merged. The push trigger, limited to the paths below, makes the first
+# run happen on the branch that adds it, and re-checks the graphs whenever a lock file moves.
+#
+# No dependency is installed in any job: pnpm audit and pnpm sbom read the lock file, cargo deny and cargo audit read
+# Cargo.lock, uv export reads uv.lock. No lifecycle script of a dependency runs here.
+name: supply-chain
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/supply-chain.yml
+      - web/pnpm-lock.yaml
+      - desktop/src-tauri/Cargo.lock
+      - qa/uv.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.ref }}
+  cancel-in-progress: true
+
+# bash on Linux runners with -e and pipefail, so a failing command inside a pipeline fails the step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  rust:
+    name: cargo deny, cargo audit and Cargo SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The channel is read from rust-toolchain.toml so the pin lives in one place (as in ci.yml).
+      - name: Install the pinned toolchain
+        working-directory: desktop/src-tauri
+        run: |
+          channel=$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)
+          test -n "$channel"
+          rustup toolchain install "$channel" --profile minimal --no-self-update
+
+      # Prebuilt binaries whose SHA-256 the action checks against its own manifest; fallback none means a version that
+      # has no prebuilt binary fails the job instead of being compiled from unpinned sources. cargo-deny and cargo-audit
+      # are the versions the lab PC runs (D:/dev/v04/p0/READY). cargo-cyclonedx writes CycloneDX like pnpm and uv do;
+      # cargo-sbom was passed over so that all three SBOMs share one format.
+      - name: Install cargo-deny, cargo-audit and cargo-cyclonedx
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-cyclonedx@0.5.9
+          fallback: none
+
+      - name: Cargo SBOM
+        working-directory: desktop/src-tauri
+        run: |
+          cargo cyclonedx --manifest-path Cargo.toml --format json --spec-version 1.5 --target x86_64-pc-windows-gnu --override-filename nq-terminal-shell.cdx
+          jq -e '.bomFormat == "CycloneDX" and (.components | length > 0)' nq-terminal-shell.cdx.json
+
+      - name: Upload the Cargo SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-cargo
+          path: desktop/src-tauri/nq-terminal-shell.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # The same command as desktop/scripts/check.ps1. deny.toml limits the graph to the Windows targets.
+      - name: cargo deny
+        working-directory: desktop/src-tauri
+        run: cargo deny --locked check
+
+      # Fails on a vulnerability. Two warnings (glib unsound, proc-macro-error unmaintained) come from crates that only
+      # the non-Windows part of Cargo.lock pulls in; they are printed, and osv_scan lists them too.
+      - name: cargo audit
+        working-directory: desktop/src-tauri
+        run: cargo audit
+
+  web:
+    name: pnpm audit and npm SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # Production dependencies only: that is what the shipped bundle is made from. The scan of the whole graph,
+      # development tools included, is the osv job.
+      - name: npm SBOM
+        working-directory: web
+        run: |
+          mkdir -p "$RUNNER_TEMP/sbom"
+          pnpm sbom --sbom-format cyclonedx --sbom-spec-version 1.5 --sbom-type application --lockfile-only --prod > "$RUNNER_TEMP/sbom/sbom-npm.cdx.json"
+          jq -e '.bomFormat == "CycloneDX" and (.components | length > 0)' "$RUNNER_TEMP/sbom/sbom-npm.cdx.json"
+
+      - name: Upload the npm SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-npm
+          path: ${{ runner.temp }}/sbom/sbom-npm.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: pnpm audit
+        working-directory: web
+        run: pnpm audit --prod --audit-level high
+
+  qa:
+    name: pip-audit and QA SBOM
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        with:
+          tool: uv@0.10.2
+          fallback: none
+
+      # pip-audit's own dependencies are resolved at install time; the tool is the only thing this job installs.
+      - name: Install pip-audit
+        run: python -m pip install --disable-pip-version-check "pip-audit==2.10.1"
+
+      - name: QA SBOM
+        working-directory: qa
+        run: |
+          mkdir -p "$RUNNER_TEMP/sbom"
+          uv export --frozen --quiet --no-emit-project --format cyclonedx1.5 > "$RUNNER_TEMP/sbom/sbom-qa.cdx.json"
+          jq -e '.bomFormat == "CycloneDX" and (.components | length > 0)' "$RUNNER_TEMP/sbom/sbom-qa.cdx.json"
+
+      - name: Upload the QA SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-qa
+          path: ${{ runner.temp }}/sbom/sbom-qa.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # The requirements carry hashes, so pip-audit needs no pip and no resolver; --strict fails when a package cannot
+      # be audited instead of skipping it.
+      - name: pip-audit
+        working-directory: qa
+        run: |
+          uv export --frozen --quiet --no-emit-project --format requirements-txt > "$RUNNER_TEMP/qa-requirements.txt"
+          pip-audit --requirement "$RUNNER_TEMP/qa-requirements.txt" --disable-pip --strict --progress-spinner off
+
+  osv:
+    name: OSV scan of the three lock files
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # The scanner's own tests (fixture answers, no network) run first: a scanner that fails its tests must not be
+      # trusted to call a lock file clean. ci.yml does not reach scripts/tests, so this is the only place they run in CI.
+      - name: Scanner tests
+        run: node --test scripts/tests/*.test.mjs
+
+      # Sends only the ecosystem, name and version of public packages to api.osv.dev, never the lab's nq* packages.
+      # Exit 1 on an advisory rated HIGH or CRITICAL, exit 2 when the scan could not be completed.
+      - name: OSV scan
+        run: node scripts/osv_scan.mjs --out "$RUNNER_TEMP/osv-report.json"
+
+      # The report is written whenever the scan finished, including when it found something. When the scan itself
+      # failed there is no report, and the failed scan step above is what turns the job red.
+      - name: Upload the OSV report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: osv-report
+          path: ${{ runner.temp }}/osv-report.json
+          if-no-files-found: warn
+          retention-days: 90

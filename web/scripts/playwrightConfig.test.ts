@@ -4,7 +4,9 @@
 // other workers never decides them; `pnpm e2e` runs the main project only.
 // Born failing: a layout that lets the budgets share the run with the other specs, or that makes them wait
 // on the main project, is caught.
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import config from '../playwright.config.ts'
 import pkg from '../package.json' with { type: 'json' }
@@ -93,11 +95,14 @@ describe('Playwright projects', () => {
     expect(commandsSeparate({ e2e: 'playwright test --project chromium', 'e2e:perf': 'playwright test --project perf' })).toBe(false)
   })
 
-  it('caps the main project at two workers, whatever --workers asks for', () => {
-    // Four workers left about 5,900 loopback sockets in TIME_WAIT at the start of a run, and runs lost a page
-    // load there (an empty workspace, or net::ERR_NO_BUFFER_SPACE); the per-project limit holds under --workers=4.
+  it('holds the main project to one worker, whatever --workers asks for: its workers would share one backend and one state folder', () => {
+    // Born failing (test-speed): the project said two workers, which the top-level `workers: 1` hid until someone ran
+    // `pnpm e2e --workers=4`; two workers then shared the one backend with flows/p2 (queues runs) and workspace-import
+    // (starts the store). Two measured runs of a two-worker layout each lost two tests to the shared backend's latency
+    // (docs/desktop/v04/w2a-supply-chain__test-speed.md). Four workers also left about 5,900 loopback sockets in TIME_WAIT.
     const main = (config.projects ?? []).find((p) => p.name === 'chromium')
-    expect(main?.workers).toBe(2)
+    expect(main?.workers).toBe(1)
+    expect(config.workers).toBe(1)
   })
 
   it('builds the app into a folder of its own and serves that folder, never the shared dist-gallery', () => {
@@ -142,5 +147,151 @@ describe('Screenshots and the global job indicator (release 0.2.0)', () => {
     expect(file, 'expect.toHaveScreenshot.stylePath is not set').not.toBeNull()
     const css = readFileSync(file ?? '', 'utf8')
     expect(css).toMatch(/\[data-chrome="jobs"\]\s*\{[^}]*display:\s*none\s*!important/)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------------------------------
+// One backend, one state folder, several workers (test-speed). The run starts ONE fixture backend with ONE state folder
+// (its lock, its token, its job queue and its workspace store). Workers may share it only while none writes to it: a spec
+// that queues a job or starts the workspace store changes what every other spec sees. So a project with more than one
+// worker holds only specs that read, and a project with a spec that writes has one worker and, when other projects have
+// specs, finishes before they start (Playwright dependencies). The layout in use is one project of one worker; the measured
+// two-project layout that failed the three-green-runs test is in the test-speed note, and this function judges it too.
+
+/** What marks a spec as one that changes the backend's state: a write request, a queued run, or the workspace store. */
+export const WRITE_SIGNALS = new RegExp(
+  [
+    String.raw`method:\s*['"](?:POST|PUT|PATCH|DELETE)['"]`,
+    String.raw`\b(?:request|api\w*)\.(?:post|put|patch|delete)\(`,
+    String.raw`Queue run`,
+    String.raw`__NQT_STORE__`,
+    String.raw`startStoreInContext`,
+    String.raw`NQT_E2E_SESSION`,
+    String.raw`\bisStoreWrite\b`,
+  ].join('|'),
+)
+
+/** The most workers one project may run: three or more left thousands of loopback sockets in TIME_WAIT (see above). */
+const MAX_WORKERS = 2
+
+function dependsOn(projects: readonly Project[], from: Project, to: Project, seen = new Set<string>()): boolean {
+  for (const name of from.dependencies ?? []) {
+    if (seen.has(name)) continue
+    seen.add(name)
+    const next = projects.find((p) => p.name === name)
+    if (next === to || (next !== undefined && dependsOn(projects, next, to, seen))) return true
+  }
+  return false
+}
+
+/** Whether the project is the one that runs the performance budgets (its own file, its own command). */
+const isPerf = (p: Project): boolean => p.name === 'perf'
+
+/**
+ * Everything wrong with how the projects share the one backend. `specs` maps each spec file (`e2e/...`) to its source.
+ * Empty when: the budgets project runs on exactly one worker; every spec runs in exactly one project; a project with
+ * more workers than one holds no spec that writes; a project with a spec that writes has one worker and finishes before
+ * every other project with specs starts.
+ */
+export function sharedBackendProblems(projects: readonly Project[], specs: ReadonlyMap<string, string>): string[] {
+  const problems: string[] = []
+  for (const p of projects.filter(isPerf)) {
+    if (p.workers !== 1) problems.push(`perf: workers is ${String(p.workers)}, the budgets need exactly 1 (set it on the project)`)
+  }
+  const files = new Map<Project, string[]>(projects.map((p) => [p, []]))
+  for (const [file] of specs) {
+    const runners = projectsRunning(projects, file)
+    if (runners.length === 1 && isPerf(runners[0]!)) continue // the budgets spec has its project and its command
+    if (runners.length !== 1) problems.push(`${file}: runs in ${runners.length} projects, not exactly one`)
+    for (const p of runners) files.get(p)?.push(file)
+  }
+  const withSpecs = projects.filter((p) => !isPerf(p) && (files.get(p) ?? []).length > 0)
+  for (const p of withSpecs) {
+    const workers = Number(p.workers ?? 1)
+    const writers = (files.get(p) ?? []).filter((f) => WRITE_SIGNALS.test(specs.get(f) ?? ''))
+    if (workers > MAX_WORKERS) problems.push(`${p.name}: ${workers} workers, at most ${MAX_WORKERS}`)
+    if (writers.length === 0) continue
+    if (workers !== 1) problems.push(`${p.name}: ${workers} workers share the one state folder, and ${writers.join(', ')} write to it`)
+    for (const other of withSpecs.filter((o) => o !== p && !dependsOn(projects, o, p))) {
+      problems.push(`${p.name}: writes state but does not finish before ${other.name} starts (add it to ${other.name}'s dependencies)`)
+    }
+  }
+  return problems
+}
+
+/** Every spec file under e2e, as `e2e/<path>`, with its source. The screenshot folders and the results folder are skipped. */
+function readSpecs(): Map<string, string> {
+  const root = fileURLToPath(new URL('../e2e/', import.meta.url))
+  const found = new Map<string, string>()
+  const walk = (dir: string, rel: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith('__') || entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), `${rel}${entry.name}/`)
+      else if (entry.name.endsWith('.spec.ts')) found.set(`e2e/${rel}${entry.name}`, readFileSync(path.join(dir, entry.name), 'utf8'))
+    }
+  }
+  walk(root, '')
+  return found
+}
+
+describe('Playwright workers share one backend only while they read', () => {
+  const specs = readSpecs()
+  const readers = new Map([['e2e/a.spec.ts', "await page.goto('/')"], ['e2e/b.spec.ts', 'await expect(page).toHaveScreenshot()']])
+  const writer = new Map([['e2e/q.spec.ts', "await page.getByRole('button', { name: 'Queue run' }).click()"]])
+  const all = new Map([...readers, ...writer])
+  const WRITES = { name: 'writes', testMatch: /q\.spec\.ts$/, workers: 1 }
+  const READS = { name: 'reads', testIgnore: [/q\.spec\.ts$/], workers: 2, dependencies: ['writes'] }
+  const PERF = { name: 'perf', testMatch: /perf[\\/]budgets\.spec\.ts$/, workers: 1 }
+
+  it('finds the specs it is meant to read (a walk that finds none would pass everything)', () => {
+    expect(specs.size).toBeGreaterThan(40)
+    expect(specs.has('e2e/flows/p2.spec.ts')).toBe(true)
+    expect(specs.has('e2e/visual/screens.spec.ts')).toBe(true)
+  })
+
+  it('has no problem in the real layout: no project shares the one backend between workers while specs write to it', () => {
+    expect(sharedBackendProblems(config.projects ?? [], specs)).toEqual([])
+  })
+
+  it('keeps the specs that queue a run or start the workspace store in a project of one worker', () => {
+    const projects = config.projects ?? []
+    for (const file of ['e2e/flows/p2.spec.ts', 'e2e/workspace-import.spec.ts', 'e2e/desktop-seams.spec.ts', 'e2e/launch.spec.ts']) {
+      const names = projectsRunning(projects, file).map((p) => p.name)
+      expect(names, file).toHaveLength(1)
+      expect(Number(projects.find((p) => p.name === names[0])?.workers), file).toBe(1)
+    }
+  })
+
+  it('born failing: a budgets project with more than one worker, or with none set, is caught', () => {
+    expect(sharedBackendProblems([WRITES, READS, PERF], all)).toEqual([])
+    expect(sharedBackendProblems([WRITES, READS, { ...PERF, workers: 2 }], all)).toEqual([expect.stringMatching(/perf: workers is 2/)])
+    expect(sharedBackendProblems([WRITES, READS, { name: 'perf', testMatch: PERF.testMatch }], all)).toEqual([expect.stringMatching(/perf: workers is undefined/)])
+  })
+
+  it('born failing: workers that share the one state folder with a spec that writes are caught', () => {
+    // The shape before test-speed asked for it: one project, two workers, the queue spec among the readers.
+    const one = [{ name: 'chromium', testIgnore: [PERF.testMatch], workers: 2 }, PERF]
+    const found = sharedBackendProblems(one, all)
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatch(/chromium: 2 workers share the one state folder, and e2e\/q\.spec\.ts write to it/)
+    // A single worker has the folder to itself, so the writer may sit with the readers when it is alone.
+    expect(sharedBackendProblems([{ name: 'chromium', testIgnore: [PERF.testMatch], workers: 1 }, PERF], all)).toEqual([])
+  })
+
+  it('born failing: a writer that can run beside the readers, or a reader that gains a write, is caught', () => {
+    const beside = sharedBackendProblems([WRITES, { ...READS, dependencies: [] }, PERF], all)
+    expect(beside).toEqual([expect.stringMatching(/writes: writes state but does not finish before reads starts/)])
+    const sneaky = new Map([...all, ['e2e/c.spec.ts', "await page.request.fetch('/api/jobs', { method: 'POST' })"]])
+    expect(sharedBackendProblems([WRITES, READS, PERF], sneaky)).toEqual(expect.arrayContaining([expect.stringMatching(/reads: 2 workers share the one state folder/)]))
+    const store = new Map([...readers, ['e2e/d.spec.ts', 'window.__NQT_STORE__ = true']])
+    expect(sharedBackendProblems([WRITES, READS, PERF], store)).toEqual(expect.arrayContaining([expect.stringMatching(/reads: 2 workers share the one state folder/)]))
+  })
+
+  it('born failing: a spec that no project runs, or two projects run, and more than two workers, are caught', () => {
+    const lost = sharedBackendProblems([{ name: 'chromium', testMatch: /a\.spec\.ts$/, workers: 1 }, PERF], all)
+    expect(lost).toEqual(expect.arrayContaining([expect.stringMatching(/b\.spec\.ts: runs in 0 projects/)]))
+    const twice = sharedBackendProblems([{ name: 'x', workers: 1 }, { name: 'y', workers: 1 }, PERF], readers)
+    expect(twice).toEqual(expect.arrayContaining([expect.stringMatching(/a\.spec\.ts: runs in 2 projects/)]))
+    expect(sharedBackendProblems([{ name: 'chromium', workers: 3 }, PERF], readers)).toEqual([expect.stringMatching(/chromium: 3 workers, at most 2/)])
   })
 })

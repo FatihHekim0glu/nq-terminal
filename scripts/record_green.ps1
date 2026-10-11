@@ -5,6 +5,7 @@
 .DESCRIPTION
   From any folder:
     powershell -NoProfile -File terminal\scripts\record_green.ps1 -Check backend|crosscheck|smoke|smoke-app
+    powershell -NoProfile -File terminal\scripts\record_green.ps1 -Check backend -Coverage     (the backend check with pytest-cov)
     powershell -NoProfile -File terminal\scripts\record_green.ps1 -Stamp        (print the provenance stamp as JSON)
 
   The checks, exactly as the roadmap names them (04 D5.4, 05 S08):
@@ -27,6 +28,15 @@
                       for each file the UTF-8 name, a zero byte, its bytes, a zero byte
 
 
+  -Coverage (backend only) adds pytest-cov to the backend check (--cov=nq_terminal, a JSON report) and puts a `coverage` block in the
+  record: tool, source package, percent, covered, statements and missing lines, a percent per area (the first folder under
+  nq_terminal, or (root)), and the report path. Nothing is written inside the repository or the lab: the coverage data file
+  (COVERAGE_FILE) and the JSON report go to -CoverageDir (default D:\dev\v04\coverage), and a folder that resolves inside the
+  repository, the lab or a test tree (through .., a junction or a link) is refused before anything runs (exit 2). A stale report
+  from an earlier run is deleted first, and a pass whose report is missing or unreadable writes no record. The record still names
+  the plain serial pytest command, so release_check.ps1 accepts it as the backend record of its tree. The figure is a reading, not a gate:
+  no threshold is applied here (docs\TESTING.md holds the rule).
+
   Inputs outside the tree stamp (the record's "inputs" block, and "started_utc"): crosscheck records the smoke exe
   (path, sha256), the sha256 of web\dist (sorted names plus file hashes) and of the QA dump folder (with its newest
   write time); smoke-app records the smoke exe and web\dist. The exe is -SmokeExe, else NQT_SMOKE_EXE, else the default
@@ -37,6 +47,10 @@
   backend, crosscheck, smoke or smoke-app.
 .PARAMETER Stamp
   Print the provenance stamp of the tree as JSON and exit.
+.PARAMETER Coverage
+  Add the pytest-cov figure to the backend record (see above). Only with -Check backend (exit 2 otherwise).
+.PARAMETER CoverageDir
+  Where the coverage data file and JSON report go (default D:\dev\v04\coverage). Never inside the repository or the lab.
 .PARAMETER RecordsDir
   Where records go (default terminal\state\release).
 .PARAMETER Lab
@@ -57,6 +71,8 @@ param(
     [string]$Check = '',
     [switch]$Stamp,
     [switch]$Inputs,
+    [switch]$Coverage,
+    [string]$CoverageDir = '',
     [string]$SmokeExe = '',
     [string]$DistDir = '',
     [string]$DumpsDir = '',
@@ -72,6 +88,10 @@ $ErrorActionPreference = 'Stop'
 $Terminal = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Utf8 = New-Object System.Text.UTF8Encoding($false)
 $StampRoot = if ($TreeRoot) { $TreeRoot } else { $Terminal }
+$DefaultCoverageDir = 'D:\dev\v04\coverage'
+$CoverageSource = 'nq_terminal'
+$CoverageReportName = 'backend.coverage.json'
+$CoverageDataName = 'backend.coverage'
 
 function Invoke-GitBytes {
     # Raw stdout bytes of a git command (no text decoding, so the hash is of what git wrote).
@@ -149,7 +169,7 @@ function Test-XdistImportable {
 
 function Get-CheckCommand {
     # The program, its arguments and its working folder for one named check.
-    param([string]$Name, [string]$LabDir)
+    param([string]$Name, [string]$LabDir, [bool]$WithCoverage = $false)
     $python = Join-Path $LabDir '.venv\Scripts\python.exe'
     $smoke = Join-Path $Terminal 'scripts\smoke_real.ps1'
     $ps = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $smoke)
@@ -158,6 +178,7 @@ function Get-CheckCommand {
             # Parallel (-n 16, one worker per test file) only when this venv imports xdist; else the serial command.
             $pytestArgs = @('-m', 'pytest', '-p', 'no:warnings', '-o', 'addopts=', '-q')
             if (Test-XdistImportable $python) { $pytestArgs += @('-n', '16', '--dist', 'loadfile') }
+            if ($WithCoverage) { $pytestArgs += @("--cov=$CoverageSource", "--cov-report=json:$(Join-Path $CoverageDir $CoverageReportName)") }
             return @{ exe = $python; args = ($pytestArgs + @((Join-Path $Terminal 'backend\tests'))); cwd = $LabDir }
         }
         'crosscheck' {
@@ -217,7 +238,13 @@ function Invoke-Check {
     $smokeBefore = [Environment]::GetEnvironmentVariable('NQT_SMOKE_EXE', 'Process')
     $smokePath = Resolve-SmokeExePath
     if ($SmokeExe -or (Test-Path -LiteralPath $smokePath -PathType Leaf)) { $env:NQT_SMOKE_EXE = $smokePath }
-    try { return (Invoke-CheckSteps $Command) } finally { [Environment]::SetEnvironmentVariable('NQT_SMOKE_EXE', $smokeBefore, 'Process') }
+    # -Coverage: pytest-cov keeps its data file in the coverage folder (never in the working folder of the check).
+    $coverageBefore = $env:COVERAGE_FILE
+    if ($Coverage) { $env:COVERAGE_FILE = Join-Path $CoverageDir $CoverageDataName }
+    try { return (Invoke-CheckSteps $Command) } finally {
+        [Environment]::SetEnvironmentVariable('NQT_SMOKE_EXE', $smokeBefore, 'Process')
+        [Environment]::SetEnvironmentVariable('COVERAGE_FILE', $coverageBefore, 'Process')
+    }
 }
 
 function Invoke-CheckSteps {
@@ -296,8 +323,100 @@ function Get-CheckInputs {
     return $out
 }
 
+function Resolve-LinkChain {
+    # Follows a junction or symbolic link (a few hops at most) to the folder it stands for; any other path is returned as it is.
+    param([string]$Path, [int]$Depth = 0)
+    if ($Depth -gt 16 -or -not (Test-Path -LiteralPath $Path)) { return $Path }
+    $item = Get-Item -LiteralPath $Path -Force
+    $target = @($item.Target) | Where-Object { $_ } | Select-Object -First 1
+    if (-not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or -not $target) { return $Path }
+    $target = $target -replace '^\\\?\?\\', ''
+    $full = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine((Split-Path $Path -Parent), $target))
+    return Resolve-RealPath $full ($Depth + 1)
+}
+
+function Resolve-RealPath {
+    # An absolute path with every junction and symbolic link on the way resolved (the path need not exist yet).
+    param([string]$Path, [int]$Depth = 0)
+    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $root = [System.IO.Path]::GetPathRoot($full)
+    $current = $root.TrimEnd('\')
+    foreach ($part in @($full.Substring($root.Length).Split('\') | Where-Object { $_ -ne '' })) {
+        $current = Resolve-LinkChain ([System.IO.Path]::Combine($current + '\', $part)) $Depth
+        $current = $current.TrimEnd('\')
+    }
+    return $current
+}
+
+function Test-InsidePath {
+    # True when Child is Parent or lies below it (whole path parts, case-insensitive), after links are resolved.
+    param([string]$Child, [string]$Parent)
+    $c = (Resolve-RealPath $Child).TrimEnd('\') + '\'
+    $p = (Resolve-RealPath $Parent).TrimEnd('\') + '\'
+    return $c.StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-CoverageRefusal {
+    # Why a coverage folder may not be used, or '' when it may: it must lie outside the repository, the stamped tree and the lab.
+    param([string]$Folder, [string[]]$Protected)
+    foreach ($root in ($Protected | Where-Object { $_ } | Select-Object -Unique)) {
+        if (Test-InsidePath $Folder $root) { return "the coverage folder '$Folder' is inside the repository or the lab ($root)" }
+    }
+    return ''
+}
+
+function Clear-StaleCoverage {
+    # A report or data file left by an earlier run must never be read as this run's: delete them before the run.
+    param([string]$Folder)
+    foreach ($stale in @(Get-ChildItem -LiteralPath $Folder -File -Filter "$CoverageDataName*" -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $stale.FullName -Force }
+}
+
+function Get-CoverageAreas {
+    # Percent per area from the report's per-file summaries: the first folder under nq_terminal, or (root) for a module there.
+    param([System.Collections.IDictionary]$Files)
+    $sums = @{}
+    foreach ($name in $Files.Keys) {
+        $parts = @(($name.Replace('\', '/')).Split('/'))
+        $at = [array]::LastIndexOf($parts, $CoverageSource)
+        $area = if ($at -lt 0) { '(other)' } elseif ($parts.Count - $at -le 2) { '(root)' } else { $parts[$at + 1] }
+        if (-not $sums.ContainsKey($area)) { $sums[$area] = @(0, 0) }
+        $sums[$area][0] += [int]$Files[$name]['summary']['covered_lines']
+        $sums[$area][1] += [int]$Files[$name]['summary']['num_statements']
+    }
+    $areas = [ordered]@{}
+    foreach ($area in ($sums.Keys | Sort-Object)) { if ($sums[$area][1] -gt 0) { $areas[$area] = [math]::Round(100.0 * $sums[$area][0] / $sums[$area][1], 2) } }
+    return $areas
+}
+
+function Read-CoverageJson {
+    # The report as nested dictionaries. ConvertFrom-Json of Windows PowerShell 5.1 cannot read it: the report has empty
+    # property names (the module-level entry under classes and functions), which it refuses.
+    param([string]$Path)
+    Add-Type -AssemblyName System.Web.Extensions
+    $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+    $serializer.MaxJsonLength = [int]::MaxValue
+    return $serializer.DeserializeObject([System.IO.File]::ReadAllText($Path, $Utf8))
+}
+
+function Read-CoverageReport {
+    # The coverage block of the record from pytest-cov's JSON report; $null when the report is missing, unreadable or empty.
+    param([string]$Report, [string]$DataFile)
+    if (-not (Test-Path -LiteralPath $Report -PathType Leaf)) { return $null }
+    try {
+        $json = Read-CoverageJson $Report
+        $t = $json['totals']
+        if ([int]$t['num_statements'] -le 0) { return $null }
+        return [ordered]@{
+            tool = 'pytest-cov'; source = $CoverageSource
+            percent = [math]::Round([double]$t['percent_covered'], 2)
+            files = $json['files'].Count; covered_lines = [int]$t['covered_lines']; num_statements = [int]$t['num_statements']; missing_lines = [int]$t['missing_lines']
+            areas = (Get-CoverageAreas $json['files']); report = $Report; data_file = $DataFile
+        }
+    } catch { return $null }
+}
+
 function Write-Record {
-    param([string]$Dir, [string]$Name, [hashtable]$Result, $Stamped, [string]$CommandText, [bool]$SelfTest, $CheckInputs = $null, [string]$StartedUtc = '')
+    param([string]$Dir, [string]$Name, [hashtable]$Result, $Stamped, [string]$CommandText, [bool]$SelfTest, $CheckInputs = $null, [string]$StartedUtc = '', $CoverageBlock = $null)
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
     $date = (Get-Date).ToString('yyyy-MM-dd')
     $record = [ordered]@{
@@ -313,6 +432,7 @@ function Write-Record {
         stamp = $Stamped
         inputs = $CheckInputs
     }
+    if ($null -ne $CoverageBlock) { $record['coverage'] = $CoverageBlock }
     $file = Join-Path $Dir "${date}_$Name.json"
     [System.IO.File]::WriteAllText($file, (($record | ConvertTo-Json -Depth 6) + "`n"), $Utf8)
     return $file
@@ -340,10 +460,19 @@ if ($selfTest -and -not $RecordsDir) {
     exit 2
 }
 if (-not $RecordsDir) { $RecordsDir = Join-Path $Terminal 'state\release' }
-$canonical = Get-CheckCommand $Check $labDir
+if ($Coverage) {
+    if ($Check -ne 'backend') { Write-Host 'record_green: -Coverage belongs to -Check backend only; nothing was run or written.'; exit 2 }
+    if (-not $CoverageDir) { $CoverageDir = $DefaultCoverageDir }
+    $CoverageDir = [System.IO.Path]::GetFullPath($CoverageDir)
+    $why = Get-CoverageRefusal $CoverageDir @($Terminal, $StampRoot, $labDir)
+    if ($why) { Write-Host "record_green: $why; nothing was run or written."; exit 2 }
+    New-Item -ItemType Directory -Force -Path $CoverageDir | Out-Null
+    Clear-StaleCoverage $CoverageDir
+}
+$canonical = Get-CheckCommand $Check $labDir ([bool]$Coverage)
 $command = if ($Exe) { @{ exe = $Exe; args = $ExeArgs; cwd = $Terminal } } else { $canonical }
 # The record always names the check's own command (the serial form for backend, whatever workers ran), never the hook program.
-$commandText = Format-CommandText $canonical
+$commandText = Format-CommandText (Get-CheckCommand $Check $labDir)
 if ($Check -eq 'backend') { $commandText = $commandText -replace ' -n 16 --dist loadfile', '' }
 Write-Host "record_green: $Check in $($command.cwd): $(Format-CommandText $command)"
 
@@ -365,6 +494,15 @@ if (($inputsBefore | ConvertTo-Json -Depth 4 -Compress) -ne ($inputsAfter | Conv
     Write-Host "record_green: the smoke exe, web\dist or the dumps changed while $Check ran (inputs before and after differ); no record written."
     exit 1
 }
-$file = Write-Record $RecordsDir $Check $result $after $commandText $selfTest $inputsAfter $startedUtc
+$coverageBlock = $null
+if ($Coverage) {
+    $coverageBlock = Read-CoverageReport (Join-Path $CoverageDir $CoverageReportName) (Join-Path $CoverageDir $CoverageDataName)
+    if ($null -eq $coverageBlock) {
+        Write-Host "record_green: $Check passed but the coverage report ($(Join-Path $CoverageDir $CoverageReportName)) is missing or unreadable; no record written."
+        exit 1
+    }
+    Write-Host "record_green: backend coverage $($coverageBlock.percent)% ($($coverageBlock.covered_lines) of $($coverageBlock.num_statements) statements)"
+}
+$file = Write-Record $RecordsDir $Check $result $after $commandText $selfTest $inputsAfter $startedUtc $coverageBlock
 Write-Host "record_green: $Check passed; record $file"
 exit 0
