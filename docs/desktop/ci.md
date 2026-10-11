@@ -86,7 +86,7 @@ Where the rest lives. `desktop-check.yml` (written in v0.4, wave w2b) carries cl
 
 | Job | What it runs |
 |---|---|
-| `rust` | A matrix over three feature sets (release, smoke, measure), `fail-fast: false`. For each: the toolchain from `rust-toolchain.toml`, the Cargo registry cached on `Cargo.lock`, a stand-in lab (a plain virtual environment under the runner's temp folder), `cargo clippy --all-targets --locked <set> -- -D warnings` and `cargo test --locked <set>`. The smoke set builds the page first (`pnpm install --frozen-lockfile`, `pnpm build`), because the shell refuses a lab with no `web/dist`. |
+| `rust` | A matrix over three feature sets (release, smoke, measure), `fail-fast: false`. For each: the toolchain from `rust-toolchain.toml`, the Cargo registry cached on `Cargo.lock`, a stand-in lab (a plain virtual environment under the runner's temp folder), `cargo clippy --all-targets --locked <set> -- -D warnings` and `cargo test --locked --no-fail-fast <set>` (so one run lists every failing test, not the first). The smoke set builds the page first (`pnpm install --frozen-lockfile`, `pnpm build`), because the shell refuses a lab with no `web/dist`. |
 | `supply-chain` | `cargo deny --locked check` (0.20.2) and `cargo audit` (0.22.2), installed by a SHA-pinned `taiki-e/install-action`. |
 | `exe-size` | Builds the release exe, reads the latest release's exe out of its installer and fails when the new one is more than 25 percent larger. The limit is a first guess, since no MSVC exe has been measured. |
 | `coverage` | Report only: `cargo-llvm-cov` 0.9.1 on the default set, uploaded as the artefact `rust-coverage` with the figure in the run summary. It has `continue-on-error: true` and nothing waits on it. |

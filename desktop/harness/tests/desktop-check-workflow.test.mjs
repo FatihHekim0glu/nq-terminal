@@ -78,7 +78,7 @@ export function featureSetProblems(text) {
   for (const name of Object.keys(sets)) if (!(name in FEATURE_SETS)) problems.push(`unknown feature set ${name}`)
   if (!/FEATURES: \$\{\{ matrix\.features \}\}/.test(job)) problems.push('the matrix features do not reach the steps')
   if (!/cargo clippy --all-targets --locked @features -- -D warnings/.test(job)) problems.push('no clippy -D warnings over the set')
-  if (!/cargo test --locked @features -- --exact @skips/.test(job)) problems.push('no cargo test --locked over the set with the skip list')
+  if (!/cargo test --locked --no-fail-fast @features -- --exact @skips/.test(job)) problems.push('no cargo test --locked over the set with the skip list')
   if (!/fail-fast: false/.test(job)) problems.push('one failing set would cancel the others (fail-fast)')
   return problems
 }
@@ -144,7 +144,7 @@ export function selfSkipProblems(text) {
   const from = text.indexOf('- name: Tests, less the runner skip list')
   const step = from < 0 ? '' : text.slice(from, text.indexOf('\n  supply-chain:', from) < 0 ? undefined : text.indexOf('\n  supply-chain:', from))
   if (!step) return [...problems, 'no Tests step to read']
-  if (!/cargo test --locked @features -- --exact @skips --nocapture/.test(step)) problems.push('the Tests step does not run with --nocapture, so a printed SKIPPED line is never seen')
+  if (!/cargo test --locked --no-fail-fast @features -- --exact @skips --nocapture/.test(step)) problems.push('the Tests step does not run with --nocapture, so a printed SKIPPED line is never seen')
   if (!/-match 'SKIPPED/.test(step)) problems.push('the Tests step does not count the SKIPPED lines')
   if (!/-- --list --ignored/.test(step)) problems.push('the listed count still includes the #[ignore]d tests (no --list --ignored)')
   if (!/GITHUB_STEP_SUMMARY[^\n]*self-skipped/.test(step)) problems.push('the run summary does not report the tests that skipped themselves')
@@ -328,7 +328,7 @@ test('born failing: the skip guard fails on a skip without a reason, a stray ski
   assert.ok(skipProblems(plant('nightly | x | a reason long enough to read'), source).some((p) => p.startsWith('skip names unknown set')))
   const stale = plant('all | no_such_test_in_the_crate | a reason long enough to read')
   assert.ok(skipProblems(stale, source).includes('skip names no test of the crate: no_such_test_in_the_crate'))
-  const stray = text.replace('cargo test --locked @features -- --exact @skips', 'cargo test --locked @features -- --exact @skips --skip hidden_window')
+  const stray = text.replace('cargo test --locked --no-fail-fast @features -- --exact @skips', 'cargo test --locked --no-fail-fast @features -- --exact @skips --skip hidden_window')
   assert.ok(skipProblems(stray, source).some((p) => p.startsWith('a skip outside the list')))
   assert.ok(skipProblems(text.replace('--exact @skips', '--exact @skips --include-ignored'), source).length > 0)
 })

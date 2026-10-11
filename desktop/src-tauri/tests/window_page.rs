@@ -25,8 +25,17 @@ mod harness;
 use harness::*;
 use serde_json::{Value, json};
 use std::path::Path;
+use std::time::Duration;
 
 const PAGE_BODY: &str = r#"const out = {};
+// The page may have started loading before the shell registered its script (the registration is asynchronous), so
+// load it once more: a document created after the registration always carries the object.
+await send('Page.enable');
+await send('Page.reload', { ignoreCache: true });
+await sleep(1500);
+for (const end = Date.now() + 30000; Date.now() < end; await sleep(100)) {
+  if (await evaluate("document.readyState === 'complete'") === true) break;
+}
 out.shell = await evaluate(`(() => { const d = Object.getOwnPropertyDescriptor(window, '__NQT_SHELL__');
   return { value: window.__NQT_SHELL__ ?? null, frozen: Object.isFrozen(window.__NQT_SHELL__ ?? {}) && window.__NQT_SHELL__ !== undefined,
     writable: d ? d.writable : null, configurable: d ? d.configurable : null } })()`);
@@ -133,6 +142,11 @@ fn the_page_gets_the_shell_object_and_no_new_window() {
     let mut shell = launch(&run, &args, &[]);
     let pid = shell.0.id();
     let port = devtools_port(&run, &mut shell);
+    let hooked = wait_for_event(&run, "window_hooks", Duration::from_secs(30));
+    assert!(
+        hooked.is_some(),
+        "the shell never registered its page script"
+    );
     let result = cdp(port, &page_url(), PAGE_BODY);
     let title = shell_title(pid).unwrap_or_default();
     let closed = close_shell(&mut shell);

@@ -164,7 +164,7 @@ jobs:
             $skips += @('--skip', $name)
             Write-Host "skipped on the runner: $name ($why)"
           }
-          cargo test --locked @features -- --exact @skips --nocapture | Tee-Object -Variable testOutput
+          cargo test --locked --no-fail-fast @features -- --exact @skips --nocapture | Tee-Object -Variable testOutput
           if ($LASTEXITCODE -ne 0) { throw "cargo test ($env:SET) exit $LASTEXITCODE" }
           $selfSkipped = @($testOutput | Where-Object { $_ -match 'SKIPPED' })
           $selfSkipped | ForEach-Object { Write-Host "::warning::a test passed without running: $_" }
