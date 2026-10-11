@@ -15,6 +15,7 @@ repository folder with Node 24, and `corepack pnpm --dir web` stands for pnpm in
 | Docs drift test | macOS, Linux, Windows | No | Part of Vitest: `web/scripts/docsSync.test.ts` |
 | qa reference tests | Any machine with uv | No, except one test (below) | `cd qa`, then `uv run --frozen --offline pytest` |
 | Backend pytest | The nq-lab virtual environment | Yes | See the README, Test commands |
+| Coverage | The nq-lab virtual environment (backend); Node 24 (web) | Backend: yes | `scripts\record_green.ps1 -Check backend -Coverage`; web: `test:coverage`. See Coverage below |
 | P2 fakes | Any machine with the nq-lab virtual environment | Yes | Part of backend pytest: a fake IB server on a loopback socket and a fake `run_base.py`; no test connects to a real TWS or Gateway |
 | Playwright against the fixture backend | Windows | Yes | `corepack pnpm --dir web e2e`, `e2e:perf` |
 | Playwright against the demo layer | macOS, Linux (not tried on Windows) | No | `corepack pnpm --dir web e2e:offline`, `e2e:offline:perf`, `e2e:offline:baseline` |
@@ -22,6 +23,79 @@ repository folder with Node 24, and `corepack pnpm --dir web` stands for pnpm in
 Two tests assume the nq-lab layout and fail outside it, on any machine: `web/src/grids/JournalTable.model.test.ts`
 reads nq-lab's `src/nq_lab/paper_plumbing.py`, and qa's `test_the_default_dump_folder_is_under_terminal_qa` expects the
 qa folder's parent to be named `terminal`.
+
+## Coverage
+
+Coverage is measured per area and recorded here, so that it can be held. Three areas, three tools. The figures are
+line coverage (branch coverage is off everywhere), and they are readings: no script or CI job fails on a figure yet.
+
+| Area | Tool | How to measure | Where the output goes |
+|---|---|---|---|
+| Backend (`backend/nq_terminal`) | pytest-cov 7.1.0 (coverage 7.16.1), installed in the lab virtual environment | `powershell -NoProfile -File scripts\record_green.ps1 -Check backend -Coverage` | `D:\dev\v04\coverage\` (`backend.coverage.json`, `backend.coverage`), and a `coverage` block in the dated backend record |
+| Web (`web/src`) | `@vitest/coverage-v8` through the `test:coverage` script | `corepack pnpm --dir web test:coverage --coverage.reportsDirectory=D:/dev/v04/coverage/web --coverage.reporter=json-summary --coverage.reporter=text-summary` | `D:\dev\v04\coverage\web` (`coverage-summary.json`); the main tree needs `pnpm --dir web install --frozen-lockfile` once to get the package |
+| Rust (`desktop/src-tauri`) | cargo-llvm-cov, on the MSVC leg of CI (wave w2b); not installed on this machine and not measured here | The CI job | The CI job's artefact |
+
+`-Coverage` runs the same backend check as before (the same tests, in parallel when xdist is importable) and adds
+`--cov=nq_terminal` and a JSON report. The dated record keeps naming the plain serial command, so `release_check.ps1`
+accepts it as the backend record of its tree; it gains a `coverage` block with the percent, the statement counts (covered,
+missing, total), the number of files, a percent per area and the report path. Nothing is written inside the repository or the
+lab: the data file (`COVERAGE_FILE`) and the report go to `-CoverageDir`, and a folder that resolves inside either (by `..`,
+a junction or a link) is refused with exit 2 before anything runs. A report left by an earlier run is deleted first, and a
+pass whose report is missing or unreadable writes no record. The record is only written for a tree that did not change
+while the tests ran, as for every record.
+
+### Baselines
+
+| Area | Line coverage | Statements (covered of total) | Files | Taken |
+|---|---|---|---|---|
+| Backend | 96.54% | 16,094 of 16,671 (577 missing) | 143 | 11 October 2026, base `16f56ec`, 4,950 passed and 9 skipped in 248 s with `-n 16` |
+| Web (`web/src`) | 97.03% | 21,859 of 22,914 (95.40%); branches 88.39%, functions 93.67% | 779 | 11 October 2026, base `16f56ec` plus the w2a-supply-chain branch, 7,805 passed and 52 skipped in 158 s; the three lab-only tests left out, as in CI |
+| Rust | not yet recorded | | | Wave w2b, from the MSVC leg |
+
+The whole web report, which also counts the `scripts/` and `e2e/` files that the unit tests load, reads 94.45% of lines over 883
+files (statements 92.82%, branches 86.59%, functions 91.65%). The baseline above is the `web/src` part, because the rule below is
+about the app. The area under `web/src` with the lowest line coverage is `perspective` (83.57%); every other one is 94% or more.
+The run was made in a copy of the tree (its `node_modules` installed from the lock), so the figure is a reading of the branch;
+the main tree repeats it after the merge and replaces the row if it differs.
+
+Backend by area (the first folder under `nq_terminal`, or `(root)` for the modules directly in it):
+
+| Area | Files | Statements | Line coverage |
+|---|---|---|---|
+| `(root)` | 9 | 907 | 94.49% |
+| `analytics` | 26 | 2,640 | 96.02% |
+| `api` | 26 | 2,229 | 96.01% |
+| `desktop` | 10 | 830 | 91.20% |
+| `models` | 25 | 2,742 | 99.74% |
+| `services` | 47 | 7,323 | 96.55% |
+
+One module with 20 or more statements is under 80%: `desktop/fixture_main.py`, 67.3% of 49. The run that took these
+figures was a measurement of the working tree while two other slices edited files outside `backend/`, so no stamped record
+exists for it; the merge agent repeats it on the committed tree and replaces this table if the figures differ.
+
+### The rule
+
+**Coverage may not fall; new modules 80% or more.**
+
+- A change may not lower an area's line coverage below the baseline above. If it must (code that is deleted together with
+  its tests, for example), the change says why and lowers the baseline in the same commit.
+- A coverage that rises moves the baseline up in the same commit, so that the table is always the last good reading.
+- A new module (a new file under `backend/nq_terminal` or `web/src`) is covered to 80% of its lines or more by its own tests.
+  Read it from the report: `files[<path>].summary.percent_covered` in `backend.coverage.json`.
+- The owner's rule is 80% as the minimum. The baselines are above it; the rule exists to keep them there.
+
+### Limits of the figure
+
+- `backend/nq_terminal/services` has no `__init__.py`, so coverage.py does not list a module there that no test imports; it
+  would be missing from the denominator instead of counting as 0%. The count of files in the report (143) must equal the
+  number of `.py` files under `backend/nq_terminal` (143 on the base). A difference is a module nobody tests.
+- The web report lists every non-test `.ts` and `.tsx` file under `web/src` (checked on the baseline run: none is missing), so a
+  module that no test imports shows as 0% instead of dropping out. The report also counts the `scripts/` and `e2e/` files that
+  the tests load, which is why the whole-report figure differs from the `web/src` one.
+- Line coverage says a line ran, not that its result was checked. It is the floor of the test suite, not its measure.
+- The report has empty property names (the module-level entry under `classes` and `functions`), which Windows PowerShell 5.1
+  `ConvertFrom-Json` refuses; `record_green.ps1` reads it with `JavaScriptSerializer`. A script of your own should use
+  Python's `json` module.
 
 ## Session token
 
