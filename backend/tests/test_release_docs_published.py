@@ -7,8 +7,8 @@ check reads it from there: when a new release is published its version, tag and 
 the figures it quotes. The build that is not yet published is not read here (test_release_version.py holds that one
 together).
 
-0.3.2 is published as `desktop-v0.3.2` (the on-screen IB snapshot switch, a health check that reads only the new tail of the gate log, HOME without
-`scipy.stats`, a minimised start kept minimised); 0.3.1 is the previous release and its values stay as history. 0.3.2 holds the latest stated
+0.3.3 is published as `desktop-v0.3.3` (a close request that lands on a hidden helper window reaches the app window, `close-app.ps1`, the IB note that asks the backend); 0.3.2 is the previous release and its values stay as history. 0.3.3 states no G2 verdict (PROVISIONAL, taken under load), so 0.3.2 keeps the latest stated one. 0.3.2 was published as `desktop-v0.3.2` (the on-screen IB snapshot switch, a health check that reads only the new tail of the gate log, HOME without
+`scipy.stats`, a minimised start kept minimised); 0.3.1 is the release before it. 0.3.2 holds the latest stated
 G2 verdict (AUTOMATED PASS, OWNER ROWS PENDING), because neither 0.3.0 nor 0.3.1 states one and 0.2.1 is the verdict before it. 0.3.1 was
 published as `desktop-v0.3.1` (a faster first launch, the REG staleness line, the exit code on the stopped page), 0.3.0 as `desktop-v0.3.0`
 (contrast themes, launcher fixes, carried fixes), 0.2.1 as `desktop-v0.2.1` (a
@@ -23,12 +23,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-PUBLISHED_VERSION = "0.3.2"
+PUBLISHED_VERSION = "0.3.3"
 PUBLISHED_TAG = f"desktop-v{PUBLISHED_VERSION}"
-PUBLISHED_SHA256 = "bed93b22d4089d269752db584e3a7f631fcfe7cfc2a238c9601ec0707edcd5fd"
-PUBLISHED_BYTES = "3,268,015"
-PREVIOUS_VERSION = "0.3.1"
-PREVIOUS_SHA256 = "e972b9b56fcc517fd8c5c449c5612c24cd4d1cb9923ba28507945d60d1af72fc"
+PUBLISHED_SHA256 = "adb26588d466e1d007866bd73bd1cecee2b5bcb7743876a6193c8c70b00a5f89"
+PUBLISHED_BYTES = "3,269,631"
+PREVIOUS_VERSION = "0.3.2"
+PREVIOUS_SHA256 = "bed93b22d4089d269752db584e3a7f631fcfe7cfc2a238c9601ec0707edcd5fd"
 INSTALLER = f"nq-lab terminal_{PUBLISHED_VERSION}_x64-setup.exe"
 
 TERMINAL = Path(__file__).resolve().parents[2]
@@ -59,7 +59,7 @@ def test_readme_status_states_the_verdict_and_the_idle_figure():
     assert "AUTOMATED PASS, OWNER ROWS PENDING" in status
     assert "477.3 MB" in status
     assert "g2_windows/verdict.md" in status
-    assert "505.4 MB" in status, f"the {PREVIOUS_VERSION} reading stays as history"
+    assert "505.4 MB" in status, "the 0.1.0 reading stays as history"
 
 
 def test_handover_makes_the_published_release_current_and_keeps_the_previous_values_as_history():
@@ -132,6 +132,27 @@ def test_the_finisher_placeholders_of_the_0_3_2_wave_were_all_filled():
         assert needle not in _text(path), path.name
     commits = "899b7d2, b39ca54, 31938d0, 3494143, 8f95b8b, 50701d6, 06a0768, 640fbab, e948719"
     assert commits in _text(HANDOVER), "the 0.3.2 commit list is filled"
+
+
+def test_the_finisher_placeholders_of_the_0_3_3_wave_were_all_filled():
+    needle = "{{" + "V033"
+    for path in (README, HANDOVER, DOCS / "smartscreen.md", DOCS / "g2_windows" / "placeholders.md", RESULTS, VERDICT):
+        assert needle not in _text(path), path.name
+    commits = "c07d16f, dc7a0fd, 02cab4a, eb19900, 4cc6997, d3b1bb6, 16f56ec, bb5b9a6"
+    assert commits in _text(HANDOVER), "the 0.3.3 commit list is filled"
+
+
+def test_no_g2_verdict_is_stated_for_0_3_3_and_the_published_state_is_written():
+    verdict_head = _text(VERDICT).split("## Release 0.3.3")[0]
+    assert "has been published since 11 October 2026 (tag `desktop-v0.3.3`" in verdict_head
+    verdict_033 = _text(VERDICT).split("## Release 0.3.3")[1].split("## Release 0.3.2")[0]
+    assert "NOT STATED" in verdict_033
+    assert "stays the latest stated G2 verdict" in verdict_033
+    readme = _text(README).split("## Status")[1].split("## Highlights")[0]
+    assert "Known limitation of 0.3.3" in readme
+    assert "No G2 verdict is stated for 0.3.3" in readme
+    results_head = _text(RESULTS).split("## G1.")[0]
+    assert "0.3.3 has been published since 11 October 2026" in results_head
 
 
 def test_the_0_3_1_reference_limitation_is_marked_closed_in_0_3_2_with_the_history_kept():

@@ -15,7 +15,7 @@
 <p align="center">
   <a href="#safety-model"><img src="https://img.shields.io/badge/read%20only-no%20order%20path-870F1E?style=flat-square&labelColor=191919" alt="read only: no order path"></a>
   <a href="#try-the-demo"><img src="https://img.shields.io/badge/demo-runs%20in%20the%20browser-FFB000?style=flat-square&labelColor=191919" alt="demo: runs in the browser"></a>
-  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.3.2%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.3.2 for Windows, unsigned"></a>
+  <a href="#install-on-windows"><img src="https://img.shields.io/badge/desktop-v0.3.3%20Windows%2C%20unsigned-D7D7D7?style=flat-square&labelColor=191919" alt="desktop: v0.3.3 for Windows, unsigned"></a>
   <a href="#how-it-is-built"><img src="https://img.shields.io/badge/NautilusTrader-1.231.0-D7D7D7?style=flat-square&labelColor=191919" alt="NautilusTrader 1.231.0"></a>
 </p>
 
@@ -41,11 +41,14 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 
 ## Status
 
-As of 8 October 2026:
+As of 11 October 2026:
 
 - **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 84 API paths.
-- **Windows desktop app, 0.3.2.** Released on 8 October 2026 as the annotated tag desktop-v0.3.2, on commit `e948719`: an
-  unsigned, per-user installer of 3,268,015 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It brings
+- **Windows desktop app, 0.3.3.** Released on 11 October 2026 as the annotated tag desktop-v0.3.3, on commit `bb5b9a6`: an
+  unsigned, per-user installer of 3,269,631 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It makes
+  closing the app from Task Manager or a script always close it (a close request that lands on one of the app's hidden
+  helper windows is passed on to the app window, which stores the workspace and stops the backend it started), adds
+  `close-app.ps1` for a graceful close from a script, and makes the Options IB note ask the backend itself. 0.3.2 brought
   an on-screen switch for the read-only IB snapshot (Options, then IB snapshot; it takes effect at the next start and
   adds no order path), a health check that reads only the new tail of the research gate log, a HOME that no longer
   loads the statistics library in its own start-up work (on the same lab and evening the first launch measured 3,961 ms
@@ -63,7 +66,7 @@ As of 8 October 2026:
   list quietly (every 15 s while idle, every 2 s while a job is active) and announces a finished job, an anchor badge
   with a one-click re-run, and a low WebView2 memory target while the window is minimised or hidden. The job indicator's
   reads of the job list count as background polls, so the quiet-period trim still fires at HOME. The earlier releases
-  stay available: 0.3.1 (`desktop-v0.3.1`, commit `94c881d`, 3,259,240 bytes), 0.3.0 (`desktop-v0.3.0`, commit `b85a2dc`, 3,257,107 bytes), 0.2.1 (`desktop-v0.2.1`, commit `3b22af0`, 3,257,242 bytes), 0.2.0 (`desktop-v0.2.0`, commit `19658fe`, 3,256,246 bytes), 0.1.2 (`desktop-v0.1.2`, commit `5153496`, 3,254,474 bytes), which trims the backend's working set
+  stay available: 0.3.2 (`desktop-v0.3.2`, commit `e948719`, 3,268,015 bytes), 0.3.1 (`desktop-v0.3.1`, commit `94c881d`, 3,259,240 bytes), 0.3.0 (`desktop-v0.3.0`, commit `b85a2dc`, 3,257,107 bytes), 0.2.1 (`desktop-v0.2.1`, commit `3b22af0`, 3,257,242 bytes), 0.2.0 (`desktop-v0.2.0`, commit `19658fe`, 3,256,246 bytes), 0.1.2 (`desktop-v0.1.2`, commit `5153496`, 3,254,474 bytes), which trims the backend's working set
   after the HOME prewarm and in quiet periods, 0.1.1 (`desktop-v0.1.1`, 3,253,307 bytes), which capped the maths thread
   pools of the backend server, and 0.1.0 (`desktop-v0.1.0`, commit `8122c87`, 3,253,432 bytes).
 - **Known limitation of 0.3.0, closed in 0.3.1.** The first launch of 0.3.0 measured 6,116 ms (PROVISIONAL, taken under
@@ -79,6 +82,11 @@ As of 8 October 2026:
   evening 0.3.2 is 2.4 s faster than 0.2.1. Two things follow from the design: the IB switch applies at the next start,
   and the first EQ, DES or RISK tear sheet opened before the backend's warm-up has loaded the statistics library pays
   that load once, about 0.4 to 0.6 s ([hand-over](docs/desktop/handover_windows.md), section 8).
+- **Known limitation of 0.3.3.** No G2 verdict is stated for 0.3.3. Its re-measure of 11 October 2026 was reduced and taken
+  on a busy PC (a game held the graphics card at full use), so every row is PROVISIONAL: the first launch read 4,961 ms
+  against the 5,000 ms ceiling (two of five launches over it), and the harness's reference did not reproduce. The 0.3.2
+  verdict stays the latest stated one, and a re-measure on a quiet PC is still to be done
+  ([G2 verdict](docs/desktop/g2_windows/verdict.md)).
 - **Known limitation of 0.2.0, fixed in 0.2.1.** About 1 start in 240 stopped on the shell's identity check: the first
   start after a Windows Defender signature update can take the backend longer than the shell's 2 s link budget. It
   existed since 0.1.x and 0.2.1 fixes it; on 0.2.0, close the app and open it again.
@@ -165,6 +173,7 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 
 | Release | File | Size | SHA256 |
 |---|---|---:|---|
+| `desktop-v0.3.3` | `nq-lab terminal_0.3.3_x64-setup.exe` | 3,269,631 bytes | `adb26588d466e1d007866bd73bd1cecee2b5bcb7743876a6193c8c70b00a5f89` |
 | `desktop-v0.3.2` | `nq-lab terminal_0.3.2_x64-setup.exe` | 3,268,015 bytes | `bed93b22d4089d269752db584e3a7f631fcfe7cfc2a238c9601ec0707edcd5fd` |
 | `desktop-v0.3.1` | `nq-lab terminal_0.3.1_x64-setup.exe` | 3,259,240 bytes | `e972b9b56fcc517fd8c5c449c5612c24cd4d1cb9923ba28507945d60d1af72fc` |
 | `desktop-v0.3.0` | `nq-lab terminal_0.3.0_x64-setup.exe` | 3,257,107 bytes | `bb2c264a121bdbfa8ef643f781d1ec7ab803caacae19e44b7a728484bbefec8f` |
@@ -177,7 +186,7 @@ release folder that section 2 of the [hand-over](docs/desktop/handover_windows.m
 **2. Verify the hash before you run it.** In PowerShell, in the folder that holds your copy:
 
 ```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.3.2_x64-setup.exe' | Format-List Algorithm,Hash
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\nq-lab terminal_0.3.3_x64-setup.exe' | Format-List Algorithm,Hash
 ```
 
 PowerShell prints the hash in capitals; compare it with the value above without regard to case. If it differs by one
@@ -573,7 +582,11 @@ annualise geometrically. Every chart names its return basis and unit.
 **The catalogue.** [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) lists 79 metrics (41 P0, 31 P1, 7 P2), from
 performance and drawdowns to research integrity and live paper monitoring.
 
-**Latest full run.** The release records of the 0.3.2 tree (8 October 2026) read: backend 4,932 passed, crosscheck strict
+**Latest full run.** The release records of the 0.3.3 tree (11 October 2026) read: backend 4,958 passed, crosscheck strict
+PASS 2,495, FAIL 0, smoke 18 and smoke-app 5 passed, QA 333 passed, the install test on a renamed-product build 54 of
+54 and the upgrade from 0.3.2 to 0.3.3 on a renamed-product build 105 of 105 (the owner's real install unchanged), and
+`release_check.ps1 -Tag desktop-v0.3.3 -RequireSmokeApp -RequireInstall` PASS with no WARN ([hand-over](docs/desktop/handover_windows.md),
+section 7). The release records of the 0.3.2 tree (8 October 2026) read: backend 4,932 passed, crosscheck strict
 PASS 2,495, FAIL 0, smoke and smoke-app passed, QA 333 passed, the install test on a renamed-product build 54 of
 54 and the upgrade from 0.3.1 to 0.3.2 on a renamed-product build 105 of 105 (the owner's real install unchanged), and
 `release_check.ps1 -Tag desktop-v0.3.2 -RequireSmokeApp -RequireInstall` PASS with no WARN ([hand-over](docs/desktop/handover_windows.md),
