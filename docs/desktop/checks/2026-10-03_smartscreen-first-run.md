@@ -17,9 +17,9 @@ The installer is unsigned, by decision (the register, "Still open": code signing
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, 3,253,432 bytes |
-| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installer | {{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}, {{installer size in bytes of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installer SHA-256 | {{installer SHA-256 from SHA256SUMS of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Windows build | |
 | Browser used for the real download in step 6 (if you do it) | |
 
@@ -28,8 +28,8 @@ The installer is unsigned, by decision (the register, "Still open": code signing
 1. [ ] Read the streams of the local installer. A downloaded file has a second stream named `Zone.Identifier`; a local build has only the main data stream.
 
    ```powershell
-   $Release = 'D:\dev\release\0.1.0'
-   Get-Item -LiteralPath "$Release\nq-lab terminal_0.1.0_x64-setup.exe" -Stream * | Select-Object Stream, Length
+   $Release = '{{release folder of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}'
+   Get-Item -LiteralPath "$Release\{{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}" -Stream * | Select-Object Stream, Length
    ```
 
    Expected: one row, `:$DATA`, with the installer's size. Record what you see below.
@@ -46,8 +46,8 @@ The installer is unsigned, by decision (the register, "Still open": code signing
    ```powershell
    $Ev   = 'D:\dev\d5\owner-evidence\<date>_smartscreen-first-run'
    New-Item -ItemType Directory -Force -Path $Ev | Out-Null
-   $Copy = Join-Path $Ev 'nq-lab terminal_0.1.0_x64-setup.exe'
-   Copy-Item -LiteralPath "$Release\nq-lab terminal_0.1.0_x64-setup.exe" -Destination $Copy
+   $Copy = Join-Path $Ev '{{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}'
+   Copy-Item -LiteralPath "$Release\{{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}" -Destination $Copy
    Set-Content -LiteralPath $Copy -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
    Get-Item -LiteralPath $Copy -Stream * | Select-Object Stream, Length
    ```

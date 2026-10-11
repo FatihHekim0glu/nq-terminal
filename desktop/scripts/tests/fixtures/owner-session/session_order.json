@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "note": "Fixture list for owner-session.tests.ps1. The real list is docs/desktop/checks/session_order.json.",
+  "steps": [
+    { "check": "real-keyboard", "template": "2026-10-03_real-keyboard.md", "minutes": 15 },
+    { "check": "nvda", "template": "2026-10-03_nvda.md", "minutes": 20 },
+    { "check": "minimised-close", "template": "2026-10-11_minimised-close.md", "minutes": 10 }
+  ]
+}

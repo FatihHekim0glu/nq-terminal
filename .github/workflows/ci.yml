@@ -125,6 +125,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "upgrade-owner.tests.ps1 exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\close-app.tests.ps1
           if ($LASTEXITCODE -ne 0) { throw "close-app.tests.ps1 exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\owner-session.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "owner-session.tests.ps1 exit $LASTEXITCODE" }
 
   # The Rust shell's format check (docs/desktop/ci.md, "The Rust job"). Only rustfmt runs here: the crate has been built
   # on the GNU host of the lab PC alone, so clippy and the unit tests wait for a first MSVC build (REL-07).

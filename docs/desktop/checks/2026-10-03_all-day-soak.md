@@ -14,7 +14,7 @@ The run opens the heavy screens in rounds (GP, GIP, `volmanaged_v0 EQ`, REG, MON
 | --- | --- |
 | Run date and start time | |
 | Length planned (hours) | |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Overnight soak of the build night (W5B, before) | 3 hours (36 to 37 samples, PARTIAL); largest sample 1,577.4 MB (the start-up peak; 1,292 MB at most after 15 minutes) |
 | Re-measure soak (W5C, after) | 2 h (harness stopped at 2 h 5 min by the manager; external sampler, 25 samples), PARTIAL; largest sample 705.8 MB, first 698.7 MB, median 674.8 MB, slope over the last hour +25.9 MB per hour; source `D:/dev/w5c/measure-runs/soak-outside.jsonl` |
 

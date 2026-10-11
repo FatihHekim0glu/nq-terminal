@@ -14,7 +14,7 @@ Decision 1.1 of the register (`docs/desktop/owner_decisions_windows.md`, "T3: co
 | --- | --- |
 | Run date | |
 | Build read | the `measure` build (the default of the command) |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Machine up time at the run (the harness prints it) | |
 | Measure artefact median for cold HOME, for the "within noise" comparison | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms) |
 

@@ -146,7 +146,7 @@ These are the fourteen owner decisions of `windows_build_plan.md`, in its order.
 | O11 | Closing with a running backtest | Taken: confirm, then stop |
 | O12 | Minimum window size | Taken: 1,024 by 640 |
 | O13 | Apple Developer Program | Deferred with the Mac |
-| O14 | A licence for the public repository | Open, no action: matters only for free open-source signing |
+| O14 | A licence for the public repository | Open: answered in practice by LICENSE:1-4 (all rights reserved, published for viewing and evaluation only); owner to confirm; matters only for free open-source signing |
 | O15 | A standing go for commits and pushes | Taken (plan decision 2); the tag is under 1.5 |
 | O16 | Quiet-machine windows | Provisional (plan decision 3) |
 | O17 | How the kit reaches the Mac | Deferred with the Mac |
@@ -204,7 +204,7 @@ The security review of the plan found four places where the safer design departs
 | Departure | From | Because |
 | --- | --- | --- |
 | Local GNU-host release, one combined embedded manifest, no MSVC build | 02 C3-13, 03 section 13.1 | Plan decision 4; the MSVC leg waits for CI |
-| No CI workflow files; `desktop/scripts/check.ps1`, `desktop/scripts/advisories.mjs` and one local T8 run stand in | 04 D4.1, D5.3, D5.4 | No GitHub Actions tonight |
+| The CI workflow `.github/workflows/ci.yml` runs the checks that need no private lab data on each push and pull request to `main`; `desktop/scripts/check.ps1`, `desktop/scripts/advisories.mjs` and one local T8 run stand in for the rest | 04 D4.1, D5.3, D5.4 | The lab checks need private data, so they stay local (`ci.md`) |
 | The G2 row "GNU smoke against MSVC measure" becomes GNU smoke against GNU measure | 04 D5 exit list | Follows from the first row |
 | The stale-dist rebuild needs an explicit click | 03 section 7.1 (the shell rebuilds a stale page) | It runs package install scripts; refused outright under the test builds |
 | The default install folder is per-user under `%LOCALAPPDATA%\Programs`, with a protected list on any chosen folder | 03 section 13.1 (`D:\Apps\nq-lab terminal`) | Decision 1.3 |

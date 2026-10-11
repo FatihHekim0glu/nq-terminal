@@ -13,10 +13,10 @@ This check proves that on the real installer, by hand, in the one case the autom
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer file | `nq-lab terminal_0.1.0_x64-setup.exe` |
-| Installer size (bytes) | 3,253,432 |
-| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installer file | {{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installer size (bytes) | {{installer size in bytes of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installer SHA-256 | {{installer SHA-256 from SHA256SUMS of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Folder chosen | `D:\Apps\nq-lab terminal` (or your own) |
 
 ## Preconditions
@@ -40,9 +40,9 @@ This check proves that on the real installer, by hand, in the one case the autom
 1. [ ] Verify the installer against the checksum list. Both lines must show the same hash as the table above (case does not matter).
 
    ```powershell
-   $Release = 'D:\dev\release\0.1.0'
-   (Get-FileHash -Algorithm SHA256 -LiteralPath "$Release\nq-lab terminal_0.1.0_x64-setup.exe").Hash
-   Select-String -LiteralPath "$Release\SHA256SUMS" -SimpleMatch 'nq-lab terminal_0.1.0_x64-setup.exe'
+   $Release = '{{release folder of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}'
+   (Get-FileHash -Algorithm SHA256 -LiteralPath "$Release\{{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}").Hash
+   Select-String -LiteralPath "$Release\SHA256SUMS" -SimpleMatch '{{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}'
    ```
 
 2. [ ] Double-click the installer. Expected: no UAC prompt, a wizard with a folder page. Write down the folder it offers: it must be `%LOCALAPPDATA%\Programs\nq-lab terminal` (that is `C:\Users\<you>\AppData\Local\Programs\nq-lab terminal`, the product folder name of the installer script).

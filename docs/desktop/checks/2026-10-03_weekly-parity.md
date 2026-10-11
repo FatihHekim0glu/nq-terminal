@@ -14,7 +14,7 @@ The weekly parity list of 03 section 19 and 04 phase D6 (task D6.2), about 15 mi
 | --- | --- |
 | Week number (1 to 4) | |
 | Run date | |
-| Installed tag (as shown by the installer's version, and the release commit) | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Which door started the backend today (app or browser) | |
 | Consecutive green weeks before this one | |
 
