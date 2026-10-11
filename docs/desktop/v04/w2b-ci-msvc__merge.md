@@ -1,6 +1,6 @@
 # Wave w2b, merge: CI widened, the MSVC leg, the drift watch and the release build
 
-Integration of the three slices (ci-widen, desktop-check, drift-release) on the branch `v04/w2b-ci-msvc`. The merge step wired the documents that the slices could not touch, checked the third slice (its builder left no report), ran the local release checks and made no git write. A release check then found gaps (below); they are fixed. Status: ready to push. Nothing here has run on a hosted runner.
+Integration of the three slices (ci-widen, desktop-check, drift-release) on the branch `v04/w2b-ci-msvc`. The merge step wired the documents that the slices could not touch, checked the third slice (its builder left no report), ran the local release checks and made no git write. A release check then found gaps (below); they are fixed. Status: pushed and green on hosted runners (section "Post-push loop" at the end); the text above was written before the first run.
 
 ## What the merge changed
 
@@ -71,7 +71,7 @@ One more defect of the same kind in the test file: after fix 1 two born-failing 
 
 ## Rust coverage figure
 
-Not available yet. `cargo-llvm-cov` is not installed on this PC and the figure is produced by the `coverage` job of `desktop-check.yml` on the hosted MSVC leg (report only, artefact `rust-coverage`, one line in the run summary). The post-push loop must read it from the first green run and paste it here for w9 to fold into `docs/TESTING.md`. Until then the figure is: none.
+Rust coverage, default feature set, MSVC (report only): lines 50.83%, functions 48.41%, regions 50.11%. Read from the `coverage` job of desktop-check run 38166147800 (the same figures in runs 38164591015 and 38165243344). For w9 to fold into `docs/TESTING.md`.
 
 ## For the 03 Appendix A addendum
 
@@ -101,3 +101,28 @@ Both gates are repository variables, unset today, so both write jobs are skipped
 6. Wave w2a must add a `test:coverage` script that forwards extra arguments and writes `web/coverage/coverage-summary.json` (the `json-summary` reporter); until then the coverage step prints a notice and passes.
 7. Repository variables and the register entry for O20 (two of its switches are wired here, the CodeQL permission is not) are the owner's and the manager's.
 8. Owner and manager settings still open: a GitHub environment named `release` (limited to main, one required reviewer) and `environment: release` on the attest job; the repository variables `NQT_DRIFT_ISSUES` and `NQT_ATTEST`. A release dispatch must be run on main for an attestation to exist.
+
+## Post-push loop (hosted runs of v04/w2b-ci-msvc)
+
+Runs, all at `https://github.com/FatihHekim0glu/nq-terminal/actions/runs/<id>`:
+
+| Run | Workflow | Commit | Result |
+|---|---|---|---|
+| 38163832244 | ci | c1c9ebe | cancelled by the next push (every job finished so far green, offline e2e included) |
+| 38163832316 | desktop-check | c1c9ebe | failure: 4 tests failed on the runner (below) |
+| 38163832309 | webview2-drift | c1c9ebe | success (first branch run) |
+| 38164590958 / 38164591015 | ci / desktop-check | 882d8c4 | ci cancelled by the next push; desktop-check failure: one smoke test |
+| 38165243325 / 38165243344 | ci / desktop-check | fa1854c | ci success; desktop-check failure: one smoke test |
+| 38166147796 / 38166147800 | ci / desktop-check | f447f72 | both success |
+
+Fix rounds (three of four used):
+
+1. `882d8c4` fix(desktop). On the hosted runner the user is the machine's RID 500 account, which SDDL writes as the alias `LA`. The owner-only lock check (`reads.rs`) compared the full SID only, so the user's own rights were refused (3 `reads::` tests), and the DACL test of the data folder (`window_folders.rs`) missed the trustee. `sddl_alias_of` now maps a machine SID ending in -500 to `LA`; a new test covers accept and reject. A real defect, not an environment skip: the built-in Administrator on any PC hit it.
+2. `fa1854c` ci. `zoom_and_size_reach_the_page_and_the_window` asks for a 1280x800 window; the hosted desktop is smaller and the shell fits the window to it (inner 1028x749 at scale 1). Added to `RUNNER_SKIPS` with that reason (smoke set), as the failure table above foresaw; the lab PC run covers it.
+3. `f447f72` ci. `the_page_gets_the_shell_object_and_no_new_window` saw no `__NQT_SHELL__`: the smoke page can start loading before the asynchronous script registration finishes. The test now waits for the `window_hooks` log line and reloads the page before it reads the object (the production shell navigates only after the backend is up, so the race is a test one). The Tests step now runs `cargo test --no-fail-fast` so one run names every failing test; the guard test and `ci.md` follow. This fix was written without a local smoke run (windres is not on this PC's PATH for the smoke build); the hosted run is its proof.
+
+Figures from the green run: release exe 3,543,552 bytes (MSVC) against 3,698,688 bytes (desktop-v0.3.3, GNU host), change -4.2%, limit +25%. The drift watch read WebView2 runtime 153.0.4234.48 on `windows-2025` (from the HKLM key), below the committed floor 154, so a scheduled run on the hosted image stays green until the runner image moves to 154 or later.
+
+Left as it was: nothing failed for a reason outside the repo. `desktop-check.yml` is not dispatch-only; D4.6 can move on this evidence. `desktop-release.yml` was not dispatched (its exit criterion is only that it is written).
+
+Owner settings, none created by this loop: repository variables `NQT_DRIFT_ISSUES` = `on` and `NQT_ATTEST` = `on` (unset today, so both write jobs are skipped); a GitHub environment `release` limited to main with one required reviewer, then `environment: release` on the attest job; the O20 register entry; the web `test:coverage` script from wave w2a (the web coverage step prints a notice until then).
