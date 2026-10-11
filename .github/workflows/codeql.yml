@@ -1,0 +1,47 @@
+# CodeQL static analysis (grade G-06, step 3). It is dispatch-only on purpose: it needs `security-events: write` on its
+# job, a departure from the repository's "contents: read only" rule (docs/desktop/ci.md), so it stays manual until the
+# owner says go (decision O20). The move to a push, pull-request or schedule trigger is a separate change that updates
+# desktop/harness/tests/supply-chain-workflow.test.mjs and docs/desktop/ci.md together.
+#
+# One job, three languages as a matrix. None of them needs a build (build-mode none), so nothing is compiled or
+# installed. The analysis uploads its results to the repository's code scanning page, and writes nothing else.
+name: codeql
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python, actions]
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}

@@ -204,6 +204,10 @@ export default defineConfig(({ mode }) => ({
     // The panel, grid and screen style tests read their stylesheets as text (?raw) only.
     css: { include: [/src[\\/]theme[\\/]tokens\.css/, /src[\\/](chrome|grids|screens[\\/][a-z]+)[\\/][^?]+\.css\?raw$/] },
     restoreMocks: true,
+    // isolate stays on (the default). `vitest run --no-isolate` took the full run from 101 s to 59 s on the lab PC under load,
+    // but 65 tests in 14 files failed: the zustand stores (the workspace's panels, the command line's index), the ECharts
+    // host and the DOM that one file leaves behind reach the next file on the same worker. A per-file reset of that state is
+    // vi.resetModules() and a fresh DOM, which is what isolation already does, so there is no correct saving left to take.
     // One fork per hardware thread (32 here) ran the machine out of memory once the bundle test
     // added two real Vite builds; eight forks keep the whole suite at about the same wall time.
     maxWorkers: 8,

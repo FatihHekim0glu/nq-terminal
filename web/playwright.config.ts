@@ -109,16 +109,21 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   // The wall-clock performance budgets (e2e/perf/budgets.spec.ts) are their own project and their own command:
-  // `pnpm e2e` runs the main project (with --workers=4 if wanted), then `pnpm e2e:perf` runs the budgets alone
-  // in one worker, so CPU contention from other specs never decides them. The budgets depend on no other
-  // project: a failure in the main run no longer skips them (improvement run 3).
-  // The main project runs at most two workers, even under --workers=4: four workers left about 5,900 loopback
-  // sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes; two workers peaked at about
-  // 1,200), and one run lost a page load there to net::ERR_NO_BUFFER_SPACE.
+  // `pnpm e2e` runs the main project, then `pnpm e2e:perf` runs the budgets alone in one worker, so CPU contention from
+  // other specs never decides them. The budgets depend on no other project: a failure in the main run no longer skips
+  // them (improvement run 3).
+  // Both projects run ONE worker, whatever --workers asks for. The run has one fixture backend and one state folder (its job
+  // queue, its workspace store), and some specs write to them (flows/p2 queues runs; workspace-import and desktop-seams start
+  // the store), so a second worker would share state with them. Two workers did cut the full run from 26.0 to 14 to 16 minutes
+  // on a loaded PC, but each of two runs lost two tests to the shared backend's latency (10 s expectations on a command line that
+  // had not got its index, and a HOME page load); docs/desktop/v04/w2a-supply-chain__test-speed.md has the figures and what a
+  // safe second worker needs (a backend and a state folder of its own). scripts/playwrightConfig.test.ts keeps the rule.
+  // Four workers also left about 5,900 loopback sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes;
+  // two peaked at about 1,200), and one run lost a page load there to net::ERR_NO_BUFFER_SPACE.
   projects: [
     // e2e/support holds vitest unit tests (run by `pnpm test`), which Playwright's default *.test.ts match would load.
-    { name: 'chromium', testIgnore: [BUDGETS_SPEC, SUPPORT_UNIT_TESTS], workers: 2 },
-    { name: 'perf', testMatch: BUDGETS_SPEC },
+    { name: 'chromium', testIgnore: [BUDGETS_SPEC, SUPPORT_UNIT_TESTS], workers: 1 },
+    { name: 'perf', testMatch: BUDGETS_SPEC, workers: 1 },
   ],
   webServer: [
     {
