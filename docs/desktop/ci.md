@@ -10,20 +10,20 @@ Six jobs. The `windows` job, `windows-2025`, has a 30 minute limit; its steps, i
 
 | Step | Command (from the repository folder) | What it proves |
 |---|---|---|
-| Check out | `actions/checkout` into a folder named `terminal` | The tree as pushed. |
+| Check out | `actions/checkout` into a folder named `terminal`, with `fetch-tags: true` | The tree as pushed. The tags are fetched because the owner-session self-test reads the release tag `desktop-v0.3.2` with a read-only `git rev-parse`, and a default checkout carries no tags. |
 | Set up pnpm and Node | `pnpm/action-setup` (version from `web/package.json`), `actions/setup-node` 24 with the pnpm store cached | The pinned toolchain. |
 | Prepare scratch folder | creates `D:\dev\tmp` | Some tests write scratch files there. |
 | Install | `pnpm install --frozen-lockfile` in `web` | The lockfile is complete and the install is reproducible. |
 | Web type checks | `pnpm test:types`, then `pnpm test:e2e-types` | `tsc -b` for the app and the type projects of every end-to-end suite. |
 | Contract hash | `pnpm check:api` | The generated API types match `contract/openapi.json`. |
 | Vitest | `vitest run`, minus three tests that need the lab (below) | The unit and component suites, about 7,400 tests. |
-| Web test coverage | `pnpm test:coverage` with the same exclusions, when `web/package.json` has that script (wave w2a adds it); until then a `::notice` says there is none and the step passes | The coverage figure. A failing run fails the job. |
+| Web test coverage | `pnpm test:coverage` (`vitest run --coverage`, `@vitest/coverage-v8`, added by wave w2a) with the same exclusions; the step keeps a `::notice` fallback that passes only if the script is ever removed | The coverage figure. A failing run fails the job. |
 | Upload coverage summary | `actions/upload-artifact` of `web/coverage/coverage-summary.json` | The summary is kept for 30 days. The step may fail without failing the run: a lost upload is not a failed test. |
 | Web build | `pnpm build` | `tsc -b`, the Vite build, the bundle budgets and the build stamp. |
-| Desktop script tests | `node --test desktop/scripts/tests/*.test.mjs` | The artefact check, the dist scan, the installer hooks and the bootstrapper check. |
+| Desktop script tests | `node --test desktop/scripts/tests/*.test.mjs scripts/tests/*.test.mjs` | The artefact check, the dist scan, the installer hooks and the bootstrapper check, and the tests of the release-tree scripts, among them `osv_scan.test.mjs` (fixture answers, no network). The `osv` job of `supply-chain.yml` runs the scanner tests again before its scan. |
 | Stand-in lab | `python -m venv` under the runner's temp folder, `NQT_LAB` pointing at it | The harness runs the lab's interpreter for its window watch, a standard-library script. The folder holds no lab data. |
 | Desktop harness tests | `node --test desktop/harness/tests/*.test.mjs` | The measurement harness's own tests, among them the pin tests of this workflow. |
-| Release script self-tests | `scripts/tests/release_check.tests.ps1`, `scripts/tests/smoke_real.tests.ps1`, `desktop/scripts/install-test.ps1 -SelfTest`, `desktop/scripts/tests/install-test.tests.ps1`, `desktop/scripts/tests/upgrade-owner.tests.ps1`, `desktop/scripts/tests/close-app.tests.ps1` and `desktop/scripts/tests/owner-session.tests.ps1` | The born-failing tests of the release scripts. They install nothing. The upgrade test reads the owner's real install only when one exists for the user, which a hosted runner never has, so that part skips itself and says so. `desktop/harness/tests/ci-workflow.test.mjs` fails when a new `*.tests.ps1` under `scripts/tests` or `desktop/scripts/tests` is not listed in the workflow. |
+| Release script self-tests | `scripts/tests/release_check.tests.ps1`, `scripts/tests/smoke_real.tests.ps1`, `scripts/tests/record_green.tests.ps1` (the `-Coverage` switch of `record_green.ps1`, against scratch trees under `D:dev	mp`), `desktop/scripts/install-test.ps1 -SelfTest`, `desktop/scripts/tests/install-test.tests.ps1`, `desktop/scripts/tests/upgrade-owner.tests.ps1`, `desktop/scripts/tests/close-app.tests.ps1` and `desktop/scripts/tests/owner-session.tests.ps1` | The born-failing tests of the release scripts. They install nothing. The upgrade test reads the owner's real install only when one exists for the user, which a hosted runner never has, so that part skips itself and says so. `desktop/harness/tests/ci-workflow.test.mjs` fails when a new `*.tests.ps1` under `scripts/tests` or `desktop/scripts/tests` is not listed in the workflow. |
 
 The other five jobs run beside it:
 
@@ -129,9 +129,30 @@ A GitHub environment named `release`, restricted to the `main` branch with a req
 
 The two variables are repository settings (Settings, then the Actions variables page). Notes: `docs/desktop/v04/w2b-ci-msvc__drift-release.md`.
 
+## The supply-chain workflow
+
+`.github/workflows/supply-chain.yml` (grade G-06) watches the three dependency graphs this repository owns and makes an SBOM of each. It runs every Monday at 05:23 UTC, on dispatch, and on a push that touches the workflow file or one of the three lock files (`web/pnpm-lock.yaml`, `desktop/src-tauri/Cargo.lock`, `qa/uv.lock`). The push trigger is there because a schedule or dispatch trigger runs only from the default branch, so a workflow added on a branch would otherwise not run before it is merged; it also re-checks the graphs whenever a lock file moves. Four jobs on `ubuntu-24.04`, none of which installs a dependency (so no lifecycle script of a package runs):
+
+| Job | What it runs | Artefact kept 90 days |
+|---|---|---|
+| `rust` | the pinned toolchain; `cargo cyclonedx` (CycloneDX 1.5, target `x86_64-pc-windows-gnu`, the shipped build); `cargo deny --locked check`; `cargo audit` | `sbom-cargo` |
+| `web` | `pnpm sbom --sbom-format cyclonedx --lockfile-only --prod`; `pnpm audit --prod --audit-level high` | `sbom-npm` |
+| `qa` | `uv export` to CycloneDX 1.5; `pip-audit` over a hashed `uv export` of the lock, with `--strict` | `sbom-qa` |
+| `osv` | `node --test scripts/tests/*.test.mjs` (the scanner's own tests, fixture answers, no network), then `node scripts/osv_scan.mjs`: every registry package of the three locks against api.osv.dev | `osv-report` |
+
+Each SBOM step and its upload come before the audit step of the same job, so a failed audit still leaves the SBOM. Every tool is pinned to an exact version (cargo-deny 0.20.2, cargo-audit 0.22.2, cargo-cyclonedx 0.5.9, uv 0.10.2, pip-audit 2.10.1) and installed with `fallback: none`, so a version without a prebuilt binary fails the job instead of being compiled from unpinned sources. A job fails on a vulnerability, on a scan that could not be completed and on an empty SBOM. No step carries `continue-on-error` or `|| true`.
+
+`scripts/osv_scan.mjs` sends api.osv.dev only the ecosystem, and the name with the version, of public packages. A name or npm scope that starts with `nq` is a lab package and is dropped when the lock is read, and the request builder refuses one that is still there. The report counts the packages it withheld and names none. Exit 0 is clean at the threshold (HIGH by default), 1 is an advisory at or above it, 2 is a scan that could not be completed. Severity comes from the record's label, then a CVSS 3 score, then a CVSS 4.0 vector (read as HIGH unless it names no impact); an OpenSSF malicious-package record (`MAL-`) is always CRITICAL. Records with no severity at all (many RUSTSEC entries) are listed, counted in the closing line and not gating, unless `--fail-on-unrated` is given.
+
+`desktop/harness/tests/supply-chain-workflow.test.mjs` reads both new workflows as text and fails on an unpinned action, a write permission outside the CodeQL job, a missing push path, a loose tool version, a hidden failure and a missing scanner-tests step in the `osv` job. Check both files with `actionlint` as under "Checking the workflow locally".
+
+## The CodeQL workflow
+
+`.github/workflows/codeql.yml` analyses `javascript-typescript`, `python` and `actions` (a matrix of three, `build-mode: none`, so nothing is built or installed). It is `workflow_dispatch` only, and stays so until the owner's go (decision O20). Its one job holds `security-events: write`, which is the only write scope in the two new workflows and the only departure from the read-only rule below; the top level of the file is `contents: read`. Moving it to a push, pull-request or schedule trigger is a separate change that updates `supply-chain-workflow.test.mjs` and this page together.
+
 ## Rules the workflow keeps
 
-These follow decision C3-2 and the supply-chain notes of the release research. `desktop/harness/tests/ci-rust-job.test.mjs` holds each as a guard and feeds it the broken state it must refuse.
+These follow decision C3-2 and the supply-chain notes of the release research. They hold for `ci.yml` and `supply-chain.yml`; `codeql.yml` keeps them except for the one scope named above. `desktop/harness/tests/ci-rust-job.test.mjs` holds each as a guard and feeds it the broken state it must refuse.
 
 - `permissions: contents: read` for the whole workflow, and no job widens it.
 - No secrets. The workflow reads none and the checkout does not keep the token (`persist-credentials: false`).
