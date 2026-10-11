@@ -272,6 +272,12 @@ fn check_backend_lifecycle(log: &[Value]) {
         shutdown["stopped_in_grace"], true,
         "the backend needed the job to end it: {shutdown}"
     );
+    assert_eq!(shutdown["mode"], "spawned", "{shutdown}");
+    let records = log
+        .iter()
+        .filter(|e| e["event"] == "supervise_shutdown")
+        .count();
+    assert_eq!(records, 1, "the exit shut down a second time: {log:?}");
     for refused in [
         "supervise_refused",
         "supervise_failed",

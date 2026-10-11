@@ -779,6 +779,27 @@ fn a_shell_attaches_to_a_real_backend_and_never_stops_it() {
         matches!(live.child.0.try_wait(), Ok(None)),
         "closing an attached shell stopped the backend it did not start"
     );
+    // V033B review: the close-app script reads the shutdown record to report a clean exit, and an attached backend
+    // is the owner's usual setup. Exactly one record, naming the attached mode, written after the store flush.
+    let shutdowns: Vec<&Value> = log
+        .iter()
+        .filter(|e| e["event"] == "supervise_shutdown")
+        .collect();
+    assert_eq!(
+        shutdowns.len(),
+        1,
+        "one close of an attached shell, one shutdown record: {log:?}"
+    );
+    assert_eq!(shutdowns[0]["mode"], "attached", "{}", shutdowns[0]);
+    assert!(
+        shutdowns[0].get("stopped_in_grace").is_none(),
+        "an attached backend is not stopped, so its record has no grace: {}",
+        shutdowns[0]
+    );
+    assert!(
+        position_of(&log, "store_flush") < position_of(&log, "supervise_shutdown"),
+        "the flush must come before the shutdown record: {log:?}"
+    );
 
     // The backend ends only when its own parent (this test) lets go of its stdin.
     drop(live.stdin.take());

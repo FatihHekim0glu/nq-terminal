@@ -14,6 +14,7 @@ import { defineConfig, devices } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CLEAN_DIRS_ENV } from './scripts/e2eTeardown.ts'
+import { RUN_ID_ENV, SCRIPT_PATH as E2E_STATE_SCRIPT, STATE_OWNER_ENV, newRunId } from './e2e/support/e2eState.ts'
 
 const WEB_DIR = path.dirname(fileURLToPath(import.meta.url))
 const TERMINAL_DIR = path.resolve(WEB_DIR, '..')
@@ -42,6 +43,7 @@ const FIXTURE_ENV: Record<string, string> = {
   ...Object.fromEntries(MACHINE_SETTINGS.map((key) => [key, ''])),
 }
 
+const SUPPORT_UNIT_TESTS = /e2e[\\/]support[\\/][^\\/]+\.test\.ts$/
 const BUDGETS_SPEC = /perf[\\/]budgets\.spec\.ts$/
 
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`
@@ -63,8 +65,13 @@ const ENSURE_RUN_DIR = path.join(WEB_DIR, 'scripts', 'start', 'ensureRunDir.ts')
 const PROOF_URL = `${API_ORIGIN}/api/desktop/proof?nonce=${'0'.repeat(64)}`
 // The build folder and the cookie are removed when the run ends (scripts/e2eTeardown.ts), so runs on different ports
 // leave nothing behind on the system drive but the backend's small state folder.
-// The state folder is not listed: the backend still holds its lock when the teardown runs, so it is emptied by the next run's
-// start instead (ensureRunDir.ts --fresh).
+// The state folder is not listed there: the backend still holds its lock when that teardown runs. It is marked with this run's
+// random id instead when the backend starts (e2eState.ts mark), and e2e/support/e2eState.teardown.ts removes it, through a
+// detached cleaner that waits for the lock, only when the marker is this run's own id (another port's folder is never touched).
+// A folder a killed run leaves behind is still emptied by the next run on that port (ensureRunDir.ts --fresh).
+const RUN_ID = newRunId()
+process.env[RUN_ID_ENV] = RUN_ID
+process.env[STATE_OWNER_ENV] = JSON.stringify({ folder: E2E_STATE, runId: RUN_ID })
 process.env[CLEAN_DIRS_ENV] = JSON.stringify([E2E_DIST, E2E_STORAGE])
 // Read by e2e/session.setup.ts (this process); the cookie file is also named for specs that make a context of their own.
 process.env.NQT_E2E_SESSION = JSON.stringify({ stateDir: E2E_STATE, apiPort: API_PORT, webOrigin: WEB_ORIGIN, storage: E2E_STORAGE })
@@ -74,7 +81,8 @@ export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e/.results',
   globalSetup: './e2e/session.setup.ts',
-  globalTeardown: './scripts/e2eTeardown.ts',
+  // The state-folder teardown first, the build-folder teardown last (scripts/e2eTeardown.test.ts reads the last).
+  globalTeardown: ['./e2e/support/e2eState.teardown.ts', './scripts/e2eTeardown.ts'],
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   fullyParallel: false,
   workers: 1,
@@ -108,14 +116,15 @@ export default defineConfig({
   // sockets in TIME_WAIT at the start of a run (Windows holds each for two minutes; two workers peaked at about
   // 1,200), and one run lost a page load there to net::ERR_NO_BUFFER_SPACE.
   projects: [
-    { name: 'chromium', testIgnore: BUDGETS_SPEC, workers: 2 },
+    // e2e/support holds vitest unit tests (run by `pnpm test`), which Playwright's default *.test.ts match would load.
+    { name: 'chromium', testIgnore: [BUDGETS_SPEC, SUPPORT_UNIT_TESTS], workers: 2 },
     { name: 'perf', testMatch: BUDGETS_SPEC },
   ],
   webServer: [
     {
       name: 'backend (fixture mode)',
       // The state folder must exist before the backend starts (it refuses a given NQT_STATE_DIR that is missing).
-      command: `node ${q(ENSURE_RUN_DIR)} --fresh ${q(E2E_STATE)} && ${q(PYTHON)} -m uvicorn fixture_app:app --app-dir ${q(BACKEND_TESTS)} --host 127.0.0.1 --port ${API_PORT}`,
+      command: `node ${q(ENSURE_RUN_DIR)} --fresh ${q(E2E_STATE)} && node ${q(E2E_STATE_SCRIPT)} mark ${q(E2E_STATE)} ${q(RUN_ID)} && ${q(PYTHON)} -m uvicorn fixture_app:app --app-dir ${q(BACKEND_TESTS)} --host 127.0.0.1 --port ${API_PORT}`,
       // Every other /api path needs a session; the proof route needs none (an answer of 200 means the backend is up).
       url: PROOF_URL,
       env: {

@@ -210,7 +210,7 @@ describe('the tsconfigs', () => {
 
   it('e2e/tsconfig.json also checks the offline config', () => {
     const tsconfig = JSON.parse(read('e2e', 'tsconfig.json')) as { include: string[] }
-    expect(tsconfig.include).toEqual(['./*.ts', '../playwright.config.ts', '../playwright.offline.config.ts'])
+    expect(tsconfig.include).toEqual(['./*.ts', './support/*.ts', '../playwright.config.ts', '../playwright.offline.config.ts'])
   })
 })
 

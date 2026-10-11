@@ -6,6 +6,7 @@ import { getBridge } from '../bridge'
 import { requestIbSwitch } from '../bridge/ibSwitch'
 import { IB_SWITCH } from '../copy/ibSwitch'
 import { useIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
+import { useBackendReadsTws } from './ibSwitchProbe'
 
 /**
  * A native button with role=switch whose checked state is the value in force in this session. A click asks the app for
@@ -20,10 +21,20 @@ import { useIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
 const ANNOUNCE_GAP_MS = 50
 type Phase = 'idle' | 'clearing' | 'asking' | 'answered'
 
+/**
+ * The note while this app has the switch off. LIVE reads TWS in that case only through a backend attached at start (not
+ * started by this app). Two sources say so: the flag LIVE's panel sets while it is open and fresh, and one read of the
+ * backend's own snapshot route when Options opens (so the note is right without LIVE ever having been opened). This
+ * component exists only while the switch is off, so the switch on and a browser never make the request.
+ */
+function OffNote({ id }: { readonly id: string }) {
+  const liveFlag = useIbSnapshotLive()
+  const backendReads = useBackendReadsTws(true)
+  return <p id={id} className="frame-ib-note">{liveFlag || backendReads ? IB_SWITCH.noteOffAttached : IB_SWITCH.noteOff}</p>
+}
+
 export default function IbSwitch() {
   const on = getBridge().ibSnapshot
-  // LIVE reads TWS while this app has the switch off: only a backend attached at start (not started by this app) can.
-  const attachedReading = useIbSnapshotLive()
   const noteId = useId()
   const [phase, setPhase] = useState<Phase>('idle')
   const timer = useRef<number | undefined>(undefined)
@@ -47,7 +58,7 @@ export default function IbSwitch() {
       <button type="button" role="switch" aria-checked={on} aria-describedby={noteId} onClick={ask}>
         {IB_SWITCH.label}
       </button>
-      <p id={noteId} className="frame-ib-note">{on ? IB_SWITCH.noteOn : attachedReading ? IB_SWITCH.noteOffAttached : IB_SWITCH.noteOff}</p>
+      {on ? <p id={noteId} className="frame-ib-note">{IB_SWITCH.noteOn}</p> : <OffNote id={noteId} />}
       <p role="status" className="frame-ib-note">{status}</p>
     </div>
   )

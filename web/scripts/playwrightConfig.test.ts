@@ -114,6 +114,13 @@ describe('Playwright projects', () => {
     expect(dirs[0]).toMatch(/e2e-gallery-\d+$/) // one folder per web port: Playwright refuses a busy port before building
   })
 
+  it('leaves the unit tests of e2e/support to vitest: no Playwright project loads them', () => {
+    // Born failing (0.3.3 review): Playwright's default match takes any *.test.ts under testDir, and e2e/support holds a
+    // vitest file (e2eState.test.ts), which Playwright cannot load.
+    const projects = config.projects ?? []
+    expect(projectsRunning(projects, 'e2e/support/e2eState.test.ts').map((p) => p.name)).toEqual([])
+  })
+
   it('keeps every other spec, including the browserless trace checks, in the main project', () => {
     const projects = config.projects ?? []
     for (const file of ['e2e/runs.spec.ts', 'e2e/perf/trace.spec.ts', 'e2e/visual/screens.spec.ts']) {

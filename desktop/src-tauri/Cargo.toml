@@ -29,7 +29,8 @@ tauri-build = { version = "2.7.1", features = [] }
 [dependencies]
 # 2.12.x keeps the 2.11.6 floor for the 2026 IPC fixes (03 section 13.1).
 tauri = { version = "2.12.1", features = [] }
-tauri-plugin-single-instance = { version = "2.4", optional = true }
+# Pinned to the version the close relay was proven on: its helper window class `<identifier>-sic` (close_relay.rs).
+tauri-plugin-single-instance = { version = "=2.5.2", optional = true }
 tauri-plugin-window-state = { version = "2.4", optional = true }
 webview2-com = "0.39.1"
 windows = { version = "0.62.2", features = [

@@ -30,6 +30,14 @@ pub const TAO_TARGET_CLASS: &str = "Tao Thread Event Target";
 const SINGLE_INSTANCE_SUFFIX: &str = "-sic";
 /// This module's subclass id (any value unique per window and procedure).
 const SUBCLASS_ID: usize = 0x4E51_5443;
+/// The helpers a release build relays: tao's event target and the single-instance window.
+const RELEASE_HELPERS: usize = 2;
+
+/// Whether the relay found fewer helpers than this build has (V033B review): a release relaying fewer than both can
+/// still lose a close to the one it missed. A test build registers no single-instance plugin, so tao's alone is whole.
+pub fn relay_incomplete(release_plugins: bool, relayed: usize) -> bool {
+    release_plugins && relayed < RELEASE_HELPERS
+}
 
 /// Whether a window of this class, on the UI thread, gets the relay.
 pub fn relays_close(class: &str, identifier: &str) -> bool {
@@ -108,7 +116,7 @@ pub fn install_on(helper: HWND, target: HWND) -> bool {
 }
 
 /// Installs the relay on every helper window of the calling thread (the UI thread, in `setup`), towards the app
-/// window, and logs what it found.
+/// window, and logs what it found; a release that relayed fewer than both helpers also logs `close_relay_incomplete`.
 pub fn install(target: HWND, identifier: &str) {
     let (mut relayed, mut failed) = (Vec::new(), Vec::new());
     for handle in thread_windows() {
@@ -130,6 +138,10 @@ pub fn install(target: HWND, identifier: &str) {
         "close_relay",
         json!({ "relayed": relayed, "failed": failed }),
     );
+    if relay_incomplete(crate::RELEASE_PLUGINS, relayed.len()) {
+        let found = json!({ "relayed": relayed, "failed": failed, "expected": RELEASE_HELPERS });
+        crate::crash::log("close_relay_incomplete", found);
+    }
 }
 
 #[cfg(test)]
@@ -148,6 +160,17 @@ mod tests {
         assert!(relays_close("Tao Thread Event Target", ID));
         assert!(relays_close("dev.nqlab.terminal-sic", ID));
         assert!(relays_close("dev.nqlab.terminal_0.3-sic", ID));
+    }
+
+    #[test]
+    fn a_release_that_relays_fewer_than_both_helpers_is_incomplete() {
+        for relayed in [0, 1] {
+            assert!(relay_incomplete(true, relayed), "{relayed} relayed");
+        }
+        assert!(!relay_incomplete(true, RELEASE_HELPERS));
+        for relayed in [0, 1, 2] {
+            assert!(!relay_incomplete(false, relayed), "a test build: {relayed}");
+        }
     }
 
     #[test]

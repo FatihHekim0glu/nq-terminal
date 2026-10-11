@@ -157,6 +157,44 @@ The app's own files are elsewhere: `%APPDATA%\dev.nqlab.terminal` holds `setting
 
 There is no updater by design (for 0.1.2 too: the recommended default, taken as a provisional owner decision). An update is a new installer, checked as in section 2 and installed by the owner through `desktop\scripts\upgrade-owner.ps1`, which takes the backup, runs the installer silently, verifies the result and rolls back on any failure. The script never starts the app: the first launch after an upgrade is yours.
 
+### Closing the app from a script
+
+`desktop\scripts\close-app.ps1` closes the running app the way a person closing its window does, so the app stores its unsent workspace changes before it exits. Use the full path, as in the upgrade steps below. Start with the dry run: it lists the app's processes and prints the window it would close, and it sends nothing.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\desktop\scripts\close-app.ps1' -DryRun
+```
+
+The normal close posts the request to the app's own window, then waits up to 30 seconds (`-TimeoutSeconds`) for the app to exit and for its log to show the store flush and the shutdown. It reads the log about once a second, so a question from the app is reported as soon as it is logged, not at the deadline:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\desktop\scripts\close-app.ps1'
+```
+
+`-Force` applies only after a timeout (exit 3). It stops the app's process and nothing else, and reports the close as forced (exit 4). It always waits at least 15 seconds, whatever `-TimeoutSeconds` says (the app asks about a running backtest only after a flush of up to 4 seconds and a 2 second job count read), and it gives an app that has flushed but not yet logged its shutdown 10 seconds more before it stops anything. It reads the log again right before the stop:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\Fatih Hekimoglu\nq-lab\terminal\desktop\scripts\close-app.ps1' -Force
+```
+
+Exit codes:
+
+- 0: graceful. The app exited, and its log shows the store flush and the shutdown after the request. With `-DryRun`, a window was found and nothing was sent.
+- 1: error. Bad arguments, a running app with no window the script can close, or a close request that could not be posted. A `SKIPPED process` line also exits 1: the script listed an app process but could not check it (for example an elevated app, or a process number the system reused), so it closed and stopped nothing for it and the app may still be running. Check the app by hand before you replace any files.
+- 2: not running. No app process of this user, or none of the `-ProcessId` values.
+- 3: timed out. The app was still running after the timeout and `-Force` was not given. The script stopped nothing. The same code reports `log-unreadable`: the app is still running and `shell.log` is missing or cannot be read, so an open backtest question cannot be ruled out. Nothing is stopped, `-Force` included; check the `-LogPath` the script printed.
+- 4: forced. The app did not exit in time, and `-Force` stopped its process.
+- 5: exited without evidence. The app exited, but its log lacks the store flush or the shutdown after the request, so check `shell.log` before you rely on the close.
+- 6: a backtest is running and the app is asking whether to stop it. The script does not stop the app while that question is open, `-Force` included. A question still open from an earlier run of the script counts too, until the app logs the answer (`close_confirm_answered`, with the choice `close` or `cancel`). Answer the question in the app, then run the script again. If you answer Close within a second of the question appearing, the script may still report 6 while the app is closing; check that the app has gone.
+
+When several app processes run, the worst result decides, in this order: 6, 3, 4, 5, 1, 0.
+
+If you cancel the question, the app stays open. An exit that no close came before (the app giving up after a crash or a window failure) never asks the question: it ends the backend the app started, a running backtest included, and writes its one `supervise_shutdown` record.
+
+The script closes only this user's `nq-lab-terminal.exe`. Its `-ImageName` option is for the script's own tests and accepts only `nq-lab-terminal` or a stand-in name of the form `nqt-test-` followed by lower-case letters, digits and hyphens; any other value is refused with exit 1 before a process is listed, so the script cannot close or stop another program. The wait and the stop act on the process the script listed at the start, never on a lookup by process number, so a number that the system reuses after the app exits cannot be waited on or stopped. The shell writes one `supervise_shutdown` record to `shell.log` on every close path, and the script reads it (with its `mode`: `spawned`, `attached` or `none`) as part of the evidence.
+
+Why a script posts to the app's own window: before 0.3.3, a close sent by .NET's `Process.CloseMainWindow` could land on one of the shell's hidden helper windows, and the app kept running.
+
 ### Before an upgrade
 
 1. Check the new build folder as in section 2: the installer, `SHA256SUMS` and `PROVENANCE.json` naming the new version and the commit of its tag.

@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
 // The read-only IB snapshot switch in Options (O10; desktop app only): a native button with role=switch, checked as
 // this session's value, described by its note, asking the app for the other value on a click (the app confirms in its
-// own dialog and applies it at the next start), with a polite status line; absent outside the desktop app.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+// own dialog and applies it at the next start), with a polite status line; absent outside the desktop app. While the
+// switch is off the note also follows the backend's own state: one read of GET /api/ib/snapshot when Options opens.
+import { QueryClient } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiProvider } from '../api/ApiProvider'
 import { installBridge } from '../bridge'
 import { fakeBridge } from '../bridge/bridge.testUtil'
 import { FRAME_STRIP } from '../copy/chrome'
 import { IB_SWITCH } from '../copy/ibSwitch'
 import { setIbSnapshotLive } from '../screens/live/ib/ibLiveStore'
+import {
+  DISABLED_SNAPSHOT,
+  LIVE_SNAPSHOT,
+  REFUSED_SNAPSHOT,
+  UNAVAILABLE_SNAPSHOT,
+} from '../screens/live/ib/ibSnapshot.fixtures'
 import { FrameStrip } from './FrameStrip'
 
 // The switch asks the shell by navigating, which jsdom cannot do, so the request is spied on (the addresses are
@@ -16,7 +25,22 @@ import { FrameStrip } from './FrameStrip'
 const requestIbSwitch = vi.hoisted(() => vi.fn())
 vi.mock('../bridge/ibSwitch', () => ({ requestIbSwitch }))
 
+// The backend's answer to GET /api/ib/snapshot: the server's own "IB not set" body unless a test says otherwise.
+const fetchSpy = vi.fn()
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+const fresh = () => ({ ...LIVE_SNAPSHOT, fetched_at_utc: new Date().toISOString() })
+const ibRequests = () => fetchSpy.mock.calls.filter(([url]) => String(url).includes('/api/ib/snapshot'))
+const noteOf = (sw: HTMLElement) => document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.textContent
+
+beforeEach(() => {
+  fetchSpy.mockReset()
+  fetchSpy.mockImplementation(async () => json(DISABLED_SNAPSHOT))
+  vi.stubGlobal('fetch', fetchSpy)
+})
+
 afterEach(() => {
+  vi.unstubAllGlobals()
   act(() => setIbSnapshotLive(false))
   requestIbSwitch.mockClear()
   cleanup()
@@ -30,16 +54,18 @@ async function open(ibSnapshot: boolean | null) {
   installBridge(fakeBridge({ ibSnapshot }))
   const noop = () => undefined
   render(
-    <FrameStrip
-      screen="HOME"
-      tapeOn={false}
-      scheme="standard"
-      onOpen={noop}
-      onNew={noop}
-      onTape={noop}
-      onScheme={noop}
-      onDemo={noop}
-    />,
+    <ApiProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <FrameStrip
+        screen="HOME"
+        tapeOn={false}
+        scheme="standard"
+        onOpen={noop}
+        onNew={noop}
+        onTape={noop}
+        onScheme={noop}
+        onDemo={noop}
+      />
+    </ApiProvider>,
   )
   const options = screen.getByRole('button', { name: FRAME_STRIP.options })
   fireEvent.click(options)
@@ -79,29 +105,87 @@ describe('the IB snapshot switch in Options', () => {
     installBridge(null)
     await open(true)
     const on = screen.getByRole('switch', { name: IB_SWITCH.label })
-    expect(document.getElementById(on.getAttribute('aria-describedby') ?? '')?.textContent).toBe(IB_SWITCH.noteOn)
+    expect(noteOf(on)).toBe(IB_SWITCH.noteOn)
   })
 
   it('says an attached backend reading TWS follows its own setting when the app has it off, and only then', async () => {
     await open(false)
     const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
-    const noteOf = () => document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.textContent
-    expect(noteOf()).toBe(IB_SWITCH.noteOff)
+    expect(noteOf(sw)).toBe(IB_SWITCH.noteOff)
     act(() => setIbSnapshotLive(true))
-    expect(noteOf()).toBe(IB_SWITCH.noteOffAttached)
-    expect(noteOf()).toMatch(/attached, not started by this app/)
-    expect(noteOf()).not.toMatch(/Off in this session/)
+    expect(noteOf(sw)).toBe(IB_SWITCH.noteOffAttached)
+    expect(noteOf(sw)).toMatch(/attached, not started by this app/)
+    expect(noteOf(sw)).not.toMatch(/Off in this session/)
     expect(sw.getAttribute('aria-checked')).toBe('false')
     act(() => setIbSnapshotLive(false))
-    expect(noteOf()).toBe(IB_SWITCH.noteOff)
+    expect(noteOf(sw)).toBe(IB_SWITCH.noteOff)
   })
 
   it('keeps the on note when the app has it on, whatever the snapshot does', async () => {
     await open(true)
     act(() => setIbSnapshotLive(true))
     const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
-    expect(document.getElementById(sw.getAttribute('aria-describedby') ?? '')?.textContent).toBe(IB_SWITCH.noteOn)
+    expect(noteOf(sw)).toBe(IB_SWITCH.noteOn)
   })
+
+  it('says an attached backend is reading TWS when it answers a fresh snapshot, although LIVE never mounted', async () => {
+    fetchSpy.mockImplementation(async () => json(fresh()))
+    await open(false)
+    const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
+    await waitFor(() => expect(noteOf(sw)).toBe(IB_SWITCH.noteOffAttached))
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+    expect(ibRequests()).toHaveLength(1)
+  })
+
+  it('asks once while Options is open and does not poll', async () => {
+    fetchSpy.mockImplementation(async () => json(fresh()))
+    await open(false)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+    expect(ibRequests()).toHaveLength(1)
+  })
+
+  it.each([
+    ['IB not set (disabled)', DISABLED_SNAPSHOT],
+    ['no TWS answered (unavailable)', UNAVAILABLE_SNAPSHOT],
+    ['a guard refused the read', REFUSED_SNAPSHOT],
+    ['an ok body the backend served from a cache 2 minutes old', { ...LIVE_SNAPSHOT, cached: true, age_s: 120 }],
+    ['a body of the wrong shape', { hello: 'world' }],
+  ])('keeps the off note when the backend answers %s', async (_name, body) => {
+    fetchSpy.mockImplementation(async () => json(body))
+    await open(false)
+    await waitFor(() => expect(ibRequests()).toHaveLength(1))
+    await settle()
+    expect(noteOf(screen.getByRole('switch', { name: IB_SWITCH.label }))).toBe(IB_SWITCH.noteOff)
+  })
+
+  it('keeps the off note when the request fails with an error status or does not reach the backend', async () => {
+    fetchSpy.mockImplementation(async () => json({ detail: 'broke' }, 500))
+    await open(false)
+    await waitFor(() => expect(ibRequests()).toHaveLength(1))
+    await settle()
+    expect(noteOf(screen.getByRole('switch', { name: IB_SWITCH.label }))).toBe(IB_SWITCH.noteOff)
+    cleanup()
+    installBridge(null)
+    fetchSpy.mockClear()
+    fetchSpy.mockImplementation(async () => {
+      throw new TypeError('network down')
+    })
+    await open(false)
+    await waitFor(() => expect(ibRequests()).toHaveLength(1))
+    await settle()
+    expect(noteOf(screen.getByRole('switch', { name: IB_SWITCH.label }))).toBe(IB_SWITCH.noteOff)
+  })
+
+  it('makes no request when the switch is on, whatever the backend would answer', async () => {
+    fetchSpy.mockImplementation(async () => json(fresh()))
+    await open(true)
+    await settle()
+    expect(ibRequests()).toHaveLength(0)
+    expect(noteOf(screen.getByRole('switch', { name: IB_SWITCH.label }))).toBe(IB_SWITCH.noteOn)
+  })
+
   it('asks the app for the other value and says where the answer is asked, without changing its own state', async () => {
     await open(false)
     const sw = screen.getByRole('switch', { name: IB_SWITCH.label })
@@ -173,9 +257,11 @@ describe('the IB snapshot switch in Options', () => {
     expect(document.activeElement).toBe(options)
   })
 
-  it('is not there outside the desktop app', async () => {
+  it('is not there outside the desktop app, and asks the backend nothing', async () => {
     await open(null)
+    await settle()
     expect(screen.queryByRole('switch')).toBeNull()
     expect(screen.queryByText(IB_SWITCH.label)).toBeNull()
+    expect(ibRequests()).toHaveLength(0)
   })
 })

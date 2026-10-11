@@ -17,7 +17,7 @@ use crate::{Launch, ShellError, crash};
 use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use tauri::{Manager, Runtime, WebviewWindow};
 use windows::core::PWSTR;
@@ -412,13 +412,121 @@ fn plan<R: Runtime>(window: &WebviewWindow<R>, launch: &Launch) -> Option<Spec> 
     })
 }
 
+/// What one call of `Supervisor::shutdown` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShutdownGate {
+    /// An earlier call went past the question and shut down: nothing is asked, logged or stopped again.
+    Done,
+    /// The owner kept the window (a running backtest, Cancel): the guard stays open and the next close asks again.
+    Kept,
+    /// This call shuts down; the guard is now closed.
+    Go,
+}
+
+/// The once guard (V033B review): main.rs shuts down from the close and again on RunEvent::Exit, when the backend can
+/// be gone but still current, its job count unreadable and so read as running. `may_close` (the count and the
+/// question) runs only while no call has gone past it, and only a call that gets past it closes the guard.
+fn shutdown_gate(done: &AtomicBool, may_close: impl FnOnce() -> bool) -> ShutdownGate {
+    if done.load(Ordering::SeqCst) {
+        return ShutdownGate::Done;
+    }
+    if !may_close() {
+        return ShutdownGate::Kept;
+    }
+    if done.swap(true, Ordering::SeqCst) {
+        ShutdownGate::Done
+    } else {
+        ShutdownGate::Go
+    }
+}
+
+/// What the shutdown found and ended, for its one `supervise_shutdown` record; a spawned backend says whether it
+/// stopped within its grace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ended {
+    Spawned(bool),
+    Attached,
+    Nothing,
+}
+
+fn shutdown_record(ended: Ended) -> serde_json::Value {
+    match ended {
+        Ended::Spawned(grace) => json!({ "mode": "spawned", "stopped_in_grace": grace }),
+        Ended::Attached => json!({ "mode": "attached" }),
+        Ended::Nothing => json!({ "mode": "none" }),
+    }
+}
+
+/// With a running backtest in a spawned backend, or a count that cannot be read, the owner is asked (O11; a test
+/// build answers Cancel); true lets the close go on. Any other backend, or none, goes on unasked.
+fn may_close<R: Runtime>(current: Option<&Backend>, owner: crate::dialogs::Owner<'_, R>) -> bool {
+    let Some(Backend::Spawned(s)) = current else {
+        return true;
+    };
+    let owner_ok = |pid| s.job_pids().contains(&pid);
+    let running = link::running_jobs(s.port(), s.session(), &owner_ok, run::LINK_TIMEOUT);
+    if let Err(e) = &running {
+        let error = e.to_string();
+        crash::log("supervise_close_count_unread", json!({ "error": error }));
+    }
+    if !link::close_needs_confirm(&running) {
+        return true;
+    }
+    // A close parked on the question (a minimised window may leave it unseen) shows in the log.
+    crash::log(
+        "close_confirm_asked",
+        json!({ "count_read": running.is_ok() }),
+    );
+    let answer = crate::dialogs::confirm_close_running_job(owner);
+    // The answer is logged after the dialog returns, so a log with an ask and no answer after it is a question still
+    // open, whenever it was asked (close-app.ps1 never stops a shell in that state).
+    crash::log("close_confirm_answered", answered_record(answer));
+    answer != crate::dialogs::Confirm::Cancel
+}
+
+/// The fields of the `close_confirm_answered` record: the owner's choice at the backtest question.
+fn answered_record(answer: crate::dialogs::Confirm) -> serde_json::Value {
+    let choice = match answer {
+        crate::dialogs::Confirm::Proceed => "close",
+        crate::dialogs::Confirm::Cancel => "cancel",
+    };
+    json!({ "choice": choice })
+}
+
+/// Ends a spawned backend: its stdin closed, STOP_GRACE_S to stop, then its job. An attached one is left running.
+fn end_backend(current: Option<&Backend>) -> Ended {
+    match current {
+        Some(Backend::Spawned(s)) => {
+            s.close_stdin();
+            let stopped_in_grace = s.wait_exit(Duration::from_secs(STOP_GRACE_S));
+            s.end();
+            Ended::Spawned(stopped_in_grace)
+        }
+        Some(Backend::Attached(_)) => Ended::Attached,
+        None => Ended::Nothing,
+    }
+}
+
+/// Why a close the owner cancelled keeps the window.
+const CLOSE_KEPT: &str = "a backtest is running and the close was cancelled";
+
 /// The supervisor's handle, kept as app state for the life of the window.
 pub struct Supervisor {
     page_server: Option<String>,
     shared: Option<Arc<Shared>>,
+    /// Set by the one shutdown that got past the question (`shutdown_gate`).
+    done: AtomicBool,
 }
 
 impl Supervisor {
+    const fn new(page_server: Option<String>, shared: Option<Arc<Shared>>) -> Self {
+        Self {
+            page_server,
+            shared,
+            done: AtomicBool::new(false),
+        }
+    }
+
     #[allow(
         dead_code,
         reason = "the mode is read by the tests and by the diagnostics once a menu item exists"
@@ -434,48 +542,61 @@ impl Supervisor {
         }
     }
 
-    /// Window closing (03 section 2.3): with a running backtest in a spawned backend, ask first (O11; a test build
-    /// answers Cancel, so the window stays); then close its stdin, give it STOP_GRACE_S to stop, and end the job.
-    /// Attach mode only stops the loop: the backend stays up for whoever owns it.
+    /// Window closing (03 section 2.3), once (`shutdown_gate`): `may_close` asks about a running backtest (Err keeps
+    /// the window and the next close asks again); then the loop stops, a spawned backend ends (`end_backend`), an
+    /// attached one stays up for whoever owns it, and one `supervise_shutdown` record names the mode. A later call
+    /// (RunEvent::Exit after the close) returns Ok at once, unasked and unlogged.
     pub fn shutdown<R: Runtime>(
         &self,
         owner: crate::dialogs::Owner<'_, R>,
     ) -> Result<(), ShellError> {
-        let Some(shared) = &self.shared else {
-            return Ok(());
-        };
-        let current = shared.current();
-        if let Some(Backend::Spawned(s)) = current.as_deref() {
-            let owner_ok = |pid| s.job_pids().contains(&pid);
-            let running = link::running_jobs(s.port(), s.session(), &owner_ok, run::LINK_TIMEOUT);
-            if let Err(e) = &running {
-                crash::log(
-                    "supervise_close_count_unread",
-                    json!({ "error": e.to_string() }),
-                );
-            }
-            let cancel = crate::dialogs::Confirm::Cancel;
-            if link::close_needs_confirm(&running) {
-                // A close parked on the question (a minimised window may leave it unseen) shows in the log.
-                crash::log(
-                    "close_confirm_asked",
-                    json!({ "count_read": running.is_ok() }),
-                );
-                if crate::dialogs::confirm_close_running_job(owner) == cancel {
-                    let kept = "a backtest is running and the close was cancelled";
-                    return Err(ShellError::Refused(kept.into()));
-                }
-            }
-        }
-        shared.stop();
-        if let Some(Backend::Spawned(s)) = current.as_deref() {
-            s.close_stdin();
-            let stopped = s.wait_exit(Duration::from_secs(STOP_GRACE_S));
-            crash::log("supervise_shutdown", json!({ "stopped_in_grace": stopped }));
-            s.end();
-        }
-        Ok(())
+        self.run_shutdown(
+            ShutdownKind::Close,
+            |current| may_close(current, owner),
+            end_backend,
+        )
     }
+
+    /// The shell is exiting (RunEvent::Exit) and the process goes on regardless, so there is nothing to keep and
+    /// nothing to ask (an exit with no close before it, from a lost engine or a failed bridge, must not put the
+    /// backtest question to an owner who may have no window left). A close that already shut down returns Ok at once;
+    /// otherwise the backend ends the same way and the one `supervise_shutdown` record is written.
+    pub fn shutdown_on_exit(&self) -> Result<(), ShellError> {
+        self.run_shutdown(ShutdownKind::Exit, |_| true, end_backend)
+    }
+
+    /// The one shutdown: the gate, then the stop, the end and the record. `ask` is called only for a `Close`.
+    fn run_shutdown(
+        &self,
+        kind: ShutdownKind,
+        ask: impl FnOnce(Option<&Backend>) -> bool,
+        end: impl FnOnce(Option<&Backend>) -> Ended,
+    ) -> Result<(), ShellError> {
+        let current = self.shared.as_ref().and_then(|s| s.current());
+        let may_go = || match kind {
+            ShutdownKind::Close => ask(current.as_deref()),
+            ShutdownKind::Exit => true,
+        };
+        match shutdown_gate(&self.done, may_go) {
+            ShutdownGate::Done => Ok(()),
+            ShutdownGate::Kept => Err(ShellError::Refused(CLOSE_KEPT.into())),
+            ShutdownGate::Go => {
+                if let Some(shared) = &self.shared {
+                    shared.stop();
+                }
+                let ended = end(current.as_deref());
+                crash::log("supervise_shutdown", shutdown_record(ended));
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Whether a shutdown may put the backtest question: a close does, the exit of the process does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShutdownKind {
+    Close,
+    Exit,
 }
 
 /// The smoke `--attach-url`: a page server with no backend and no handshake (03 section 7.1).
@@ -492,10 +613,7 @@ fn page_server<R: Runtime>(
         .map_err(|e| ShellError::Refused(format!("--attach-url: {e}")))?;
     window.navigate(parsed)?;
     crash::log("supervise_attach_url", json!({ "url": url }));
-    Ok(Some(Supervisor {
-        page_server: Some(url.clone()),
-        shared: None,
-    }))
+    Ok(Some(Supervisor::new(Some(url.clone()), None)))
 }
 
 #[cfg(not(feature = "smoke"))]
@@ -542,10 +660,7 @@ pub fn start<R: Runtime>(
             "supervise_idle",
             json!({ "note": "no lab is set; the splash stays" }),
         );
-        return Ok(Supervisor {
-            page_server: None,
-            shared: None,
-        });
+        return Ok(Supervisor::new(None, None));
     };
     if !spec.python().is_file() {
         let missing = format!("{} has no .venv\\Scripts\\python.exe", spec.lab.display());
@@ -566,122 +681,13 @@ pub fn start<R: Runtime>(
         .name("nqt-supervise".into())
         .spawn(move || run::run(loop_shared, sink))
         .map_err(|e| ShellError::Io(e.to_string()))?;
-    Ok(Supervisor {
-        page_server: None,
-        shared: Some(shared),
-    })
+    Ok(Supervisor::new(None, Some(shared)))
 }
 
 #[cfg(test)]
-mod exit_note_tests {
-    use super::*;
+#[path = "supervise_shell_exit_note_tests.rs"]
+mod exit_note_tests;
 
-    /// V032 review: on a second exit (a fragment-only navigation) the reason line still held the earlier exit's code
-    /// when the announcement focused it, so a screen reader read out a stale code. The code line is now written first:
-    /// the very scripts the window evaluates, run in their order by node against a stopped page whose line still holds
-    /// an earlier code, leave the reason line with this exit's code at the moment of the focus.
-    #[test]
-    #[allow(
-        clippy::disallowed_methods,
-        reason = "a unit test runs node on the shell's own scripts"
-    )]
-    fn the_announcement_reads_this_exits_code_never_an_earlier_one() {
-        let evals = stopped_evals("exited", Some(&check::exit_note_script(Some(5))));
-        let harness = format!(
-            r#"
-const evals = {evals};
-const reason = {{ nodeType: 3, textContent: 'The backend stopped.' }};
-const code = {{ nodeType: 1, textContent: ' The backend ended with exit code 3.' }};
-reason.nextSibling = code; code.nextSibling = null;
-const body = {{ id: 'body' }};
-let heard = null;
-const line = {{ firstChild: reason, setAttribute() {{}}, focus() {{ heard = reason.textContent + code.textContent; doc.activeElement = line; }} }};
-const doc = {{ title: 'nq-lab terminal: stopped', readyState: 'complete', body, activeElement: body,
-  getElementById: (id) => (id === 'exited-text' ? line : id === 'exit-code' ? code : null) }};
-const location = {{ pathname: '/stopped.html', hash: '#exited' }};
-for (const script of evals) new Function('document', 'location', 'setTimeout', script)(doc, location, () => {{}});
-console.log(JSON.stringify({{ heard, title: doc.title }}));
-"#,
-            evals = serde_json::to_string(&evals).expect("scripts")
-        );
-        let out = std::process::Command::new("node")
-            .args(["-e", &harness])
-            .output()
-            .unwrap_or_else(|e| panic!("cannot run node: {e}"));
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        let got: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
-        assert_eq!(
-            got,
-            json!({
-                "heard": "The backend stopped. The backend ended with exit code 5.",
-                "title": "nq-lab terminal: The backend stopped."
-            })
-        );
-    }
-
-    #[test]
-    fn a_reason_without_an_exit_code_evaluates_only_its_announcement() {
-        assert_eq!(
-            stopped_evals("lock-held", None),
-            [announce::announce_script("lock-held")]
-        );
-    }
-
-    #[test]
-    fn the_repeats_cover_a_full_page_load() {
-        const { assert!(EXIT_NOTE_REPEATS >= 1) };
-        assert!(
-            EXIT_NOTE_PAUSE * EXIT_NOTE_REPEATS >= Duration::from_secs(2),
-            "the repeats must outlast the stopped page's load"
-        );
-    }
-
-    #[test]
-    fn with_no_newer_exit_the_note_is_evaluated_again_every_time() {
-        let counter = AtomicU64::new(0);
-        let generation = next_exit_generation(&counter);
-        let mut evals = 0;
-        let ran = repeat_exit_note(
-            generation,
-            &counter,
-            EXIT_NOTE_REPEATS,
-            Duration::ZERO,
-            || evals += 1,
-        );
-        assert_eq!((ran, evals), (EXIT_NOTE_REPEATS, EXIT_NOTE_REPEATS));
-    }
-
-    #[test]
-    fn a_newer_exit_ends_the_older_loop_before_its_next_eval() {
-        let counter = AtomicU64::new(0);
-        let older = next_exit_generation(&counter);
-        let mut evals = 0;
-        let ran = repeat_exit_note(older, &counter, EXIT_NOTE_REPEATS, Duration::ZERO, || {
-            evals += 1;
-            // A second exit arrives while the first loop runs.
-            let newer = next_exit_generation(&counter);
-            assert!(newer > older);
-        });
-        assert_eq!(
-            (ran, evals),
-            (1, 1),
-            "the older code must never be written again"
-        );
-    }
-
-    #[test]
-    fn an_older_loop_that_starts_late_writes_nothing() {
-        let counter = AtomicU64::new(0);
-        let older = next_exit_generation(&counter);
-        let _newer = next_exit_generation(&counter);
-        let mut evals = 0;
-        let ran = repeat_exit_note(older, &counter, EXIT_NOTE_REPEATS, Duration::ZERO, || {
-            evals += 1
-        });
-        assert_eq!((ran, evals), (0, 0));
-    }
-}
+#[cfg(test)]
+#[path = "supervise_shell_shutdown_tests.rs"]
+mod shutdown_tests;

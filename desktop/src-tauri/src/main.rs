@@ -297,8 +297,11 @@ fn main() {
         .build(context());
     match built {
         Ok(app) => app.run(|app, event| {
-            if matches!(event, tauri::RunEvent::Exit) {
-                let _ = shutdown_backend(app);
+            if matches!(event, tauri::RunEvent::Exit)
+                && let Some(supervisor) = app.try_state::<supervise::shell::Supervisor>()
+                && let Err(e) = supervisor.shutdown_on_exit()
+            {
+                crash::log("supervise_exit_failed", json!({ "error": e.to_string() }));
             }
         }),
         Err(e) => {
@@ -323,7 +326,8 @@ fn close_may_go_on(app: &tauri::AppHandle) -> bool {
 }
 
 /// Ends the backend this shell started (03 section 2.3): asks first when a backtest runs (Err keeps the window), then
-/// closes its stdin, waits up to five seconds and ends the job. An attached backend is never touched.
+/// closes its stdin, waits up to five seconds and ends the job. An attached backend is never touched. It runs once:
+/// after a close went past the question, RunEvent::Exit (`Supervisor::shutdown_on_exit`, which never asks) returns Ok at once.
 fn shutdown_backend(app: &tauri::AppHandle) -> Result<(), ShellError> {
     match app.try_state::<supervise::shell::Supervisor>() {
         Some(supervisor) => supervisor.shutdown(app.get_webview_window(MAIN_LABEL).as_ref()),

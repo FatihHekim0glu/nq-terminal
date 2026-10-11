@@ -144,12 +144,23 @@ fn one_close_sent_the_dotnet_way_ends_the_app_through_its_own_close() {
         has(&log, "store_flush"),
         "the close skipped the flush: {log:?}"
     );
+    // V033B review: every close path writes one shutdown record, and the exit after it never shuts down (or asks
+    // about a backtest) again. Before the guard, a measure close wrote none and a smoke exit asked a second time.
+    let shutdowns: Vec<&Value> = log
+        .iter()
+        .filter(|e| e["event"] == "supervise_shutdown")
+        .collect();
+    assert_eq!(shutdowns.len(), 1, "one close, one shutdown: {log:?}");
+    assert!(
+        !has(&log, "close_confirm_asked"),
+        "no backtest runs, yet the close asked: {log:?}"
+    );
+    let mode = &shutdowns[0]["mode"];
     if cfg!(feature = "smoke") {
-        assert!(
-            has(&log, "supervise_shutdown"),
-            "the backend was not shut down: {log:?}"
-        );
+        assert_eq!(mode, "spawned", "{}", shutdowns[0]);
     } else {
+        // The stand-in never answers the handshake, so no backend is current when the close comes.
+        assert_eq!(mode, "none", "{}", shutdowns[0]);
         let ended = launch_support::stand_in_ended(&lab, Duration::from_secs(10));
         assert!(ended, "the stand-in backend outlived the shell's close");
     }
