@@ -200,6 +200,13 @@ fn handle_sddl(file: &File) -> Result<String, String> {
     }
 }
 
+/// SDDL writes the built-in local Administrator (a machine SID ending in -500, the account a hosted runner uses) as
+/// the alias `LA`, not as the SID, so a descriptor naming this user can carry either spelling.
+pub fn sddl_alias_of(sid: &str) -> Option<&'static str> {
+    let machine_admin = sid.starts_with("S-1-5-21-") && sid.ends_with("-500");
+    machine_admin.then_some("LA")
+}
+
 const SYSTEM_SID: &str = "SY";
 const ADMINISTRATORS_SID: &str = "BA";
 
@@ -207,11 +214,12 @@ const ADMINISTRATORS_SID: &str = "BA";
 /// Administrators, and the DACL is protected with only allow entries for those three and no inherited entry. The
 /// same two rules as lock.py's `is_trusted_owner` and `is_owner_only`.
 fn untrusted_reason(sddl: &str, user_sid: &str) -> Option<String> {
-    let allowed = [
+    let mut allowed = vec![
         user_sid.to_uppercase(),
         SYSTEM_SID.to_string(),
         ADMINISTRATORS_SID.to_string(),
     ];
+    allowed.extend(sddl_alias_of(user_sid).map(String::from));
     let Some((owner_part, dacl)) = sddl.split_once("D:") else {
         return Some("it has no DACL".into());
     };
@@ -393,6 +401,16 @@ mod tests {
         for bad in &others {
             assert!(untrusted_reason(bad, me).is_some(), "accepted {bad}");
         }
+    }
+
+    #[test]
+    fn the_built_in_administrator_may_be_written_as_the_la_alias() {
+        let admin = "S-1-5-21-1-2-3-500";
+        let aliased = "O:LAD:P(A;;FA;;;LA)(A;;FA;;;SY)(A;;FA;;;BA)";
+        assert_eq!(untrusted_reason(aliased, admin), None);
+        assert_eq!(sddl_alias_of(admin), Some("LA"));
+        assert_eq!(sddl_alias_of("S-1-5-21-1-2-3-1001"), None);
+        assert!(untrusted_reason(aliased, "S-1-5-21-1-2-3-1001").is_some());
     }
 
     #[test]
