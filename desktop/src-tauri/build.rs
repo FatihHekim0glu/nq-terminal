@@ -11,7 +11,8 @@
 //! `windows/app.manifest` (Common-Controls 6.0, PerMonitorV2, true/pm, asInvoker) given to tauri-build, and an empty
 //! COFF object named `default-manifest.o` that gcc finds first through its `-B` prefix, so the link holds exactly
 //! one manifest and prints no warning. `desktop/scripts/check.ps1` greps the build log and reads the exe with
-//! `pe-info.mjs` to prove both.
+//! `pe-info.mjs` to prove both. On MSVC (the desktop-check.yml leg) there is no MinGW default manifest to shadow: only
+//! the resource tauri-build compiled is linked, into the bin by embed-resource and into the tests here (on GNU too).
 #![allow(
     clippy::disallowed_methods,
     reason = "build-time reads of the crate's own files and output into OUT_DIR, never part of the shipped shell"
@@ -89,8 +90,29 @@ fn main() {
     if let Err(e) = tauri_build::try_build(attributes) {
         panic!("tauri-build failed: {e:#}");
     }
-    if gnu && let Ok(out) = std::env::var("OUT_DIR") {
-        let resource = PathBuf::from(out).join("libresource.a");
-        println!("cargo:rustc-link-arg-tests={}", resource.display());
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "windows") {
+        match compiled_resource() {
+            Ok(resource) => println!("cargo:rustc-link-arg-tests={}", resource.display()),
+            Err(e) => panic!("cannot hand the manifest to the tests: {e}"),
+        }
     }
+}
+
+/// The resource object tauri-build compiled (the combined manifest above all). embed-resource links it into the bins
+/// only, so the integration tests that load tauri's menu code (TaskDialogIndirect needs Common Controls 6) get it
+/// here. Its name follows the host the build script runs on, not the target: `resource.lib` from rc.exe on an MSVC
+/// host, `libresource.a` from windres on a GNU host (also when a GNU host builds for the MSVC target, and link.exe
+/// takes that archive too). So the file that exists is the one linked.
+fn compiled_resource() -> Result<PathBuf, String> {
+    let out = PathBuf::from(std::env::var("OUT_DIR").map_err(|e| format!("OUT_DIR: {e}"))?);
+    ["resource.lib", "libresource.a"]
+        .iter()
+        .map(|name| out.join(name))
+        .find(|path| path.is_file())
+        .ok_or_else(|| {
+            format!(
+                "neither resource.lib nor libresource.a in {}",
+                out.display()
+            )
+        })
 }

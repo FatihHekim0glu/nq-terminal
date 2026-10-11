@@ -1,15 +1,18 @@
-# First CI workflow (REL-03): the checks of this repository that need no private lab data, on a hosted Windows runner.
-# What runs, and what deliberately does not, is written in docs/desktop/ci.md.
+# CI workflow (REL-03, widened in v0.4): every check of this repository that needs no private lab data, on hosted runners,
+# for a push to any branch, a pull request to main and a run by hand. What runs, and what deliberately does not, is
+# written in docs/desktop/ci.md. Clippy, the Rust tests and the MSVC build are in desktop-check.yml.
 #
 # Rules this file keeps (docs/desktop/02_decision.md, C3-2): a read-only token, no secrets, every action pinned by its
-# full commit SHA, nothing signed or published, and a newer push cancels the run it supersedes.
+# full commit SHA, nothing signed or published, and a newer push cancels the run it supersedes. Only an upload step and
+# the report-only perf-trend job may swallow a failure; no test does (desktop/harness/tests/ci-rust-job.test.mjs).
 name: ci
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -21,7 +24,7 @@ concurrency:
 jobs:
   windows:
     name: web checks and script tests
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
     steps:
       # The folder is named terminal because a QA test expects its folder's parent to carry that name, and the lab
@@ -81,6 +84,34 @@ jobs:
           --exclude scripts/start/sessionPage.browser.test.ts
           --testNamePattern "^(?!the banner copy matches the Python constant)"
 
+      # The coverage figure (wave w2a adds the pnpm script). Until the script exists the step says so and passes; once it
+      # does, a failing run fails the job. The same exclusions as the Vitest step above, for the same reasons. The summary
+      # is uploaded by the next step, which may fail without failing the run: a lost upload is not a failed test.
+      - name: Web test coverage
+        id: coverage
+        working-directory: terminal/web
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = (Get-Content package.json -Raw | ConvertFrom-Json).scripts
+          if (-not ($scripts.PSObject.Properties.Name -contains 'test:coverage')) {
+            Write-Output '::notice title=Web coverage::package.json has no test:coverage script yet, so no coverage figure is taken.'
+            exit 0
+          }
+          "ran=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          pnpm test:coverage --exclude scripts/start/startPs1.test.ts --exclude scripts/start/sessionPage.browser.test.ts --testNamePattern "^(?!the banner copy matches the Python constant)"
+          if ($LASTEXITCODE -ne 0) { throw "pnpm test:coverage exit $LASTEXITCODE" }
+
+      - name: Upload coverage summary
+        if: ${{ !cancelled() && steps.coverage.outputs.ran == 'true' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: web-coverage-summary
+          path: terminal/web/coverage/coverage-summary.json
+          if-no-files-found: warn
+          retention-days: 30
+
       - name: Web build
         working-directory: terminal/web
         run: pnpm build
@@ -126,11 +157,201 @@ jobs:
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\close-app.tests.ps1
           if ($LASTEXITCODE -ne 0) { throw "close-app.tests.ps1 exit $LASTEXITCODE" }
 
+  # The QA reference tests (docs/TESTING.md): a separate uv project that needs no lab. Windows, because the golden files
+  # were taken there. The checkout folder is named terminal because one test expects the qa folder's parent to carry
+  # that name. --frozen: the lockfile decides, a stale one fails the job instead of being rewritten.
+  qa:
+    name: qa reference tests
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: 0.10.2
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: terminal/qa/uv.lock
+
+      - name: QA reference tests
+        working-directory: terminal/qa
+        run: uv run --frozen pytest
+
+  # The offline Playwright projects (offline and offline-demo; the timing project is perf-trend). docs/TESTING.md calls
+  # the suite macOS and Linux, so it runs on Ubuntu. The screenshot baselines are git-ignored and belong to one machine
+  # (offline-<platform>), so there is nothing to compare on a fresh runner: --update-snapshots=all writes them and every
+  # other assertion of every spec still runs.
+  offline-e2e:
+    name: offline end-to-end tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: terminal/web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: terminal/web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: terminal/web
+        run: pnpm install --frozen-lockfile
+
+      # The Playwright browsers are cached by the lockfile (it pins @playwright/test, so a new Playwright release is a new
+      # key). The install step still runs: with a cache hit it downloads nothing and only adds the system libraries.
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('terminal/web/pnpm-lock.yaml') }}
+
+      - name: Install Chromium
+        working-directory: terminal/web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Offline end-to-end
+        working-directory: terminal/web
+        run: pnpm e2e:offline --workers=2 --update-snapshots=all
+
+      - name: Upload end-to-end results
+        if: ${{ failure() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: offline-e2e-results
+          path: terminal/web/node_modules/.tmp/e2e-offline-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ruff over the backend, with backend/ruff.toml as it is. The rule set is the fatal-error set (syntax errors,
+  # undefined names, invalid comparisons): ruff's default rules and its import rule are not clean on the backend today
+  # (docs/desktop/ci.md, "The ruff job"), and this job changes nothing in backend.
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: 0.10.2
+
+      - name: Ruff
+        working-directory: terminal
+        run: uvx ruff@0.17.0 check --select E9,F63,F7,F82 --output-format github backend
+
+  # The offline performance budgets as a trend, never a gate (a shared runner is too noisy to block on). The budgets are
+  # the ones the PC enforces. A miss writes a warning annotation and a summary of the numbers; neither the step nor the job
+  # can fail the run.
+  perf-trend:
+    name: offline performance trend (report only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: terminal/web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: terminal/web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: terminal/web
+        run: pnpm install --frozen-lockfile
+
+      # The Playwright browsers are cached by the lockfile (it pins @playwright/test, so a new Playwright release is a new
+      # key). The install step still runs: with a cache hit it downloads nothing and only adds the system libraries.
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('terminal/web/pnpm-lock.yaml') }}
+
+      - name: Install Chromium
+        working-directory: terminal/web
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Offline performance budgets
+        id: perf
+        continue-on-error: true
+        working-directory: terminal/web
+        shell: bash
+        run: pnpm e2e:offline:perf 2>&1 | tee "$RUNNER_TEMP/perf.log"
+
+      # Three outcomes, three messages. A budget miss prints perf lines and fails the step; a run that failed with no perf lines
+      # (a timeout, a renamed script) is not a budget; a setup step that broke (install, cache, browsers) skips the perf step
+      # altogether, which the last warning catches. All of them are warnings: the job cannot fail the run.
+      - name: Warn when a budget is exceeded
+        if: ${{ steps.perf.outcome == 'failure' }}
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/perf.log" ] && grep -q '^perf ' "$RUNNER_TEMP/perf.log"; then
+            echo "::warning title=Offline performance trend::A budget of e2e:offline:perf was missed on a shared runner. Report only, so this does not fail the run."
+          else
+            echo "::warning title=Offline performance trend::The e2e:offline:perf run failed before it printed any numbers (a timeout, a renamed script or a crash), so no budget was measured. Report only, so this does not fail the run."
+          fi
+
+      - name: Warn when the trend did not run
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          echo "::warning title=Offline performance trend::The perf trend did not run: a setup step (checkout, install, cache or browser install) failed before the budgets. Report only, so this does not fail the run."
+
+      - name: Summarise the numbers
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          {
+            echo '### Offline performance numbers (report only)'
+            if [ -f "$RUNNER_TEMP/perf.log" ] && grep -q '^perf ' "$RUNNER_TEMP/perf.log"; then
+              echo '~~~'
+              awk '/^perf /' "$RUNNER_TEMP/perf.log"
+              echo '~~~'
+            else
+              echo 'No numbers recorded: no perf lines were produced (the run did not start, failed early, or printed nothing).'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # The Rust shell's format check (docs/desktop/ci.md, "The Rust job"). Only rustfmt runs here: the crate has been built
-  # on the GNU host of the lab PC alone, so clippy and the unit tests wait for a first MSVC build (REL-07).
+  # on the GNU host of the lab PC alone, so clippy and the unit tests live in desktop-check.yml, with the first MSVC build.
   rust:
     name: rust format check
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 15
     steps:
       - name: Check out

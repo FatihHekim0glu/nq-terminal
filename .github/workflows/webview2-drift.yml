@@ -1,0 +1,206 @@
+# The weekly drift watch (04 D5.3; risks T8 and T9; docs/desktop/05_risks_costs.md): what the hosted runner's WebView2
+# runtime and the Tauri project's published security advisories did since the last clean run. It reads and compares; it
+# builds nothing and installs nothing.
+#
+#   runtime     read from the registry of the runner (the WebView2 runtime, else Edge stable, whose build the runtime
+#               follows), compared with the version of the last clean run, or with the committed floor
+#               (NQT_FLOOR_MAJOR in the compare step) when that state is gone. A new major version fails the run.
+#   advisories  desktop/scripts/advisories.mjs over the advisory feed of tauri-apps/tauri. An advisory newer than the
+#               recorded date that touches IPC, capabilities or downloads fails the run.
+#
+# The watch runs twice a week, inside the seven days after which Actions drops a cache entry nobody read.
+#
+# The last-seen state (runtime version, advisory date) is carried between runs in an Actions cache entry and is saved
+# only after a clean run, so a drift stays red every week until it is accepted: run the workflow by hand with "accept"
+# ticked once the change has been looked at.
+#
+# The full T8 suite (the offline project on the smoke build, in a real window) stays on the lab PC; it needs the app's
+# own harness and a quiet machine. This job is the cheap half that needs neither.
+#
+# The push trigger names this file alone: schedule and workflow_dispatch only ever run from the default branch, so the
+# first run of a change to this file happens on the branch that made it (GitHub Docs, "Events that trigger workflows").
+#
+# Rules (docs/desktop/02_decision.md C3-2, owner decision O20): a read-only token, no secrets, every action pinned by
+# its full commit SHA, nothing signed or published. The one write job opens an issue; it exists only when the repository
+# variable NQT_DRIFT_ISSUES is "on", holds issues: write and nothing else, runs no action and never runs on a push.
+name: webview2-drift
+
+on:
+  push:
+    paths:
+      - .github/workflows/webview2-drift.yml
+  schedule:
+    - cron: '17 6 * * 1,4'
+  workflow_dispatch:
+    inputs:
+      accept:
+        description: Accept the drift this run reports (moves the recorded runtime version and advisory date forward)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webview2-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: runtime and advisory drift
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # A new key for every run; the newest entry whose key starts with the prefix is the last clean run's state.
+      - name: Restore the last clean state
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nqt-drift
+          key: nqt-drift-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: nqt-drift-state-
+
+      # The WebView2 runtime registers itself under its EdgeUpdate client id; Edge stable has its own. A runner with
+      # neither fails here: a check that cannot read the runtime never passes.
+      - name: Read the runner's runtime version
+        id: webview2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $webview2 = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $edge = '{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}'
+          $candidates = @(
+            @{ source = 'webview2-hklm'; key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$webview2" },
+            @{ source = 'webview2-hkcu'; key = "HKCU:\Software\Microsoft\EdgeUpdate\Clients\$webview2" },
+            @{ source = 'edge-stable-hklm'; key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\$edge" }
+          )
+          $found = $null
+          foreach ($candidate in $candidates) {
+            $item = Get-ItemProperty -LiteralPath $candidate.key -Name pv -ErrorAction SilentlyContinue
+            if ($null -ne $item -and "$($item.pv)" -match '^\d+\.\d+\.\d+\.\d+$') { $found = @{ source = $candidate.source; version = "$($item.pv)" }; break }
+          }
+          if ($null -eq $found) { throw 'no WebView2 runtime and no Edge stable version in the registry of this runner' }
+          Write-Host "runtime $($found.version) (from $($found.source))"
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$($found.version)`nsource=$($found.source)`n")
+
+      # A new major fails the run and leaves the recorded version where it was; a build inside the same major is
+      # recorded and noted. Accepting (a dispatch with accept ticked) records the new major and passes.
+      - name: Compare with the last clean run
+        id: compare
+        shell: pwsh
+        env:
+          NQT_CURRENT: ${{ steps.webview2.outputs.version }}
+          NQT_SOURCE: ${{ steps.webview2.outputs.source }}
+          NQT_ACCEPT: ${{ inputs.accept }}
+          NQT_STATE_DIR: ${{ runner.temp }}/nqt-drift
+          # The last accepted major. Raise it in a commit once a new major has been reviewed.
+          NQT_FLOOR_MAJOR: 154
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:NQT_CURRENT -notmatch '^\d+\.\d+\.\d+\.\d+$') { throw "the runtime version is not four numbers: '$($env:NQT_CURRENT)'" }
+          $current = [version]$env:NQT_CURRENT
+          $accept = $env:NQT_ACCEPT -eq 'true'
+          New-Item -ItemType Directory -Force -Path $env:NQT_STATE_DIR | Out-Null
+          $stateFile = Join-Path $env:NQT_STATE_DIR 'webview2.json'
+          $previous = $null
+          if (Test-Path -LiteralPath $stateFile) { $previous = [version](Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json).version }
+          # The committed floor is the last accepted major: it backs the check when the saved state is gone (cache
+          # evicted), and it wins over a saved state that is older than it. A floor that cannot be read never passes.
+          $floorMajor = 0
+          if (-not [int]::TryParse($env:NQT_FLOOR_MAJOR, [ref]$floorMajor) -or $floorMajor -lt 1) { throw "the committed floor major is not a whole number of 1 or more: '$($env:NQT_FLOOR_MAJOR)'" }
+          $baselineMajor = $floorMajor
+          if ($null -ne $previous -and $previous.Major -gt $floorMajor) { $baselineMajor = $previous.Major }
+          $newMajor = $current.Major -gt $baselineMajor
+          if ($null -eq $previous) {
+            $line = "WebView2 runtime $($current): first run or no saved state, recorded as the baseline (committed floor: major $($floorMajor))."
+            # Actions drops a cache entry nobody used for seven days, and a cache saved on a branch is not seen from the
+            # default branch. A scheduled run with no state says so; the committed floor still catches a new major.
+            if ($env:GITHUB_EVENT_NAME -eq 'schedule') { Write-Host '::warning title=No recorded WebView2 baseline::the saved state was not found (cache evicted or never saved on this branch); this run used the committed floor NQT_FLOOR_MAJOR in .github/workflows/webview2-drift.yml for the major version check' }
+          }
+          elseif ($current -ne $previous -and -not $newMajor) { $line = "WebView2 runtime: $($previous) to $($current), same major version." }
+          elseif (-not $newMajor) { $line = "WebView2 runtime $($current): unchanged." }
+          if ($newMajor) { $line = "WebView2 runtime: new major version, $($current) over the recorded major $($baselineMajor)." }
+          Write-Host $line
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- $line"
+          if ($newMajor -and -not $accept) { throw "new major runtime $($current) (recorded major $($baselineMajor)). Run the workflow by hand with accept ticked, and raise NQT_FLOOR_MAJOR in .github/workflows/webview2-drift.yml, once the change has been reviewed." }
+          $state = [ordered]@{ version = $current.ToString(); source = $env:NQT_SOURCE; checkedUtc = (Get-Date).ToUniversalTime().ToString('o') }
+          [System.IO.File]::WriteAllText($stateFile, ($state | ConvertTo-Json) + "`n", (New-Object System.Text.UTF8Encoding($false)))
+
+      # The feed is read with the job token (an anonymous call from a shared runner address is rate limited) and handed to
+      # the script as a file; one advisory per line, joined into a list. An empty feed is an error: Tauri has published
+      # advisories, so none means the call did not work.
+      - name: Tauri security advisories
+        id: advisories
+        if: ${{ !cancelled() }}
+        working-directory: terminal
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NQT_STATE_DIR: ${{ runner.temp }}/nqt-drift
+          NQT_ACCEPT: ${{ inputs.accept }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path $env:NQT_STATE_DIR | Out-Null
+          $lines = @(gh api repos/tauri-apps/tauri/security-advisories --paginate --jq '.[]')
+          if ($LASTEXITCODE -ne 0) { throw "gh api exit $LASTEXITCODE" }
+          if ($lines.Count -eq 0) { throw 'the advisory feed of tauri-apps/tauri came back empty' }
+          $feed = Join-Path $env:NQT_STATE_DIR 'advisory-feed.json'
+          [System.IO.File]::WriteAllText($feed, '[' + ($lines -join ',') + ']', (New-Object System.Text.UTF8Encoding($false)))
+          $arguments = @('desktop/scripts/advisories.mjs', '--state', (Join-Path $env:NQT_STATE_DIR 'advisories.json'), '--feed-file', $feed)
+          if ($env:NQT_ACCEPT -eq 'true') { $arguments += '--ack' }
+          node @arguments | Tee-Object -Variable report
+          $code = $LASTEXITCODE
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ('```' + "`n" + ($report -join "`n") + "`n" + '```')
+          if ($code -ne 0) { throw "advisories.mjs exit $code" }
+
+      # Only a clean run (or an accepted one) moves the state on; a failed run saves nothing, so the same drift is
+      # reported again next week.
+      - name: Save the state
+        if: ${{ success() }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nqt-drift
+          key: nqt-drift-state-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # Owner decision O20: opens an issue when the watch fails, and only when the variable NQT_DRIFT_ISSUES is "on". The
+  # only job of this file with a write permission; it runs no action and reads nothing from the checkout. A push never
+  # opens one: a red first run on a branch is read in the run itself. Everything the job writes is the run's address
+  # and the repository's own name, both passed through the environment.
+  issues:
+    name: open a drift issue
+    needs: [drift]
+    if: ${{ always() && needs.drift.result == 'failure' && vars.NQT_DRIFT_ISSUES == 'on' && github.event_name != 'push' }}
+    runs-on: windows-2025
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issue
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NQT_REPO: ${{ github.repository }}
+          NQT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $title = 'WebView2 or Tauri drift: the weekly watch failed'
+          $body = "The weekly drift watch failed: a new major WebView2 runtime or a Tauri advisory touching IPC, capabilities or downloads. Details are in the run summary: $($env:NQT_RUN_URL)`n`nRun the workflow by hand with accept ticked once the change has been reviewed."
+          $open = @(gh issue list --repo $env:NQT_REPO --state open --search "$title in:title" --json number --jq '.[].number')
+          if ($LASTEXITCODE -ne 0) { throw "gh issue list exit $LASTEXITCODE" }
+          if ($open.Count -gt 0) {
+            gh issue comment $open[0] --repo $env:NQT_REPO --body $body
+            if ($LASTEXITCODE -ne 0) { throw "gh issue comment exit $LASTEXITCODE" }
+          } else {
+            gh issue create --repo $env:NQT_REPO --title $title --body $body
+            if ($LASTEXITCODE -ne 0) { throw "gh issue create exit $LASTEXITCODE" }
+          }

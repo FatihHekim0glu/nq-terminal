@@ -1,0 +1,399 @@
+# The shell's check on the MSVC host (04 D4.1 and D4.6; REL-07's first half; grade G-03): Clippy with -D warnings and
+# cargo test for the release (default), smoke and measure feature sets; cargo deny and cargo audit; the release exe size
+# against the last release; and a report-only Rust coverage figure from cargo-llvm-cov. Every build of the shell so far
+# came from the GNU host of the lab PC, so this is its first MSVC leg. What runs, what the runner skips and why, and the
+# expected first-run failures: docs/desktop/v04/w2b-ci-msvc__desktop-check.md.
+#
+# Rules (02 C3-2, as in ci.yml): a read-only token, no secrets, every action pinned by its full commit SHA, nothing
+# signed or published, and a newer push cancels the run it supersedes. Coverage is report-only: its job alone carries
+# continue-on-error, so it can never fail the run. desktop/harness/tests/desktop-check-workflow.test.mjs guards all of it.
+name: desktop-check
+
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+  CARGO_INCREMENTAL: '0'
+  # The list of tests the hosted runner leaves out, one per line: "<sets> | <exact test path> | <reason>", where <sets> is
+  # all or a comma list of release, smoke and measure. A test is never edited or marked ignored for the runner; a test
+  # that needs the lab PC is listed here with its reason. Every step that runs tests expands this list, and the rust job
+  # fails when a listed name is not a test of its set, so a stale entry cannot hide. It is not the only way a test goes
+  # unexercised: a few tests skip themselves (print SKIPPED: and return, for want of screen 2 or a quiet machine) and
+  # #[ignore]d tests never run. The Tests step runs with --nocapture, counts the SKIPPED lines and reports the ignored
+  # tests apart from its "listed" figure, so the run summary shows both.
+  RUNNER_SKIPS: |
+    smoke | one_close_sent_the_dotnet_way_ends_the_app_through_its_own_close | starts this tree's real backend in a lab derived from the owner's nq_lab sources and venv (tests/hidden_support/labs.rs), which only the lab PC has
+    smoke | smoke_build_stays_hidden_through_home_and_close | starts this tree's real backend in a lab derived from the owner's nq_lab sources and venv (tests/hidden_support/labs.rs), which only the lab PC has
+    smoke | real_backend_store_export_flush_on_close_and_the_next_launch | starts a real backend in the lab's own terminal folder (tests/int1_seams.rs), which only the lab PC has; without it the test prints SKIPPED and passes having checked no seam
+    smoke | a_shell_attaches_to_a_real_backend_and_never_stops_it | starts a real backend in the lab's own terminal folder (tests/int1_seams.rs), which only the lab PC has; without it the test prints SKIPPED and passes having checked no seam
+
+jobs:
+  rust:
+    name: clippy and tests (${{ matrix.set }})
+    runs-on: windows-2025
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - set: release
+            features: ''
+          - set: smoke
+            features: --no-default-features --features smoke
+          - set: measure
+            features: --no-default-features --features measure
+    env:
+      FEATURES: ${{ matrix.features }}
+      SET: ${{ matrix.set }}
+    steps:
+      # The folder is named terminal, as in ci.yml: the lab holds this tree as nq-lab/terminal.
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      # The channel is read from rust-toolchain.toml so the pin lives in one place; the hosted rustup's default host is
+      # MSVC, and the step proves it.
+      - name: Install the pinned toolchain
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --component clippy --component rustfmt --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+          $info = rustc -vV
+          if ($LASTEXITCODE -ne 0) { throw "rustc -vV exit $LASTEXITCODE" }
+          $info | Out-Host
+          if (-not ($info -match '^host: x86_64-pc-windows-msvc$')) { throw 'the toolchain is not on the MSVC host' }
+
+      - name: Cache the cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('terminal/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      # The tests start the fixture backend (tests/fixtures/fake_backend.py, standard library only) with the lab's
+      # interpreter. A plain virtual environment under the runner's temp folder stands in; it holds no lab data. The
+      # tests also write their run folders under D:\dev (the lab PC's layout) and read crate sources from CARGO_HOME.
+      - name: Stand-in lab for the tests
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'D:\')) { subst D: $env:RUNNER_TEMP; if ($LASTEXITCODE -ne 0) { throw 'subst failed' } }
+          New-Item -ItemType Directory -Force -Path 'D:\dev\tmp' | Out-Null
+          $lab = Join-Path $env:RUNNER_TEMP 'standin-lab'
+          $venv = Join-Path $lab '.venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw "python -m venv exit $LASTEXITCODE" }
+          "NQT_LAB=$lab" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NQT_LAB_VENV=$venv" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not $env:CARGO_HOME) { "CARGO_HOME=$(Join-Path $env:USERPROFILE '.cargo')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append }
+
+      # The smoke tests start the shell on a fake lab whose terminal is this tree, and the shell refuses a lab without
+      # a page build ("the page build is missing"), so the smoke set builds web/dist first, as check.ps1's preflight
+      # requires on the lab PC.
+      - name: Set up pnpm for the page build
+        if: matrix.set == 'smoke'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: terminal/web/package.json
+
+      - name: Set up Node for the page build
+        if: matrix.set == 'smoke'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: terminal/web/pnpm-lock.yaml
+
+      - name: Page build for the smoke tests
+        if: matrix.set == 'smoke'
+        working-directory: terminal/web
+        shell: pwsh
+        run: |
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install exit $LASTEXITCODE" }
+          pnpm build
+          if ($LASTEXITCODE -ne 0) { throw "pnpm build exit $LASTEXITCODE" }
+
+      - name: Clippy with -D warnings
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $features = @($env:FEATURES -split ' ' | Where-Object { $_ })
+          cargo clippy --all-targets --locked @features -- -D warnings
+          if ($LASTEXITCODE -ne 0) { throw "cargo clippy ($env:SET) exit $LASTEXITCODE" }
+
+      - name: Tests, less the runner skip list
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $features = @($env:FEATURES -split ' ' | Where-Object { $_ })
+          $listed = cargo test --locked @features -- --list --format terse
+          if ($LASTEXITCODE -ne 0) { throw "cargo test --list ($env:SET) exit $LASTEXITCODE" }
+          $names = @($listed | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' })
+          if ($names.Count -eq 0) { throw "no tests listed for the $env:SET set" }
+          $ignoredList = cargo test --locked @features -- --list --ignored --format terse
+          if ($LASTEXITCODE -ne 0) { throw "cargo test --list --ignored ($env:SET) exit $LASTEXITCODE" }
+          $ignored = @($ignoredList | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' })
+          $runnable = @($names | Where-Object { $ignored -notcontains $_ })
+          $skips = @()
+          foreach ($line in ($env:RUNNER_SKIPS -split "`n")) {
+            if (-not $line.Trim()) { continue }
+            $sets, $name, $why = ($line -split '\|', 3) | ForEach-Object { $_.Trim() }
+            if (-not $why) { throw "skip without a reason: $line" }
+            if (-not (@($sets -split ',' | ForEach-Object { $_.Trim() }) | Where-Object { $_ -in @('all', $env:SET) })) { continue }
+            if ($names -notcontains $name) { throw "the skip list names $name, which is not a test of the $env:SET set" }
+            $skips += @('--skip', $name)
+            Write-Host "skipped on the runner: $name ($why)"
+          }
+          cargo test --locked @features -- --exact @skips --nocapture | Tee-Object -Variable testOutput
+          if ($LASTEXITCODE -ne 0) { throw "cargo test ($env:SET) exit $LASTEXITCODE" }
+          $selfSkipped = @($testOutput | Where-Object { $_ -match 'SKIPPED' })
+          $selfSkipped | ForEach-Object { Write-Host "::warning::a test passed without running: $_" }
+          $ran = $runnable.Count - $skips.Count / 2
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value "Rust tests, $env:SET set: $($names.Count) listed, $($ignored.Count) #[ignore]d (never run), $($skips.Count / 2) skipped on the runner (RUNNER_SKIPS), $ran run, of which $($selfSkipped.Count) self-skipped (printed SKIPPED and passed without checking)."
+
+  supply-chain:
+    name: cargo deny and cargo audit
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --component clippy --component rustfmt --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+
+      - name: Cache the cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('terminal/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      # The same versions as D:/dev/cargo/bin on the lab PC (D:/dev/v04/p0/READY); the action checks each download's hash.
+      - name: Install cargo-deny and cargo-audit
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+        with:
+          tool: cargo-deny@0.20.2,cargo-audit@0.22.2
+
+      # deny.toml: the bans, the licence allow list, crates.io only, and every advisory for the Windows graph.
+      - name: cargo deny
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo deny --locked check
+          if ($LASTEXITCODE -ne 0) { throw "cargo deny --locked check exit $LASTEXITCODE" }
+
+      - name: cargo audit
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo audit
+          if ($LASTEXITCODE -ne 0) { throw "cargo audit exit $LASTEXITCODE" }
+
+  exe-size:
+    name: release exe size against the last release
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      # The last release was built on the GNU host and this exe on MSVC, so the limit is wide; see the note.
+      EXE_GROWTH_LIMIT_PCT: '25'
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Install the pinned toolchain
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --component clippy --component rustfmt --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+
+      - name: Cache the cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('terminal/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      # The release exe as cargo tauri build makes it (the CLI adds tauri/custom-protocol), with no installer.
+      - name: Build the release exe
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo build --release --locked --features tauri/custom-protocol
+          if ($LASTEXITCODE -ne 0) { throw "cargo build --release exit $LASTEXITCODE" }
+
+      # The last release publishes its installer and SHA256SUMS; the exe is read out of the installer with 7-Zip after
+      # the installer's hash is matched against SHA256SUMS.
+      - name: Compare with the last release
+        shell: pwsh
+        run: |
+          $exe = Get-Item 'terminal/desktop/src-tauri/target/release/nq-lab-terminal.exe'
+          $json = gh api "repos/$env:GITHUB_REPOSITORY/releases/latest"
+          if ($LASTEXITCODE -ne 0) { throw "gh api releases/latest exit $LASTEXITCODE" }
+          $release = $json | ConvertFrom-Json
+          $asset = @($release.assets | Where-Object { $_.name -like '*_x64-setup.exe' })
+          if ($asset.Count -ne 1) { throw "release $($release.tag_name) has $($asset.Count) x64 installers, not one" }
+          $dir = Join-Path $env:RUNNER_TEMP 'last-release'
+          gh release download $release.tag_name --repo $env:GITHUB_REPOSITORY --pattern $asset[0].name --pattern SHA256SUMS --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw "gh release download exit $LASTEXITCODE" }
+          $installer = Join-Path $dir $asset[0].name
+          $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
+          if ((Get-Content (Join-Path $dir 'SHA256SUMS') -Raw).ToLowerInvariant() -notmatch $hash) { throw "the installer's SHA-256 $hash is not in SHA256SUMS" }
+          $out = Join-Path $env:RUNNER_TEMP 'last-release-files'
+          7z x -y "-o$out" $installer | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "7z x exit $LASTEXITCODE" }
+          $base = @(Get-ChildItem $out -Recurse -File -Filter 'nq-lab-terminal.exe')
+          if ($base.Count -ne 1) { throw "found $($base.Count) nq-lab-terminal.exe in $($asset[0].name), not one" }
+          $growth = 100.0 * ($exe.Length - $base[0].Length) / $base[0].Length
+          $line = 'Release exe: {0:N0} bytes (MSVC, this commit) against {1:N0} bytes ({2}, GNU host); change {3:+0.0;-0.0;0.0}%, limit +{4}%.' -f $exe.Length, $base[0].Length, $release.tag_name, $growth, $env:EXE_GROWTH_LIMIT_PCT
+          Write-Host $line
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          if ($growth -gt [double]$env:EXE_GROWTH_LIMIT_PCT) { throw "the release exe grew $([math]::Round($growth, 1))% over $($release.tag_name)" }
+
+  coverage:
+    name: rust coverage (report only)
+    runs-on: windows-2025
+    timeout-minutes: 75
+    continue-on-error: true
+    env:
+      SET: release
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: terminal
+          persist-credentials: false
+
+      - name: Install the pinned toolchain with llvm-tools
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $pin = Select-String -Path rust-toolchain.toml -Pattern '^channel\s*=\s*"([^"]+)"'
+          if (-not $pin) { throw 'rust-toolchain.toml names no channel' }
+          $channel = $pin.Matches[0].Groups[1].Value
+          rustup toolchain install $channel --profile minimal --component clippy --component rustfmt --component llvm-tools --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup toolchain install $channel exit $LASTEXITCODE" }
+
+      - name: Cache the cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('terminal/desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - name: Stand-in lab for the tests
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'D:\')) { subst D: $env:RUNNER_TEMP; if ($LASTEXITCODE -ne 0) { throw 'subst failed' } }
+          New-Item -ItemType Directory -Force -Path 'D:\dev\tmp' | Out-Null
+          $lab = Join-Path $env:RUNNER_TEMP 'standin-lab'
+          $venv = Join-Path $lab '.venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw "python -m venv exit $LASTEXITCODE" }
+          "NQT_LAB=$lab" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "NQT_LAB_VENV=$venv" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if (-not $env:CARGO_HOME) { "CARGO_HOME=$(Join-Path $env:USERPROFILE '.cargo')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append }
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@26e9283f268b880168bdbd2c545dfcd60ec2c6ab # v2.87.13
+        with:
+          tool: cargo-llvm-cov@0.9.1
+
+      # The default (release) feature set, less the runner skip list, as the rust job runs it.
+      - name: Coverage of the default feature set
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $listed = cargo llvm-cov --locked --no-report -- --list --format terse
+          if ($LASTEXITCODE -ne 0) { throw "cargo llvm-cov --list exit $LASTEXITCODE" }
+          $names = @($listed | Where-Object { $_ -match ': test$' } | ForEach-Object { $_ -replace ': test$', '' })
+          if ($names.Count -eq 0) { throw "no tests listed for the $env:SET set" }
+          $skips = @()
+          foreach ($line in ($env:RUNNER_SKIPS -split "`n")) {
+            if (-not $line.Trim()) { continue }
+            $sets, $name, $why = ($line -split '\|', 3) | ForEach-Object { $_.Trim() }
+            if (-not $why) { throw "skip without a reason: $line" }
+            if (-not (@($sets -split ',' | ForEach-Object { $_.Trim() }) | Where-Object { $_ -in @('all', $env:SET) })) { continue }
+            if ($names -notcontains $name) { throw "the skip list names $name, which is not a test of the $env:SET set" }
+            $skips += @('--skip', $name)
+          }
+          cargo llvm-cov --locked --no-report -- --exact @skips
+          if ($LASTEXITCODE -ne 0) { throw "cargo llvm-cov exit $LASTEXITCODE" }
+
+      - name: Coverage report
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'rust-coverage'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          cargo llvm-cov report --lcov --output-path (Join-Path $dir 'lcov.info')
+          if ($LASTEXITCODE -ne 0) { throw "cargo llvm-cov report --lcov exit $LASTEXITCODE" }
+          cargo llvm-cov report --json --summary-only --output-path (Join-Path $dir 'summary.json')
+          if ($LASTEXITCODE -ne 0) { throw "cargo llvm-cov report --json exit $LASTEXITCODE" }
+          $totals = (Get-Content (Join-Path $dir 'summary.json') -Raw | ConvertFrom-Json).data[0].totals
+          $line = 'Rust coverage, default set, MSVC (report only): lines {0:N2}%, functions {1:N2}%, regions {2:N2}%.' -f $totals.lines.percent, $totals.functions.percent, $totals.regions.percent
+          Write-Host $line
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $line
+          Set-Content -Path (Join-Path $dir 'figure.txt') -Value $line -Encoding utf8
+
+      - name: Upload the coverage report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rust-coverage
+          path: ${{ runner.temp }}/rust-coverage
+          if-no-files-found: error
+          retention-days: 30
+
+      # The job is report-only, so a failure leaves the run green and the figure missing: say so on the run.
+      - name: Say the coverage figure was not produced
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          Write-Host '::warning title=Rust coverage::the coverage figure was not produced'
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value 'Rust coverage: the coverage figure was not produced.'
