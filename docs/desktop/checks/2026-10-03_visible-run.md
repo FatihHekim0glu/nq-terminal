@@ -19,9 +19,9 @@ It also checks the first minute of use by eye: the window appears once, nothing 
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer | `nq-lab terminal_0.1.0_x64-setup.exe`, 3,253,432 bytes |
-| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installer | {{installer file name of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}, {{installer size in bytes of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installer SHA-256 | {{installer SHA-256 from SHA256SUMS of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Installed into | |
 | Measure artefact median, cold HOME | pending (the measure artefact was not run against the real lab: port 8765 was listening); for reference the GNU smoke build read 3,167 ms on a first launch and 2,750 ms on the usual launch in the W5C re-measure (W5B: 5,048 ms and 3,321 ms) |
 | Whether the lab's `terminal\state` folder already held a cache | yes / no |

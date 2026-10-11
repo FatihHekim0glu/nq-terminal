@@ -13,8 +13,8 @@ Everything else the check looks at is a boundary: the run writes its own folder 
 | Field | Entry |
 | --- | --- |
 | Run date | |
-| Installer SHA-256 | 2f4b5c4cdf37a5a520be4517d7efd725288ac9ae28b047e85b302e9f52c4b590 |
-| Release commit | 8122c877bb00e4f07ce505d5ba0468d6a9858f41 |
+| Installer SHA-256 | {{installer SHA-256 from SHA256SUMS of the installed tag (desktop/scripts/owner-session.ps1 fills this)}} |
+| Installed tag and release commit | installed tag and release commit (desktop/scripts/owner-session.ps1 fills this) |
 | Door used (the app, or the browser terminal) | the app |
 | Strategy, data variant and window chosen | |
 | Run id | |

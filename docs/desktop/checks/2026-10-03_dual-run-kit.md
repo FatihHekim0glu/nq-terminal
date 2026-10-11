@@ -10,7 +10,7 @@ The plan's own words (03 section 19): the run starts at the first app build that
 
 ## Rules of the run
 
-- **Which build.** The installed `desktop-v0.1.0`, or a later D6 fix tag. Changes to the web source or the shell reach this install only through a new tag.
+- **Which build.** The installed tag and release commit named in `installed tag and release commit (desktop/scripts/owner-session.ps1 fills this)`, or a later D6 fix tag. Changes to the web source or the shell reach this install only through a new tag.
 - **A fix tag for a blocking defect restarts the four-week count.** A fix tag for a non-blocking defect is installed only if you ask for it, and extends the run so that at least the last two weeks are on the final tag.
 - **Defect rule.** A defect that exists in the app and not in the browser is fixed before any new app feature. A defect in both is an ordinary terminal bug.
 - **Blocking defect** (04, QA gate): a red parity row, a wrong number, a breach of the research gate or of the write ban, or a crash. A blocking defect resets the count.
@@ -55,7 +55,7 @@ Copy `2026-10-03_weekly-parity.md` to `YYYY-MM-DD_weekly-parity-week-N.md` and d
    Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{ n = 'FreeGB'; e = { [math]::Round($_.Free / 1GB, 1) } }
    ```
 
-3. [ ] Check the installed tag is the one you expect: the version in Settings, Apps, against `8122c877bb00e4f07ce505d5ba0468d6a9858f41` and any fix tag.
+3. [ ] Check the installed tag is the one you expect: the version in Settings, Apps, against `installed tag and release commit (desktop/scripts/owner-session.ps1 fills this)` and any fix tag.
 4. [ ] Read the idle memory of the app at HOME once in week 1 and once in week 4, with the commands of `2026-10-03_visible-run.md`, step 4. G2's rule is at most 500 MB. A value that grows from week 1 to week 4 is a finding even if it is under the ceiling.
 
 ## What to compare between the browser terminal and the app

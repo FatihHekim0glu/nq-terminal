@@ -1,0 +1,24 @@
+--- a/gen_03_tables.py
++++ b/gen_03_tables.py
+@@ -157,6 +157,11 @@
+     "analytics/perf.py": ("wrap", "scipy.stats imported inside the functions that need it", "1.1", ""),
+     "models/jobs.py": ("keep", "lazy registry import kept; nautilus_trader stays out of start-up", "1.1", ""),
+     "constants.py": ("keep", "mnemonic table unchanged; Mac key alternatives live in the page", "none", ""),
++    # addendum: V04 W0 (preflight of 11 October; both rows are in the Appendix A addendum)
++    "memtrim.py": ("new", "working-set trim after the HOME prewarm and in quiet periods (vnext perf-1, 0.1.2); "
++                   "Windows only; NQT_MEMTRIM=0 turns it off", "D5", ""),
++    "threadcaps.py": ("new", "caps the OpenBLAS, OpenMP, MKL and NumExpr pools of the server at 2 before numpy "
++                      "loads (0.1.1); a name already set is left alone", "D5", ""),
+ }
+ 
+ 
+@@ -271,6 +276,9 @@
+     "demo": ("keep", "unchanged; ships only in the demo build; feeds the self-test page's offline mode", "none"),
+     "gallery": ("keep", "unchanged; screenshot gallery stays on Chromium", "none"),
+     "copy": ("wrap", "new strings for the splash, backend stopped page and Mac keys; copy rules test", "2.1, 3.3"),
++    # addendum: V04 W0 (preflight of 11 October; the row is in the Appendix A addendum)
++    "jobsbar": ("new", "research launcher in the chrome: job indicator, anchor badge and re-runs (0.2.0); "
++                "polls GET /api/jobs every 15 s idle and every 2 s with a job active", "D5"),
+ }
+ 
+ 

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "note": "The owner's session, in order. owner_minutes is attention time; a visible run's 30 minutes minimised and the reboot's own time are not counted. Keyboard, NVDA and Narrator come first because they gate the WCAG 2.2 AA claim. The reboot check needs a fresh boot: restart the PC, then do it before you open anything else. all-day-soak, dual-run-kit and weekly-parity are not session steps (see README.md).",
+  "steps": [
+    { "step": 1, "check": "real-keyboard", "template": "2026-10-03_real-keyboard.md", "owner_minutes": 15 },
+    { "step": 2, "check": "nvda", "template": "2026-10-03_nvda.md", "owner_minutes": 15 },
+    { "step": 3, "check": "narrator", "template": "2026-10-03_narrator.md", "owner_minutes": 15 },
+    { "step": 4, "check": "ib-dialog-screen-reader", "template": "2026-10-11_ib-dialog-screen-reader.md", "owner_minutes": 10 },
+    { "step": 5, "check": "visible-run", "template": "2026-10-03_visible-run.md", "owner_minutes": 15 },
+    { "step": 6, "check": "minimised-close", "template": "2026-10-11_minimised-close.md", "owner_minutes": 10 },
+    { "step": 7, "check": "custom-install-folder", "template": "2026-10-03_custom-install-folder.md", "owner_minutes": 15 },
+    { "step": 8, "check": "zoom-200-by-eye", "template": "2026-10-03_zoom-200-by-eye.md", "owner_minutes": 20 },
+    { "step": 9, "check": "real-contrast-theme", "template": "2026-10-11_real-contrast-theme.md", "owner_minutes": 30 },
+    { "step": 10, "check": "ib-switch-paper-tws", "template": "2026-10-11_ib-switch-paper-tws.md", "owner_minutes": 20 },
+    { "step": 11, "check": "real-jobs-backtest", "template": "2026-10-03_real-jobs-backtest.md", "owner_minutes": 20 },
+    { "step": 12, "check": "smartscreen-first-run", "template": "2026-10-03_smartscreen-first-run.md", "owner_minutes": 10 },
+    { "step": 13, "check": "reboot-first-launch", "template": "2026-10-03_reboot-first-launch.md", "owner_minutes": 5 },
+    { "step": 14, "check": "pending-measurements", "template": "2026-10-03_pending-measurements.md", "owner_minutes": 10 }
+  ]
+}

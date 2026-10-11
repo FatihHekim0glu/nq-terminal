@@ -1,6 +1,6 @@
 # Owner checks for the Windows app
 
-Status: templates written on 3 October 2026 for the hand-over (wave W6) and brought in line with the tree at commit `f2e03bf`. Nothing in this folder has been run by the owner yet, so every check below reads NOT RUN. Owner items that are not in this folder: the eomtsy research opening is a step of the lab's research, not of the app.
+Status: templates written on 3 October 2026 for the hand-over (wave W6) and refreshed on 11 October 2026 so that they run on 0.3.3 and later releases without edits: the installed tag, its release commit and the installer fields are filled in by `desktop/scripts/owner-session.ps1`. The four templates dated 11 October 2026 cover the IB switch, the minimised start and the contrast themes. Nothing in this folder has been run by the owner yet, so every check below reads NOT RUN. Owner items that are not in this folder: the eomtsy research opening is a step of the lab's research, not of the app.
 
 Gate G2 on Windows (04, phase D5) and the four-week dual run (04, phase D6; 03 section 19) both end in checks that only a person at the keyboard can make: a real keyboard, a screen reader, a window that is really minimised, a double-click on the installed app. The automated rows of G2 are in `docs/desktop/g2_windows/results.md`. This folder holds one dated template for each check that stays with the owner, so that each is run the same way every time and leaves a record that can be read later.
 
@@ -8,35 +8,44 @@ G2 and milestone M4 stay provisional until every row marked "G2" below has a fil
 
 ## The checks
 
-| Check | File | Needed for | Owner time | Status |
-| --- | --- | --- | --- | --- |
-| Install into a custom folder (ACL and refusals) | [2026-10-03_custom-install-folder.md](2026-10-03_custom-install-folder.md) | G2, register 1.3 | 15 minutes | NOT RUN |
-| First launch after a reboot | [2026-10-03_reboot-first-launch.md](2026-10-03_reboot-first-launch.md) | G2 | 5 minutes plus the reboot | NOT RUN |
-| Visible run of the installed release, with a real minimise | [2026-10-03_visible-run.md](2026-10-03_visible-run.md) | G2 | about 15 minutes of attention, 30 minutes minimised | NOT RUN |
-| Real keyboard (16 of 16), print and app zoom keys | [2026-10-03_real-keyboard.md](2026-10-03_real-keyboard.md) | G2 | about 15 minutes | NOT RUN |
-| 200% zoom by eye in small windows | [2026-10-03_zoom-200-by-eye.md](2026-10-03_zoom-200-by-eye.md) | G2, register 1.2 | about 20 minutes | NOT RUN |
-| NVDA pass | [2026-10-03_nvda.md](2026-10-03_nvda.md) | G2 | about 15 minutes | NOT RUN |
-| Narrator pass | [2026-10-03_narrator.md](2026-10-03_narrator.md) | G2 | about 15 minutes | NOT RUN |
-| The real JOBS backtest | [2026-10-03_real-jobs-backtest.md](2026-10-03_real-jobs-backtest.md) | G2 (05 X09) | 20 minutes | NOT RUN |
-| SmartScreen first run | [2026-10-03_smartscreen-first-run.md](2026-10-03_smartscreen-first-run.md) | the unsigned decision | 10 minutes | NOT RUN |
-| The all-day soak | [2026-10-03_all-day-soak.md](2026-10-03_all-day-soak.md) | G2, only if the overnight soak was partial | one day with the PC left alone | NOT RUN |
-| Measurements left pending or provisional | [2026-10-03_pending-measurements.md](2026-10-03_pending-measurements.md) | G2 | 10 minutes in a quiet window | NOT RUN |
-| The weekly parity list | [2026-10-03_weekly-parity.md](2026-10-03_weekly-parity.md) | D6, once a week for four weeks | about 15 minutes | NOT RUN |
-| Install and upgrade test on the renamed product, beside the real install | [2026-10-05_install-upgrade-test.md](2026-10-05_install-upgrade-test.md) | release check `-RequireInstall` (automated, not an owner check) | none | AUTOMATED, PASS |
-| The four-week dual-run kit | [2026-10-03_dual-run-kit.md](2026-10-03_dual-run-kit.md) | D6 | a few minutes a day | NOT STARTED |
+The table lists all 18 templates in the order of [session_order.json](session_order.json). Steps 1 to 14 are the owner's session, about 3 to 3.5 hours of attention in total (210 minutes, the minutes per step are in the JSON file). The four templates below the session are run on their own schedule.
+
+| Step | Check | File | Needed for | Owner time | Status |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Real keyboard (16 of 16), print and app zoom keys | [2026-10-03_real-keyboard.md](2026-10-03_real-keyboard.md) | G2 | about 15 minutes | NOT RUN |
+| 2 | NVDA pass | [2026-10-03_nvda.md](2026-10-03_nvda.md) | G2 | about 15 minutes | NOT RUN |
+| 3 | Narrator pass | [2026-10-03_narrator.md](2026-10-03_narrator.md) | G2 | about 15 minutes | NOT RUN |
+| 4 | The IB snapshot dialog with a screen reader | [2026-10-11_ib-dialog-screen-reader.md](2026-10-11_ib-dialog-screen-reader.md) | G2 (the switch's screen reader path, audit item 4) | about 10 minutes | NOT RUN |
+| 5 | Visible run of the installed release, with a real minimise | [2026-10-03_visible-run.md](2026-10-03_visible-run.md) | G2 | about 15 minutes of attention, 30 minutes minimised | NOT RUN |
+| 6 | A minimised start, closed from the taskbar | [2026-10-11_minimised-close.md](2026-10-11_minimised-close.md) | G2 (audit item 3) | about 10 minutes | NOT RUN |
+| 7 | Install into a custom folder (ACL and refusals) | [2026-10-03_custom-install-folder.md](2026-10-03_custom-install-folder.md) | G2, register 1.3 | 15 minutes | NOT RUN |
+| 8 | 200% zoom by eye in small windows | [2026-10-03_zoom-200-by-eye.md](2026-10-03_zoom-200-by-eye.md) | G2, register 1.2 | about 20 minutes | NOT RUN |
+| 9 | The installed app under a real Windows contrast theme | [2026-10-11_real-contrast-theme.md](2026-10-11_real-contrast-theme.md) | G2 (verdict, 0.3.0 section) | about 30 minutes | NOT RUN |
+| 10 | The IB snapshot switch with paper TWS | [2026-10-11_ib-switch-paper-tws.md](2026-10-11_ib-switch-paper-tws.md) | G2 (the 0.3.2 switch, handover section 7) | about 20 minutes | NOT RUN |
+| 11 | The real JOBS backtest | [2026-10-03_real-jobs-backtest.md](2026-10-03_real-jobs-backtest.md) | G2 (05 X09) | 20 minutes | NOT RUN |
+| 12 | SmartScreen first run | [2026-10-03_smartscreen-first-run.md](2026-10-03_smartscreen-first-run.md) | the unsigned decision | 10 minutes | NOT RUN |
+| 13 | First launch after a reboot | [2026-10-03_reboot-first-launch.md](2026-10-03_reboot-first-launch.md) | G2 | 5 minutes plus the reboot | NOT RUN |
+| 14 | Measurements left pending or provisional | [2026-10-03_pending-measurements.md](2026-10-03_pending-measurements.md) | G2 | 10 minutes in a quiet window | NOT RUN |
+| not a step | The all-day soak | [2026-10-03_all-day-soak.md](2026-10-03_all-day-soak.md) | G2, only if the overnight soak was partial | one day with the PC left alone | NOT RUN |
+| not a step | The weekly parity list | [2026-10-03_weekly-parity.md](2026-10-03_weekly-parity.md) | D6, once a week for four weeks | about 15 minutes | NOT RUN |
+| not a step | The four-week dual-run kit | [2026-10-03_dual-run-kit.md](2026-10-03_dual-run-kit.md) | D6 | a few minutes a day | NOT RUN |
+| not an owner check | Install and upgrade test on the renamed product, beside the real install | [2026-10-05_install-upgrade-test.md](2026-10-05_install-upgrade-test.md) | release check `-RequireInstall` (automated) | none | NOT RUN |
+
+The all-day soak row can be met by the hidden 8 hour soak of wave e2-endurance-040, if the owner accepts it in place of a day with the PC left alone. The install and upgrade test is an automated release check and is not refreshed in this folder.
 
 The installer, the runbook and the SmartScreen record that these checks lean on are in `docs/desktop/handover_windows.md` and `docs/desktop/smartscreen.md`. The decisions behind the pass rules are in `docs/desktop/owner_decisions_windows.md`.
 
 ## Order
 
-1. Verify the installer and install it (the runbook), then the custom-folder check if you want the app outside the default folder.
-2. The visible run. It also gives the shell log that the other checks read.
-3. The real keyboard, the zoom check, NVDA, Narrator, in any order.
-4. The real JOBS backtest.
-5. SmartScreen first run, whenever you have a copy of the installer that came through a browser.
-6. The reboot check at a time you choose: it needs a fresh boot, so do it first thing after a restart and before you open anything else.
-7. The soak when you can leave the PC for a day.
-8. Then, and only then, start the dual run.
+Before the session, install the release (the runbook in `docs/desktop/handover_windows.md`) and verify its checksum. Then do the steps of the table in order. The order is in `session_order.json`:
+
+1. Start with the real keyboard check, then NVDA and Narrator. They come first because they gate the WCAG 2.2 AA claim. The IB dialog with a screen reader follows.
+2. The visible run. It also gives the shell log that the other checks read. The minimised start is checked straight after it.
+3. The custom-folder check, if you want the app outside the default folder, the 200% zoom check and the contrast theme check.
+4. The IB snapshot switch with paper TWS, then the real JOBS backtest and the SmartScreen first run, which needs a copy of the installer that came through a browser.
+5. The reboot check: restart the PC, then do it before you open anything else. Then the pending measurements, in a quiet window.
+
+After the session: the soak, when you can leave the PC for a day. Start the dual run only after the session is done, and run the weekly parity list with it.
 
 ## How to use a template
 
@@ -64,7 +73,7 @@ Every command in these templates only reads, except the ones that start the harn
 
 ```powershell
 $Terminal = Join-Path $env:USERPROFILE 'nq-lab\terminal'
-$Release  = 'D:\dev\release\0.1.0'
+$Release  = '{{release folder of the installed tag (desktop/scripts/owner-session.ps1 fills this)}}'
 ```
 
 The app's own settings and logs are in its config folder, normally `%APPDATA%\dev.nqlab.terminal` (the shell log is `logs\shell.log` inside it). Each template that reads the log first confirms the folder exists with `Test-Path`.
