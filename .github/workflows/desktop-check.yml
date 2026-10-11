@@ -36,6 +36,7 @@ env:
     smoke | smoke_build_stays_hidden_through_home_and_close | starts this tree's real backend in a lab derived from the owner's nq_lab sources and venv (tests/hidden_support/labs.rs), which only the lab PC has
     smoke | real_backend_store_export_flush_on_close_and_the_next_launch | starts a real backend in the lab's own terminal folder (tests/int1_seams.rs), which only the lab PC has; without it the test prints SKIPPED and passes having checked no seam
     smoke | a_shell_attaches_to_a_real_backend_and_never_stops_it | starts a real backend in the lab's own terminal folder (tests/int1_seams.rs), which only the lab PC has; without it the test prints SKIPPED and passes having checked no seam
+    smoke | zoom_and_size_reach_the_page_and_the_window | asks for a 1280x800 window and expects exactly that size, but the hosted session's desktop is smaller and the shell fits the window to it (first run: inner 1028x749 at scale 1), so the size check cannot hold there; the zoom half is covered by the lab PC run
 
 jobs:
   rust:
