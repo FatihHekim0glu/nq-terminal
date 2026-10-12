@@ -196,6 +196,7 @@ PowerShell query. The breakdown is read for information only: if it fails, the r
 
 - The harness measures; it does not decide G2. `report.mjs --check` fails when a row, a build's readings or a figure's provenance is missing, and
   `--strict` also fails on a ceiling or a disagreement between builds.
+- `report.mjs` also adds `check spawn_offset`: a counted launch whose `supervise_spawned` comes more than 150 ms after the shell's start line fails `--check --strict` (exit 4); the target is a median of 120 ms or less. A counted launch with no spawn reading, or a build with fewer than `--min-runs` readings, also fails it. The shell log carries two lines for it, `supervise_thread_began` and `supervise_create_process`, the second written just before `CreateProcessW`.
 - The measure build has no debugging port, so its HOME ready is the shell's `home_painted` (first contentful paint of the backend's page, polled
   every 500 ms), not the moment the data is in. Its idle memory is read after a settle period.
 - The real-data rows (`eq_warm`, `reg_warm`, the real fills run) and the first-launch reading need the main tree and the owner's lab.
