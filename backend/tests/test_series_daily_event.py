@@ -6,12 +6,14 @@ Two runs share every test:
 - the lab tree (`-m lab_only`): the real files, anchored to the real screen JSON at 1e-9. Skipped without the marker
   or without the lab files. The repository is public, so no real in-sample row is ever copied into a fixture.
 
-Two rows state their headline sample as a row filter (hvix_nd_v0, apieia_ho_v0): `SeriesSource.keep_where` says it, and
-the tests plant the source without the rule to show the anchor needs it.
+Three rows state their headline sample as a row filter (hvix_nd_v0, apieia_ho_v0, wkndshort_v0):
+`SeriesSource.keep_where` says it, and the tests plant the source without the rule to show the anchor needs it.
 
 Anchors: n, mean and sd of the series at 1 tick against the screen's headline, the 0 and 2 tick means against the
 cost ladder, and a date anchor from a calendar fact the file does not write itself (E+15, the session before D, the
-Friday before the refunding, the first and last mark). Each is born failing against the broken state it guards.
+Friday before the refunding, the first full day after the Friday, the first and last mark). Each is born failing
+against the broken state it guards. wkndshort_v0 is a legs file: the legs of a week share one exit and their sum over
+K is the weekly book (spec rule 2), so its anchor sums the legs per session first.
 """
 from __future__ import annotations
 
@@ -42,9 +44,12 @@ from fakes import FIXTURES
 FIXTURE_DIR = FIXTURES / "results" / "screens" / "daily_event"
 ROWS = ("fedflow_tsy_v0", "lhrev_letf_v0", "tsyauct_intra_ml_v0", "hvix_nd_v0", "apieia_ho_v0", "cropsmooth_v0",
         "dburst_rev_v1", "fomcdrift_tsy_v0", "fomcfx_v0", "fomcpc_fx_v0", "pretra_tsy_v0", "xfut_tcn120_v0",
-        "wkndgap_fx_v0")
+        "wkndgap_fx_v0", "wkndshort_v0")
 LEARNED = tuple(daily_event.SOURCES)
 TRADE_ROWS = tuple(n for n in LEARNED if daily_event.SOURCES[n].kind == "trades")
+ONE_TICK_ROWS = ("wkndshort_v0",)  # the legs file records the net P&L at 1 tick only (`h_net1`)
+WKNDSHORT_K = 100_000_000  # spec design.K_usd: the book is the sum of the active legs over K (rule 2)
+SESSION_TABLE = ROOT / "data" / "calendar" / "wkndshort_sessions_2010_2021.json"
 FENCE = pd.Timestamp("2022-01-01", tz="UTC")
 HASH = "0" * 64
 REGISTRY_HEADER = "name,registered,n,p,control_p,verdict,family_k,bonferroni_p,holm_p,bh_q,spec,spec_sha256,spec_sha_ok"
@@ -60,6 +65,7 @@ class Anchor:
     sd: str | None
     ladder: dict[int, str]
     events_only: bool = False  # the file holds a zero row in every week without an event; the screen counts events
+    per_session: bool = False  # the file holds legs; the legs of one event share its exit and the screen counts events
 
 
 _HEAD = {"n": "headline.n", "mean": "headline.mean_bp", "sd": "headline.sd_bp"}
@@ -82,6 +88,7 @@ ANCHORS = {
     "pretra_tsy_v0": Anchor(1e4, **_HEAD, ladder=_LADDER),
     "wkndgap_fx_v0": Anchor(1.0, "headline.n", "headline.mean", "headline.sd", {2: "headline.mean_2tick"},
                             events_only=True),
+    "wkndshort_v0": Anchor(1 / WKNDSHORT_K, "headline.n", "headline.mean", "headline.sd", {}, per_session=True),
 }
 
 
@@ -176,6 +183,24 @@ def _next_session(day: pd.Timestamp) -> pd.Timestamp:
     return sessions[sessions.searchsorted(day, side="right")]
 
 
+@functools.lru_cache(maxsize=1)
+def _full_days() -> pd.DatetimeIndex:
+    """wkndshort_v0's full days: NYSE sessions less those the spec's session table marks an early close, a holiday
+    halt or a year-end day. The table is a calendar, not a result, so it is read from the lab tree whenever it is
+    there; without it every NYSE session counts as full, which is all the fixture's weeks need."""
+    sessions = _calendar()
+    if not SESSION_TABLE.is_file():
+        return sessions
+    days = json.loads(SESSION_TABLE.read_text(encoding="utf-8"))["days"]
+    return sessions[[days.get(d.strftime("%Y-%m-%d")) == "full" for d in sessions]]
+
+
+def _kept(base: Path, name: str) -> pd.DataFrame:
+    """The file's rows the source keeps (its rule, a value at 1 tick), worked out here from the file."""
+    source, raw = daily_event.SOURCES[name], _raw(base, name)
+    return raw[_keep_mask(raw, source)].dropna(subset=[source.values[1]])
+
+
 def _swap_cost(name: str, cost: int, read: int):
     source = daily_event.SOURCES[name]
     return dataclasses.replace(source, values=MappingProxyType({**source.values, cost: source.values[read]}))
@@ -193,7 +218,10 @@ def _use(monkeypatch, name: str, source) -> None:
 def anchor_headline(base: Path, name: str, cost: int = 1) -> None:
     """n, mean and sd of the series at `cost` against the screen JSON (the 1 tick headline, or the ladder)."""
     anchor, doc = ANCHORS[name], _doc(base, name)
-    r = np.asarray(ResearchService(base).series(name, cost).r)
+    hs = ResearchService(base).series(name, cost)
+    r = np.asarray(hs.r)
+    if anchor.per_session:
+        r = pd.Series(r).groupby(np.asarray(hs.t)).sum().to_numpy()
     if anchor.events_only:
         r = r[r != 0]
     if cost == 1:
@@ -256,22 +284,30 @@ def anchor_dates(base: Path, name: str) -> None:
             opens = key.split("_")[0]
             opens = pd.Timestamp(_pluck(doc, "first_valid_week") if opens == "first" else f"{opens}-01")
             assert events.index[events.index >= opens][0] == pd.Timestamp(block["first"])
+    elif name == "wkndshort_v0":
+        # Short from the Friday close F to the close of the first full day after it (spec: X), so realised there,
+        # never at F; the legs of a week share that exit, so the book has one session per active week.
+        fridays = pd.DatetimeIndex(pd.to_datetime(kept["F"]))
+        full = _full_days()
+        due = full[full.searchsorted(fridays, side="right")]
+        assert (fridays.weekday == 4).all() and sorted(due) == sorted(stamps)
+        assert len(set(stamps)) == fridays.nunique() == _pluck(doc, "headline.n")
     else:
         assert sorted(pd.to_datetime(kept[source.time_column])) == sorted(stamps)
 
 
 INDEPENDENT_DATE_FACTS = ("fomcdrift_tsy_v0", "fomcfx_v0", "pretra_tsy_v0", "lhrev_letf_v0", "fedflow_tsy_v0",
-                          "cropsmooth_v0", "hvix_nd_v0", "apieia_ho_v0", "wkndgap_fx_v0")
+                          "cropsmooth_v0", "hvix_nd_v0", "apieia_ho_v0", "wkndgap_fx_v0", "wkndshort_v0")
 REGRESSION_ONLY_DATES = tuple(n for n in LEARNED if n not in INDEPENDENT_DATE_FACTS)
 
 
 # ---------------------------------------------------------------- the mapping table
 
 
-def test_the_slice_names_its_thirteen_rows_once_each():
+def test_the_slice_names_its_fourteen_rows_once_each():
     assert set(daily_event.SOURCES) | set(daily_event.NOT_LEARNABLE) == set(ROWS)
     assert not set(daily_event.SOURCES) & set(daily_event.NOT_LEARNABLE)
-    assert len(LEARNED) == 11 and set(daily_event.NOT_LEARNABLE) == {"dburst_rev_v1", "xfut_tcn120_v0"}
+    assert len(LEARNED) == 12 and set(daily_event.NOT_LEARNABLE) == {"dburst_rev_v1", "xfut_tcn120_v0"}
 
 
 def test_each_row_states_the_unit_its_spec_defines():
@@ -285,6 +321,14 @@ def test_each_row_states_the_unit_its_spec_defines():
     assert {n: units[n] for n in bp_of_k} == dict.fromkeys(bp_of_k, daily_event.BP_PER_TRADE)
 
 
+def test_wkndshort_states_usd_of_its_k_book_so_it_is_not_on_capital():
+    """wkndshort_v0's legs are net USD (spec rule 2: side x n x M x price change less costs); the book is their sum
+    over K = $100M. A USD unit is not a return on capital, so the served series is not on capital (no CAGR)."""
+    unit = daily_event.SOURCES["wkndshort_v0"].unit
+    assert unit == daily_event.BOOK_USD_PER_TRADE == "USD of the K = $100M book per trade"
+    assert not unit.startswith(series_mod.CAPITAL_UNIT) and unit.endswith("per trade")
+
+
 def test_texts_use_no_em_or_en_dash_and_each_refusal_gives_a_reason():
     texts = [*daily_event.NOT_LEARNABLE.values(), *(s.unit for s in daily_event.SOURCES.values())]
     assert not any(chr(code) in text for code in (0x2013, 0x2014) for text in texts)
@@ -293,8 +337,9 @@ def test_texts_use_no_em_or_en_dash_and_each_refusal_gives_a_reason():
 
 def test_event_rows_are_summed_per_session_and_the_one_daily_row_is_used_as_recorded():
     assert {n: s.kind for n, s in daily_event.SOURCES.items() if s.kind != "trades"} == {"lhrev_letf_v0": "daily"}
-    for source in daily_event.SOURCES.values():
-        assert sorted(source.values) == [0, 1, 2] and not source.void_as_zero and source.void_column is None
+    for name, source in daily_event.SOURCES.items():
+        assert sorted(source.values) == ([1] if name in ONE_TICK_ROWS else [0, 1, 2])
+        assert not source.void_as_zero and source.void_column is None
         assert source.time_rule == constants.STAMP and source.portfolio is None
 
 
@@ -382,7 +427,7 @@ def test_lhrev_is_a_daily_series_with_the_lo_control_as_benchmark(root):
 
 
 @pytest.mark.parametrize("wrong", [0, 2])
-@pytest.mark.parametrize("name", ANCHORS)
+@pytest.mark.parametrize("name", [n for n in ANCHORS if n not in ONE_TICK_ROWS])
 def test_a_wrong_tick_column_read_for_one_tick_fails_its_anchor(root, tmp_path, patched, name, wrong):
     anchor_headline(root, name)
     _use(patched, name, _swap_cost(name, 1, wrong))
@@ -475,11 +520,13 @@ def test_regression_guard_an_event_on_a_non_session_is_refused_by_the_series_bui
 # ---------------------------------------------------------------- the window start (rows whose sample starts late)
 
 WINDOW_ROWS = ("tsyauct_intra_ml_v0", "fedflow_tsy_v0", "hvix_nd_v0", "apieia_ho_v0", "fomcdrift_tsy_v0", "fomcfx_v0",
-               "fomcpc_fx_v0", "pretra_tsy_v0", "wkndgap_fx_v0")
+               "fomcpc_fx_v0", "pretra_tsy_v0", "wkndgap_fx_v0", "wkndshort_v0")
 # The start each row's spec or screen fixes (statistics review of wave w3): a zero fill from the NQ data start would pad
-# sessions before the sample and zero-fill statements the screen left out.
+# sessions before the sample and zero-fill statements the screen left out. wkndshort_v0 starts at the exit of the
+# spec's first eligible Friday (2011-10-14).
 WINDOW_STARTS = {"fomcdrift_tsy_v0": "2011-01-26", "fomcfx_v0": "2010-12-01", "fomcpc_fx_v0": "2011-04-27",
-                 "pretra_tsy_v0": "2011-01-03", "apieia_ho_v0": "2010-10-06", "wkndgap_fx_v0": "2011-06-20"}
+                 "pretra_tsy_v0": "2011-01-03", "apieia_ho_v0": "2010-10-06", "wkndgap_fx_v0": "2011-06-20",
+                 "wkndshort_v0": "2011-10-17"}
 
 
 def test_the_rows_whose_sample_starts_after_the_default_window_name_their_start():
@@ -674,12 +721,108 @@ def test_born_failing_wkndgap_counting_its_zero_weeks_as_events_fails_the_headli
         anchor_headline(root, name)
 
 
+# ---------------------------------------------------------------- the weekend short book: legs summed at their exit
+
+
+def test_wkndshort_keeps_the_active_legs_and_each_week_has_one_exit(root):
+    name = "wkndshort_v0"
+    kept, doc = _kept(root, name), _doc(root, name)
+    assert len(kept) == _pluck(doc, "precheck.active_market_weeks")
+    assert kept["F"].nunique() == _pluck(doc, "precheck.T_active") == _pluck(doc, "headline.n")
+    assert kept.groupby("F")["X"].nunique().eq(1).all()
+
+
+def test_wkndshort_serves_the_headline_book_in_usd_of_k_per_session(root):
+    """The session series is the sum of each week's active legs at its exit; over K it is the screen's weekly book."""
+    name = "wkndshort_v0"
+    s, doc = hypothesis_series(ResearchService(root), name, 1), _doc(root, name)
+    events = s.r[s.r != 0] / WKNDSHORT_K
+    assert s.kind == "trades" and s.unit == "USD of the K = $100M book per session" and not s.on_capital
+    assert len(events) == _pluck(doc, "headline.n")
+    assert events.mean() == pytest.approx(_pluck(doc, "headline.mean"), rel=1e-9, abs=0)
+    assert events.std(ddof=1) == pytest.approx(_pluck(doc, "headline.sd"), rel=1e-9, abs=0)
+
+
+def test_born_failing_wkndshort_dated_at_its_friday_entry_fails_its_date_anchor(root, patched):
+    """The weekly file's only date is the Friday entry F; a source dated there puts each week's book at least one
+    session before the session its return is realised."""
+    name = "wkndshort_v0"
+    anchor_dates(root, name)
+    _use(patched, name, dataclasses.replace(daily_event.SOURCES[name], time_column="F"))
+    with pytest.raises((AssertionError, ResearchDataError, SeriesError)):
+        anchor_dates(root, name)
+
+
+def test_born_failing_wkndshort_counted_per_leg_not_per_week_fails_the_headline(root, patched):
+    name = "wkndshort_v0"
+    anchor_headline(root, name)
+    patched.setitem(ANCHORS, name, dataclasses.replace(ANCHORS[name], per_session=False))
+    with pytest.raises(AssertionError):
+        anchor_headline(root, name)
+
+
+@pytest.mark.parametrize("column", ["h_gross", "c_net1", "s1_net1"])
+def test_born_failing_wkndshort_reading_another_leg_column_fails_the_headline(root, patched, column):
+    """Gross, the midweek control leg and the S1 leg sit beside the headline leg `h_net1` in the same file."""
+    name = "wkndshort_v0"
+    anchor_headline(root, name)
+    _use(patched, name, dataclasses.replace(daily_event.SOURCES[name], values=MappingProxyType({1: column})))
+    with pytest.raises(AssertionError):
+        anchor_headline(root, name)
+
+
+@pytest.mark.lab_only
+def test_wkndshort_active_legs_over_k_are_the_weekly_book_in_every_week(lab):
+    """Spec rule 2: r_w = the sum over the active legs / K. The weekly file holds r_w by Friday and no exit date."""
+    name = "wkndshort_v0"
+    kept = _kept(lab, name)
+    weekly = pd.read_csv(lab / "results" / "screens" / "wkndshort_v0_weekly.csv").set_index("F")["r1"].sort_index()
+    book = kept.groupby("F")["h_net1"].sum() / WKNDSHORT_K
+    assert _spec(lab, name)["design"]["K_usd"] == WKNDSHORT_K
+    assert list(book.index) == list(weekly.index) and len(book) == 381
+    assert float((book - weekly).abs().max()) < 1e-12
+
+
+@pytest.mark.lab_only
+def test_wkndshort_serves_2570_sessions_381_of_them_events_with_the_headline_sharpe(lab):
+    name = "wkndshort_v0"
+    s, doc = hypothesis_series(ResearchService(lab), name, 1), _doc(lab, name)
+    events = s.r[s.r != 0]
+    assert (len(s.r), s.r.index[0], s.r.index[-1]) == (2570, pd.Timestamp("2011-10-17"), pd.Timestamp("2021-12-31"))
+    assert len(events) == doc["headline"]["n"] == doc["precheck"]["T_active"] == 381
+    assert (events / WKNDSHORT_K).mean() == pytest.approx(doc["headline"]["mean"], rel=1e-9, abs=0)
+    assert (events / WKNDSHORT_K).std(ddof=1) == pytest.approx(doc["headline"]["sd"], rel=1e-9, abs=0)
+    assert perf.sharpe(s.r, s.periods) == pytest.approx(0.7794, abs=1e-4)
+
+
+@pytest.mark.lab_only
+def test_wkndshort_window_starts_at_the_exit_of_the_specs_first_eligible_friday(lab):
+    name = "wkndshort_v0"
+    spec, kept = _spec(lab, name), _kept(lab, name)
+    first = set(spec["data_facts"]["first_structurally_eligible_friday"].values())
+    assert first == {kept["F"].min()} == {"2011-10-14"}
+    exit_day = _full_days()[_full_days().searchsorted(pd.Timestamp("2011-10-14"), side="right")]
+    assert daily_event.SOURCES[name].window_start == exit_day.strftime("%Y-%m-%d") == kept["X"].min()
+
+
+@pytest.mark.lab_only
+def test_wkndshort_exits_a_session_late_only_where_the_next_session_is_not_a_full_day(lab):
+    """A next-session rule would misdate three weeks: the session after the Friday is an early close (2017-07-03,
+    2018-12-24) or a year-end day (2018-12-31) in the spec's session table, so the exit is the session after it."""
+    kept = _kept(lab, "wkndshort_v0")
+    late = sorted({f for f, x in zip(kept["F"], kept["X"]) if pd.Timestamp(x) != _next_session(pd.Timestamp(f))})
+    assert late == ["2017-06-30", "2018-12-21", "2018-12-28"]
+    days = json.loads(SESSION_TABLE.read_text(encoding="utf-8"))["days"]
+    assert [days[_next_session(pd.Timestamp(f)).strftime("%Y-%m-%d")] for f in late] == [
+        "early_close", "early_close", "year_end_unverified"]
+
+
 # ---------------------------------------------------------------- the keep rule is what selects the sample
 
-RULE_ROWS = ("hvix_nd_v0", "apieia_ho_v0")
+RULE_ROWS = ("hvix_nd_v0", "apieia_ho_v0", "wkndshort_v0")
 
 
-def test_the_rule_rows_are_the_two_that_state_a_row_filter():
+def test_the_rule_rows_are_the_three_that_state_a_row_filter():
     assert {n for n in LEARNED if daily_event.SOURCES[n].keep_where} == set(RULE_ROWS)
 
 
@@ -700,7 +843,8 @@ def test_born_failing_a_source_without_its_rule_serves_another_sample_and_fails_
 
 @pytest.mark.parametrize("name", RULE_ROWS)
 def test_born_failing_a_rule_on_the_wrong_value_keeps_the_wrong_rows(root, patched, name):
-    wrong = {"hvix_nd_v0": {"headline": False}, "apieia_ho_v0": {"kind": "thu_fri", "void": None}}[name]
+    wrong = {"hvix_nd_v0": {"headline": False}, "apieia_ho_v0": {"kind": "thu_fri", "void": None},
+             "wkndshort_v0": {"active": False}}[name]
     _use(patched, name, dataclasses.replace(daily_event.SOURCES[name], keep_where=MappingProxyType(wrong)))
     with pytest.raises((AssertionError, ResearchDataError)):
         anchor_headline(root, name)

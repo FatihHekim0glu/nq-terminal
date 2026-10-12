@@ -190,6 +190,40 @@ Checks on the fixed tree (output under `D:/dev/v04/w3-research-integrity/statsfi
 | Backend, `pytest backend/tests -n 6` | 5,525 passed, 353 skipped, 10 xfailed, 2 errors: both are the session teardown of the research-file guard, which saw `oos_access_log.jsonl` gain caller `terminal` lines during the run. They come from another lane's running terminal app (47 in-sample lines, bounded at 2022-01-01, every 1 to 2 minutes since before this run started); no test failed |
 | `uv run --frozen --project qa python -m crosscheck --strict` | PASS 2,563, FAIL 0, SKIP 0, INFO 104 over 90 dumps; `registry_completeness` 59 of 59 with 53 learned and 6 not learnable |
 
+### 2c. wkndshort re-review fix
+
+The re-review of `7f9cbf3` rejected the 2b outcome for wkndshort_v0: its not-learnable reason was false. Spec rule 2
+defines the weekly book as the sum of the active legs over K ($100M), and on the lab file the 1,465 active legs'
+`h_net1` over 1e8 equal the weekly `r1` in all 381 weeks (largest difference 1e-16). Every leg carries its exit date
+`X`, the first full day after the Friday `F` in the spec's session table; a next-session rule would misdate three weeks
+(2017-06-30, 2018-12-21, 2018-12-28, whose next session is an early close or a year-end day), so the row is dated at `X`.
+
+Fix (`daily_event.py`, `series_sources/__init__.py`): the source below; `wkndshort_v0` and `WKNDSHORT_REASON` removed
+from the base not-learnable table, which now holds three rows. Synthetic fixture pair (`wkndshort_v0_legs.csv`,
+`wkndshort_v0.json`) and two manifest entries added.
+
+| Row | Module | File | Kind | Time column and rule | Guard | Unit | Values (cost: column) | Benchmark | Void and sample rule | Window start | Anchor |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| wkndshort_v0 | daily_event | `wkndshort_v0_legs.csv` | trades | `X` (each leg's exit), stamp | none | USD of the K = $100M book per trade (not on capital) | 1: h_net1 | none | keep_where active=True | 2011-10-17 (exit of the first eligible Friday, 2011-10-14) | legs summed per session: n 381, mean and sd over K at 1 tick, exit = first full day after F, 1e-9 on the lab tree |
+
+Tests that failed first (red run `D:/dev/v04/w3b-wkndshort/red.txt`: 39 failing cases, 851 passed, 10 xfailed): the
+anchors and every parametrised case for the row, `test_wkndshort_states_usd_of_its_k_book_so_it_is_not_on_capital`,
+`test_born_failing_wkndshort_dated_at_its_friday_entry_fails_its_date_anchor`, the per-leg and wrong-column variants,
+the lab cases (legs over K equal weekly `r1` every week; 2,570 sessions, 381 events, headline mean and sd at 1e-9;
+window start; the three late exits), and in the registry tests the weekend-rows case (both learned), 54 and 5, and the
+route case (unlearned is now `["zz_new_v0"]`, wkndshort_v0 is a trial).
+
+Served on the lab tree (1 tick, P = 252): 2,570 sessions from 2011-10-17 to 2021-12-31, 381 of them events; over K
+the event mean is 0.000290347 and sd 0.0022638 (the headline); per session mean 4.304e-05 and sd 8.768e-04 of K;
+Sharpe 0.7794. Rows learned: 54 of 59; not learnable 5 (cotliq_v0, mpslope_ym_v0 and finroll_tff_v0 outside C2,
+dburst_rev_v1, xfut_tcn120_v0). This section supersedes 2b and the register's count line for wkndshort_v0.
+
+| Check | Result |
+|---|---|
+| Series tests, the seven `test_series*.py` files with the lab-only cases, `-n 2` (`D:/dev/v04/w3b-wkndshort/green.txt`) | 904 passed, 10 xfailed |
+| `registry_completeness` dump (`qa/.dumps`, read directly) | 59 of 59 registered rows covered: 54 learned, 5 not learnable |
+| `crosscheck --strict` | not run: the worktree has no `qa/.venv` and `uv run` would install one; the lab venv lacks its dependencies |
+
 ### 3. The first-launch A/B with the larger N
 
 Run through A/B labs with `D:/dev/v04/tools/ab.mjs`: 0.3.3's smoke exe (`D:/dev/release/0.3.3/payload/smoke/nq-lab-terminal.exe`)

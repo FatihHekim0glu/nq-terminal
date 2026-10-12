@@ -41,11 +41,8 @@ ORIGINAL_22 = ("za_v0", "tom_v0", "preholiday_v0", "prefomc_v0", "overnight_v0",
 C2_ROWS = ("cotliq_v0", "mpslope_ym_v0", "finroll_tff_v0")
 C2_REASON = ("outside convention C2 (P = 252 or 12, docs/ANALYTICS_CATALOG.md:16); needs a statistics decision "
              "(O23)")
-WKNDSHORT_REASON = ("An event row (one Friday-close to Monday-close short per active week, 381 events), but the weekly "
-                    "file dates each event at its Friday entry and holds no exit date; the return is realised at the "
-                    "next NYSE session's close, and a series source has no rule that dates a row at the next session. "
-                    "The per-root legs are in another unit and do not add up to the book.")
-SOURCE = constants.SeriesSource("x_daily.csv", "date", MappingProxyType({1: "r1"}), "return on capital per session",
+WKNDSHORT_FILES = ("wkndshort_v0_legs.csv", "wkndshort_v0.json")  # the synthetic pair of the daily_event fixtures
+SOURCE =constants.SeriesSource("x_daily.csv", "date", MappingProxyType({1: "r1"}), "return on capital per session",
                                 "daily")
 
 
@@ -108,15 +105,19 @@ def test_the_three_rows_outside_convention_c2_are_not_learnable_with_the_reason(
 
 
 def test_born_failing_the_weekend_rows_carry_their_reviewed_status():
-    """wkndshort_v0 is an event row inside C1 trades, not a weekly book outside C2: its reason names the real obstacle
-    (dating at the next session). wkndgap_fx_v0's weekly file is dated at the Monday exit, so it is learned."""
-    assert series_sources.NOT_LEARNABLE["wkndshort_v0"] == WKNDSHORT_REASON
-    assert "wkndgap_fx_v0" in series_sources.SERIES_SOURCES and "wkndgap_fx_v0" not in series_sources.NOT_LEARNABLE
-    assert not any(chr(code) in WKNDSHORT_REASON for code in (0x2013, 0x2014))
+    """Both weekend rows are learned event rows inside C1 trades (re-review of wave w3): wkndgap_fx_v0 from its weekly
+    file dated at the Monday exit, wkndshort_v0 from its legs file dated at each leg's exit X (the active legs over K
+    are the weekly book), so neither is listed not learnable and the old wkndshort reason is gone."""
+    for name in ("wkndgap_fx_v0", "wkndshort_v0"):
+        assert name in series_sources.SERIES_SOURCES and name not in series_sources.NOT_LEARNABLE
+    assert series_sources.SERIES_SOURCES["wkndshort_v0"].time_column == "X"
+    assert not hasattr(series_sources, "WKNDSHORT_REASON")
 
 
-def test_the_registry_learns_53_and_names_6_not_learnable():
-    assert len(series_sources.SERIES_SOURCES) == 53 and len(series_sources.NOT_LEARNABLE) == 6
+def test_the_registry_learns_54_and_names_5_not_learnable():
+    assert len(series_sources.SERIES_SOURCES) == 54 and len(series_sources.NOT_LEARNABLE) == 5
+    assert set(series_sources.NOT_LEARNABLE) == {"cotliq_v0", "mpslope_ym_v0", "finroll_tff_v0", "dburst_rev_v1",
+                                                 "xfut_tcn120_v0"}
 
 
 def test_the_unlearned_reason_is_the_not_learnable_reason_or_no_series_source_yet():
@@ -203,17 +204,21 @@ def test_the_model_reads_the_clause_the_service_writes():
 
 
 def test_the_route_serves_the_list_for_rows_planted_in_a_copy_of_the_fixture_tree(tmp_path):
+    """wkndshort_v0 (planted with its synthetic legs file and screen JSON) is a trial of N; only the row no release
+    has learned is listed."""
     root = tmp_path / "tree"
     shutil.copytree(FIXTURES, root)
+    screens = root / "results" / "screens"
+    for file in WKNDSHORT_FILES:
+        shutil.copyfile(screens / "daily_event" / file, screens / file)
     with (root / "results" / "registry.csv").open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     write_registry(root, [*rows, dict(rows[0], name="wkndshort_v0", spec="wkndshort_v0"),
                           dict(rows[0], name="zz_new_v0", spec="zz_new_v0")])
     trials, unlearned = analytics_api.registry_trials(ResearchService(root))
-    assert unlearned == ["wkndshort_v0", "zz_new_v0"]
+    assert unlearned == ["zz_new_v0"] and "wkndshort_v0" in [t.name for t in trials]
     served = tearsheet_extended.deflated_view(trials, unlearned).model_dump(mode="json")
-    assert served["unlearned"] == [{"name": "wkndshort_v0", "reason": WKNDSHORT_REASON},
-                                   {"name": "zz_new_v0", "reason": "no series source yet"}]
+    assert served["unlearned"] == [{"name": "zz_new_v0", "reason": "no series source yet"}]
 
 
 # ---------------------------------------------------------------- the completeness dump
