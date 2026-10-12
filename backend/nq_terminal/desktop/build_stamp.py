@@ -11,6 +11,11 @@ present, and every file under `web/public`. `openapi_sha256` is the full sha256 
 
 `dist_status` answers `missing` when `dist/index.html` is absent; `stale` when the stamp is absent or unreadable, a
 source is newer than the stamp or the contract's sha256 differs; else `current`. It only reads.
+
+The walk over the sources (`newest_source_mtime_ms`, 27 to 34 ms over the lab tree's 736 files) stays off the READY
+path: `serve` starts it on a daemon thread before it builds the app (`handshake.DistWalk`) and the READY line hands its
+result to `dist_status` as `newest_ms`, so the answer is the same exact one (startup.md 7.4). The shell's stale-page
+rebuild depends on it: a file edited deep under `web/src` or `web/public` after the build must give `stale`.
 """
 from __future__ import annotations
 
@@ -67,8 +72,12 @@ def _stamp(dist: Path) -> tuple[int, str] | None:
     return (mtime, digest) if HEX64.match(digest) else None
 
 
-def dist_status(web_dir: Path = WEB_DIR, contract: Path = OPENAPI) -> str:
-    """'current', 'stale' or 'missing' for `<web_dir>/dist`."""
+def dist_status(web_dir: Path = WEB_DIR, contract: Path = OPENAPI, *, newest_ms: int | None = None,
+                contract_sha: str | None = None) -> str:
+    """'current', 'stale' or 'missing' for `<web_dir>/dist`.
+
+    `newest_ms` is `newest_source_mtime_ms(web_dir)` when the caller already walked the sources, and `contract_sha` the
+    contract's sha256 when the caller already has it (the READY line has both); each is computed here when None."""
     dist = web_dir / "dist"
     if not (dist / "index.html").is_file():
         return MISSING
@@ -76,6 +85,8 @@ def dist_status(web_dir: Path = WEB_DIR, contract: Path = OPENAPI) -> str:
     if stamp is None:
         return STALE
     mtime, digest = stamp
-    if newest_source_mtime_ms(web_dir) > mtime or openapi_sha256(contract) != digest:
+    sha = contract_sha if contract_sha is not None else openapi_sha256(contract)
+    if sha != digest:
         return STALE
-    return CURRENT
+    newest = newest_ms if newest_ms is not None else newest_source_mtime_ms(web_dir)
+    return STALE if newest > mtime else CURRENT

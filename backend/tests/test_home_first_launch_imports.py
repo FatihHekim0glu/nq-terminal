@@ -14,15 +14,21 @@ which nq_lab statistics modules are loaded at each point:
 - after each HOME task, in order;
 - after each request HOME sends on a first launch (the 0.3.1 backend log, in its order: commands, jobs, the GP bars
   with variant and start, registry, the data catalogue, multiple-testing, confirmations, the EQ panel without a cost,
-  the realised-volatility read, the universe at windows 22 and 252, runs, hypotheses, MON's two-day cells);
+  the realised-volatility read, the universe at windows 22 and 252, hypotheses, MON's two-day cells; no /api/runs, see
+  below);
 - after the deflated Sharpe, asked for separately and last: HOME's REG panel asks for it when it is not compact (the
   owner's 2400 x 1350 window), right after /api/hypotheses (the 0.3.1 log), and the route imports scipy.stats. It is the
   only request of the HOME window that does. The web holds the request back until the registry and the hypotheses have
   answered (`deflatedRequestable`), so the import follows HOME's last data response;
+- after /api/runs, asked for separately and after the deflated Sharpe (v04 w1 home-window, startup.md 7.3): GP's picker
+  and RecordWatch ask for it once HOME's queries have gone quiet, not while HOME loads, and no HOME-ready condition
+  needs the run list. Nothing of the HOME window builds the run index: the child counts the builds of the index
+  (`_record_run_index`, which only a cache miss reaches) at every point;
 - after each later task, in order.
 
 Two children: one runs the HOME tasks before the requests (the usual first launch), the other sends the requests on a
-cold app before any task (a request that beats the prewarm). Born failing: 0.3.1's `warm` loads scipy.stats.
+cold app before any task (a request that beats the prewarm). Born failing: 0.3.1's `warm` loads scipy.stats; 0.3.3's
+`runs` task builds the run index inside the HOME tasks stage.
 """
 from __future__ import annotations
 
@@ -50,10 +56,10 @@ HOME_REQUESTS = (
     "/api/market/rv?symbol=NQ.V.0&window=22",
     "/api/market/universe?window=22",
     "/api/market/universe?window=252",
-    "/api/runs",
     "/api/hypotheses",
 )
 DEFLATED = "/api/analytics/deflated"
+RUNS = "/api/runs"  # sent by GP's picker and RecordWatch after HOME's last data response, never inside the HOME window
 STATS = "scipy.stats"
 WARMED = "scipy.cluster.hierarchy"
 
@@ -63,6 +69,7 @@ from pathlib import Path
 backend, tests, fixture_dir, state, log_dir, mode, out = sys.argv[1:8]
 requests = json.loads(sys.argv[8])
 deflated = sys.argv[9]
+runs_url = sys.argv[10]
 sys.path[:0] = [backend, tests]
 
 def loaded():
@@ -71,7 +78,18 @@ def loaded():
             "nq_lab.sizing_stats": "nq_lab.sizing_stats" in mods,
             "nq_lab.calendar_stats": "nq_lab.calendar_stats" in mods,
             "scipy.cluster.hierarchy": "scipy.cluster.hierarchy" in mods,
-            "foreign": sorted(m for m in mods if m == "conftest" or m.startswith("test_") or m == "pytest")}
+            "foreign": sorted(m for m in mods if m == "conftest" or m.startswith("test_") or m == "pytest"),
+            "runs_built": len(run_builds)}
+
+run_builds = []
+from nq_terminal.api import runs as runs_api
+_real_record = runs_api._record_run_index
+
+def _counted_record(service):
+    run_builds.append(1)
+    return _real_record(service)
+
+runs_api._record_run_index = _counted_record
 
 from fixture_app import create_fixture_app
 from fastapi.testclient import TestClient
@@ -113,6 +131,8 @@ else:
 points.append(["home_done", loaded()])
 statuses[deflated] = client.get(deflated).status_code
 points.append([f"get:{deflated}", loaded()])
+statuses[runs_url] = client.get(runs_url).status_code
+points.append([f"get:{runs_url}", loaded()])
 later = []
 for task in home_prewarm.later_tasks(app.state):
     task()
@@ -137,7 +157,7 @@ def run_child(work: Path, mode: str) -> dict[str, Any]:
     state.mkdir(parents=True)
     out = work / "report.json"
     args = [sys.executable, "-c", CHILD_SCRIPT, str(BACKEND), str(TESTS), str(FIXTURES), str(state), str(log), mode,
-            str(out), json.dumps(list(HOME_REQUESTS)), DEFLATED]
+            str(out), json.dumps(list(HOME_REQUESTS)), DEFLATED, RUNS]
     done = subprocess.run(args, env=_child_env(state), cwd=str(work), capture_output=True, text=True,
                           encoding="utf-8", timeout=300, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                           check=False)
@@ -172,7 +192,7 @@ def test_the_baseline_holds_no_scipy_stats_and_no_test_module(report):
 def test_every_home_request_answered(report):
     assert report["statuses"] and set(report["statuses"].values()) == {200}, report["statuses"]
     assert report["statuses"][DEFLATED] == 200
-    assert set(HOME_REQUESTS) <= set(report["statuses"])
+    assert set(HOME_REQUESTS) <= set(report["statuses"]) and report["statuses"][RUNS] == 200
 
 
 def test_born_failing_no_home_task_or_request_imports_scipy_stats(report):
@@ -180,6 +200,22 @@ def test_born_failing_no_home_task_or_request_imports_scipy_stats(report):
               for name, seen in home_points(report)
               if seen["stats"] or seen["nq_lab.sizing_stats"] or seen["nq_lab.calendar_stats"]]
     assert loaded == [], f"scipy.stats is loaded during HOME: {loaded[:3]}"
+
+
+def test_born_failing_no_run_index_is_built_before_homes_last_data_response(report):
+    """v04 w1 home-window: the run index is price-free but cold on a first launch (1.06 s of the HOME stage, startup.md
+    7.3). No HOME task and no request of the HOME window (including the deflated Sharpe, HOME's last data response)
+    builds it; /api/runs, sent afterwards as GP's picker and RecordWatch send it, builds it once. Fails on 0.3.3, where
+    the `runs` task is the second HOME task."""
+    built = [(name, seen["runs_built"]) for name, seen in home_points(report) if seen["runs_built"]]
+    assert built == [], f"the run index is built inside the HOME window: {built[:3]}"
+    by_name = points(report)
+    assert by_name[f"get:{DEFLATED}"]["runs_built"] == 0
+    assert by_name[f"get:{RUNS}"]["runs_built"] == 1, "the request after HOME builds it, once"
+    names = [name for name, _ in report["points"]]
+    assert names.index(f"get:{RUNS}") > names.index(f"get:{DEFLATED}") > names.index(f"get:{HOME_REQUESTS[-1]}")
+    assert report["later"][:2] == ["warm_stats", "runs"]
+    assert by_name["later:runs"]["runs_built"] == 1, "the later task finds the index the request built"
 
 
 def test_deflated_is_the_only_home_window_request_that_imports_scipy_stats(report):

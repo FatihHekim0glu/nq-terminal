@@ -20,6 +20,11 @@ The start path (03 sections 2.2 and 2.4, Appendix A row 2):
    names it, and a busy port is refused rather than shared.
 4. The app's start-up takes the lock (`desktop/lifecycle.py`); once the server is up, print one `NQT-READY {json}`
    line (`desktop/handshake.py`). Losing a race for the lock in the start-up also ends in `NQT-ATTACH` and exit 0.
+   Importing this module builds no app (`app.app` is lazy): `serve` builds the one real app, once. The READY line's
+   `dist` is exact (the shell's stale-page rebuild depends on it), but its walk of the web sources runs on a daemon
+   thread `serve` starts before it builds the app (`handshake.DistWalk`), so the READY path only reads the result; a
+   few seconds after READY another walk logs a warning when a source changed since (`handshake.schedule_dist_check`;
+   startup.md 7.4).
 5. The HOME prewarm waits for the start gate (V021, `services/prewarm.StartGate`): the READY line printed and the
    first identity proof answered (`api/desktop.py` marks it once the answer is sent). In launcher mode the gate opens
    on READY (`LAUNCHER_FALLBACK_S`, V031: the launcher's 400 ms proof poll held the prewarm back up to 532 ms, more
@@ -108,8 +113,11 @@ def _channel(settings: Settings) -> StdinChannel | None:
     return StdinChannel(watchdog.PollingStdin(STDIN_FD), on_eof=watchdog.on_eof).start()
 
 
-def _announce_when_started(server: Any, app: FastAPI, nonce: str | None) -> None:
-    """Print NQT-READY once uvicorn's start-up (the lifespan, so the lock) has finished and the socket listens."""
+def _announce_when_started(server: Any, app: FastAPI, nonce: str | None,
+                           dist_walk: handshake.DistWalk | None = None) -> None:
+    """Print NQT-READY once uvicorn's start-up (the lifespan, so the lock) has finished and the socket listens.
+
+    `dist_walk` is the web source walk `serve` started early; the READY line's exact `dist` reads its result."""
     original = getattr(server, "startup", None)
     if original is None:
         return
@@ -118,11 +126,14 @@ def _announce_when_started(server: Any, app: FastAPI, nonce: str | None) -> None
         await original(sockets=sockets)
         held, current = lifecycle.held_lock(app), lifecycle.runtime(app)
         if server.started and held is not None:
-            _say(handshake.ready_line(handshake.ready_payload(
-                app.state.settings, token=current.token, nonce=nonce, port=current.port, pid=current.pid)))
+            payload = handshake.ready_payload(app.state.settings, token=current.token, nonce=nonce, port=current.port,
+                                              pid=current.pid, dist_walk=dist_walk)
+            _say(handshake.ready_line(payload))
             gate = getattr(app.state, START_GATE_KEY, None)
             if gate is not None:
                 gate.mark_ready()  # the prewarm may start once the first proof is answered too (V021)
+            # startup.md 7.4: the web source walk runs a few seconds after READY, off the start path
+            handshake.schedule_dist_check(app.state.settings, payload["dist"])
 
     server.startup = startup
 
@@ -169,6 +180,8 @@ def serve(settings: Settings, build: AppBuilder) -> int:
     if live is not None:
         _say(handshake.attach_line(live.port))
         return EXIT_ATTACHED
+    # startup.md 7.4: walk the web sources now, beside the token wait and the app build, so READY's exact `dist` is free
+    dist_walk = handshake.DistWalk.start(settings.web_dist.parent)
     channel = _channel(settings)
     credentials = channel.wait(TOKEN_WAIT_S) if channel is not None else (lifecycle.new_token(), None)
     if credentials is None:
@@ -188,7 +201,7 @@ def serve(settings: Settings, build: AppBuilder) -> int:
     # a few seconds after READY when no proof comes (browser), so the shell's first proof never meets the prewarm's
     # imports.
     setattr(app.state, START_GATE_KEY, start_gate(settings))
-    _announce_when_started(server, app, nonce)
+    _announce_when_started(server, app, nonce, dist_walk)
     return _run(server, sock, app, channel)
 
 

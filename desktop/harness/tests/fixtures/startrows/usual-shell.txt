@@ -1,0 +1,12 @@
+{"devtools":true,"event":"start","identifier":"dev.nqlab.terminal.smoke","measure":false,"pid":40260,"product":"nq-lab terminal smoke","release_plugins":false,"scrubbed":[],"smoke":true,"t":1791411740848,"test_build":true}
+{"event":"supervise_spawned","launcher_pid":57184,"route":"job_list","t":1791411741433}
+{"event":"supervise_checked","launcher_pid":57184,"pid":12988,"port":51889,"t":1791411742995}
+{"devtools":true,"event":"start","identifier":"dev.nqlab.terminal.smoke","measure":false,"pid":53460,"product":"nq-lab terminal smoke","release_plugins":false,"scrubbed":[],"smoke":true,"t":1791411815238,"test_build":true}
+{"event":"supervise_spawned","launcher_pid":24828,"route":"job_list","t":1791411815753}
+{"event":"supervise_checked","launcher_pid":24828,"pid":28300,"port":64938,"t":1791411817357}
+{"devtools":true,"event":"start","identifier":"dev.nqlab.terminal.smoke","measure":false,"pid":41652,"product":"nq-lab terminal smoke","release_plugins":false,"scrubbed":[],"smoke":true,"t":1791411889131,"test_build":true}
+{"event":"supervise_spawned","launcher_pid":27576,"route":"job_list","t":1791411889572}
+{"event":"supervise_checked","launcher_pid":27576,"pid":4300,"port":57122,"t":1791411891052}
+{"devtools":true,"event":"start","identifier":"dev.nqlab.terminal.smoke","measure":false,"pid":14276,"product":"nq-lab terminal smoke","release_plugins":false,"scrubbed":[],"smoke":true,"t":1791411961986,"test_build":true}
+{"event":"supervise_spawned","launcher_pid":42332,"route":"job_list","t":1791411962418}
+{"event":"supervise_checked","launcher_pid":42332,"pid":33288,"port":63680,"t":1791411963926}

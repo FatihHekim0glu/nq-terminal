@@ -15,7 +15,7 @@ call, one gate line). The two price reads that have no result cache entry (the u
 GP bars) go through the same route functions and the bar service's own cache; the page's later reads are hits there.
 
 Order (02 section 4.1 item 3, decided: the cold-HOME cap holds on the very first launch, with an empty state folder; W5C
-D4: no work HOME does not show runs during the HOME window): what HOME asks for, in the order it needs it, then what
+D4: no work HOME does not show runs during the HOME window; v04 w1: nor the run index): what HOME asks for, in the order it needs it, then what
 HOME never asks for. First the `warm` task, which reads no price and writes no gate line: it imports
 `scipy.cluster.hierarchy` and `scipy.spatial.distance` (neither loads `scipy.stats`) and builds the XNYS calendar once
 through `data.last_sessions`. Those modules stay lazy imports off the start path (D1.1). No HOME request needs
@@ -26,11 +26,14 @@ only. The one HOME request that imports it is REG's deflated Sharpe: a REG panel
 answered (`deflatedRequestable`), that is after HOME's last data response, so the import (about 0.55 s) falls inside
 that request and not in front of HOME's data. `scipy.stats` (with `nq_lab.sizing_stats`) otherwise loads in the first
 later task, `warm_stats`, once HOME is served; a first launch that opens EQ, DES or RISK before then pays that import
-once inside the request. Then the run index (price-free; HOME's GP panel requests
-/api/runs through `useGpData`, and a first launch has no persisted index, so a request that raced a later task would
-build it cold from the heads of the result files while HOME loads). Then the price-reading tasks: MON two-day and
-universe, GP bars. Then, as `later` tasks that wait until the process is quiet (`services/prewarm.py`): `warm_stats`
-(price-free, no gate line), the ledger (price-free and persisted to disk; it serves RecordWatch and LEDG, never HOME:
+once inside the request. Then the price-reading tasks: MON two-day and universe, GP bars. The run index is not among
+them (v04 w1, startup.md 7.3): no HOME-ready condition needs the run list (the probe waits for GP's chart, MON's grid,
+EQ's figures and REG's grid), GP uses it only for its picker and RecordWatch for its diff, and both now ask for
+/api/runs once HOME's own queries have gone quiet (or, for the picker, when it is opened), so on a first launch, which
+has no persisted index, the cold build (about 1.06 s) no longer sits inside the HOME window. Then, as `later` tasks that
+wait until the process is quiet (`services/prewarm.py`): `warm_stats` (price-free, no gate line), the run index
+(price-free; it is built here, or by the first of the page's requests if that comes first, the result cache's
+single-flight making it one computation), the ledger (price-free and persisted to disk; it serves RecordWatch and LEDG, never HOME:
 HOME's REG panel reads the registry, hypotheses, multiple-testing and confirmations, not the ledger), the deflated
 Sharpe (a wide REG panel asks for it after HOME's data, which then finds it computed; 1.2 s cold) and EQ's bootstrap (HOME's EQ panel asks for /panel, the full EQ screen
 for the bootstrap, and the EQ Enter unit of DEC1 depends on it being warm). On a first launch they would otherwise take
@@ -52,7 +55,8 @@ from typing import Any, Callable
 from fastapi import FastAPI
 
 from nq_terminal import memtrim
-from nq_terminal.services.prewarm import (ENV_PREWARM, PORT_BOUND_KEY, STAGE_LATER, START_GATE_KEY, Task,
+from nq_terminal.desktop import request_timing
+from nq_terminal.services.prewarm import (ENV_PREWARM, PORT_BOUND_KEY, STAGE_LATER, STAGE_TASKS, START_GATE_KEY, Task,
                                           start_prewarm)
 
 LOG = logging.getLogger(__name__)
@@ -158,13 +162,15 @@ def _runs(state: Any) -> Task:
 
 def home_tasks(state: Any) -> list[Task]:
     """The prewarm tasks for what the HOME layout asks for, in order; none of them runs until the prewarm thread calls it."""
-    return [_warm(state), _runs(state), _two_day(state), _universe(state), _gp_bars(state)]
+    return [_warm(state), _two_day(state), _universe(state), _gp_bars(state)]
 
 
 def later_tasks(state: Any) -> list[Task]:
     """What HOME's first paint does not wait for but the next screens do; run once HOME is served and the process is quiet.
-    `warm_stats` comes first: scipy.stats is what the deflated Sharpe, EQ's bootstrap and the next screens import."""
-    return [_warm_stats(state), _ledger(state), _deflated(state), _eq_bootstrap(state)]
+    `warm_stats` comes first: scipy.stats is what the deflated Sharpe, EQ's bootstrap and the next screens import. The run
+    index follows (GP's picker and RecordWatch ask for /api/runs once HOME is quiet; the HOME-ready probe does not wait
+    for it), then the ledger."""
+    return [_warm_stats(state), _runs(state), _ledger(state), _deflated(state), _eq_bootstrap(state)]
 
 
 def home_prewarm_allowed(app: FastAPI, environ: dict[str, str] | None = None) -> bool:
@@ -180,6 +186,8 @@ def _trim_after(app: Any) -> Callable[[str], None]:
     trim = memtrim.stage_hook(app)
 
     def after(stage: str) -> None:
+        if stage == STAGE_TASKS:
+            request_timing.close_window(app)  # per-request lines are written in the HOME window only (startup.md 11.3)
         if stage in TRIM_STAGES:
             trim(stage)
     return after
