@@ -301,3 +301,33 @@ test('born failing: a coverage step that fails on a missing script, swallows a f
   assert.ok(coverageViolations(mutate(WORKFLOW, '        continue-on-error: true\n        uses: actions/upload-artifact', '        uses: actions/upload-artifact')).some((v) => v.includes('upload')), 'upload fails the run')
   assert.ok(coverageViolations(mutate(WORKFLOW, '--exclude scripts/start/startPs1.test.ts', '--exclude nothing.test.ts')).length > 0, 'the vitest exclusion is not repeated')
 })
+
+/** The ways the timing step breaks its contract: it runs the timing project alone, on one worker, after the functional run. */
+function timingViolations(text) {
+  const out = []
+  const all = inJob(text, 'offline-e2e')
+  const functional = all.find((s) => /pnpm e2e:offline(\s|$)/.test(s.run))
+  const timing = all.find((s) => /pnpm e2e:offline:timing\b/.test(s.run))
+  if (!timing) return ['no step runs pnpm e2e:offline:timing']
+  if (!functional || all.indexOf(timing) < all.indexOf(functional)) out.push('the timing step does not come after the functional run')
+  if (/--workers[ =]([2-9]|\d\d)/.test(timing.run)) out.push('the timing specs are given more than one worker')
+  if (/--project/.test(timing.run)) out.push('the timing step picks projects by hand instead of the script')
+  if (!/--update-snapshots=all/.test(timing.run)) out.push('baselines are git-ignored, so the timing specs need --update-snapshots=all')
+  if (timing.workingDirectory !== 'terminal/web') out.push('the timing step is not in terminal/web')
+  if (timing.continueOnError !== null) out.push('the timing step swallows its failure')
+  if (functional && /e2e:offline:timing/.test(functional.run)) out.push('the timing specs share the functional command')
+  return out
+}
+
+test('offline-e2e runs the timing specs in their own step, on one worker, after the functional run', () => {
+  assert.deepEqual(timingViolations(WORKFLOW), [])
+})
+
+test('born failing: a timing step before the functional run, on two workers, or folded into it is caught', () => {
+  const step = (line) => `  offline-e2e:\n    steps:\n      - name: a\n        working-directory: terminal/web\n        run: ${line}\n`
+  const good = `${step('pnpm e2e:offline --workers=2 --update-snapshots=all')}      - name: b\n        working-directory: terminal/web\n        run: pnpm e2e:offline:timing --update-snapshots=all\n`
+  assert.deepEqual(timingViolations(good), [])
+  assert.ok(timingViolations(good.replace('timing --update', 'timing --workers=2 --update')).some((v) => /more than one worker/.test(v)))
+  assert.ok(timingViolations(`${step('pnpm e2e:offline:timing --update-snapshots=all')}      - name: b\n        working-directory: terminal/web\n        run: pnpm e2e:offline --workers=2 --update-snapshots=all\n`).some((v) => /after the functional/.test(v)))
+  assert.ok(timingViolations(step('pnpm e2e:offline --workers=2 --update-snapshots=all')).some((v) => /no step runs/.test(v)))
+})

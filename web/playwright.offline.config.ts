@@ -12,6 +12,8 @@
 //   offline       the specs listed below, at most two workers (one by default, as in playwright.config.ts: the
 //                 top-level workers is the total, so pass --workers=2 or more to use both); the two checks that
 //                 probe a real backend's routes are skipped
+//   offline-timing the gallery specs that assert a timing bar (TIMING_SPECS), one worker, run after `offline` by
+//                 `pnpm e2e:offline:timing`; the WebKit projects still run them with the other specs
 //   offline-perf  e2e/perf/budgets.spec.ts alone (`pnpm e2e:offline:perf`, one worker)
 //   offline-demo  e2e/offline/*.offline.ts against the demo build. Named .offline.ts and never .spec.ts: the
 //                 Windows config has testDir './e2e' and would otherwise run them (scripts/playwrightOffline.test.ts).
@@ -103,6 +105,17 @@ const OFFLINE_SPECS = [
   /[\\/]gallery-[a-z-]+\.spec\.ts$/,
   /visual[\\/]screens\.spec\.ts$/,
 ]
+// The gallery specs that assert a timing bar (a render, draw or frame budget). They are part of OFFLINE_SPECS, so the WebKit
+// projects still run them with the rest, but the Chromium `offline` project leaves them out and `offline-timing` runs them
+// alone on one worker, after the functional run, so another spec never shares the CPU with a measurement
+// (docs/desktop/v04/ci-hygiene.md, "Round 2"). A new spec that asserts a bar is added here; scripts/playwrightOffline.test.ts
+// fails when a spec with a timing bar is left out.
+const TIMING_SPECS = [
+  /[\\/]gallery-candles\.spec\.ts$/,
+  /[\\/]gallery-echarts\.spec\.ts$/,
+  /[\\/]gallery-grids-tiles\.spec\.ts$/,
+  /[\\/]gallery-linestack\.spec\.ts$/,
+]
 const BUDGETS_SPEC = /perf[\\/]budgets\.spec\.ts$/
 // These two probe a real backend's routes with write methods and a cross-site read; the demo API has no such surface
 // (its own refusals are pinned by src/demo/serve.test.ts).
@@ -133,7 +146,18 @@ export default defineConfig({
       name: 'offline',
       testMatch: OFFLINE_SPECS,
       grepInvert: OFFLINE_GREP_INVERT,
+      testIgnore: TIMING_SPECS,
       workers: 2,
+      use: { ...CHROMIUM_CHANNEL },
+    },
+    // The timing specs of OFFLINE_SPECS, one worker and never in parallel (`pnpm e2e:offline:timing`). Their functional
+    // assertions run here too; only the schedule differs.
+    {
+      name: 'offline-timing',
+      testMatch: TIMING_SPECS,
+      grepInvert: OFFLINE_GREP_INVERT,
+      fullyParallel: false,
+      workers: 1,
       use: { ...CHROMIUM_CHANNEL },
     },
     { name: 'offline-perf', testMatch: BUDGETS_SPEC, use: { ...CHROMIUM_CHANNEL } },

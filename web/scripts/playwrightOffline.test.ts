@@ -574,3 +574,96 @@ describe('the offline-webkit project (D8.1)', () => {
     expect(config).toMatch(/\.\.\.devices\['Desktop Chrome'\], \.\.\.PAGE_SETTINGS/)
   })
 })
+
+// ---- Timing specs run alone (docs/desktop/v04/ci-hygiene.md, "Round 2"). ----
+
+/** The text of one project of the offline config, from its name to the next project (or the web servers). */
+export function projectBlock(source: string, name: string): string {
+  const start = source.indexOf(`name: '${name}'`)
+  if (start < 0) return ''
+  const rest = source.slice(start + 1)
+  const next = rest.search(/name: '|webServer:/)
+  return next < 0 ? rest : rest.slice(0, next)
+}
+
+/** The file names (e.g. `gallery-linestack.spec.ts`) the TIMING_SPECS list of the config names. */
+export function timingSpecNames(source: string): string[] {
+  const list = /const TIMING_SPECS = \[([\s\S]*?)\n\]/.exec(source)?.[1] ?? ''
+  return [...list.matchAll(/\]([\w-]+)[\\]\.spec/g)].map((m) => `${m[1]}.spec.ts`)
+}
+
+/** The specs of `files` (name -> source) that assert a timing bar and are not named in `timing`. */
+export function timingSpecsOutside(files: Readonly<Record<string, string>>, timing: readonly string[]): string[] {
+  return Object.entries(files)
+    .filter(([name, text]) => /BUDGET_MS|measureWithQuietRetry/.test(text) && !timing.includes(name))
+    .map(([name]) => name)
+}
+
+/** The offline specs of OFFLINE_SPECS, read from disk: every gallery spec, shell, four flows and the screens. */
+function offlineSpecSources(): Record<string, string> {
+  const gallery = readdirSync(path.join(WEB, 'e2e')).filter((f) => /^gallery-[a-z-]+\.spec\.ts$/.test(f)).map((f) => f)
+  const out: Record<string, string> = {}
+  for (const f of gallery) out[f] = read('e2e', f)
+  out['shell.spec.ts'] = read('e2e', 'shell.spec.ts')
+  for (const f of ['safety', 'keyboard', 'scan', 'rules']) out[`${f}.spec.ts`] = read('e2e', 'flows', `${f}.spec.ts`)
+  out['screens.spec.ts'] = read('e2e', 'visual', 'screens.spec.ts')
+  return out
+}
+
+describe('the timing specs have a project of their own', () => {
+  const config = read('playwright.offline.config.ts')
+  const timing = timingSpecNames(config)
+
+  it('lists the four gallery specs that assert a timing bar', () => {
+    expect(timing.sort()).toEqual(['gallery-candles.spec.ts', 'gallery-echarts.spec.ts', 'gallery-grids-tiles.spec.ts', 'gallery-linestack.spec.ts'])
+  })
+
+  it('leaves no offline spec that asserts a timing bar outside that list', () => {
+    expect(timingSpecsOutside(offlineSpecSources(), timing)).toEqual([])
+  })
+
+  it('born failing: a spec with a budget that is not listed is caught, a listed one is not', () => {
+    const files = { 'gallery-new.spec.ts': 'const RENDER_BUDGET_MS = 100', 'gallery-linestack.spec.ts': 'const RENDER_BUDGET_MS = 100', 'shell.spec.ts': 'expect(a).toBeLessThan(1)' }
+    expect(timingSpecsOutside(files, ['gallery-linestack.spec.ts'])).toEqual(['gallery-new.spec.ts'])
+  })
+
+  it('keeps them out of the multi-worker offline project', () => {
+    const offline = projectBlock(config, 'offline')
+    expect(offline).toMatch(/testIgnore:\s*TIMING_SPECS/)
+    expect(offline).toMatch(/workers:\s*2/)
+    expect(offline).not.toMatch(/testMatch:\s*TIMING_SPECS/)
+  })
+
+  it('runs them in offline-timing on one worker, never in parallel, waiting on no other project', () => {
+    const block = projectBlock(config, 'offline-timing')
+    expect(block).toMatch(/testMatch:\s*TIMING_SPECS/)
+    expect(block).toMatch(/workers:\s*1\b/)
+    expect(block).toMatch(/fullyParallel:\s*false/)
+    expect(block).not.toMatch(/workers:\s*[2-9]/)
+    expect(block).not.toMatch(/dependencies/)
+  })
+
+  it('keeps every other project on a worker count that cannot hold a timing spec', () => {
+    // Only `offline` (which ignores TIMING_SPECS) may use more than one worker.
+    for (const m of config.matchAll(/name: '([\w-]+)'/g)) {
+      const name = m[1] ?? ''
+      if (name === 'offline' || !/^offline/.test(name)) continue
+      expect(projectBlock(config, name), name).not.toMatch(/workers:\s*[2-9]/)
+    }
+  })
+
+  it('leaves the WebKit projects on the whole spec list, so the macOS run keeps its spec set', () => {
+    expect(projectBlock(config, 'offline-webkit')).toMatch(/testMatch:\s*OFFLINE_SPECS/)
+    expect(projectBlock(config, 'offline-webkit')).not.toMatch(/testIgnore/)
+    expect(projectBlock(config, 'offline-webkit')).toContain('offline-webkit-{platform}')
+  })
+
+  it('e2e:offline:timing runs offline-timing alone on one worker, and e2e:offline never runs it', () => {
+    const line = scripts['e2e:offline:timing'] ?? ''
+    expect(line).toMatch(/-c playwright\.offline\.config\.ts/)
+    expect(line).toMatch(/--project[ =]offline-timing\b/)
+    expect(line).not.toMatch(/--project[ =]offline(?![-\w])/)
+    expect(line).toMatch(/--workers[ =]1\b/)
+    expect(scripts['e2e:offline'] ?? '').not.toContain('timing')
+  })
+})

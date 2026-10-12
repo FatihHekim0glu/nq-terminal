@@ -236,6 +236,14 @@ jobs:
         working-directory: terminal/web
         run: pnpm e2e:offline --workers=2 --update-snapshots=all
 
+      # The gallery specs that assert a timing bar run alone, on one worker, after the functional run (not beside it): a
+      # measurement never shares the 4-core runner with another spec. `!cancelled()` runs it after a functional failure too,
+      # so one run reports both. The baselines are rewritten for the same reason as above.
+      - name: Offline timing specs (one worker)
+        if: ${{ !cancelled() }}
+        working-directory: terminal/web
+        run: pnpm e2e:offline:timing --update-snapshots=all
+
       - name: Upload end-to-end results
         if: ${{ failure() }}
         continue-on-error: true

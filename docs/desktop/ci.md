@@ -30,7 +30,7 @@ The other five jobs run beside it:
 | Job | Runner | Limit | What it runs |
 |---|---|---|---|
 | `qa` | `windows-2025` | 20 min | `uv run --frozen pytest` in `qa`, with uv 0.10.2 and Python 3.12 from `setup-uv`, the uv cache keyed on `qa/uv.lock`. The 333 reference tests need no lab. Windows, because the golden files were taken there. The checkout folder is named `terminal`, which the one layout-bound test (`test_the_default_dump_folder_is_under_terminal_qa`) needs. `--frozen`: a stale lockfile fails the job. |
-| `offline-e2e` | `ubuntu-latest` | 30 min | `pnpm e2e:offline --workers=2 --update-snapshots=all` in `web`: the `offline` and `offline-demo` projects, about 190 tests, against the Node demo API. Chromium is installed by `playwright install --with-deps chromium`, and `~/.cache/ms-playwright` is cached by the lockfile hash. On failure the results folder is uploaded for 7 days (the upload may fail without failing the run). |
+| `offline-e2e` | `ubuntu-latest` | 30 min | `pnpm e2e:offline --workers=2 --update-snapshots=all` in `web`: the `offline` and `offline-demo` projects, about 190 tests with the timing specs, against the Node demo API; then `pnpm e2e:offline:timing --update-snapshots=all`, the four timing specs alone on one worker (see below). Chromium is installed by `playwright install --with-deps chromium`, and `~/.cache/ms-playwright` is cached by the lockfile hash. On failure the results folder is uploaded for 7 days (the upload may fail without failing the run). |
 | `ruff` | `ubuntu-latest` | 10 min | `uvx ruff@0.17.0 check --select E9,F63,F7,F82 --output-format github backend` from the repository folder, so ruff finds `backend/ruff.toml` as it is. See "The ruff job". |
 | `perf-trend` | `ubuntu-latest` | 30 min | `pnpm e2e:offline:perf`, report only. See "The performance trend". |
 | `rust` | `windows-2025` | 15 min | `cargo fmt --check`. See "The Rust job". |
@@ -44,6 +44,8 @@ The offline screenshot baselines are git-ignored and belong to one machine (`web
 ### The two gallery perf figures in `offline-e2e`
 
 Two gallery specs hold a perf budget inside `offline-e2e`: the 10,000-row MonitorGrid scroll (p95 frame under 34 ms, under 5 percent of frames over 33.4 ms) and the LineStack build of 250,000 points per pane (every build under 100 ms). The budgets are unchanged; the measurement is not. The frame intervals are read at Chromium's 0.1 ms clock grain, so float noise no longer counts a 33.4 ms frame as over 33.4 ms, and on CI alone a miss of a budget gets one quiet second measurement on a fresh load of the entry, with both attempts in the log (`web/e2e/support/perfMeasure.ts`). The functional checks of those specs are never retried. `docs/desktop/v04/ci-hygiene.md` has the runs behind it.
+
+The timing bars no longer share the runner with a functional spec: the four gallery specs that assert one (`gallery-candles`, `gallery-echarts`, `gallery-grids-tiles`, `gallery-linestack`) are left out of the `offline` project and run in `offline-timing` (`pnpm e2e:offline:timing`, one worker, not parallel), as their own step of `offline-e2e` after the functional run. Their functional assertions run there too. The WebKit projects still run the whole spec list, so `mac-webkit` keeps its 190 specs and its baselines. `scripts/playwrightOffline.test.ts` fails if a spec with a timing bar is not in that list, and `desktop/harness/tests/ci-workflow.test.mjs` pins the step order and the single worker. See "Round 2" in `docs/desktop/v04/ci-hygiene.md`.
 
 ## What does not run
 

@@ -92,3 +92,21 @@ Each attempt met both perf budgets on its first measurement, so the quiet retry 
 2. The source of the variance is the second worker: `offline-e2e` runs the `offline` project with `--workers=2` on a 4-core runner, so the two perf figures share the CPU with whatever spec the other worker runs. Moving the two perf tests to a one-worker project (as `offline-perf` is for the budgets) would remove it; that changes the job's layout and run time, so it is left as a choice.
 3. LineStack misses only on its cold build (134.7 and 142.8 ms against warm builds of 29 to 70 ms). It stays held to 100 ms on every attempt. If misses survive the retry, the honest options are a different bar (a warm-up build before measuring, so the cold build is no longer gated) or a quieter runner; either is the manager's call.
 4. Not a flake, seen while reading: `ipc_refusal.rs` waits for a target by URL only, and its verdict counts a page with no IPC object as refusing by absence. On the blank document of fix 3 that would pass without checking a command. It has not failed, so it is not changed here; the `PAGE_WAIT` condition would close it.
+
+## Round 2: the timing specs on their own worker
+
+Round 1 left two hosted misses: the MonitorGrid 10,000-row scroll (p95 49.9 ms against the 34 ms bar on `ci` run 38219649238, even after the logged quiet retry) and the LineStack cold build. The cause recorded above stands: `offline-e2e` runs the `offline` project on two workers on a 4-core runner, so a measurement shares the CPU with another spec.
+
+What moved:
+
+- `web/playwright.offline.config.ts` gets a `TIMING_SPECS` list: every spec that asserts a timing bar. Reading the offline spec set, those are `gallery-candles` (render and zoom frame budgets), `gallery-echarts` (draw budget per chart), `gallery-grids-tiles` (MonitorGrid scroll) and `gallery-linestack` (build budget). `perspective.spec.ts` and `e2e/perf/budgets.spec.ts` also hold bars, but the first is not in the offline spec set and the second already has its own project and job (`offline-perf`, `perf-trend`).
+- The `offline` project ignores `TIMING_SPECS`; a new `offline-timing` project matches only them, with `workers: 1` and `fullyParallel: false`.
+- `pnpm e2e:offline:timing` runs that project. `ci.yml` runs it as a second step of `offline-e2e`, after the functional step (`if: !cancelled()`, so a functional failure does not hide a timing result). It rewrites the baselines like the first step, because a fresh runner has none.
+- `desktop/scripts/check.ps1` runs the same two scripts in turn.
+- Unchanged: every threshold, budget, ratio, retry count and `test.slow()`; no test is skipped or deleted; `offline-webkit` and `offline-webkit-demo` still match the whole `OFFLINE_SPECS` list (the Mac run keeps its 190 specs, its report-only bars and the `offline-webkit-darwin` baselines); the Windows config and `pnpm e2e` are not touched.
+
+Guards: `web/scripts/playwrightOffline.test.ts` (the list is the four specs, no offline spec with a `*_BUDGET_MS` or `measureWithQuietRetry` is outside it, `offline` ignores it, `offline-timing` is one worker and not parallel and depends on nothing, no other Chromium project has more than one worker, the WebKit projects keep the full list) and `desktop/harness/tests/ci-workflow.test.mjs` (a step runs `e2e:offline:timing` after the functional step, on no more than one worker, in `web`, without `continue-on-error`).
+
+### Hosted runs of Round 2
+
+Pending the hosted runs of this branch.

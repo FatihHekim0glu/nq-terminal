@@ -28,6 +28,7 @@
     "e2e:desktop": "playwright test -c playwright.desktop.config.ts",
     "e2e:offline": "playwright test -c playwright.offline.config.ts --project=offline --project=offline-demo",
     "e2e:offline:webkit": "playwright test -c playwright.offline.config.ts --project=offline-webkit --project=offline-webkit-demo",
+    "e2e:offline:timing": "playwright test -c playwright.offline.config.ts --project=offline-timing --workers=1",
     "e2e:offline:perf": "playwright test -c playwright.offline.config.ts --project=offline-perf --workers=1",
     "e2e:offline:baseline": "playwright test -c playwright.offline.config.ts --project=offline --project=offline-demo --update-snapshots=all",
     "test:e2e-types": "tsc -p e2e/tsconfig.json && tsc -p e2e/offline/tsconfig.json && tsc -p e2e/flows/tsconfig.json && tsc -p e2e/perf/tsconfig.json && tsc -p e2e/visual/tsconfig.json && tsc -p e2e/desktop/tsconfig.json"

@@ -478,7 +478,7 @@ function Invoke-WebSteps {
     Step-Pnpm 'web-test-types' 'test:types'
     Step-Pnpm 'web-vitest' 'test'
     Step-Pnpm 'web-test-e2e-types' 'test:e2e-types'
-    if (Wait-NoBrowserRun) { Step-Pnpm 'web-e2e-offline' 'e2e:offline' }
+    if (Wait-NoBrowserRun) { Step-Pnpm 'web-e2e-offline' 'e2e:offline'; Step-Pnpm 'web-e2e-offline-timing' 'e2e:offline:timing' }
     else { Add-Result 'web-e2e-offline' $false 'another Playwright or vitest run was still going after 15 minutes' }
 }
 
