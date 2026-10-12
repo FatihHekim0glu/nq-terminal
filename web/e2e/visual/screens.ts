@@ -12,6 +12,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { AXE_TAGS } from '../gallery.ts'
+import { COMMAND_LINE_KEY } from '../support/commandKey.ts'
 
 export interface Viewport {
   readonly width: number
@@ -214,7 +215,7 @@ export async function settle(page: Page): Promise<void> {
 async function runStep(page: Page, step: ScreenStep): Promise<void> {
   await settle(page)
   await step.before?.(page)
-  await page.keyboard.press('Control+k')
+  await page.keyboard.press(COMMAND_LINE_KEY)
   await expect(commandLine(page)).toBeFocused()
   await commandLine(page).fill(step.line)
   await commandLine(page).press('Enter')
@@ -231,7 +232,7 @@ export async function openScreen(page: Page, screen: ScreenCase, viewport: Viewp
   await expect(page.locator('[data-nqt-title]').first()).toBeVisible()
   await expect(page.getByRole('contentinfo')).toContainText('KILL off')
   if (screen.line !== null) {
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await expect(commandLine(page)).toBeFocused()
     await commandLine(page).fill(screen.line)
     await commandLine(page).press('Enter')
@@ -268,7 +269,7 @@ export async function openDropdown(page: Page): Promise<void> {
 
 /** The dropdown as soon as its first option shows, before the command index has necessarily arrived. */
 export async function openDropdownEarly(page: Page): Promise<void> {
-  await page.keyboard.press('Control+k')
+  await page.keyboard.press(COMMAND_LINE_KEY)
   await expect(commandLine(page)).toBeFocused()
   await commandLine(page).fill(DROPDOWN_QUERY)
   await expect(commandLine(page)).toHaveAttribute('aria-expanded', 'true')

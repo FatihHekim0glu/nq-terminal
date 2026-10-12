@@ -133,8 +133,9 @@ jobs:
 
   # G1 item 2, first part: the offline demo suite under Playwright's WebKit. The two offline-webkit projects of
   # web/playwright.offline.config.ts serve the gallery build and the in-page demo build (dist-demo) from `vite preview` with a
-  # Node-side demo API, so there is no backend and no Python. The screenshot baselines belong to one machine, so
-  # --update-snapshots=all writes them here and every other assertion still runs (as in ci.yml).
+  # Node-side demo API, so there is no backend and no Python. The darwin screenshot baselines are committed under
+  # web/e2e/__screenshots__/offline-webkit-darwin (from run 38213974815, force-added: the folder is git-ignored for other machines)
+  # and are compared here; the upload below keeps what a run writes, so a changed baseline can be refreshed on purpose.
   webkit-offline:
     name: offline demo suite under WebKit
     runs-on: macos-26
@@ -167,7 +168,7 @@ jobs:
 
       - name: Offline suite under WebKit
         working-directory: web
-        run: pnpm exec playwright test -c playwright.offline.config.ts --project=offline-webkit --project=offline-webkit-demo --workers=2 --update-snapshots=all
+        run: pnpm exec playwright test -c playwright.offline.config.ts --project=offline-webkit --project=offline-webkit-demo --workers=2
 
       - name: Summary
         if: ${{ always() }}
@@ -178,6 +179,17 @@ jobs:
             echo "Runner: macOS $(sw_vers -productVersion), $(uname -m). Job status: ${{ job.status }}."
             echo 'Playwright WebKit is not the WKWebView of the Mac app: a pass is a lead, never a proof.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The baselines this run wrote (demo screens only, never research data), kept so they can be committed to
+      # web/e2e/__screenshots__/offline-webkit-darwin (docs/desktop/v04/w5b-mac-webkit.md).
+      - name: Upload the written baselines
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: webkit-darwin-baselines
+          path: web/e2e/__screenshots__/offline-webkit-darwin
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload the end-to-end results
         if: ${{ failure() }}

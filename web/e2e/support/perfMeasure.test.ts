@@ -137,4 +137,25 @@ describe('measureWithQuietRetry', () => {
     })
     expect(log[1]).toBe('perf x, attempt 1 missed (expect(received) Expected: < 1); measuring once more, CI only')
   })
+
+  it('report-only: measures once, logs it and never applies the check, on or off CI', async () => {
+    for (const ci of [true, false]) {
+      const log: string[] = []
+      let calls = 0
+      const out = await measureWithQuietRetry({
+        label: 'x',
+        ci,
+        reportOnly: true,
+        measure: async () => ++calls,
+        check: () => {
+          throw new Error('over budget')
+        },
+        log: (line) => log.push(line),
+      })
+      expect(out).toEqual([1])
+      expect(calls).toBe(1)
+      expect(log).toHaveLength(2)
+      expect(log[1]).toContain('report-only')
+    }
+  })
 })

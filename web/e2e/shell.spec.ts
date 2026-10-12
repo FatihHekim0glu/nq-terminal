@@ -17,6 +17,7 @@
 import { AxeBuilder } from '@axe-core/playwright'
 import { expect, test, type Page, type Request } from '@playwright/test'
 import { MASK_COLOR } from './gallery.ts'
+import { COMMAND_LINE_KEY } from './support/commandKey.ts'
 import { recordDemoRefusals, withoutDemoRefusals } from './target.ts'
 import { expectWatchSegment } from './watchReady.ts'
 
@@ -110,7 +111,7 @@ async function openApp(page: Page): Promise<void> {
 
 async function runCommand(page: Page, line: string): Promise<void> {
   const input = commandLine(page)
-  await page.keyboard.press('Control+k')
+  await page.keyboard.press(COMMAND_LINE_KEY)
   await expect(input).toBeFocused()
   await input.fill(line)
   await input.press('Enter')
@@ -170,12 +171,12 @@ test.describe('terminal shell', () => {
     await page.keyboard.press('Escape')
     await expect(panelBody(page, 'NQ GP 1d')).toBeFocused()
 
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await expect(commandLine(page)).toBeFocused()
     await page.keyboard.press('Tab')
     const firstBody = panelBody(page, 'NQ GP 1d')
     await expect(firstBody).toBeFocused()
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await expect(commandLine(page)).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(firstBody).toBeFocused()
@@ -189,7 +190,7 @@ test.describe('terminal shell', () => {
     // N03: the first-run orientation line sits between the command line and the panels with its own Tab stops (three
     // command links and Dismiss). This walk is about the panels, so the line is dismissed first.
     await page.getByRole('button', { name: 'Dismiss the orientation line' }).click()
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     const visited: string[] = []
     for (let i = 0; i < HOME_TITLES.length; i += 1) {
       await page.keyboard.press('Tab')
@@ -274,7 +275,7 @@ test.describe('terminal shell', () => {
   test('axe finds no WCAG 2.2 AA violation on HOME, HELP, the open suggestion list or an error', async ({ page }) => {
     await openApp(page)
     await expectAxeClean(page)
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await commandLine(page).fill('RE')
     await expect(page.getByRole('listbox')).toBeVisible()
     await expectAxeClean(page)
@@ -409,6 +410,21 @@ test.describe('terminal shell', () => {
         const body = cell.closest('.nqt-panel-body')?.getBoundingClientRect()
         return body !== undefined && r.bottom > body.top && r.top < body.bottom && cell.querySelector('svg') === null
       }).length)).toBe(0)
+      // Layout settled: panel and chrome boxes unchanged over four frames. WebKit on the hosted Mac once placed the lower panels
+      // one pixel higher than in two earlier runs (run 38215795241), so the frame is taken only once nothing is still moving.
+      await page.evaluate(async () => {
+        const boxes = () => [...document.querySelectorAll('[data-nqt-panel], .nqt-panel-body, [role="contentinfo"]')]
+          .map((el) => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].join(',') }).join('|')
+        const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+        let last = boxes()
+        let same = 0
+        for (let i = 0; i < 120 && same < 4; i += 1) {
+          await frame()
+          const now = boxes()
+          same = now === last ? same + 1 : 0
+          last = now
+        }
+      })
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
       await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`, { mask: await runCounters(page), maskColor: MASK_COLOR })
       await runCommand(page, 'HELP')

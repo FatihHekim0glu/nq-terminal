@@ -2,6 +2,7 @@
 // fence at 2022-01-01, no line across a gap, the keyboard crosshair and its readout, range buttons,
 // the table view, crosshair sync by link group, and 250,000 points drawn in under 100 ms.
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { isWebkitOnMac } from './support/commandKey.ts'
 import { expectGalleryAxeClean, expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
 import { measureWithQuietRetry } from './support/perfMeasure.ts'
 
@@ -204,6 +205,8 @@ test('250,000 points per pane are drawn in under 100 ms', async ({ page }) => {
   await measureWithQuietRetry({
     label: 'LineStack.perf render ms (cold build, then two Log rebuilds)',
     ci: Boolean(process.env.CI),
+    // Report-only under WebKit on the hosted Mac (w5b-mac-webkit); Windows and chromium keep the bar.
+    reportOnly: isWebkitOnMac(test.info().project.name),
     measure: builds,
     check: (runs) => {
       for (const ms of runs) expect(ms, `render times ${runs.join(', ')} ms`).toBeLessThan(RENDER_BUDGET_MS)

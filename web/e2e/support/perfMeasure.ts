@@ -40,6 +40,8 @@ export interface QuietRetryOptions<T> {
   readonly label: string
   /** True on the hosted runner (CI is set by GitHub Actions); off CI a miss fails at once. */
   readonly ci: boolean
+  /** True where the figures are only reported (WebKit on the hosted Mac): one measurement, logged, never checked. */
+  readonly reportOnly?: boolean
   /** Takes one measurement (1 for the first attempt, 2 for the retry); anything it throws fails the test at once. */
   readonly measure: (attempt: number) => Promise<T>
   /** The perf-only assertions: throws on a miss. */
@@ -56,9 +58,13 @@ function reason(e: unknown): string {
 
 /** Every attempt's value, in order; the last one passed the check. */
 export async function measureWithQuietRetry<T>(options: QuietRetryOptions<T>): Promise<readonly T[]> {
-  const { label, ci, measure, check, log } = options
+  const { label, ci, reportOnly = false, measure, check, log } = options
   const first = await measure(1)
   log(`perf ${label}, attempt 1: ${JSON.stringify(first)}`)
+  if (reportOnly) {
+    log(`perf ${label}: report-only on this platform, no budget applied`)
+    return [first]
+  }
   if (!ci) {
     check(first)
     return [first]

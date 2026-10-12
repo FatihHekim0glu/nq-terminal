@@ -2,6 +2,7 @@
 // writes performance.mark() calls into the page, so a CDP trace (browser.startTracing) holds the times;
 // trace.ts reads them back. Shared by budgets.spec.ts (fixture backend) and smoke.real.ts (real files).
 import { expect, type Browser, type BrowserContext, type Locator, type Page, type Request, type Response, type TestInfo } from '@playwright/test'
+import { COMMAND_LINE_KEY } from '../support/commandKey.ts'
 import { isStoreWrite } from '../storeWrites.ts'
 import { recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
 import { startStoreInContext } from './storeOn.ts'
@@ -68,7 +69,7 @@ export async function settle(page: Page, timeout = 20_000): Promise<void> {
  *  which shows only once GET /api/commands has reached the page: a line entered before that is refused (the index has
  *  not loaded) and stays in the box, which is what a busy backend on a cold cache can make HOME's frames outrun. */
 export async function runLine(page: Page, line: string): Promise<Locator> {
-  await page.keyboard.press('Control+k')
+  await page.keyboard.press(COMMAND_LINE_KEY)
   await expect(commandLine(page)).toBeFocused()
   await commandLine(page).fill(line)
   await expect(page.locator('.cmd-preview')).toContainText('<GO>')
