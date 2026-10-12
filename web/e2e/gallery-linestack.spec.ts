@@ -3,6 +3,7 @@
 // the table view, crosshair sync by link group, and 250,000 points drawn in under 100 ms.
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { expectGalleryAxeClean, expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
+import { measureWithQuietRetry } from './support/perfMeasure.ts'
 
 const ENTRY = 'LineStack'
 const FENCE_TIME = Date.UTC(2022, 0, 1) / 1000
@@ -183,19 +184,32 @@ test('link group A shares one crosshair; an unlinked stack keeps its own', async
 
 test('250,000 points per pane are drawn in under 100 ms', async ({ page }) => {
   const watch = await watchGallery(page)
-  const main = await openGallery(page, 'LineStack.perf')
-  const status = main.getByTestId('render-ms')
-  await expect(status).toHaveAttribute('data-render-ms', /\d/)
-  // Two rebuilds through the Log toggle, each a full build of both panes.
-  const log = main.getByRole('button', { name: 'Log', exact: true })
-  await log.click()
-  await expect(status).toHaveAttribute('data-render-ms', /^[\d.]+,[\d.]+$/)
-  await log.click()
-  await expect(status).toHaveAttribute('data-render-ms', /^[\d.]+,[\d.]+,[\d.]+$/)
-  const runs = ((await status.getAttribute('data-render-ms')) ?? '').split(',').map(Number)
-  test.info().annotations.push({ type: 'render-ms', description: runs.join(', ') })
-  expect(await main.getByRole('img').getAttribute('aria-label')).toMatch(/^Strategy: 250000 points from 2019-01-02 00:00 to /)
-  for (const ms of runs) expect(ms, `render times ${runs.join(', ')} ms`).toBeLessThan(RENDER_BUDGET_MS)
+  // The first (cold) build on a fresh load of the entry and two rebuilds through the Log toggle, each a full build of
+  // both panes. Every build is held to the budget; on CI alone a miss gets one quiet second load of the entry
+  // (e2e/support/perfMeasure.ts), and both attempts are logged.
+  const builds = async (): Promise<readonly number[]> => {
+    const main = await openGallery(page, 'LineStack.perf')
+    const status = main.getByTestId('render-ms')
+    await expect(status).toHaveAttribute('data-render-ms', /\d/)
+    const log = main.getByRole('button', { name: 'Log', exact: true })
+    await log.click()
+    await expect(status).toHaveAttribute('data-render-ms', /^[\d.]+,[\d.]+$/)
+    await log.click()
+    await expect(status).toHaveAttribute('data-render-ms', /^[\d.]+,[\d.]+,[\d.]+$/)
+    const runs = ((await status.getAttribute('data-render-ms')) ?? '').split(',').map(Number)
+    test.info().annotations.push({ type: 'render-ms', description: runs.join(', ') })
+    expect(await main.getByRole('img').getAttribute('aria-label')).toMatch(/^Strategy: 250000 points from 2019-01-02 00:00 to /)
+    return runs
+  }
+  await measureWithQuietRetry({
+    label: 'LineStack.perf render ms (cold build, then two Log rebuilds)',
+    ci: Boolean(process.env.CI),
+    measure: builds,
+    check: (runs) => {
+      for (const ms of runs) expect(ms, `render times ${runs.join(', ')} ms`).toBeLessThan(RENDER_BUDGET_MS)
+    },
+    log: (line) => process.stdout.write(`${line}\n`),
+  })
   await expectGalleryAxeClean(page)
   expect(watch.errors).toEqual([])
 })

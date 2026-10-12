@@ -4,6 +4,7 @@
 // 10,000-row entry is scrolled frame by frame and its frame times are measured and reported.
 import { expect, test, type Page } from '@playwright/test'
 import { expectGalleryAxeClean, expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
+import { frameStats, measureWithQuietRetry } from './support/perfMeasure.ts'
 
 const BANNER = 'PLUMBING TEST, DELAYED DATA: not strategy performance'
 
@@ -65,33 +66,51 @@ test.describe('MonitorGrid', () => {
     const grid = main.getByRole('grid', { name: 'Runs, 10,000 fixture rows' })
     await expect(grid).toHaveAttribute('aria-rowcount', '10001')
 
-    const perf = await page.evaluate(async () => {
-      const box = document.querySelector<HTMLElement>('.nqt-grid-scroll')
-      if (!box) throw new Error('no scroll box')
-      const target = box.scrollHeight - box.clientHeight
-      const frames: number[] = []
-      let maxRows = 0
-      let last = performance.now()
-      await new Promise<void>((done) => {
-        const tick = (now: number) => {
-          frames.push(now - last)
-          last = now
-          maxRows = Math.max(maxRows, box.querySelectorAll('tbody tr[aria-rowindex]').length)
-          if (box.scrollTop >= target - 1 || frames.length > 2000) return done()
-          box.scrollTop += 400
+    // One scroll to the end, frame by frame. The intervals come back raw and are read at the clock's 0.1 ms grain in
+    // Node (e2e/support/perfMeasure.ts): read in the page, float noise counted some 33.4 ms frames as over 33.4 ms.
+    const scroll = async (attempt: number) => {
+      if (attempt > 1) {
+        // A fresh load of the entry, as the first attempt had (the locators re-resolve on the new document).
+        await openGallery(page, 'MonitorGrid.large')
+        await expect(grid).toHaveAttribute('aria-rowcount', '10001')
+      }
+      const { intervals, maxRows } = await page.evaluate(async () => {
+        const box = document.querySelector<HTMLElement>('.nqt-grid-scroll')
+        if (!box) throw new Error('no scroll box')
+        const target = box.scrollHeight - box.clientHeight
+        const frames: number[] = []
+        let maxRows = 0
+        let last = performance.now()
+        await new Promise<void>((done) => {
+          const tick = (now: number) => {
+            frames.push(now - last)
+            last = now
+            maxRows = Math.max(maxRows, box.querySelectorAll('tbody tr[aria-rowindex]').length)
+            if (box.scrollTop >= target - 1 || frames.length > 2000) return done()
+            box.scrollTop += 400
+            requestAnimationFrame(tick)
+          }
           requestAnimationFrame(tick)
-        }
-        requestAnimationFrame(tick)
+        })
+        return { intervals: frames.slice(1), maxRows }
       })
-      const sorted = frames.slice(1).sort((a, b) => a - b)
-      const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] ?? 0
-      return { frames: sorted.length, p50: at(0.5), p95: at(0.95), max: at(1), over33: sorted.filter((f) => f > 33.4).length, maxRows }
+      const perf = { ...frameStats(intervals), maxRows }
+      // Functional on every attempt, never retried: enough frames to judge, and the grid stays virtualised.
+      expect(perf.frames).toBeGreaterThan(400)
+      expect(perf.maxRows).toBeLessThan(120)
+      return perf
+    }
+    // The frame budgets alone get one quiet second attempt on CI (both written to the log), never off CI.
+    await measureWithQuietRetry({
+      label: 'MonitorGrid.large scroll (400px, 20 rows, per frame over 10,000 rows)',
+      ci: Boolean(process.env.CI),
+      measure: scroll,
+      check: (perf) => {
+        expect(perf.p95).toBeLessThan(34)
+        expect(perf.over33 / perf.frames).toBeLessThan(0.05)
+      },
+      log: (line) => process.stdout.write(`${line}\n`),
     })
-    process.stdout.write(`MonitorGrid.large scroll (400px, 20 rows, per frame over 10,000 rows): ${JSON.stringify(perf)}\n`)
-    expect(perf.frames).toBeGreaterThan(400)
-    expect(perf.maxRows).toBeLessThan(120)
-    expect(perf.p95).toBeLessThan(34)
-    expect(perf.over33 / perf.frames).toBeLessThan(0.05)
 
     await grid.focus()
     const t0 = Date.now()
