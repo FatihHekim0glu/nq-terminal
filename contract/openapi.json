@@ -3243,6 +3243,14 @@
             "title": "Tag",
             "type": "string"
           },
+          "unlearned": {
+            "description": "every registered row N does not count, in registry order, with its reason; the same names the N note gives",
+            "items": {
+              "$ref": "#/components/schemas/UnlearnedRow"
+            },
+            "title": "Unlearned",
+            "type": "array"
+          },
           "variance": {
             "anyOf": [
               {
@@ -3283,6 +3291,7 @@
           "sr0_null_annual",
           "leave_one_out",
           "n_note",
+          "unlearned",
           "euler_gamma",
           "dominant",
           "rows",
@@ -3814,6 +3823,456 @@
         "title": "DqSymbol",
         "type": "object"
       },
+      "DqUniverse": {
+        "properties": {
+          "fence": {
+            "title": "Fence",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "description": "expected files that could not be read",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "roots": {
+            "items": {
+              "$ref": "#/components/schemas/DqUniverseRoot"
+            },
+            "title": "Roots",
+            "type": "array"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Years",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "fence",
+          "years",
+          "roots",
+          "missing"
+        ],
+        "title": "DqUniverse",
+        "type": "object"
+      },
+      "DqUniverseCell": {
+        "properties": {
+          "gated_out": {
+            "minimum": 0.0,
+            "title": "Gated Out",
+            "type": "integer"
+          },
+          "rejected": {
+            "minimum": 0.0,
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "sessions": {
+            "description": "NYSE sessions of the year in the root's records, up to the fence",
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "unrepairable": {
+            "minimum": 0.0,
+            "title": "Unrepairable",
+            "type": "integer"
+          },
+          "usable": {
+            "description": "vendor days, plus rebuilt days in the repaired variant",
+            "minimum": 0.0,
+            "title": "Usable",
+            "type": "integer"
+          },
+          "usable_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "usable over sessions; null when there is no session",
+            "title": "Usable Share"
+          },
+          "year": {
+            "title": "Year",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions",
+          "usable",
+          "gated_out",
+          "unrepairable",
+          "rejected",
+          "usable_share",
+          "year"
+        ],
+        "title": "DqUniverseCell",
+        "type": "object"
+      },
+      "DqUniverseCounts": {
+        "properties": {
+          "gated_out": {
+            "minimum": 0.0,
+            "title": "Gated Out",
+            "type": "integer"
+          },
+          "rejected": {
+            "minimum": 0.0,
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "sessions": {
+            "description": "NYSE sessions of the year in the root's records, up to the fence",
+            "minimum": 0.0,
+            "title": "Sessions",
+            "type": "integer"
+          },
+          "unrepairable": {
+            "minimum": 0.0,
+            "title": "Unrepairable",
+            "type": "integer"
+          },
+          "usable": {
+            "description": "vendor days, plus rebuilt days in the repaired variant",
+            "minimum": 0.0,
+            "title": "Usable",
+            "type": "integer"
+          },
+          "usable_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "usable over sessions; null when there is no session",
+            "title": "Usable Share"
+          }
+        },
+        "required": [
+          "sessions",
+          "usable",
+          "gated_out",
+          "unrepairable",
+          "rejected",
+          "usable_share"
+        ],
+        "title": "DqUniverseCounts",
+        "type": "object"
+      },
+      "DqUniverseDaily": {
+        "properties": {
+          "first_bar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Bar"
+          },
+          "last_bar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "a date up to the fence, else the sealed text",
+            "title": "Last Bar"
+          },
+          "last_sealed": {
+            "title": "Last Sealed",
+            "type": "boolean"
+          },
+          "missing_nyse_sessions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "NYSE sessions from 2010-10 with no 1d bar, per the QA",
+            "title": "Missing Nyse Sessions"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1d bars up to the fence",
+            "title": "Rows"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "rows",
+          "first_bar",
+          "last_bar",
+          "last_sealed",
+          "missing_nyse_sessions"
+        ],
+        "title": "DqUniverseDaily",
+        "type": "object"
+      },
+      "DqUniverseRoot": {
+        "properties": {
+          "blocks": {
+            "description": "the known blocks, quoted from the records",
+            "items": {
+              "type": "string"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "daily": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DqUniverseDaily"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_bar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "first 1m bar in the QA report, as a date",
+            "title": "First Bar"
+          },
+          "last_bar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "last 1m bar as a date up to the fence, else the sealed text",
+            "title": "Last Bar"
+          },
+          "last_sealed": {
+            "title": "Last Sealed",
+            "type": "boolean"
+          },
+          "qa_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Source"
+          },
+          "repair_status": {
+            "enum": [
+              "nq",
+              "v1",
+              "v2",
+              "vendor_only",
+              "not_assessed"
+            ],
+            "title": "Repair Status",
+            "type": "string"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DqUniverseRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "source": {
+            "description": "the files the day states come from, relative to the project root",
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "root",
+          "symbol",
+          "repair_status",
+          "source",
+          "qa_source",
+          "first_bar",
+          "last_bar",
+          "last_sealed",
+          "rows",
+          "daily",
+          "blocks"
+        ],
+        "title": "DqUniverseRoot",
+        "type": "object"
+      },
+      "DqUniverseRow": {
+        "properties": {
+          "cells": {
+            "description": "one per year of the grid, first year to last",
+            "items": {
+              "$ref": "#/components/schemas/DqUniverseCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "timeframe": {
+            "const": "1m",
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/DqUniverseCounts"
+          },
+          "variant": {
+            "enum": [
+              "vendor",
+              "repaired"
+            ],
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeframe",
+          "variant",
+          "cells",
+          "total"
+        ],
+        "title": "DqUniverseRow",
+        "type": "object"
+      },
+      "DrawdownEpisodes": {
+        "description": "DD3: every drawdown episode (time order, no cap), the time to recovery of the recovered ones (sessions from the\ntrough to the recovery; months for a monthly series), a histogram of those times and the longest time under\nwater. An open episode is never counted as recovered: it is in `n_open` and `longest`, not in the times.",
+        "properties": {
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/DrawdownRow"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "histogram": {
+            "items": {
+              "$ref": "#/components/schemas/RecoveryBin"
+            },
+            "title": "Histogram",
+            "type": "array"
+          },
+          "longest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LongestUnderWater"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "n_episodes": {
+            "title": "N Episodes",
+            "type": "integer"
+          },
+          "n_open": {
+            "title": "N Open",
+            "type": "integer"
+          },
+          "n_recovered": {
+            "title": "N Recovered",
+            "type": "integer"
+          },
+          "recovery_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Max"
+          },
+          "recovery_median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Median"
+          },
+          "unit": {
+            "enum": [
+              "sessions",
+              "months"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "episodes",
+          "n_episodes",
+          "n_recovered",
+          "n_open",
+          "recovery_median",
+          "recovery_max",
+          "histogram",
+          "longest"
+        ],
+        "title": "DrawdownEpisodes",
+        "type": "object"
+      },
       "DrawdownRow": {
         "description": "DD2: one episode; `peak` is null when the peak is the starting value, `recovery` null while it is open.",
         "properties": {
@@ -3885,7 +4344,7 @@
         "type": "object"
       },
       "DrawdownView": {
-        "description": "DD1: underwater series of the strategy and the benchmark, and their deepest points.",
+        "description": "DD1: underwater series of the strategy and the benchmark, and their deepest points. `episodes` (DD3) is\nfilled on the full tear sheet only; the HOME panel's view leaves it null.",
         "properties": {
           "bench_dd": {
             "anyOf": [
@@ -3940,6 +4399,16 @@
             "title": "Dd",
             "type": "array"
           },
+          "episodes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DrawdownEpisodes"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "max_drawdown": {
             "anyOf": [
               {
@@ -3970,7 +4439,8 @@
           "dd",
           "bench_dd",
           "max_drawdown",
-          "bench_max_drawdown"
+          "bench_max_drawdown",
+          "episodes"
         ],
         "title": "DrawdownView",
         "type": "object"
@@ -9764,6 +10234,59 @@
         "title": "LogTail",
         "type": "object"
       },
+      "LongestUnderWater": {
+        "description": "DD3: the episode with the most sessions under water; `length` runs from its peak to its recovery, or to the\nlast session while it is open (`recovery` null).",
+        "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "number"
+          },
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "peak": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak"
+          },
+          "recovery": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery"
+          },
+          "trough": {
+            "title": "Trough",
+            "type": "string"
+          }
+        },
+        "required": [
+          "peak",
+          "trough",
+          "recovery",
+          "depth",
+          "length",
+          "open"
+        ],
+        "title": "LongestUnderWater",
+        "type": "object"
+      },
       "MarketRolls": {
         "description": "One market's in-sample rolls; `qa_rolls_total` is the universe QA report's count (null when the report or\nthe root is absent) and `qa_match` whether it equals `count`.",
         "properties": {
@@ -11804,6 +12327,17 @@
         "title": "PeriodSeries",
         "type": "object"
       },
+      "PeriodsPerYear": {
+        "description": "The observations a year the planner takes: sessions, weeks, months or quarters. Never 365.",
+        "enum": [
+          252,
+          52,
+          12,
+          4
+        ],
+        "title": "PeriodsPerYear",
+        "type": "integer"
+      },
       "Pinned": {
         "properties": {
           "openings_sha256": {
@@ -11853,6 +12387,472 @@
           "nautilus"
         ],
         "title": "Pins",
+        "type": "object"
+      },
+      "PlanBar": {
+        "properties": {
+          "alpha": {
+            "description": "the one-sided significance bar",
+            "title": "Alpha",
+            "type": "number"
+          },
+          "z": {
+            "description": "its critical value, z(1 - alpha)",
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "alpha",
+          "z"
+        ],
+        "title": "PlanBar",
+        "type": "object"
+      },
+      "PlanPoint": {
+        "description": "The design at one alpha: the minimum detectable Sharpe, the power at the reference and the typed Sharpe, the\nobservations each needs for the target power, and the detectable mean per event.",
+        "properties": {
+          "alpha": {
+            "title": "Alpha",
+            "type": "number"
+          },
+          "mde_sharpe": {
+            "description": "minimum detectable annual Sharpe at this alpha, power 0.8",
+            "title": "Mde Sharpe",
+            "type": "number"
+          },
+          "mean_per_event": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "detectable mean per event, in the units of the event standard deviation; null when none was given",
+            "title": "Mean Per Event"
+          },
+          "observations_for_reference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "observations that give power 0.8 at the reference Sharpe",
+            "title": "Observations For Reference"
+          },
+          "observations_for_typed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "observations that give power 0.8 at the typed Sharpe; null when none was typed or it is zero",
+            "title": "Observations For Typed"
+          },
+          "power_at_reference": {
+            "description": "power at the reference Sharpe 0.5",
+            "title": "Power At Reference",
+            "type": "number"
+          },
+          "power_at_typed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "power at the typed Sharpe, null when none was typed",
+            "title": "Power At Typed"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "alpha",
+          "z",
+          "mde_sharpe",
+          "power_at_reference",
+          "power_at_typed",
+          "observations_for_reference",
+          "observations_for_typed",
+          "mean_per_event"
+        ],
+        "title": "PlanPoint",
+        "type": "object"
+      },
+      "PlanSlot": {
+        "description": "The next slot of a family of k tests: slot k + 1.",
+        "properties": {
+          "at_slot": {
+            "$ref": "#/components/schemas/PlanPoint",
+            "description": "the design at the Bonferroni bar of the slot"
+          },
+          "bonferroni": {
+            "$ref": "#/components/schemas/PlanBar",
+            "description": "alpha / slot"
+          },
+          "holm_loosest": {
+            "$ref": "#/components/schemas/PlanBar",
+            "description": "Holm's bar when it has the largest and every other hypothesis was rejected first: alpha"
+          },
+          "holm_strictest": {
+            "$ref": "#/components/schemas/PlanBar",
+            "description": "Holm's bar when the planned test has the smallest p value: alpha / slot"
+          },
+          "k": {
+            "description": "tests already in the family",
+            "title": "K",
+            "type": "integer"
+          },
+          "slot": {
+            "description": "k + 1: the slot the planned test takes",
+            "title": "Slot",
+            "type": "integer"
+          },
+          "source": {
+            "description": "registry: the registry's family size; typed: the size the researcher typed",
+            "enum": [
+              "registry",
+              "typed"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "k",
+          "slot",
+          "bonferroni",
+          "holm_strictest",
+          "holm_loosest",
+          "at_slot"
+        ],
+        "title": "PlanSlot",
+        "type": "object"
+      },
+      "PlanView": {
+        "description": "The pre-registration plan of a design: reads no data. Best case, normal and independent returns (SV9).",
+        "properties": {
+          "alpha": {
+            "title": "Alpha",
+            "type": "number"
+          },
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "event_sd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Sd"
+          },
+          "family_k_registry": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the registry's family size, null when it could not be read",
+            "title": "Family K Registry"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "nominal": {
+            "$ref": "#/components/schemas/PlanPoint",
+            "description": "the design at the single-test alpha"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "periods": {
+            "title": "Periods",
+            "type": "integer"
+          },
+          "power_target": {
+            "title": "Power Target",
+            "type": "number"
+          },
+          "reference_sharpe": {
+            "title": "Reference Sharpe",
+            "type": "number"
+          },
+          "registry_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "why the registry's family size is missing, otherwise null",
+            "title": "Registry Note"
+          },
+          "slots": {
+            "items": {
+              "$ref": "#/components/schemas/PlanSlot"
+            },
+            "title": "Slots",
+            "type": "array"
+          },
+          "typed_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Typed Sharpe"
+          },
+          "years": {
+            "title": "Years",
+            "type": "number"
+          }
+        },
+        "required": [
+          "basis",
+          "note",
+          "power_target",
+          "reference_sharpe",
+          "periods",
+          "n",
+          "years",
+          "alpha",
+          "typed_sharpe",
+          "event_sd",
+          "family_k_registry",
+          "registry_note",
+          "nominal",
+          "slots"
+        ],
+        "title": "PlanView",
+        "type": "object"
+      },
+      "PowerRow": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "mde_family": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the same at alpha / k (Bonferroni)",
+            "title": "Mde Family"
+          },
+          "mde_nominal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "minimum detectable annual Sharpe at the family alpha, power 0.8",
+            "title": "Mde Nominal"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "periods": {
+            "description": "observations a year (252 sessions, 12 months), as the Deflated Sharpe view serves it",
+            "title": "Periods",
+            "type": "integer"
+          },
+          "power_family": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "power at the reference Sharpe 0.5, at alpha / k",
+            "title": "Power Family"
+          },
+          "power_nominal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "power at the reference Sharpe 0.5, at the family alpha",
+            "title": "Power Nominal"
+          },
+          "ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the served Sharpe over mde_family",
+            "title": "Ratio"
+          },
+          "sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "the served annual Sharpe ratio",
+            "title": "Sharpe"
+          },
+          "years": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "n / periods",
+            "title": "Years"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "periods",
+          "n",
+          "years",
+          "sharpe",
+          "mde_nominal",
+          "mde_family",
+          "ratio",
+          "power_nominal",
+          "power_family"
+        ],
+        "title": "PowerRow",
+        "type": "object"
+      },
+      "PowerTable": {
+        "description": "SV9: the power of the registered tests, one row per trial of the Deflated Sharpe view, in its order.",
+        "properties": {
+          "alpha": {
+            "description": "the family alpha",
+            "title": "Alpha",
+            "type": "number"
+          },
+          "alpha_family": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "alpha / k, null when k is not positive",
+            "title": "Alpha Family"
+          },
+          "basis": {
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "k": {
+            "description": "the registry's k: the registered hypotheses with a p value",
+            "title": "K",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "power_target": {
+            "title": "Power Target",
+            "type": "number"
+          },
+          "reference_sharpe": {
+            "description": "a fixed reference, never the trial's own Sharpe",
+            "title": "Reference Sharpe",
+            "type": "number"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/PowerRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "tag": {
+            "enum": [
+              "[POST HOC]",
+              "[PRE-REG]"
+            ],
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "basis",
+          "alpha",
+          "k",
+          "alpha_family",
+          "power_target",
+          "reference_sharpe",
+          "note",
+          "rows"
+        ],
+        "title": "PowerTable",
         "type": "object"
       },
       "PresetList": {
@@ -12179,6 +13179,37 @@
           "gate"
         ],
         "title": "RealisedVolSeries",
+        "type": "object"
+      },
+      "RecoveryBin": {
+        "description": "One bin of the DD3 time-to-recovery histogram: recovery times from `lo` to `hi` inclusive (`hi` null: and over).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "hi": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hi"
+          },
+          "lo": {
+            "title": "Lo",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lo",
+          "hi",
+          "count"
+        ],
+        "title": "RecoveryBin",
         "type": "object"
       },
       "RegimeRow": {
@@ -18760,6 +19791,26 @@
         "title": "UniverseRow",
         "type": "object"
       },
+      "UnlearnedRow": {
+        "description": "A registered row that N does not count: the terminal has no series for it.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "reason": {
+            "description": "the row's NOT_LEARNABLE reason (nq_terminal.series_sources), or 'no series source yet' for a row a later release learns",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ],
+        "title": "UnlearnedRow",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -20143,6 +21194,257 @@
           }
         },
         "summary": "Paper Tracking",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/plan": {
+      "get": {
+        "description": "The pre-registration plan of a design, from query parameters only: the Bonferroni and Holm bars at the next\nslot of the family (the registry's size and a typed one), the minimum detectable annual Sharpe at alpha and at the\nslot's bar for power 0.8, power at the reference Sharpe 0.5 and at a typed Sharpe, the observations needed for\npower 0.8, and, given an event standard deviation, the detectable mean per event. Reads no data and no price; best\ncase, normal and independent returns (SV9).",
+        "operationId": "preregistration_plan_api_analytics_plan_get",
+        "parameters": [
+          {
+            "description": "observations a year: 252 sessions, 52 weeks, 12 months or 4 quarters",
+            "in": "query",
+            "name": "periods",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PeriodsPerYear",
+              "default": 252,
+              "description": "observations a year: 252 sessions, 52 weeks, 12 months or 4 quarters"
+            }
+          },
+          {
+            "description": "planned observations (events for an event design)",
+            "in": "query",
+            "name": "n",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100000,
+                  "minimum": 2,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "planned observations (events for an event design)",
+              "title": "N"
+            }
+          },
+          {
+            "description": "planned years, instead of n",
+            "in": "query",
+            "name": "years",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 100.0,
+                  "minimum": 0.5,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "planned years, instead of n",
+              "title": "Years"
+            }
+          },
+          {
+            "description": "a typed family size: tests already in the family",
+            "in": "query",
+            "name": "k",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 1000,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "a typed family size: tests already in the family",
+              "title": "K"
+            }
+          },
+          {
+            "description": "one-sided single-test alpha",
+            "in": "query",
+            "name": "alpha",
+            "required": false,
+            "schema": {
+              "default": 0.05,
+              "description": "one-sided single-test alpha",
+              "maximum": 0.25,
+              "minimum": 0.001,
+              "title": "Alpha",
+              "type": "number"
+            }
+          },
+          {
+            "description": "a typed annual Sharpe to read power at",
+            "in": "query",
+            "name": "sharpe",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 5.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "a typed annual Sharpe to read power at",
+              "title": "Sharpe"
+            }
+          },
+          {
+            "description": "standard deviation per event",
+            "in": "query",
+            "name": "event_sd",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 10000.0,
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "standard deviation per event",
+              "title": "Event Sd"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Preregistration Plan",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/api/analytics/power": {
+      "get": {
+        "description": "SV9, served: the smallest annual Sharpe each registered test can detect with power 0.8, at the family alpha and\nat alpha / k, and its power at the reference Sharpe 0.5. One row per trial of the Deflated Sharpe view (the same\ncached view, so no price is read); best case, normal and independent returns, never a verdict.",
+        "operationId": "power_of_the_registered_tests_api_analytics_power_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PowerTable"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "refused by the OOS gate (the gate's own message)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a source is missing, half written or not configured"
+          }
+        },
+        "summary": "Power Of The Registered Tests",
         "tags": [
           "analytics"
         ]
@@ -21881,6 +23183,58 @@
           }
         },
         "summary": "Symbols",
+        "tags": [
+          "dq"
+        ]
+      }
+    },
+    "/api/dq/universe": {
+      "get": {
+        "description": "Usable, gated out, unrepairable and rejected sessions per root and year, from the records only.",
+        "operationId": "universe_api_dq_universe_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DqUniverse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "unknown name, id or series"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "invalid parameters"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "a report could not be decoded"
+          }
+        },
+        "summary": "Universe",
         "tags": [
           "dq"
         ]

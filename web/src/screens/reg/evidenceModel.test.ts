@@ -3,12 +3,14 @@
 import { describe, expect, it } from 'vitest'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA_C3 } from '../des/desTestData'
 import { DEFLATED_REAL } from './deflatedFixtures'
-import { powerView } from './powerModel'
+import { powerView } from '../../quant/powerReference'
+import { POWER_TABLE_REAL } from '../plan/powerTable.fixtures'
 import { buildRegRows } from './regModel'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
 import {
   blocksCount, buildEvidenceRows, detailStatus, evidenceCsv, type BuildEvidenceInput, type EvidenceRow,
 } from './evidenceModel'
+import { powerViewFromServed } from './usePowerTable'
 import type { HypothesisDetails } from './useHypothesisDetails'
 
 const REG_ROWS = buildRegRows(REGISTRY, HYPOTHESES)
@@ -25,9 +27,11 @@ const DETAILS: HypothesisDetails = {
 }
 
 const FAMILY = { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k }
+/** The served SV9 table (GET /api/analytics/power) as the view the evidence rows read. */
+const SERVED = powerViewFromServed(POWER_TABLE_REAL)
 
-function build(details: HypothesisDetails = DETAILS, family: BuildEvidenceInput['family'] = FAMILY): EvidenceRow[] {
-  const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: DEFLATED_REAL, details, family }
+function build(details: HypothesisDetails = DETAILS, power: BuildEvidenceInput['power'] = SERVED): EvidenceRow[] {
+  const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: DEFLATED_REAL, details, power }
   return buildEvidenceRows(input)
 }
 
@@ -195,7 +199,7 @@ describe('evidenceCsv', () => {
     const lines = evidenceCsv(build()).split('\r\n')
     // Other cells hold quoted commas, so the last two cells are read from the end of the line.
     const lastTwo = (name: string) => lines.find((l) => l.startsWith(`${name},`))!.split(',').slice(-2)
-    const power = powerView(DEFLATED_REAL, FAMILY).rows.find((r) => r.name === 'volmanaged_v0')!
+    const power = SERVED.rows.find((r) => r.name === 'volmanaged_v0')!
     expect(lastTwo('volmanaged_v0')).toEqual([String(power.mdeFamily), String(power.ratio)])
     // An unregistered row is not an SV3 trial: no MDE, and the cells are empty, not zero.
     expect(lastTwo('za_v0_C3_gao_momentum')).toEqual(['', ''])
@@ -210,16 +214,34 @@ describe('evidenceCsv', () => {
   })
 })
 
-describe('the power columns (MDE alpha/k and Sharpe/MDE, [POST HOC], computed in the browser)', () => {
-  it('mdeFamily equals powerView\'s value for every SV3 trial, joined by name', () => {
-    const view = powerView(DEFLATED_REAL, FAMILY)
+describe('the power columns (MDE alpha/k and Sharpe/MDE, [POST HOC], served by GET /api/analytics/power)', () => {
+  it("mdeFamily is the served table's value for every trial, joined by name", () => {
     const rows = build()
-    for (const p of view.rows) {
+    for (const p of SERVED.rows) {
       const row = rowOf(rows, p.name)
       expect(row.mdeFamily).toBe(p.mdeFamily)
       expect(row.mdeRatio).toBe(p.ratio)
     }
-    expect(view.rows).toHaveLength(21)
+    expect(SERVED.rows).toHaveLength(21)
+  })
+
+  it('born failing: a served figure that differs from the browser reference is the one shown', () => {
+    const bumped = powerViewFromServed({
+      ...POWER_TABLE_REAL,
+      rows: POWER_TABLE_REAL.rows.map((r) => (r.name === 'volmanaged_v0' ? { ...r, mde_family: 9.5, ratio: 0.1 } : r)),
+    })
+    const row = rowOf(build(DETAILS, bumped), 'volmanaged_v0')
+    expect(row.mdeFamily).toBe(9.5)
+    expect(row.mdeRatio).toBe(0.1)
+  })
+
+  it('agrees with the browser reference to 1e-12 on the captured view (the golden of qa/crosscheck/p12_power.py)', () => {
+    const reference = powerView(DEFLATED_REAL, FAMILY)
+    const rows = build()
+    for (const p of reference.rows) {
+      const row = rowOf(rows, p.name)
+      expect(Math.abs((row.mdeFamily as number) - (p.mdeFamily as number))).toBeLessThan(1e-12 * Math.abs(p.mdeFamily as number))
+    }
   })
 
   it('pins volmanaged_v0: MDE 1.12 at alpha/k and Sharpe/MDE 0.88 (the catalogue anchor)', () => {
@@ -231,11 +253,11 @@ describe('the power columns (MDE alpha/k and Sharpe/MDE, [POST HOC], computed in
   it('is the served Sharpe over the MDE, and no other combination', () => {
     for (const row of build()) {
       if (row.sharpe === null || typeof row.mdeFamily !== 'number') continue
-      expect(row.mdeRatio).toBe(row.sharpe / row.mdeFamily)
+      expect(row.mdeRatio).toBeCloseTo(row.sharpe / row.mdeFamily, 12)
     }
   })
 
-  it('is null for a row that is not an SV3 trial (unregistered) and null everywhere without the family', () => {
+  it('is null for a row that is not an SV3 trial (unregistered) and null everywhere without the served table', () => {
     expect(rowOf(build(), 'za_v0_C3_gao_momentum').mdeFamily).toBeNull()
     expect(rowOf(build(), 'za_v0_C3_gao_momentum').mdeRatio).toBeNull()
     for (const row of build(DETAILS, null)) {
@@ -244,24 +266,31 @@ describe('the power columns (MDE alpha/k and Sharpe/MDE, [POST HOC], computed in
     }
   })
 
-  it('is null for every row when the family has no usable k, but the served columns stay', () => {
-    const rows = build(DETAILS, { alpha: 0.05, k: 0 })
+  it('is null for every row when the served table has no alpha / k figure, but the served columns stay', () => {
+    const noK = powerViewFromServed({
+      ...POWER_TABLE_REAL,
+      alpha_family: null,
+      rows: POWER_TABLE_REAL.rows.map((r) => ({ ...r, mde_family: null, ratio: null, power_family: null })),
+    })
+    const rows = build(DETAILS, noK)
     for (const row of rows) expect(row.mdeFamily).toBeNull()
     expect(rowOf(rows, 'volmanaged_v0').sharpe).toBe(0.9914875364356387)
   })
 
-  it('is null for every row without the deflated view', () => {
-    const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: undefined, details: DETAILS, family: FAMILY }
-    for (const row of buildEvidenceRows(input)) expect(row.mdeFamily).toBeNull()
+  it('does not recompute: the cells need no deflated view of their own, only the served table', () => {
+    const input: BuildEvidenceInput = { rows: REG_ROWS, cards: HYPOTHESES, confirmations: CONFIRMATIONS, deflated: undefined, details: DETAILS, power: SERVED }
+    const rows = buildEvidenceRows(input)
+    expect(rowOf(rows, 'volmanaged_v0').mdeFamily).toBe(SERVED.rows.find((r) => r.name === 'volmanaged_v0')!.mdeFamily)
+    expect(rowOf(rows, 'volmanaged_v0').sharpe).toBeNull()
   })
 
   it('leaves the row order, and every other cell, exactly as before', () => {
     const without = build(DETAILS, null)
-    const withFamily = build()
-    expect(withFamily.map((r) => r.name)).toEqual(without.map((r) => r.name))
+    const withPower = build()
+    expect(withPower.map((r) => r.name)).toEqual(without.map((r) => r.name))
     for (let i = 0; i < without.length; i += 1) {
       const { mdeFamily: _a, mdeRatio: _b, ...rest } = without[i]!
-      const { mdeFamily: _c, mdeRatio: _d, ...restWith } = withFamily[i]!
+      const { mdeFamily: _c, mdeRatio: _d, ...restWith } = withPower[i]!
       expect(restWith).toEqual(rest)
     }
   })

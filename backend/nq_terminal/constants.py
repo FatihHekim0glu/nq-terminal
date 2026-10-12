@@ -14,15 +14,17 @@ file); a test fails if the two drift apart.
 Rounds and summaries: the round each registered hypothesis belongs to and the summary that reports it.
 A name missing here falls back, at run time, to the summary whose title line names it.
 
-Series sources: where the Basis A series of each hypothesis lives (ANALYTICS_CATALOG C1) and which column
-holds the value at 0, 1 or 2 ticks per side. Only these columns are read; none is a price column (tested).
+Series sources: the `SeriesSource` type and its helpers are here; the table itself, where the Basis A series of each
+hypothesis lives (ANALYTICS_CATALOG C1) and which column holds the value at 0, 1 or 2 ticks per side, is the package
+`nq_terminal.series_sources`, re-exported here as `SERIES_SOURCES` on first use. Only those columns are read; none is
+a price column (tested).
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 PRICE_COLUMN = re.compile(r"(?i:px|raw|price)|_c$|^[OHLC]$")
 # Sealed JSON keys (a denylist, stricter than the CSV check above, because the JSONs have no allowlist): any key
@@ -110,6 +112,13 @@ class SeriesSource:
     (eurodrift_v0, `eurodrift_stats.daily_books`); otherwise empty rows are left out.
     `void_column`: a boolean column; a row where it is true is void and left out (vrp_eq_v0's `void` month).
     `portfolio`: the series is a portfolio over per-market columns (`PortfolioRule`).
+    `window_start`: an ISO date; a `trades` row is zero-filled from this day (never earlier than the screen's serve
+    window) when the screen's sample starts later than the window it served (a walk-forward's first test session,
+    a frozen effective start). The default is the screen's window.
+    `keep_where`: column -> the value it must hold for a row to stay: True or False for a boolean column, a string
+    for an exact text, None for an empty cell. Every pair must hold (airfx_v0 `held` True, hvix_nd_v0 `headline`
+    True, apieia_ho_v0 `kind` "event" and `void` empty). It states the screen's own headline sample, so a row it
+    leaves out is not a void to be zeroed; a price column is refused here, as it is in every series.
     """
 
     file: str
@@ -124,6 +133,15 @@ class SeriesSource:
     void_as_zero: bool = False
     void_column: str | None = None
     portfolio: PortfolioRule | None = None
+    window_start: str | None = None
+    keep_where: Mapping[str, bool | str | None] = field(default_factory=lambda: MappingProxyType({}))
+
+    def __post_init__(self) -> None:
+        for column, wanted in self.keep_where.items():
+            if PRICE_COLUMN.search(column):
+                raise ValueError(f"keep_where names the price column {column}; a series reads no price")
+            if wanted is not None and not isinstance(wanted, (bool, str)):
+                raise ValueError(f"keep_where {column}: a value is True, False, a string or None, not {wanted!r}")
 
     def members(self, header: Sequence[str], suffix: str) -> tuple[str, ...]:
         """The per-market columns a portfolio reads for one suffix, in file order (none for a plain source)."""
@@ -153,63 +171,18 @@ def _trades(file: str, time_column: str) -> SeriesSource:
     return SeriesSource(file, time_column, _per_cost("usd_nq_{k}"), USD_TRADE, "trades")
 
 
-SERIES_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
-    "za_v0": SeriesSource("za_v0_repaired_trades.csv", "date", MappingProxyType({1: "pnl_usd_nq"}), USD_TRADE,
-                          "trades"),
-    "tom_v0": _trades("tom_v0_trades.csv", "exit"),
-    "preholiday_v0": _trades("preholiday_v0_trades.csv", "exit"),
-    "prefomc_v0": _trades("prefomc_v0_trades.csv", "date"),
-    "overnight_v0": _trades("overnight_v0_trades.csv", "exit_date"),
-    "macroday_v0": _trades("macroday_v0_trades.csv", "date"),
-    "halloween_v0": _trades("halloween_v0_trades.csv", "date"),
-    "mac5rev_v0": _trades("mac5rev_v0_trades.csv", "exit"),
-    "rebal_v0": _trades("rebal_v0_trades.csv", "exit_ts"),
-    "fomccycle_v0": SeriesSource("fomccycle_v0_daily.csv", "date", _per_cost("usd_nq_{k}"),
-                                 "USD per session, one NQ contract", "daily"),
-    "eurodrift_v0": SeriesSource("eurodrift_v0_nights.csv", "exit_date", _per_cost("net_bps_{k}", (1, 2)),
-                                 "basis points per night", "nights", void_as_zero=True),
-    "fomctone_v0": SeriesSource("fomctone_v0_trades.csv", "date", MappingProxyType({1: "usd_nq_1"}), USD_TRADE,
-                                "trades"),
-    "volmanaged_v0": SeriesSource("volmanaged_v0_daily.csv", "date", _per_cost("r_m_{k}"),
-                                  "return on capital per session", "daily", _per_cost("r_bh_{k}"),
-                                  "same-exposure buy and hold"),
-    "tsmom_v0": SeriesSource("tsmom_v0_monthly.csv", "end", _per_cost("r_m_{k}"), "return on capital per month",
-                             "monthly", _per_cost("r_bh_{k}"), "same-exposure buy and hold"),
-    "dtsmom_v0": SeriesSource("dtsmom_v0_monthly.csv", "label", _per_cost("r_ts_{k}"), "return on capital per month",
-                              "monthly", _per_cost("r_lo_{k}"), "long-only equal-risk book",
-                              time_rule=MONTH_END_SESSION, guard_column="end"),
-    "carry_v0": SeriesSource("carry_v0_monthly.csv", "label", _per_cost("r_carry_{k}"), "return on capital per month",
-                             "monthly", _per_cost("r_loac_{k}"), "equal-risk long-only book in the same classes",
-                             time_rule=MONTH_END_SESSION, guard_column="end"),
-    "eomtsy_v0": SeriesSource("eomtsy_v0_monthly.csv", "month", _per_cost("r{k}"), "return on capital per month",
-                              "monthly", _per_cost("lo{k}"), "held-contract all-month long-only book",
-                              time_rule=MONTH_END_SESSION, guard_column="L"),
-    "cskew_v0": SeriesSource("cskew_v0_monthly.csv", "label", _per_cost("r_cskew_{k}"), "return on capital per month",
-                             "monthly", _per_cost("r_lo_{k}"), "equal-risk long-only commodity book",
-                             time_rule=MONTH_END_SESSION, guard_column="end"),
-    "mim_v0": SeriesSource("mim_v0_daily.csv", "date", MappingProxyType({0: "R_gross", 1: "R_net_1tick"}),
-                           "return on capital per session", "daily", MappingProxyType({0: "R_lo_gross"}),
-                           "long-only book, gross"),
-    # Round 13: the daily CSV holds each market's VT and CE books at 1 era tick only; the series is the screen's P2
-    # portfolio over the 26 test markets (NQ is the anchor and is left out, as the screen's `anchor` flag says).
-    "vt_har_v0": SeriesSource("vt_har_v0_daily.csv", "date", MappingProxyType({1: "_VT"}),
-                              "portfolio return per session, in units of its own winsorised sd", "daily",
-                              MappingProxyType({1: "_CE"}),
-                              "constant-notional books at equal winsorised volatility, same portfolio rule",
-                              portfolio=PortfolioRule(exclude=("NQ",))),
-    # Round 14: `label` is the holding month (the signal forms in the month before); void months are left out.
-    "vrp_eq_v0": SeriesSource("vrp_eq_v0_monthly.csv", "label", _per_cost("r_VRP_t{k}"), "return on capital per month",
-                              "monthly", _per_cost("r_C_t{k}"), "constant long book, ES and YM",
-                              time_rule=MONTH_END_SESSION, void_column="void"),
-    # Round 15: monthly book on the last weekday of the month (a holding hour at the WM/R fix, recorded as one
-    # return on K per month). `void` holds the reason text of a void month (empty otherwise) and its returns are
-    # empty, so empty values drop those months; `D` is the weekday the book traded on, never before the NYSE
-    # session it is dated at.
-    "fxeomhedge_v0": SeriesSource("fxeomhedge_v0_monthly.csv", "month", _per_cost("r{k}"),
-                                  "return on capital per month", "monthly", _per_cost("lo{k}"),
-                                  "gross long-only FX basket, same hour", time_rule=MONTH_END_SESSION,
-                                  guard_column="D"),
-})
+if TYPE_CHECKING:
+    from nq_terminal.series_sources import SERIES_SOURCES as SERIES_SOURCES
+
+
+def __getattr__(name: str) -> Any:
+    """`SERIES_SOURCES`, re-exported from `nq_terminal.series_sources` on first use. The package imports this module
+    for `SeriesSource` and its helpers, so an import at load time here would be a cycle whichever module loads first."""
+    if name == "SERIES_SOURCES":
+        from nq_terminal.series_sources import SERIES_SOURCES
+
+        return SERIES_SOURCES
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # Command line mnemonics (UI_SPEC s5; a test compares this table with the doc): (code, screen, priority, context).
@@ -242,7 +215,8 @@ MNEMONICS: tuple[tuple[str, str, str, str], ...] = (
     ("SEAS", "Seasonality", "P1", "instrument or hypothesis"),
     ("EVT", "Event study", "P1", "instrument"),
     ("ROLL", "Roll calendar", "P1", "instrument"),
-    ("DQ", "Data quality", "P1", "instrument"),
+    ("DQ", "Data quality", "P1", "instrument or universe"),
+    ("PLAN", "Pre-registration plan", "P1", "none"),
     ("JOBS", "Backtest queue", "P2", "none"),
 )
 

@@ -24,13 +24,14 @@ describe('mnemonic registry (UI_SPEC section 5)', () => {
     expect(codes).toEqual([
       'HOME', 'GP', 'GIP', 'DES', 'REG', 'MT', 'RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'MON', 'CORR',
       'LEDG', 'OOS', 'LIVE', 'JRNL', 'HELP', 'COST', 'BLK', 'EXPO', 'SEAL', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ',
+      'PLAN',
       'JOBS',
     ])
   })
 
   it('matches the backend table code by code: screen, priority and context', () => {
     const backend = shownBackend(constantsPy)
-    expect(backend.length).toBe(30)
+    expect(backend.length).toBe(31)
     expect(MNEMONICS.map((m) => [m.code, m.screen, m.priority, m.context])).toEqual(backend)
   })
 
@@ -69,7 +70,8 @@ describe('mnemonic registry (UI_SPEC section 5)', () => {
   it('numbers screens by registry order for the status bar (HOME is 00)', () => {
     expect(screenNumber('HOME')).toBe('00')
     expect(screenNumber('REG')).toBe('04')
-    expect(screenNumber('JOBS')).toBe('29')
+    expect(screenNumber('PLAN')).toBe('29')
+    expect(screenNumber('JOBS')).toBe('30')
   })
 })
 

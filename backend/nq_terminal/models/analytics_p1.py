@@ -7,9 +7,10 @@ or trade list, and RG1's fixed terciles report Welch's t without a p-value.
 """
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from nq_terminal.models.analytics import Basis, Context, Kpi, Num, Tag
 from nq_terminal.models.common import ResponseModel
@@ -255,6 +256,18 @@ class DeflatedLeaveOneOut(ResponseModel):
     n_trials: int
 
 
+# The clause `tearsheet_extended.unlearned_note` adds to SV3's N note; a test pins the two together.
+UNLEARNED_CLAUSE = re.compile(r"; (?P<names>[^;:]+): \d+ registered rows? the terminal has not learned yet")
+
+
+class UnlearnedRow(ResponseModel):
+    """A registered row that N does not count: the terminal has no series for it."""
+
+    name: str
+    reason: str = Field(description="the row's NOT_LEARNABLE reason (nq_terminal.series_sources), or 'no series "
+                                    "source yet' for a row a later release learns")
+
+
 class DeflatedView(ResponseModel):
     """SV3 over the registered hypotheses on the common Basis A daily construction (SV3a)."""
 
@@ -273,12 +286,31 @@ class DeflatedView(ResponseModel):
     sr0_null_annual: Num
     leave_one_out: DeflatedLeaveOneOut
     n_note: str = Field(description="what N assumes: independent registered rows, no pre-registration variants")
+    unlearned: list[UnlearnedRow] = Field(
+        description="every registered row N does not count, in registry order, with its reason; the same names the "
+                    "N note gives")
     euler_gamma: float
     dominant: str | None = Field(description="the trial farthest from the mean per-session Sharpe, named")
     rows: list[DeflatedRow]
     effective_n: EffectiveNView = Field(
         description="SV3b: the effective number of trials from the daily trials' own return correlations, and the SR0 "
                     "and DSR each N would set (an extra view beside the served N)")
+
+    @staticmethod
+    def unlearned_in_note(note: str) -> list[str]:
+        """The names the N note gives as registered rows not learned (`tearsheet_extended.UNLEARNED_NOTE`)."""
+        found = UNLEARNED_CLAUSE.search(note)
+        return found.group("names").split(", ") if found else []
+
+    @model_validator(mode="after")
+    def _unlearned_matches_the_note(self) -> "DeflatedView":
+        listed, named = [row.name for row in self.unlearned], self.unlearned_in_note(self.n_note)
+        missing = [name for name in named if name not in listed]
+        extra = [name for name in listed if name not in named]
+        if missing or extra or len(set(listed)) != len(listed):
+            raise ValueError(f"the unlearned list and the N note disagree: the note names {missing} that the list "
+                             f"lacks, the list holds {extra} that the note does not name, or a name twice")
+        return self
 
 
 # ---------------------------------------------------------------- TA2

@@ -1,0 +1,32 @@
+{
+ "name": "zqcut_v0",
+ "synthetic_fixture": true,
+ "serve": {
+  "serves": [
+   {
+    "symbol": "SYN.V.0",
+    "timeframe": "1d",
+    "end": "2022-01-01 00:00:00+00:00"
+   }
+  ]
+ },
+ "facts": {
+  "first_label": "2011-01",
+  "last_label": "2012-02"
+ },
+ "headline": {
+  "n": 14,
+  "mean": 0.013948484285714288,
+  "sd": 0.025707931490091863,
+  "sharpe_ann": 1.879535386247981
+ },
+ "cost_stress": {
+  "0_ticks": 0.014548484285714286,
+  "2_ticks": 0.013348484285714288
+ },
+ "controls": {
+  "CL": {
+   "mean": -0.004200024285714285
+  }
+ }
+}

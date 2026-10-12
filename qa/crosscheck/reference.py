@@ -23,9 +23,15 @@ Where the reference libraries legitimately differ from the catalogue (ANALYTICS_
 - EQ's performance difference and RR's rolling volatility high and low (Phase 8) have no library equivalent: the
   references are independent numpy (running sums or products over the sessions where the benchmark has a value;
   the extremes of empyrical's rolling volatility).
+
+Registry completeness (W3, `registry_completeness` dumps): one reference per registered row of `results/registry.csv`,
+the word COVERED, against the row's coverage recomputed here from the dumped lists (learned names and NOT_LEARNABLE
+reasons). A row neither learned nor listed, both learned and listed, or listed with no reason is a FAIL; a row with no
+value at all is a SKIP, which `--strict` fails.
 """
 from __future__ import annotations
 
+import csv
 import math
 import warnings
 from dataclasses import dataclass
@@ -274,3 +280,38 @@ def registry_references(p) -> dict:
     source = "statsmodels.stats.multitest.multipletests"
     return {key: Ref(multipletests(p, method=method)[1].tolist(), f"{source}(method={method!r})")
             for key, method in (("bonferroni_p", "bonferroni"), ("holm_p", "holm"), ("bh_q", "fdr_bh"))}
+
+
+# ---------- registry completeness: every registered row is learned or NOT_LEARNABLE ----------
+
+COVERED = "learned or NOT_LEARNABLE"
+COMPLETENESS_SOURCE = "results/registry.csv registered row: in SERIES_SOURCES or NOT_LEARNABLE with a reason"
+
+
+def registered_names(registry) -> tuple[str, ...]:
+    """The names of the rows marked registered in a `registry.csv`, in file order (the csv module, no backend)."""
+    with open(registry, encoding="utf-8", newline="") as handle:
+        return tuple(row["name"] for row in csv.DictReader(handle) if row.get("registered") == "True")
+
+
+def registry_completeness_references(inputs: dict) -> dict:
+    """One reference per registered row: the word COVERED, which its coverage must equal exactly."""
+    return {f"coverage.{name}": Ref(COVERED, COMPLETENESS_SOURCE) for name in inputs["registered"]}
+
+
+def coverage(name: str, learned: set, not_learnable: dict) -> str:
+    """COVERED for a row learned or listed with a reason, never both; otherwise what is wrong, in words."""
+    reason = not_learnable.get(name)
+    listed = isinstance(reason, str) and bool(reason.strip())
+    if name in learned and name in not_learnable:
+        return "both learned and NOT_LEARNABLE"
+    if name in learned or listed:
+        return COVERED
+    return "NOT_LEARNABLE with no reason" if name in not_learnable else "neither learned nor NOT_LEARNABLE"
+
+
+def registry_completeness_values(inputs: dict) -> dict:
+    """Each registered row's coverage, recomputed here from the dumped lists (the `ours` side of the comparison, so a
+    gap shows whatever the terminal says of itself)."""
+    learned, not_learnable = set(inputs.get("learned") or ()), dict(inputs.get("not_learnable") or {})
+    return {f"coverage.{name}": coverage(name, learned, not_learnable) for name in inputs["registered"]}

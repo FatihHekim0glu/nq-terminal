@@ -22,6 +22,7 @@ import { EVIDENCE } from '../../copy/evidence'
 import { REPLICATION } from '../../copy/replication'
 import { stubLayout } from '../../grids/testing'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../des/desTestData'
+import { POWER_TABLE_REAL } from '../plan/powerTable.fixtures'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import { buildEvidenceRows } from './evidenceModel'
 import MtScreen from './MtScreen'
@@ -29,6 +30,7 @@ import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixt
 import { buildRegRows } from './regModel'
 import RegEvidence from './RegEvidence'
 import type { HypothesisDetails } from './useHypothesisDetails'
+import { powerViewFromServed } from './usePowerTable'
 import { mountScreen, panelParams, stubApi } from './testHarness'
 
 beforeAll(() => stubLayout(1200))
@@ -108,7 +110,7 @@ describe('REG 92) Evidence grid: Shift+Enter opens DES in a new panel (G20)', ()
     confirmations: CONFIRMATIONS,
     deflated: DEFLATED_REAL,
     details: DETAILS,
-    family: { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k },
+    power: powerViewFromServed(POWER_TABLE_REAL),
   })
 
   it('Shift+Enter requests "<name> DES" with newPanel true, and a plain Enter with false', () => {

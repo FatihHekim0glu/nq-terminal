@@ -93,6 +93,11 @@ interface VolCone { readonly label: string; readonly horizons: ReadonlyArray<{ r
 interface EventStudy { readonly label: string; readonly events: ReadonlyArray<{ readonly n: number; readonly date: string; readonly used: boolean }> }
 interface RollCalendar { readonly markets: ReadonlyArray<{ readonly root: string; readonly count: number }> }
 interface DqCalendar { readonly label: string }
+interface DqUniverseApi {
+  readonly label: string
+  readonly years: ReadonlyArray<number>
+  readonly roots: ReadonlyArray<{ readonly root: string; readonly last_bar: string | null; readonly blocks: ReadonlyArray<string>; readonly rows: ReadonlyArray<unknown> }>
+}
 interface GuardReport { readonly ok: number; readonly mismatch: number; readonly no_record: number; readonly groups: ReadonlyArray<unknown> }
 
 test.describe('Phase 11 screens: served values, [POST HOC], no p-value, Number <GO>, axe, GET only', () => {
@@ -187,6 +192,34 @@ test.describe('Phase 11 screens: served values, [POST HOC], no p-value, Number <
     await expect(panel).toContainText(`${guards.ok} OK, ${guards.mismatch} mismatch, ${guards.no_record} with no record.`)
     expect(guards.ok).toBe(guards.groups.length)
     expect(await panel.innerText()).not.toMatch(P_FIGURE)
+    await expectClean(page, watch)
+  })
+
+  test('NQ DQ universe: 87 shows every root by year; the grid walks by keyboard; no date after the fence', async ({ page }) => {
+    const watch = await startApp(page)
+    const api = await apiJson<DqUniverseApi>(page, '/api/dq/universe')
+    const panel = await openLine(page, 'NQ DQ')
+    await numberGo(page, 87)
+    const grid = panel.getByRole('grid', { name: 'Data usability, every root by year' })
+    await expect(grid).toBeVisible()
+    await expect(panel).toContainText(api.label)
+    await expect(grid.getByRole('columnheader')).toHaveCount(api.years.length + 7)
+    // one row per root and series plus one 1d row per root, and the header
+    await expect(grid.getByRole('row')).toHaveCount(1 + api.roots.reduce((n, r) => n + r.rows.length + 1, 0))
+    // keyboard only: the grid has one tab stop; arrows, End and Home move it and the readout follows
+    const stop = grid.locator('[tabindex="0"]')
+    await expect(stop).toHaveCount(1)
+    await stop.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(panel.getByRole('status').filter({ hasText: /1m vendor/ })).toBeVisible()
+    await page.keyboard.press('End')
+    // the last cell of the row: the known blocks in the records' words, or the column name with none when there are none
+    const blocks = api.roots[0]!.blocks.join('; ')
+    await expect(grid.locator('[tabindex="0"]')).toHaveAttribute('aria-label', blocks === '' ? /Known blocks: none/ : blocks)
+    await page.keyboard.press('Home')
+    await expect(grid.locator('[tabindex="0"]')).toHaveAttribute('aria-label', api.roots[0]!.root)
+    await expectDescriptive(panel)
+    expect(await panel.innerText()).not.toMatch(/\b20(?:2[2-9]|[3-9]\d)-\d{2}-\d{2}\b/)
     await expectClean(page, watch)
   })
 })

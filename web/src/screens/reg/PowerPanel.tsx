@@ -1,14 +1,15 @@
 // The power table under SV3 on MT (ANALYTICS_CATALOG SV9): the smallest annual Sharpe ratio each registered test
-// can detect, and its power at a fixed reference Sharpe, per trial. [POST HOC], computed in the browser from the
-// served Deflated Sharpe view (n, P, annual Sharpe) and the served family (alpha, k). A plain table on purpose: no
-// grid, no numbered item (MT owns 1 to 21), no verdict and no alert. Reads no GET of its own: the family is the one
-// MT already holds.
-import { useMemo, type ReactNode } from 'react'
-import { useMultipleTesting } from '../../api/queries'
+// can detect, and its power at a fixed reference Sharpe, per trial. [POST HOC], served by the backend
+// (GET /api/analytics/power, read by usePowerTable once the Deflated Sharpe view has arrived) from the same n, P and
+// annual Sharpe and the registry's alpha and k. A plain table on purpose: no grid, no numbered item (MT owns 1 to 21),
+// no verdict and no alert. The one GET of its own is the served table.
+import type { ReactNode } from 'react'
 import { POWER } from '../../copy/power'
+import { POWER_SERVED } from '../../copy/plan'
 import { fillCopy } from '../../copy/workspace'
-import { POWER_TAG, powerCells, powerHeaders, powerSummary, powerView, type PowerCol, type PowerView } from './powerModel'
+import { POWER_TAG, powerCells, powerHeaders, powerSummary, type PowerCol, type PowerView } from './powerModel'
 import type { DeflatedView } from './deflatedModel'
+import { usePowerTable } from './usePowerTable'
 import './reg.css'
 
 const NUMERIC: readonly PowerCol[] = ['periods', 'n', 'years', 'sharpe', 'mdeNominal', 'mdeFamily', 'ratio', 'powerNominal', 'powerFamily']
@@ -60,24 +61,21 @@ function PowerSection({ children }: { readonly children: ReactNode }) {
 }
 
 export default function PowerPanel({ view }: { readonly view: DeflatedView }) {
-  const family = useMultipleTesting()
-  const power = useMemo(
-    () => (family.data ? powerView(view, { alpha: family.data.alpha, k: family.data.k }) : null),
-    [view, family.data],
-  )
-  if (family.isError) {
+  const table = usePowerTable(view)
+  if (table.isError) {
     return (
       <PowerSection>
-        <p className="reg-msg">{fillCopy(POWER.unavailable, { detail: family.error.detail })}</p>
+        <p className="reg-msg">{fillCopy(POWER_SERVED.unavailable, { detail: table.error.detail })}</p>
       </PowerSection>
     )
   }
+  const power = table.data
   if (!power) return null
   return (
     <PowerSection>
       <p className="reg-msg">{powerSummary(power)}</p>
       <p className="reg-msg">{POWER.approx}</p>
-      <p className="reg-msg reg-muted">{POWER.computed}</p>
+      <p className="reg-msg reg-muted">{POWER_SERVED.computed}</p>
       <PowerTable power={power} />
     </PowerSection>
   )

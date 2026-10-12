@@ -3,6 +3,7 @@
 // own text, written from this project's specs; nothing is taken from any vendor manual. UK spelling,
 // no em or en dashes. Examples are `{<line> <GO>}` command links; every one parses (helpTopics.test).
 import { DEMO_DATA, isDemoPage } from './chrome'
+import { PLAN_HELP } from './plan'
 
 export const HELP_TOPIC = {
   crumb: 'Getting started > Help > Help for {code}',
@@ -197,12 +198,12 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     shows: [
       'Sorted p values against rank, with the Bonferroni and Holm boundaries and the BH line.',
       'The adjusted values table.',
-      '85) Family holds all of this, with the Deflated Sharpe (SV3) and an approximate power table computed in the browser.',
+      '85) Family holds all of this, with the Deflated Sharpe (SV3) and the power table (SV9), served by the backend with the same bars as PLAN.',
       '86) Replication draws each sealed confirmation\'s p against its parent\'s registered in-sample p: stored numbers only.',
       "87) Effective trials estimates the effective number of trials from the daily trials' own return correlations and shows the SR0 and DSR each N would set: served by the backend with the SV3 view, an extra view only.",
       "88) Family test runs White's Reality Check, a non-studentised SPA (arch's form) and Romano-Wolf StepM over the pre-registered NQ hypotheses on one contract against cash (some member has a positive mean) and, as a second row, against NQ buy and hold, and reads the effective number of members from the correlation of their differentials: served p-values and the served effective number of members, an extra view only.",
     ],
-    data: 'GET /api/multiple-testing: the registry p values, recomputed, then compared with the stored columns; GET /api/analytics/deflated for SV3, its effective number of trials (87) Effective trials) and the power table; GET /api/registry once 86) Replication is open; GET /api/analytics/spa once 88) Family test is open.',
+    data: 'GET /api/multiple-testing: the registry p values, recomputed, then compared with the stored columns; GET /api/analytics/deflated for SV3, its effective number of trials (87) Effective trials) and GET /api/analytics/power for the power table; GET /api/registry once 86) Replication is open; GET /api/analytics/spa once 88) Family test is open.',
     examples: ['{MT <GO>}'],
     related: ['REG', 'DES'],
   },
@@ -466,18 +467,20 @@ export const HELP_TOPICS: Readonly<Record<string, HelpTopicCopy>> = {
     related: ['GP', 'MON'],
   },
   DQ: {
-    summary: 'Data quality of one instrument, and the guard fingerprint status.',
+    summary: 'Data quality of one instrument or of the whole universe, and the guard fingerprint status.',
     shows: [
       '85) Calendar: one square per session to 2021-12-31; a day that is not plain vendor data is marked G (gated out), R (rejected), B (rebuilt) or U (unrepairable). T or the Table button gives the year table.',
       'Flagged days are numbered 1) to N) in the grid; a number and <GO> gives the reason for that day and outlines it on the calendar.',
       '86) Guard fingerprints: every guard group with its status in words (OK, MISMATCH, NO RECORD).',
-      '96) Actions; 98) Export saves the flagged days, or the guard table, as CSV.',
+      '87) Universe: every root by year, 2010 to 2021, as the share of sessions that are usable for the vendor bars and, where a repair passed, the repaired bars; it opens first when the context is the universe. Each cell names its counts; the 1d row, the first and last bar and the known blocks come from the records.',
+      '96) Actions; 98) Export saves the flagged days, the guard table or the universe grid, as CSV.',
     ],
-    data: 'GET /api/dq/symbols with /api/dq/calendar/{symbol} for the calendar; GET /api/dq/guards for the guards. Records only; no price is read.',
+    data: 'GET /api/dq/symbols with /api/dq/calendar/{symbol} for the calendar; GET /api/dq/guards for the guards; GET /api/dq/universe for the universe grid. Records only; no price is read.',
     honesty: 'Descriptive counts from the records, [POST HOC]; no p value.',
     examples: ['{NQ DQ <GO>}', '{ES DQ <GO>}'],
     related: ['GP', 'GIP'],
   },
+  PLAN: PLAN_HELP,
   JOBS: {
     summary: 'A backtest queue.',
     shows: [

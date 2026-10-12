@@ -132,11 +132,13 @@ describe('MT: multiple-testing view', () => {
     expect(numberedItems(PANEL_ID).map((i) => i.n)).toEqual(expect.arrayContaining([96, 97]))
   })
 
-  it('reads /api/multiple-testing and the SV3 view /api/analytics/deflated, with GET only', async () => {
+  it('reads /api/multiple-testing, the SV3 view /api/analytics/deflated and the SV9 table /api/analytics/power, with GET only', async () => {
     const seen = stubApi()
     await ready()
     await screen.findByRole('region', { name: DEFLATED.label })
-    expect(new Set(seen.map((s) => `${s.method} ${s.url}`))).toEqual(new Set(['GET /api/multiple-testing', 'GET /api/analytics/deflated']))
+    expect(new Set(seen.map((s) => `${s.method} ${s.url}`))).toEqual(
+      new Set(['GET /api/multiple-testing', 'GET /api/analytics/deflated', 'GET /api/analytics/power']),
+    )
   })
 
   it('shows the Deflated Sharpe over the registered trials, [POST HOC], with the trial that dominates V and no verdict', async () => {

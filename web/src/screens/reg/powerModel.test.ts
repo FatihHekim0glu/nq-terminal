@@ -1,4 +1,4 @@
-// powerView, powerSummary, powerCells and powerHeaders (ANALYTICS_CATALOG SV9): the minimum detectable annual Sharpe
+// powerView (the browser reference, quant/powerReference.ts), powerSummary, powerCells and powerHeaders (ANALYTICS_CATALOG SV9): the minimum detectable annual Sharpe
 // ratio and the power at a fixed reference Sharpe ratio for every registered trial of the served DeflatedView, against
 // the scipy golden vectors of qa/crosscheck/p12_power.py and the anchors in the brief (volmanaged_v0: years 10.66,
 // Sharpe +0.99, MDE 0.76 and 1.12, ratio 0.88).
@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import raw from '../../../../qa/golden/p12_power.json?raw'
 import type { Schemas } from '../../api/types'
 import { POWER } from '../../copy/power'
+import { powerView } from '../../quant/powerReference'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import {
   POWER_TARGET,
@@ -13,7 +14,6 @@ import {
   powerCells,
   powerHeaders,
   powerSummary,
-  powerView,
   type PowerCol,
 } from './powerModel'
 import { MULTIPLE_TESTING } from './regFixtures'

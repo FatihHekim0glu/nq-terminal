@@ -15,6 +15,11 @@ P1 (TASKS Phase 10), all GET and all descriptive "[POST HOC]":
 - `.../bootstrap` (hypothesis or run): SV5 intervals and the SV6 cone (fixed seed, 10,000 replications);
 - `/api/analytics/deflated`: SV3 over every registered hypothesis at 1 tick (SV3a; no bar service, no gate read);
   one trial that cannot be built refuses the whole view (503 naming it);
+- `/api/analytics/power`: SV9, the power of the registered tests (one row per trial of the Deflated Sharpe view, the
+  registry's alpha and k), served from `analytics/power.py`; reads the same cached view as `/deflated`, no price;
+- `/api/analytics/plan`: the pre-registration planner (research_ux.md item 2): bars at the next slot of the family,
+  minimum detectable Sharpe, power, observations needed and the detectable mean per event, from bounded query
+  parameters; reads no data (the registry's family size is its one count), no price, no gate;
 - `/api/analytics/run/{run_id}/excursions`: TA2 over the run's own 1-minute bars through the gate (intraday runs);
 - `/api/analytics/run/{run_id}/trade-paths`: TA4 holding times and TA5 streaks over the whole trade list;
 - `/api/analytics/paper-tracking?file=`: LV5 over a journal's performance rows (plumbing rows never reach it).
@@ -34,6 +39,8 @@ through `cached_hypothesis_bootstrap`, `cached_run_bootstrap` and `cached_deflat
 """
 from __future__ import annotations
 
+import json
+import math
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Iterator, Mapping
@@ -44,7 +51,7 @@ from fastapi import Path as PathParam
 from fastapi.responses import Response
 
 from nq_terminal import constants
-from nq_terminal.analytics import deflated, series, validity
+from nq_terminal.analytics import deflated, power, series, validity
 from nq_terminal.analytics.exposure import BookUnusable, CostError, ExposureError, RunBook
 from nq_terminal.analytics.series import SeriesError, SeriesNotCompoundable, SeriesUnusable, SessionSeries
 from nq_terminal.analytics.tracking import TrackingError
@@ -56,6 +63,7 @@ from nq_terminal.api.runs import run_service_for
 from nq_terminal.models.analytics import Analytics, Context, Freq, HomePanel
 from nq_terminal.models.analytics_p1 import BootstrapView, DeflatedView, ExtendedAnalytics, PaperTracking, RunExcursions
 from nq_terminal.models.common import error_responses
+from nq_terminal.models.power import PeriodsPerYear, PlanView, PowerTable
 from nq_terminal.models.run_views import RunCosts, RunExposure, RunTradePaths, RunTrades
 from nq_terminal.services import (
     journals,
@@ -67,7 +75,13 @@ from nq_terminal.services import (
     tearsheet_trades,
 )
 from nq_terminal.services.bars import BarService, GateRefusal, UnknownSeries
-from nq_terminal.services.research import ResearchDataError, ResearchService, UnknownNameError, service_for_root
+from nq_terminal.services.research import (
+    FAMILY_ALPHA,
+    ResearchDataError,
+    ResearchService,
+    UnknownNameError,
+    service_for_root,
+)
 from nq_terminal.services.runs import RunNotFound, RunService, RunUnreadable
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"], responses=error_responses(403, 404, 422, 503))
@@ -416,3 +430,74 @@ def paper_tracking(
         raise HTTPException(status_code=404, detail=journals.NO_JOURNAL)
     with _http_errors():
         return tearsheet_trades.paper_tracking_view(monitor, file)
+
+
+# ---------------------------------------------------------------- SV9 served and the pre-registration planner
+
+MIN_PLAN_N, MAX_PLAN_N = 2, 100_000
+MIN_PLAN_YEARS, MAX_PLAN_YEARS = 0.5, 100.0
+MAX_PLAN_K = 1000
+MIN_PLAN_ALPHA, MAX_PLAN_ALPHA = 0.001, 0.25
+MAX_PLAN_SHARPE = 5.0
+MIN_EVENT_SD, MAX_EVENT_SD = 0.01, 10_000.0
+YEARS_ROUNDING = 9  # years x periods is a whole number of observations up to float noise
+REGISTRY_UNAVAILABLE = "the registry could not be read"
+
+
+def registry_family_k(state: Any) -> tuple[int | None, str | None]:
+    """The registry's family size k, the registered hypotheses with a p value (what `/api/multiple-testing` calls k),
+    and None with the reason when the registry cannot be read. The one count the planner reads."""
+    try:
+        rows = service_for_root(state.settings.data_root).registry_rows()
+    except (ResearchDataError, OSError):
+        return None, REGISTRY_UNAVAILABLE
+    return sum(1 for row in rows if row.registered and row.p is not None), None
+
+
+@router.get("/power", response_model=PowerTable)
+def power_of_the_registered_tests(request: Request) -> PowerTable:
+    """SV9, served: the smallest annual Sharpe each registered test can detect with power 0.8, at the family alpha and
+    at alpha / k, and its power at the reference Sharpe 0.5. One row per trial of the Deflated Sharpe view (the same
+    cached view, so no price is read); best case, normal and independent returns, never a verdict."""
+    rows = json.loads(cached_deflated(request.app.state))["rows"]
+    k, note = registry_family_k(request.app.state)
+    if k is None:
+        raise HTTPException(status_code=503, detail=f"the power table needs the registry's k: {note}")
+    return PowerTable.model_validate(power.power_table(rows, FAMILY_ALPHA, k))
+
+
+def _planned_n(n: int | None, years: float | None, periods: int) -> int:
+    """The observations of the design: `n` as given, or `years` at `periods` a year rounded up to a whole one. Exactly
+    one of the two must be given."""
+    if (n is None) == (years is None):
+        raise HTTPException(status_code=422, detail="give the book as n (observations) or as years, not both and not neither")
+    if n is not None:
+        return n
+    return math.ceil(round(years * periods, YEARS_ROUNDING))
+
+
+@router.get("/plan", response_model=PlanView)
+def preregistration_plan(
+    request: Request,
+    periods: PeriodsPerYear = Query(PeriodsPerYear.SESSIONS, description="observations a year: 252 sessions, 52 weeks, 12 months or 4 quarters"),
+    n: int | None = Query(None, ge=MIN_PLAN_N, le=MAX_PLAN_N, description="planned observations (events for an event design)"),
+    years: float | None = Query(None, ge=MIN_PLAN_YEARS, le=MAX_PLAN_YEARS, description="planned years, instead of n"),
+    k: int | None = Query(None, ge=0, le=MAX_PLAN_K, description="a typed family size: tests already in the family"),
+    alpha: float = Query(FAMILY_ALPHA, ge=MIN_PLAN_ALPHA, le=MAX_PLAN_ALPHA, description="one-sided single-test alpha"),
+    sharpe: float | None = Query(None, ge=0.0, le=MAX_PLAN_SHARPE, description="a typed annual Sharpe to read power at"),
+    event_sd: float | None = Query(None, ge=MIN_EVENT_SD, le=MAX_EVENT_SD, description="standard deviation per event"),
+) -> PlanView:
+    """The pre-registration plan of a design, from query parameters only: the Bonferroni and Holm bars at the next
+    slot of the family (the registry's size and a typed one), the minimum detectable annual Sharpe at alpha and at the
+    slot's bar for power 0.8, power at the reference Sharpe 0.5 and at a typed Sharpe, the observations needed for
+    power 0.8, and, given an event standard deviation, the detectable mean per event. Reads no data and no price; best
+    case, normal and independent returns (SV9)."""
+    periods = int(periods)
+    planned = _planned_n(n, years, periods)
+    registry_k, note = registry_family_k(request.app.state)
+    try:
+        body = power.plan(periods=periods, n=planned, alpha=alpha, k_registry=registry_k, k_typed=k, sharpe=sharpe,
+                          event_sd=event_sd)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PlanView.model_validate({**body, "family_k_registry": registry_k, "registry_note": note})

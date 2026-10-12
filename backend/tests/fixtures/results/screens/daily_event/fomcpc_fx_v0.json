@@ -1,0 +1,20 @@
+{
+ "headline": {
+  "n": 12,
+  "mean_bp": -6.039226000000002,
+  "sd_bp": 38.95741412098622,
+  "events_per_year": {
+   "2012": 9,
+   "2013": 3
+  }
+ },
+ "secondaries": {
+  "S12_costs": {
+   "net_0tick_bp": -3.039226000000001
+  }
+ },
+ "P4_2tick": {
+  "mean_bp": -9.039226000000001
+ },
+ "synthetic": true
+}

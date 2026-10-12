@@ -317,6 +317,19 @@ def _month_end_sessions(source: SeriesSource, frame: pd.DataFrame) -> pd.Series:
     return stamps.dt.tz_localize("UTC")
 
 
+def _kept_rows(source: SeriesSource, frame: pd.DataFrame) -> pd.DataFrame:
+    """The rows where every `keep_where` column holds its value (a flag column must be True or False; None means an
+    empty cell). No row left is an error, never an empty series."""
+    keep = pd.Series(True, index=frame.index)
+    for column, wanted in source.keep_where.items():
+        if isinstance(wanted, bool) and not pd.api.types.is_bool_dtype(frame[column]):
+            raise ResearchDataError(f"{source.file}: the {column} column is not True or False")
+        keep &= frame[column].isna() if wanted is None else frame[column] == wanted
+    if not keep.any():
+        raise ResearchDataError(f"{source.file}: no row holds {dict(source.keep_where)}")
+    return frame.loc[keep]
+
+
 def series_stamps(source: SeriesSource, frame: pd.DataFrame) -> pd.Series:
     """The UTC time of each series row under the source's time rule (`constants.SeriesSource`)."""
     if source.time_rule == MONTH_END_SESSION:
@@ -605,7 +618,7 @@ class ResearchService:
         portfolio source gets its value and benchmark computed into those two columns (`portfolio_columns`)."""
         raw = self._series_file(name, source)
         value, bench = source.values[cost], source.bench.get(cost)
-        extra = [c for c in (source.guard_column, source.void_column) if c]
+        extra = [c for c in (source.guard_column, source.void_column, *source.keep_where) if c]
         wanted = [source.time_column, *extra, *source.columns(list(raw.columns), cost)]
         if source.portfolio is None:
             wanted = [source.time_column, value, *([bench] if bench else []), *extra]
@@ -618,6 +631,8 @@ class ResearchService:
             if not pd.api.types.is_bool_dtype(void):
                 raise ResearchDataError(f"{source.file}: the {source.void_column} column is not True or False")
             frame = frame.loc[~void]
+        if source.keep_where:
+            frame = _kept_rows(source, frame)
         if source.portfolio is not None:
             frame = portfolio_columns(source, frame, value, bench)
         return frame, value, bench

@@ -27,7 +27,7 @@ type CategoryKey = keyof typeof RELATED.categories
  */
 const CATEGORY_CODES: ReadonlyArray<readonly [CategoryKey, readonly MnemonicCode[]]> = [
   ['prices', ['GP', 'GIP', 'MON', 'CORR', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ']],
-  ['research', ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL']],
+  ['research', ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL', 'PLAN']],
   ['runs', ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO', 'JOBS']],
   ['live', ['LIVE', 'JRNL', 'OOS']],
   ['terminal', ['HOME', 'HELP']],

@@ -1,0 +1,12 @@
+{
+ "headline": {
+  "n": 10,
+  "mean_bp": -48.501,
+  "sd_bp": 118.21471946796173
+ },
+ "cost_ladder_mean_bp": {
+  "0_tick": -45.501,
+  "2_tick": -51.50099999999999
+ },
+ "synthetic": true
+}

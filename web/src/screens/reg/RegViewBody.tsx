@@ -1,9 +1,9 @@
 // REG's sub views (look spec 7.2, roadmap #5): the data each one needs, and the switch that draws it.
 // RegViewBody's props carry everything the four views need (the effect map reads the same rows and SV3's
-// deflated view), and useEvidenceData reads the family (alpha, k) from the same cache RegScreen already
-// fills, so RegScreen itself needs no change when a view is added.
+// deflated view), and useEvidenceData reads the served power table (GET /api/analytics/power) for the evidence view
+// alone, so RegScreen itself needs no change when a view is added.
 import { useMemo, type ReactNode } from 'react'
-import { useDeflated, useMultipleTesting } from '../../api/queries'
+import { useDeflated } from '../../api/queries'
 import type { Schemas } from '../../api/types'
 import { COST_BOARD, EVIDENCE_MAP } from '../../copy/evidence'
 import { fillCopy } from '../../copy/workspace'
@@ -16,6 +16,7 @@ import { needsDetails, type RegView } from './regViews'
 import RegEvidence from './RegEvidence'
 import type { RegRow } from './regModel'
 import { useHypothesisDetails, type HypothesisDetails } from './useHypothesisDetails'
+import { usePowerTable } from './usePowerTable'
 
 export interface EvidenceDataInput {
   /** Every registry row, the served order: the fan-out for useHypothesisDetails is stable and never
@@ -36,20 +37,18 @@ export interface EvidenceData {
 
 /** Fans out useHypothesisDetails only while a view needs it, on every registered name (so the fan-out
  *  stays stable as the filters change), and builds the evidence rows only for the evidence view
- *  itself, on the filtered `shown` rows. The evidence rows' power cells need the registered family
- *  (alpha and k): it is read here from the multiple-testing query RegScreen already holds (the same
- *  cache entry, so no second request), and stays null, with the cells empty, until it arrives. */
+ *  itself, on the filtered `shown` rows. The evidence rows' power cells are the served SV9 table's
+ *  (GET /api/analytics/power, at the registered alpha and k): it is asked for here, once the Deflated
+ *  Sharpe view it comes from has arrived and only while the evidence view is open (the same query key
+ *  as MT's power panel), and stays null, with the cells empty, until it arrives. */
 export function useEvidenceData(view: RegView, input: EvidenceDataInput): EvidenceData {
   const names = useMemo(() => (input.rows ?? []).map((r) => r.name), [input.rows])
   const details = useHypothesisDetails(names, needsDetails(view))
-  const mt = useMultipleTesting()
-  const alpha = mt.data?.alpha
-  const k = mt.data?.k
-  const family = useMemo(() => (alpha === undefined || k === undefined ? null : { alpha, k }), [alpha, k])
+  const power = usePowerTable(input.deflated, view === 'evidence').data ?? null
   const evidence = useMemo(() => {
     if (view !== 'evidence') return null
-    return buildEvidenceRows({ rows: input.shown, cards: input.cards ?? [], confirmations: input.confirmations ?? [], deflated: input.deflated, details, family })
-  }, [view, input.shown, input.cards, input.confirmations, input.deflated, details, family])
+    return buildEvidenceRows({ rows: input.shown, cards: input.cards ?? [], confirmations: input.confirmations ?? [], deflated: input.deflated, details, power })
+  }, [view, input.shown, input.cards, input.confirmations, input.deflated, details, power])
   return { details, evidence }
 }
 

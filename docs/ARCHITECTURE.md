@@ -60,7 +60,7 @@ nq-lab/terminal/
       test_*.py
   qa/                        separate uv project (U2): reference cross-checks, never imported by the backend
     pyproject.toml, uv.lock, crosscheck/*.py, tests/
-    golden/                  p12_power, p12_expectation, p12_neff and p2_neff_served JSON: the reference values the browser-side power formula is pinned to and the backend mirrors of the effective-number and expectation estimators are tested against (p2_neff_served is written by backend/tests/test_p2_neff_bridge.py, rewrite with NQT_UPDATE_NEFF_BRIDGE=1)
+    golden/                  p12_power, p12_expectation, p12_neff and p2_neff_served JSON: the reference values the power formula (served by `analytics/power.py`, kept in the browser as a test reference only) is pinned to and the backend mirrors of the effective-number and expectation estimators are tested against (p2_neff_served is written by backend/tests/test_p2_neff_bridge.py, rewrite with NQT_UPDATE_NEFF_BRIDGE=1)
   web/
     package.json, pnpm-lock.yaml, pnpm-workspace.yaml (engineStrict), .nvmrc, vite.config.ts, tsconfig.json
     playwright.config.ts     the Windows run against the fixture backend (projects chromium and perf)
@@ -83,7 +83,7 @@ nq-lab/terminal/
       screens/               one folder per mnemonic group; screens/layouts holds the default layouts
       commands/              grammar, parser, registry of mnemonics (single source for HELP), HL search index
       state/                 link groups, layouts, named workspaces, the research record watch
-      quant/                 browser-side formulas (normal cdf and quantile, minimum detectable Sharpe and power: the only live code); linalg, cluster, trials and neffReference.ts are test references that no production file imports (importGuard.test.ts), pinned by qa/golden
+      quant/                 browser-side reference formulas, all test references that no production file imports (importGuard.test.ts): normal cdf and quantile, minimum detectable Sharpe and power (power.ts, powerReference.ts), linalg, cluster, trials and neffReference.ts, pinned by qa/golden
       export/                GRAB (panel image), the HTML evidence pack, the print dossier and their dossier model
       demo/                  the demo layer: fetch and EventSource replaced in the page, one handler per contract path, captured and seeded data
       gallery/               the component gallery, built only with `--mode gallery`
@@ -231,6 +231,8 @@ Contract rules (Phase 2 improvement run): every response model derives from `mod
 - `GET /api/ib/snapshot` -> `IbSnapshot{state:"ok"|"disabled"|"unavailable"|"refused", message, read_only, order_path:"none", client_id:95, accounts_masked[], server_time_utc, fetched_at_utc, cached, age_s, cache_seconds, incomplete[], truncated, notes[], summary[], positions[], open_orders[], executions[]}`. Always 200. Opt-in by `NQT_IB_READONLY=1`; one TWS read is cached 5 s; account ids are masked.
 - `GET /api/analytics/spa` -> `SpaView` (SV8): the SPA, the Reality Check and StepM over the registered NQ family, with the members' differential correlation and, on both rows, the effective number of members (`effective_members`, `analytics/neff.py`).
 - `GET /api/analytics/deflated` -> `DeflatedView` (SV3), which also carries SV3b as `effective_n` (`EffectiveNView`: the common window, correlation, eigenvalues, participation ratio, Li and Ji count, clusters, N total, SR0 and DSR under each N, or a refusal), built from the very trials SV3 is computed from.
+- `GET /api/analytics/power` -> `PowerTable` (SV9): per Deflated Sharpe row the minimum detectable annual Sharpe at alpha and at alpha / k for power 0.8, and the power at the reference Sharpe 0.5; best case, one sided, [POST HOC]. `GET /api/analytics/plan?periods=&n=|years=&k=&alpha=&sharpe=&event_sd=` -> `PlanView`: the same maths for a typed design, with the Bonferroni and Holm bars at the next slot of the registry family (k + 1) and of a typed one; every parameter is bounded and 365 periods a year is refused. Neither reads a price.
+- `GET /api/dq/universe` -> `DqUniverse`: for every futures root with a repair record, per year 2010 to 2021 the usable share of NYSE sessions for the vendor and, where a repair passed, the repaired 1m bars, the first and last bar (the last clipped at the fence), the 1d row and the known blocks; records only.
 - `GET /api/analytics/paper-expectation?file=` -> `PaperExpectation` (LV6, LV6b): the paper and model cumulative P&L as a fraction of K placed on the backtest-start cone (`backtest`) and on the live-start cone resampled from the paper book's own sessions (`live`), or a refusal code; no gate read, the backtest cone is cached per series. 404 for a journal that is not known, 503 for a source that cannot be read.
 - `GET /api/analytics/hypothesis/{name}/risk-extras?cost=` and `GET /api/analytics/run/{run_id}/risk-extras?freq=` -> `RiskExtras` (RK4, PF11, BR5 of the tear sheet's own series; the ES, ulcer index and recovery factor on RET, Treynor on RR; 422 under four observations).
 - `GET /api/analytics/hypothesis/{name}/trend-regime?cost=` and `GET /api/analytics/run/{run_id}/trend-regime` -> `TrendRegimeView` (RG2; a run only at the daily frequency).
@@ -241,7 +243,7 @@ Contract discipline: pytest dumps `app.openapi()` and compares it with `contract
 
 ### 4.1 Endpoint index
 
-Every path of `contract/openapi.json` (84; 80 are GET only, `/api/jobs`, `/api/jobs/{job_id}` and `/api/workspaces/{doc}` also carry the POST, the DELETE and the PUT, and `/api/jobs/actions` is a POST alone), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers the 83 that have a GET (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
+Every path of `contract/openapi.json` (87; 83 are GET only, `/api/jobs`, `/api/jobs/{job_id}` and `/api/workspaces/{doc}` also carry the POST, the DELETE and the PUT, and `/api/jobs/actions` is a POST alone), grouped by domain, with the screens whose code reads it. The consumers come from a search of the `useApiQuery` sites and the hooks in `web/src/api/queries.ts` and `queries.screens.ts`, so they are best effort: a view that reads a path through a shared hook can be missed, and `no screen yet` means a hook exists and no screen calls it. The demo answers the 86 that have a GET (`web/src/demo/routes.ts`); a path it holds no capture for answers "not in the demo dataset". `web/scripts/docsSync.test.ts` fails when this list and the contract differ, so update it in the same change as the contract.
 
 <!-- endpoint-index:start -->
 **System**
@@ -272,6 +274,8 @@ Every path of `contract/openapi.json` (84; 80 are GET only, `/api/jobs`, `/api/j
 
 **Analytics**
 - `GET /api/analytics/deflated`: MT 85) Family and 87) Effective trials, REG (DSR column, 92) Evidence, 94) Effect map), DES profile
+- `GET /api/analytics/power`: MT 85) Family power panel, REG 92) Evidence (the served SV9 table)
+- `GET /api/analytics/plan`: PLAN (the pre-registration planner; query parameters only, no data read)
 - `GET /api/analytics/hypothesis/{name}`: the tear sheet (EQ, DD, RET, RR, MRET), DES equity and 5) Robustness
 - `GET /api/analytics/hypothesis/{name}/bootstrap`: the tear sheet (Sharpe intervals, SV6 cone, SV7 card)
 - `GET /api/analytics/hypothesis/{name}/extended`: the tear sheet (P1 views)
@@ -350,6 +354,7 @@ Every path of `contract/openapi.json` (84; 80 are GET only, `/api/jobs`, `/api/j
 - `GET /api/dq/calendar/{symbol}`: DQ
 - `GET /api/dq/guards`: DQ
 - `GET /api/dq/symbols`: DQ
+- `GET /api/dq/universe`: DQ 87) Universe (roots by years, records only)
 <!-- endpoint-index:end -->
 
 ## 5. OOS gate design

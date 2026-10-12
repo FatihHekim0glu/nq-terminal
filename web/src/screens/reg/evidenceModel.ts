@@ -1,13 +1,13 @@
 // REG's evidence matrix (92) Evidence, look spec 7.2, roadmap #5): every registry row against its
 // recorded evidence, joined from five GETs already on screen (registry, hypotheses, confirmations,
 // SV3's deflated view) plus each row's own hypothesis detail (useHypothesisDetails). Every cell equals
-// the field it names, except the two power cells (powerView, [POST HOC], computed in the browser); there is
+// the field it names, and the two power cells are the served SV9 table's (GET /api/analytics/power, [POST HOC]); there is
 // no score, no rank and no total, so the terminal adds no pass or fail.
 import type { Schemas } from '../../api/types'
 import { toCsv, type CsvValue } from '../../chrome/exportCsv'
 import { EVIDENCE } from '../../copy/evidence'
 import { verdictBadge, type DesExtract } from '../des/desModel'
-import { powerView, type PowerFamily } from './powerModel'
+import type { PowerView } from './powerModel'
 import type { HypothesisDetails } from './useHypothesisDetails'
 import type { Badge, RegRow, RowTag } from './regModel'
 
@@ -51,9 +51,9 @@ export interface EvidenceRow {
   readonly years: number | null
   readonly dsr: number | null
   /** The smallest annual Sharpe a one-sided test at alpha / k detects with 80% power on this trial's
-   *  track, and the served Sharpe over it (powerView; [POST HOC], approximate, computed in the browser).
-   *  null when the name is not an SV3a trial, or the family (alpha, k) is not known yet. Optional so a
-   *  row built before the family is read (and older fixtures) stay valid. */
+   *  track, and the served Sharpe over it (the served power table; [POST HOC], approximate, best case).
+   *  null when the name is not a row of that table, or the table has not arrived yet. Optional so a
+   *  row built before the table is read (and older fixtures) stay valid. */
   readonly mdeFamily?: number | null
   readonly mdeRatio?: number | null
   readonly detail: 'ok' | 'pending' | 'failed'
@@ -66,17 +66,17 @@ export interface BuildEvidenceInput {
   readonly confirmations: readonly Schemas['Confirmation'][]
   readonly deflated: Schemas['DeflatedView'] | undefined
   readonly details: HypothesisDetails
-  /** The registered family (alpha and k, GET /api/multiple-testing); without it the power cells are null. */
-  readonly family?: PowerFamily | null
+  /** The served power table (GET /api/analytics/power, at the registered alpha and k); without it the power cells are null. */
+  readonly power?: PowerView | null
 }
 
 /** REG's evidence rows, in the served registry order (the same order 91) Board shows; W8's effect
  *  map reuses it for its marks). No score, rank or total column exists anywhere on this row. */
 export function buildEvidenceRows(input: BuildEvidenceInput): EvidenceRow[] {
-  const { rows, cards, confirmations, deflated, details, family } = input
+  const { rows, cards, confirmations, deflated, details, power: servedPower } = input
   const byCard = new Map(cards.map((c) => [c.name, c]))
   const byDeflated = new Map((deflated?.rows ?? []).map((r) => [r.name, r]))
-  const byPower = new Map(deflated && family ? powerView(deflated, family).rows.map((r) => [r.name, r]) : [])
+  const byPower = new Map((servedPower?.rows ?? []).map((r) => [r.name, r]))
   return rows.map((row): EvidenceRow => {
     const card = byCard.get(row.name)
     const detailBody = details.byName.get(row.name)

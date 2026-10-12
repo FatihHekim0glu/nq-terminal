@@ -75,3 +75,51 @@ def write_dq_results(root: Path) -> Path:
           _sidecar("ES.V.0", "not_repaired", ES_V2_SESSIONS, ES_WHY, spec_name="repair_futures_v2"))
     _dump(results / "guard_constants.json", {"sha256": guards.fingerprint(), "constants": guards.CONSTANTS})
     return results
+
+
+# ---- the universe matrix (research_ux item 3): two more roots, the QA bounds and the 1d QA -------------------------
+HO_V2_SESSIONS = {
+    "2011-01-03": {"source": "vendor"},
+    "2011-01-04": {"source": "rebuilt", "tier": "H", "flags": ["c2"]},
+    "2011-01-05": {"source": "candidate_not_repaired", "reason": "RepairError: no trades", "tier": "H"},
+    "2012-01-03": {"source": "vendor"},
+    "2012-01-04": {"source": "rebuilt", "tier": "D"},
+    "2012-01-05": {"source": "candidate_not_repaired", "reason": "RepairError: no trades"},
+    "2012-01-06": {"source": "candidate_not_repaired", "reason": "gate after repair: opening range bar missing"},
+    "2022-01-03": {"source": "rebuilt", "tier": "H"},
+}
+ZT_WHY = "validation FAIL: on both broken test days the trade prints reproduce the vendor bars"
+ZT_SESSIONS = {
+    "2012-01-03": {"source": "vendor"},
+    "2012-01-04": {"source": "candidate_not_repaired", "reason": "symbol not repaired: v1"},
+    "2013-01-02": {"source": "candidate_not_repaired", "reason": "symbol not repaired: v1"},
+    "2022-01-04": {"source": "candidate_not_repaired", "reason": "symbol not repaired: v1"},
+}
+NQ_QA_FIRST, NQ_QA_LAST = "2010-09-29 00:01:00+00:00", "2026-09-24 23:59:00+00:00"
+FUTURES_QA_BOUNDS = {"GC": ("2010-09-30 00:00:00+00:00", "2021-12-31 21:59:00+00:00"),
+                     "ES": ("2010-09-30 00:00:00+00:00", "2021-12-30 21:59:00+00:00"),
+                     "HO": ("2010-09-30 00:00:00+00:00", "2026-03-02 21:59:00+00:00"),
+                     "ZT": ("2010-09-30 00:08:00+00:00", "2021-12-31 19:19:00+00:00")}
+CARRY_BARS = {"NQ": {"rows": 2914, "first": "2010-09-07", "last": "2021-12-31", "rows_at_or_after_fence": 0,
+                     "missing_nyse_sessions_from_2010_10": 6},
+              "GC": {"rows": 2900, "first": "2010-09-30", "last": "2022-03-01", "rows_at_or_after_fence": 40,
+                     "missing_nyse_sessions_from_2010_10": None},
+              "ES": {"rows": 2896, "first": "2010-09-30", "last": "2021-12-31", "rows_at_or_after_fence": 0,
+                     "missing_nyse_sessions_from_2010_10": 6}}
+
+
+def write_universe_results(root: Path) -> Path:
+    """`write_dq_results` plus HO (v2, repaired) and ZT (v1, not repaired) with a planted 2022 session each, the QA
+    bounds of every root (NQ and HO run past the fence) and the 1d QA of NQ, GC and ES (HO and ZT have none)."""
+    results = write_dq_results(root)
+    _dump(results / "repair_provenance_futures_v2" / "HO.V.0.json",
+          _sidecar("HO.V.0", "repaired", HO_V2_SESSIONS, None, spec_name="repair_futures_v2"))
+    _dump(results / "repair_provenance_futures" / "ZT.V.0.json", _sidecar("ZT.V.0", "not_repaired", ZT_SESSIONS, ZT_WHY))
+    years = json.loads((results / "qa_report.json").read_text(encoding="utf-8"))["years"]
+    _dump(results / "qa_report.json", {"symbol": "NQ.V.0", "first_ts": NQ_QA_FIRST, "last_ts": NQ_QA_LAST,
+                                       "rows": 4804424, "years": years})
+    qa = {root_: {"symbol": f"{root_}.V.0", "first_ts": first, "last_ts": last, "years": {}}
+          for root_, (first, last) in FUTURES_QA_BOUNDS.items()}
+    _dump(results / "qa_report_futures_1m.json", {"symbols": qa})
+    _dump(results / "qa_report_carry_1d.json", {"roots": {r: {"bars": {"0": bars}} for r, bars in CARRY_BARS.items()}})
+    return results

@@ -1,0 +1,30 @@
+{
+ "name": "tsydemfx_v0",
+ "synthetic_fixture": true,
+ "serve": {
+  "serves": [
+   {
+    "symbol": "SYN.V.0",
+    "timeframe": "1d",
+    "end": "2022-01-01 00:00:00+00:00"
+   }
+  ]
+ },
+ "facts": {
+  "first_label": "2011-01",
+  "last_label": "2012-02"
+ },
+ "headline": {
+  "n": 14,
+  "mean": 0.012932834285714286,
+  "sd": 0.026998967722593144,
+  "sharpe_ann": 1.6593468534710651,
+  "fee_only_mean": 0.013532834285714283
+ },
+ "P3": {
+  "mean": 0.012332834285714286
+ },
+ "controls_mean": {
+  "LO": 0.0023105128571428595
+ }
+}

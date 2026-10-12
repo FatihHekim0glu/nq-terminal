@@ -1,0 +1,31 @@
+{
+ "name": "tsyauction_mid_v0",
+ "synthetic_fixture": true,
+ "serve": {
+  "serves": [
+   {
+    "symbol": "SYN.V.0",
+    "timeframe": "1d",
+    "end": "2022-01-01 00:00:00+00:00"
+   }
+  ]
+ },
+ "facts": {
+  "first_label": "2011-01",
+  "last_label": "2012-02"
+ },
+ "headline": {
+  "n": 14,
+  "mean_pct": 0.826223,
+  "sd_pct": 2.3686853490662445,
+  "sharpe": 1.2083160095080727
+ },
+ "cost_ladder_mean_pct": {
+  "0_tick": 0.8862230000000001,
+  "2_tick": 0.766223
+ },
+ "control": {
+  "a": 0.008654628043101922,
+  "b": 0.031933980243958826
+ }
+}

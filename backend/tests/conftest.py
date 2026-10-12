@@ -227,6 +227,29 @@ def fresh_session_locks(folder: Path, now: float | None = None, is_alive=None) -
     return found
 
 
+def pytest_configure(config) -> None:
+    config.addinivalue_line("markers", "lab_only: reads the real lab tree under results/screens; skipped unless -m lab_only selects it")
+
+
+def lab_only_selected(markexpr: str | None) -> bool:
+    """True when the `-m` expression selects `lab_only` (not when it only names it, as `not lab_only` does)."""
+    if not markexpr:
+        return False
+    from _pytest.mark.expression import Expression
+
+    return Expression.compile(markexpr).evaluate(lambda name, **_: name == "lab_only")
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """Skip every `lab_only` item unless `-m` selects it: a marker alone skips nothing, so a plain run is synthetic-only."""
+    if lab_only_selected(config.getoption("markexpr", default="")):
+        return
+    skip = pytest.mark.skip(reason="reads the real lab tree; run with -m lab_only")
+    for item in items:
+        if item.get_closest_marker("lab_only"):
+            item.add_marker(skip)
+
+
 def pytest_sessionstart(session):
     if hasattr(session.config, "workerinput"):
         return  # an xdist worker: the controller process holds the session's lock

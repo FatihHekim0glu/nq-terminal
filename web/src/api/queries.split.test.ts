@@ -42,7 +42,7 @@ describe('queries.ts: the shell hooks', () => {
 describe('queries.screens.ts: the screens hooks', () => {
   it('holds every screen hook the shell does not, and none of the shell ones', () => {
     const hooks = Object.keys(screens).filter((name) => /^use[A-Z]/.test(name))
-    expect(hooks).toHaveLength(38)
+    expect(hooks).toHaveLength(39)
     for (const name of SHELL_HOOKS) expect(hooks, name).not.toContain(name)
     expect(hooks).toEqual(expect.arrayContaining(['useBars', 'useRunEquity', 'useLiveJournal', 'useLivePerformance', 'useSeasonality', 'useDqGuards', 'useSpa', 'useTermStructure']))
   })

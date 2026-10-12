@@ -7,6 +7,7 @@ import { buildApiUrl } from '../api/client'
 import type { ApiPath, RequestOf, Schemas, SuccessOf } from '../api/types'
 import { findCopyViolations } from '../copy/copyRules'
 import { DEFAULT_WINDOW } from '../screens/mon/model'
+import { INITIAL_DRAFT, parseDraft } from '../screens/plan/planModel'
 import { FENCE_MS, barsQuery, gateRuleText, rangeWindow } from '../screens/gp/model'
 import { RV_WINDOW } from '../screens/gp/useGpData'
 import { PAGE_ROWS } from '../screens/runs/runModel'
@@ -50,9 +51,9 @@ const CONTRACT_PATHS = Object.keys(CONTRACT).sort()
 const READ_PATHS = CONTRACT_PATHS.filter((path) => 'get' in (CONTRACT[path] ?? {}))
 
 describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
-  it('has exactly the 83 readable paths of contract/openapi.json (84 with the write-only launch action), the file gen-api.mjs generates the types from', () => {
-    expect(CONTRACT_PATHS).toHaveLength(84)
-    expect(READ_PATHS).toHaveLength(83)
+  it('has exactly the 86 readable paths of contract/openapi.json (87 with the write-only launch action), the file gen-api.mjs generates the types from', () => {
+    expect(CONTRACT_PATHS).toHaveLength(87)
+    expect(READ_PATHS).toHaveLength(86)
     expect(Object.keys(DEMO_ROUTES).sort()).toEqual(READ_PATHS)
   })
 
@@ -60,7 +61,7 @@ describe('DEMO_ROUTES covers the contract (acceptance A1, A2)', () => {
     const { '/api/health': _dropped, ...rest } = DEMO_ROUTES
     // @ts-expect-error: DemoRoutes needs a handler for every contract path, /api/health included
     const incomplete: DemoRoutes = rest
-    expect(Object.keys(incomplete)).toHaveLength(82)
+    expect(Object.keys(incomplete)).toHaveLength(85)
   })
 })
 
@@ -93,6 +94,26 @@ describe('answerDemo: path templates and error bodies', () => {
     refused(get('/api/runs/stats', { query: { ids: 'nt_dtsmom_v0_fixture_ts1,nope' } }), 404)
     refused(get('/api/qa'), 404)
     refused(get('/api/dq/symbols'), 404)
+    refused(get('/api/dq/universe'), 404)
+  })
+
+  it('serves the SV9 power table and the one captured plan, and refuses any other plan', () => {
+    expect(ok('/api/analytics/power').rows.length).toBe(ok('/api/analytics/deflated').rows.length)
+    const captured = { query: { n: 787, k: 80, sharpe: 1, event_sd: 14.8, periods: 252, alpha: 0.05 } } as const
+    expect(ok('/api/analytics/plan', captured).n).toBe(787)
+    refused(get('/api/analytics/plan', { query: { n: 787, k: 80, sharpe: 1, event_sd: 14.9, periods: 252, alpha: 0.05 } }), 404)
+    refused(get('/api/analytics/plan', { query: { n: 787, k: 80, sharpe: 1, event_sd: 14.8, periods: 252, alpha: 0.1 } }), 404)
+    refused(get('/api/analytics/plan', { query: { n: 787 } }), 404)
+  })
+
+  it('serves the captured plan for the exact query the PLAN screen sends for the round 17 design', () => {
+    const typed = parseDraft({ ...INITIAL_DRAFT, size: '787', k: '80', sharpe: '1', eventSd: '14.8' })
+    expect(typed.query).not.toBeNull()
+    expect(get('/api/analytics/plan', { query: typed.query! }).status).toBe(200)
+    const other = parseDraft({ ...INITIAL_DRAFT, size: '788', k: '80', sharpe: '1', eventSd: '14.8' })
+    refused(get('/api/analytics/plan', { query: other.query! }), 404)
+    const weekly = parseDraft({ ...INITIAL_DRAFT, periods: 52, size: '787', k: '80', sharpe: '1', eventSd: '14.8' })
+    refused(get('/api/analytics/plan', { query: weekly.query! }), 404)
   })
 
   it('answers the live stream path over plain GET with a 503 that names the event source', () => {
@@ -191,7 +212,7 @@ const gp1y = barsQuery('NQ.V.0', '1d', 'vendor', rangeWindow('1Y'))
 // HOME's default layout (GP NQ 1d, MON 27F, EQ volmanaged_v0, REG), the chrome, and each A6 command line's reads.
 const PROBES: readonly Probe[] = [
   ['health', () => get('/api/health'), (h: Schemas['DesktopHealth']) => h.fixture_mode === true && h.fence.is_end === '2022-01-01' && h.port_fixed === false && h.contract === 1],
-  ['commands', () => get('/api/commands'), (c: Schemas['CommandIndex']) => c.universe.includes('27F') && c.mnemonics.length === 30],
+  ['commands', () => get('/api/commands'), (c: Schemas['CommandIndex']) => c.universe.includes('27F') && c.mnemonics.length === 31],
   ['HOME GP bars', () => get('/api/bars', { query: gp1y }), (b: Schemas['Bars']) => b.t.length > 200 && b.symbol === 'NQ.V.0'],
   ['GP catalog', () => get('/api/data/catalog'), (c: Schemas['DataCatalog']) => c.series.some((s) => s.symbol === 'NQ.V.0')],
   ['GP rv', () => get('/api/market/rv', { query: { symbol: 'NQ.V.0', window: RV_WINDOW } }), (r: Schemas['RealisedVolSeries']) => r.rv.length === r.t.length && r.last !== null],

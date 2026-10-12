@@ -25,11 +25,13 @@ from crosscheck.p11_evt import P11_EVT_REFERENCES
 from crosscheck.p11_roll import P11_ROLL_REFERENCES
 from crosscheck.p11_seas import P11_SEAS_REFERENCES
 from crosscheck.p11_vcone import P11_VCONE_REFERENCES
+from crosscheck.p12_sv9 import P12_SV9_REFERENCES
 from crosscheck.p1_reference import P1_REFERENCES
 from crosscheck.p2_regimes_capacity_term import P2_RCT_REFERENCES
 from crosscheck.p2_risk_extras import P2_RISK_REFERENCES
 from crosscheck.p2_spa import P2_SPA_REFERENCES
-from crosscheck.reference import DOCUMENTED, Ref, registry_references, series_references
+from crosscheck.reference import (DOCUMENTED, Ref, registry_completeness_references, registry_completeness_values,
+                                  registry_references, series_references)
 from crosscheck.trade_reference import costs_references, trades_references
 
 
@@ -80,7 +82,9 @@ BUNDLE_REFERENCES = {"trades": trades_references, "costs": costs_references, "ma
                      # Phase 12 (P2): SV8, RK4 with PF11 and BR5, RG2, EX5 and MV6
                      **P2_SPA_REFERENCES, **P2_RISK_REFERENCES, **P2_RCT_REFERENCES,
                      # v2.1: LV6 and LV6b served
-                     **LV6_REFERENCES}
+                     **LV6_REFERENCES,
+                     # W3: every registered row learned or NOT_LEARNABLE, and SV9 served
+                     "registry_completeness": registry_completeness_references, **P12_SV9_REFERENCES}
 
 PASS, FAIL, SKIP, INFO = "PASS", "FAIL", "SKIP", "INFO"
 TOL = 1e-9
@@ -199,11 +203,23 @@ def compare_registry(dump: RegistryDump) -> list[Row]:
     return rows
 
 
+def completeness_values(dump: Bundle) -> dict:
+    """The dump's values with each row's coverage recomputed here from the dumped lists (the same pattern as
+    `cached_values`), so a gap shows whatever the terminal wrote of itself."""
+    ours = {**dump.values.get("ours", {}), **registry_completeness_values(dump.inputs)}
+    return {**dump.values, "ours": ours}
+
+
 def compare_bundle(dump: Bundle) -> list[Row]:
     """TA1 and TA3 (`trades`) or EX1 to EX4 (`costs`) of one run, or a market view (`market`), against the
     raw-input references."""
     rows = []
-    values = cached_values(dump) if dump.kind == "cached" else dump.values
+    if dump.kind == "cached":
+        values = cached_values(dump)
+    elif dump.kind == "registry_completeness":
+        values = completeness_values(dump)
+    else:
+        values = dump.values
     for key, ref in BUNDLE_REFERENCES[dump.kind](dump.inputs).items():
         rows.extend(_rows_for(dump.name, key, ref, values, dump.missing))
     return rows

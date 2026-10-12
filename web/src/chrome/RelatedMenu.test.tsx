@@ -44,17 +44,17 @@ describe('relatedEntries: the functions that accept the panel context', () => {
 
   it('files COST under research and runs, BLK and SEAL under research, EXPO under runs', () => {
     const hypothesis = byCategory({ kind: 'hypothesis', value: 'volmanaged_v0' })
-    expect(hypothesis.research).toEqual(['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL'])
+    expect(hypothesis.research).toEqual(['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL', 'PLAN'])
     expect(hypothesis.runs).toEqual(['RUNS', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'JOBS'])
     const run = byCategory({ kind: 'run', value: 'nt_dtsmom_v0_ts1' })
-    expect(run.research).toEqual(['REG', 'MT', 'COST'])
+    expect(run.research).toEqual(['REG', 'MT', 'COST', 'PLAN'])
     expect(run.runs).toEqual(['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO', 'JOBS'])
   })
 
   it('lists every built function when the panel has no context, P0 first in each category, JOBS under the runs', () => {
     expect(byCategory(null)).toEqual({
       prices: ['GP', 'GIP', 'MON', 'CORR', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ'],
-      research: ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL'],
+      research: ['DES', 'REG', 'MT', 'COST', 'BLK', 'SEAL', 'PLAN'],
       runs: ['RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'LEDG', 'COST', 'EXPO', 'JOBS'],
       live: ['LIVE', 'JRNL', 'OOS'],
       terminal: ['HOME', 'HELP'],

@@ -1,8 +1,9 @@
-// The power table on MT (ANALYTICS_CATALOG SV9): for every registered trial of the served Deflated Sharpe view, the
-// smallest annual Sharpe ratio a one-sided test detects with 80% power (the MDE) at the family alpha and at alpha / k,
-// the served Sharpe over that MDE, and the power at a fixed reference Sharpe of 0.50. [POST HOC], Basis A, computed in
-// the browser by quant/power.ts (pinned to scipy by qa/crosscheck/p12_power.py); nothing here is a served number and
-// none of it is a verdict.
+// The power table on MT and the two power cells of REG 92) Evidence (ANALYTICS_CATALOG SV9): for every registered trial
+// of the served Deflated Sharpe view, the smallest annual Sharpe ratio a one-sided test detects with 80% power (the MDE)
+// at the family alpha and at alpha / k, the served Sharpe over that MDE, and the power at a fixed reference Sharpe of
+// 0.50. [POST HOC], Basis A. The figures are served (GET /api/analytics/power, analytics/power.py; usePowerTable maps
+// the body onto the view below); this module only types and formats them. The browser computation survives as a test
+// reference (quant/powerReference.ts) that no production file imports. None of it is a verdict.
 //
 // The reference Sharpe is deliberately a constant and not the trial's own Sharpe: power at the observed effect is a
 // transform of the p-value and says nothing the p-value does not. A fixed 0.50 asks the useful question instead, how
@@ -10,9 +11,7 @@
 import { POWER } from '../../copy/power'
 import { SPEC } from '../../copy/tiles'
 import { fillCopy } from '../../copy/workspace'
-import { minimumDetectableSharpe, powerAtSharpe, trackYears } from '../../quant/power'
 import { formatNumber } from '../tear/tearFormat'
-import type { DeflatedView } from './deflatedModel'
 
 /** Every figure here is computed by the terminal, so it is always [POST HOC]. */
 export const POWER_TAG = SPEC.postHoc
@@ -71,47 +70,6 @@ const ALPHA_DIGITS = 3
 
 function figure(value: number | null | undefined): Figure {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function familyAlpha(family: PowerFamily): Figure {
-  return Number.isFinite(family.k) && family.k > 0 ? figure(family.alpha / family.k) : null
-}
-
-/** The MDE and power of one trial at one alpha; both null when the alpha is not usable. */
-function atAlpha(row: DeflatedView['rows'][number], alpha: Figure): { readonly mde: Figure; readonly power: Figure } {
-  if (alpha === null) return { mde: null, power: null }
-  return {
-    mde: figure(minimumDetectableSharpe(row.n, row.periods, alpha, POWER_TARGET)),
-    power: figure(powerAtSharpe(REFERENCE_SHARPE, row.n, row.periods, alpha)),
-  }
-}
-
-function ratioOf(sharpe: Figure, mdeFamily: Figure): Figure {
-  return sharpe === null || mdeFamily === null || mdeFamily <= 0 ? null : figure(sharpe / mdeFamily)
-}
-
-/** One PowerRow per registered trial of the served view, in the served order. */
-export function powerView(view: DeflatedView, family: PowerFamily): PowerView {
-  const alphaFamily = familyAlpha(family)
-  const rows = view.rows.map((row): PowerRow => {
-    const nominal = atAlpha(row, figure(family.alpha))
-    const wide = atAlpha(row, alphaFamily)
-    const sharpe = figure(row.annual_sharpe)
-    return {
-      name: row.name,
-      kind: row.kind,
-      periods: row.periods,
-      n: row.n,
-      years: figure(trackYears(row.n, row.periods)),
-      sharpe,
-      mdeNominal: nominal.mde,
-      mdeFamily: wide.mde,
-      ratio: ratioOf(sharpe, wide.mde),
-      powerNominal: nominal.power,
-      powerFamily: wide.power,
-    }
-  })
-  return { tag: POWER_TAG, basis: 'A', family, alphaFamily, rows }
 }
 
 function formatFigure(value: Figure, signed = false): string {
