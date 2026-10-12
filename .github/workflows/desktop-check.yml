@@ -90,6 +90,18 @@ jobs:
           key: cargo-registry-${{ runner.os }}-${{ hashFiles('terminal/desktop/src-tauri/Cargo.lock') }}
           restore-keys: cargo-registry-${{ runner.os }}-
 
+      # Every crate of the lockfile for this host, whatever the set builds. The smoke and measure sets never build the
+      # release-only crates (the tauri plugins), yet their identity_split, smoke_feature_absent and ipc_refusal tests run
+      # cargo tree --offline over the release graph and read those crates' sources, so they passed only when the restored
+      # cache held them; a cold cache failed them ("failed to download tauri-plugin v2.7.1 ... --offline was specified",
+      # run 38168877977). docs/desktop/v04/ci-hygiene.md.
+      - name: Fetch every crate of the lockfile
+        working-directory: terminal/desktop/src-tauri
+        shell: pwsh
+        run: |
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw "cargo fetch exit $LASTEXITCODE" }
+
       # The tests start the fixture backend (tests/fixtures/fake_backend.py, standard library only) with the lab's
       # interpreter. A plain virtual environment under the runner's temp folder stands in; it holds no lab data. The
       # tests also write their run folders under D:\dev (the lab PC's layout) and read crate sources from CARGO_HOME.

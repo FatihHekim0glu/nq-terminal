@@ -80,6 +80,10 @@ export function featureSetProblems(text) {
   if (!/cargo clippy --all-targets --locked @features -- -D warnings/.test(job)) problems.push('no clippy -D warnings over the set')
   if (!/cargo test --locked --no-fail-fast @features -- --exact @skips/.test(job)) problems.push('no cargo test --locked over the set with the skip list')
   if (!/fail-fast: false/.test(job)) problems.push('one failing set would cancel the others (fail-fast)')
+  // The smoke and measure sets' release-graph tests read crates only the release set builds (ci-hygiene, run 38168877977).
+  const fetchAt = job.search(/^ {10}cargo fetch --locked\b/m)
+  const testAt = job.search(/cargo test --locked/)
+  if (fetchAt < 0 || (testAt >= 0 && fetchAt > testAt)) problems.push('the crates of the lockfile are not fetched before the tests, so a cold cache fails the release-graph tests of the smoke and measure sets')
   return problems
 }
 
@@ -315,6 +319,13 @@ test('born failing: the pin test fails on a missing feature set', (t) => {
   assert.ok(featureSetProblems(wrongMeasure).some((p) => p.startsWith('feature set measure')))
   const noClippyGate = text.replace('-- -D warnings', '')
   assert.ok(featureSetProblems(noClippyGate).includes('no clippy -D warnings over the set'))
+  const fetchProblem = (t) => featureSetProblems(t).some((p) => p.startsWith('the crates of the lockfile are not fetched'))
+  const noFetch = text.replace(/^ {10}cargo fetch --locked[^\n]*\n/m, '')
+  assert.notEqual(noFetch, text, 'the plant removed the fetch')
+  assert.ok(fetchProblem(noFetch))
+  const lateFetch = noFetch.replace(/^( {10}cargo test --locked --no-fail-fast[^\n]*\n)/m, '$1          cargo fetch --locked\n')
+  assert.notEqual(lateFetch, noFetch, 'the plant moved the fetch after the tests')
+  assert.ok(fetchProblem(lateFetch))
 })
 
 test('born failing: the skip guard fails on a skip without a reason, a stray skip and a stale name', (t) => {
