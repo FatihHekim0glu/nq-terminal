@@ -18,11 +18,15 @@
   inside the loopback and host checks, so those refusals keep their 403 and 400.
 - `SecurityHeadersMiddleware`: every response gets `X-Frame-Options: DENY`, a CSP with
   `frame-ancestors 'none'` (fonts and scripts are self-hosted), `X-Content-Type-Options: nosniff` and
-  `Referrer-Policy: no-referrer`.
+  `Referrer-Policy: no-referrer`. Outside /api it also sets the page rule (`page_cache_control`, startup.md 7.5): a
+  hashed file under /assets/ answered 200, 206 or 304 is `public, max-age=31536000, immutable`, any other page file
+  `no-cache`; an /api answer keeps the Cache-Control its route set, and a live stream gets `no-store`. This is a
+  header rule inside the existing layer, not a new middleware or mount: the one plain StaticFiles at `/` stays.
 """
 from __future__ import annotations
 
 import ipaddress
+import re
 from typing import Iterable
 
 from starlette.datastructures import Headers
@@ -194,10 +198,45 @@ class SessionMiddleware:
 # A live stream (text/event-stream) is never stored: the framework sends no-cache, which still lets a disk cache or a
 # proxy keep journal rows; no-store replaces it.
 STREAM_CACHE_HEADER = (b"cache-control", b"no-store")
+# The page's files (startup.md 7.5, option a). A Vite build names every file under assets/ by its content
+# (`<name>-<8 base64url characters>.<ext>`), so a name never changes content: those are kept a year, immutable. Every
+# other page file (index.html, `/`, an unhashed or missing file) is revalidated on each load, so a rebuilt page is
+# seen at once. Nothing under /api is touched here.
+ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"
+PAGE_CACHE_CONTROL = "no-cache"
+ASSETS_PREFIX = "/assets/"
+HASHED_ASSET = re.compile(r"/assets/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+")
+CACHEABLE_STATUSES = frozenset({200, 206, 304})
+
+
+def is_hashed_asset(path: str) -> bool:
+    """True for `/assets/<name>-<8 character hash>.<ext>` with no sub-folder and no escaped character."""
+    return HASHED_ASSET.fullmatch(path) is not None
+
+
+def page_cache_control(path: str, status: int) -> bytes | None:
+    """The Cache-Control value for a response outside /api, or None under /api (its routes set their own)."""
+    if _is_api(path):
+        return None
+    if status in CACHEABLE_STATUSES and is_hashed_asset(path):
+        return ASSET_CACHE_CONTROL.encode("latin-1")
+    return PAGE_CACHE_CONTROL.encode("latin-1")
 
 
 def _is_event_stream(headers: list[tuple[bytes, bytes]]) -> bool:
     return any(k.lower() == b"content-type" and v.lower().startswith(b"text/event-stream") for k, v in headers)
+
+
+def _with_headers(message: Message, path: str) -> Message:
+    """The response start with the security headers, a stream's no-store, and the page rule outside /api."""
+    names = {name for name, _ in SECURITY_HEADERS}
+    headers = list(message.get("headers", ()))
+    page = page_cache_control(path, message.get("status", 200))
+    stream = _is_event_stream(headers)
+    drop = names | ({b"cache-control"} if stream or page is not None else set())
+    kept = [(k, v) for k, v in headers if k.lower() not in drop]
+    extra = [STREAM_CACHE_HEADER] if stream else [(b"cache-control", page)] if page is not None else []
+    return {**message, "headers": [*kept, *SECURITY_HEADERS, *extra]}
 
 
 class SecurityHeadersMiddleware:
@@ -208,15 +247,11 @@ class SecurityHeadersMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        names = {name for name, _ in SECURITY_HEADERS}
+        path = scope.get("path", "")
 
         async def send_with_headers(message: Message) -> None:
             if message["type"] == "http.response.start":
-                headers = list(message.get("headers", ()))
-                drop = names | ({b"cache-control"} if _is_event_stream(headers) else set())
-                kept = [(k, v) for k, v in headers if k.lower() not in drop]
-                extra = [STREAM_CACHE_HEADER] if len(drop) > len(names) else []
-                message = {**message, "headers": [*kept, *SECURITY_HEADERS, *extra]}
+                message = _with_headers(message, path)
             await send(message)
 
         await self.app(scope, receive, send_with_headers)
