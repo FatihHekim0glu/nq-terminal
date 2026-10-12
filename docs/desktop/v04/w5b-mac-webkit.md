@@ -37,3 +37,13 @@ Offline WebKit suite: 72 failed, 3 skipped, 118 passed. JavaScriptCore goldens a
 - The 3 skipped tests are the same three as on Windows (the two backend-route checks and the GIP keyboard case).
 - `docs/desktop/ci.md` still describes only the Linux job; the mac-webkit row is not edited here.
 - The frame-time bars have no Mac pass/fail reading. A real figure needs the owner's Mac session.
+
+## Merge into main
+
+Merged as 516a495 (no-ff) onto 96cf573; `docs/desktop/ci.md` gained a mac-webkit section in c690f9c.
+
+Two conflicts, both in the gallery perf specs, where main had moved the frame timing into `web/e2e/support/perfMeasure.ts`. Both were resolved by keeping main's helper and quiet CI retry and adding a `reportOnly` option to `measureWithQuietRetry`: when true, one measurement is taken and logged and the budget check is not applied. `gallery-grids-tiles.spec.ts` and `gallery-linestack.spec.ts` pass `reportOnly: isWebkitOnMac(...)`; the functional checks (frame count, row virtualisation, aria label) still run, `test.slow()` for the 10k grid is kept, and Windows and chromium bars are exactly as on main. A new case in `perfMeasure.test.ts` pins the option.
+
+Local checks: vitest `e2e/support` 3 files, 43 tests passed; tsc on `e2e/tsconfig.json` clean (using the wt-w2a install, read-only).
+
+Hosted runs on c690f9c: ci 38223123877 success, desktop-check 38223123818 success, mac-webkit dispatch 38223126968 success (offline WebKit 190 passed, 3 skipped). The push-triggered mac-webkit run 38223123881 was cancelled by the dispatch (same concurrency group).
