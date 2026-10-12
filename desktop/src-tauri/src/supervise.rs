@@ -25,7 +25,7 @@ pub mod run;
 #[path = "supervise_shell.rs"]
 pub mod shell;
 
-pub use shell::{StaleHook, start};
+pub use shell::{StaleHook, begin};
 
 use crate::link;
 use crate::{crash, writes};
@@ -333,7 +333,7 @@ fn create_launch(
     Ok(process)
 }
 
-/// The backend: the venv launcher with the allow-listed environment.
+/// The backend: the venv launcher with the allow-listed environment; `supervise_create_returned` ends its timing.
 fn create_process(
     spec: &Spec,
     job: &Owned,
@@ -348,7 +348,9 @@ fn create_process(
         cwd: &backend_dir,
         env: env_block(&check::backend_env(std::env::vars_os(), spec)),
     };
-    create_launch(&launch, job, child, in_job_list)
+    let created = create_launch(&launch, job, child, in_job_list);
+    crash::log("supervise_create_returned", json!({}));
+    created
 }
 
 /// A started process: the launcher's handle and pid, and our ends of its pipes (stdout until the reader takes it).
@@ -405,6 +407,7 @@ fn start_process(spec: &Spec) -> Result<Started, Failure> {
     let (stdin_ours, stdin_theirs) = pipe(true)?;
     let (stdout_ours, stdout_theirs) = pipe(false)?;
     let child = [stdin_theirs.raw(), stdout_theirs.raw()];
+    crash::log("supervise_create_process", json!({})); // the job and pipes are made; CreateProcessW is next
     let (process, route) =
         start_in_job(&job, |in_list| create_process(spec, &job, child, in_list))?;
     drop((Owned(process.hThread), stdin_theirs, stdout_theirs));

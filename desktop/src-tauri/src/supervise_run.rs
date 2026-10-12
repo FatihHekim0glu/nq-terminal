@@ -523,6 +523,12 @@ impl Shared {
         self.stopping.load(Ordering::SeqCst)
     }
 
+    /// True while a supervision loop holds this `Shared`.
+    #[allow(dead_code, reason = "read by the tests that include this file")]
+    pub fn looping(&self) -> bool {
+        self.looping.load(Ordering::SeqCst)
+    }
+
     /// The hold for a new loop, or None while one runs.
     fn hold_loop(&self) -> Option<LoopHold<'_>> {
         let free = self
@@ -616,6 +622,25 @@ impl Shared {
     }
 }
 
+/// The hung-page watch's question (crash.rs): does the backend the window is on answer `/api/health` (checked as
+/// every other request, through the ownership check)? False while there is no backend.
+pub fn health_check(shared: Arc<Shared>) -> impl Fn() -> bool + Send + Sync + 'static {
+    move || {
+        let Some(backend) = shared.current() else {
+            return false;
+        };
+        let owner_ok = |pid| backend.owner_ok(pid);
+        let answer = link::with_session(
+            backend.port(),
+            "/api/health",
+            backend.session(),
+            &owner_ok,
+            LINK_TIMEOUT,
+        );
+        answer.is_ok_and(|r| r.status < 500)
+    }
+}
+
 /// Where the backend stands when a retry ends.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AfterRetry {
@@ -643,12 +668,13 @@ fn serve(shared: &Shared, sink: &dyn Sink, backend: Backend) -> Option<Duration>
     let started = Instant::now();
     let backend = Arc::new(backend);
     let attached = matches!(*backend, Backend::Attached(_));
+    shared.set_current(Some(backend.clone()));
+    // Logged once the window has the backend: a sink call made before the window exists waits for it (Handoff).
+    sink.ready(backend.port(), backend.session());
     crash::log(
         "supervise_ready",
         json!({ "port": backend.port(), "attached": attached }),
     );
-    shared.set_current(Some(backend.clone()));
-    sink.ready(backend.port(), backend.session());
     let own_handles = backend.exit_handles();
     let mut handles = own_handles.clone();
     handles.push(shared.stop_event.raw());

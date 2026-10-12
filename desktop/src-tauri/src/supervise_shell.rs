@@ -16,10 +16,10 @@ use crate::link;
 use crate::{Launch, ShellError, crash};
 use serde_json::json;
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
-use tauri::{Manager, Runtime, WebviewWindow};
+use tauri::{AppHandle, Manager, Runtime, WebviewWindow};
 use windows::core::PWSTR;
 
 /// The shell page every refusal and every exit shows; the fragment names the section that explains it.
@@ -101,13 +101,29 @@ fn stopped_evals(code: &str, exit_note: Option<&str>) -> Vec<String> {
     evals
 }
 
-fn eval_exit_note<R: Runtime>(window: &WebviewWindow<R>, script: &str) {
-    if let Err(e) = window.eval(script) {
-        crash::log(
-            "supervise_exit_note_failed",
-            json!({ "error": e.to_string() }),
+/// Evaluates `script` again off this thread while `counter` holds `generation`; a failed eval is logged as `failed`.
+fn eval_again<R: Runtime>(
+    window: &WebviewWindow<R>,
+    counter: &'static AtomicU64,
+    generation: u64,
+    script: String,
+    failed: &'static str,
+) {
+    let window = window.clone();
+    std::thread::spawn(move || {
+        let eval = || {
+            if let Err(e) = window.eval(&script) {
+                crash::log(failed, json!({ "error": e.to_string() }));
+            }
+        };
+        repeat_exit_note(
+            generation,
+            counter,
+            EXIT_NOTE_REPEATS,
+            EXIT_NOTE_PAUSE,
+            eval,
         );
-    }
+    });
 }
 
 impl<R: Runtime> WindowSink<R> {
@@ -125,25 +141,8 @@ impl<R: Runtime> WindowSink<R> {
     fn announce_again(&self, code: &str) {
         let generation = next_exit_generation(&ANNOUNCE_GENERATION);
         let script = announce::announce_again_script(code);
-        let window = self.window.clone();
-        std::thread::spawn(move || {
-            let eval = || {
-                if let Err(e) = window.eval(&script) {
-                    crash::log(
-                        "supervise_announce_failed",
-                        json!({ "error": e.to_string() }),
-                    );
-                }
-            };
-            let counter = &ANNOUNCE_GENERATION;
-            repeat_exit_note(
-                generation,
-                counter,
-                EXIT_NOTE_REPEATS,
-                EXIT_NOTE_PAUSE,
-                eval,
-            );
-        });
+        let log = "supervise_announce_failed";
+        eval_again(&self.window, &ANNOUNCE_GENERATION, generation, script, log);
     }
 
     /// The stopped page's `code` section: the navigation, then `stopped_evals` (the exit code line, if any, then the
@@ -206,18 +205,8 @@ impl<R: Runtime> Sink for WindowSink<R> {
         let generation = next_exit_generation(&EXIT_NOTE_GENERATION);
         let script = check::exit_note_script(exit_code);
         self.show_stopped("exited", Some(&script));
-        let window = self.window.clone();
-        std::thread::spawn(move || {
-            let eval = || eval_exit_note(&window, &script);
-            let counter = &EXIT_NOTE_GENERATION;
-            repeat_exit_note(
-                generation,
-                counter,
-                EXIT_NOTE_REPEATS,
-                EXIT_NOTE_PAUSE,
-                eval,
-            );
-        });
+        let log = "supervise_exit_note_failed";
+        eval_again(&self.window, &EXIT_NOTE_GENERATION, generation, script, log);
     }
 
     /// Off the UI thread (the navigation handler spawned this call): the native question, then the settings write;
@@ -374,8 +363,8 @@ fn install_navigation_check<R: Runtime>(
 /// folder, fixture or not), NQT_STATE_DIR and NQT_JOBS=off always, and the fixture module with NQT_FIXTURE_DIR.
 /// A smoke backend never uses the lab's own state folder and never runs jobs (03 section 8).
 #[cfg(feature = "smoke")]
-fn plan<R: Runtime>(window: &WebviewWindow<R>, launch: &Launch) -> Option<Spec> {
-    let _ = window;
+fn plan<R: Runtime>(app: &AppHandle<R>, launch: &Launch) -> Option<Spec> {
+    let _ = app;
     let s = &launch.smoke;
     let lab = s.lab.clone()?;
     let (dir, config, fixture) = (s.state_dir.clone(), &s.config_dir, s.fixture);
@@ -392,11 +381,9 @@ fn plan<R: Runtime>(window: &WebviewWindow<R>, launch: &Launch) -> Option<Spec> 
 /// fixed module; no test name reaches the environment. The IB names go along only when the owner ticked the
 /// read-only snapshot in the settings.
 #[cfg(not(feature = "smoke"))]
-fn plan<R: Runtime>(window: &WebviewWindow<R>, launch: &Launch) -> Option<Spec> {
+fn plan<R: Runtime>(app: &AppHandle<R>, launch: &Launch) -> Option<Spec> {
     let _ = launch;
-    let options = window
-        .app_handle()
-        .try_state::<crate::window::WindowOptions>()?;
+    let options = app.try_state::<crate::window::WindowOptions>()?;
     let lab = options.lab.clone()?;
     let state_dir = lab.join("terminal").join("state");
     let extra_env = if options.ib_snapshot {
@@ -601,87 +588,199 @@ enum ShutdownKind {
 
 /// The smoke `--attach-url`: a page server with no backend and no handshake (03 section 7.1).
 #[cfg(feature = "smoke")]
-fn page_server<R: Runtime>(
-    window: &WebviewWindow<R>,
-    launch: &Launch,
-) -> Result<Option<Supervisor>, ShellError> {
-    let Some(url) = &launch.smoke.attach_url else {
-        return Ok(None);
-    };
-    let parsed: tauri::Url = url
-        .parse()
-        .map_err(|e| ShellError::Refused(format!("--attach-url: {e}")))?;
-    window.navigate(parsed)?;
-    crash::log("supervise_attach_url", json!({ "url": url }));
-    Ok(Some(Supervisor::new(Some(url.clone()), None)))
+fn page_server(launch: &Launch) -> Option<String> {
+    launch.smoke.attach_url.clone()
 }
 
 #[cfg(not(feature = "smoke"))]
-fn page_server<R: Runtime>(
-    window: &WebviewWindow<R>,
-    launch: &Launch,
-) -> Result<Option<Supervisor>, ShellError> {
-    let _ = (window, launch);
-    Ok(None)
+fn page_server(launch: &Launch) -> Option<String> {
+    let _ = launch;
+    None
 }
 
-/// The hung-page watch's question (crash.rs): does the backend the window is on answer `/api/health` (checked as
-/// every other request, through the ownership check)? False while there is no backend.
-fn health_check(shared: Arc<Shared>) -> impl Fn() -> bool + Send + Sync + 'static {
-    move || {
-        let Some(backend) = shared.current() else {
-            return false;
-        };
-        let owner_ok = |pid| backend.owner_ok(pid);
-        let answer = link::with_session(
-            backend.port(),
-            "/api/health",
-            backend.session(),
-            &owner_ok,
-            run::LINK_TIMEOUT,
-        );
-        answer.is_ok_and(|r| r.status < 500)
-    }
-}
-
-/// Starts or attaches to the backend and sends the window to its page. The attach, the spawn, the handshake and
-/// every restart run on the loop thread, so the splash paints while the backend starts. A lab without the venv
-/// interpreter is refused here, before any thread (tests/setup_refused.rs).
-pub fn start<R: Runtime>(
+/// Loads the page server's address once the window exists.
+fn show_page_server<R: Runtime>(
     window: &WebviewWindow<R>,
-    launch: &Launch,
-    stale: Option<StaleHook>,
+    url: String,
 ) -> Result<Supervisor, ShellError> {
-    if let Some(supervisor) = page_server(window, launch)? {
-        return Ok(supervisor);
+    let parsed: tauri::Url = url
+        .parse()
+        .map_err(|e| ShellError::Refused(format!("page server address: {e}")))?;
+    window.navigate(parsed)?;
+    crash::log("supervise_attach_url", json!({ "url": url }));
+    Ok(Supervisor::new(Some(url), None))
+}
+
+/// Where the loop's calls wait until the window exists (startup.md 7.2): READY, a refusal or an exit made earlier goes
+/// on to the window's sink once `give` hands it over, in the order the loop thread made them. A start that never gets
+/// its window (`abandon`) answers fail closed: nothing shown, no rebuild, Quit. The first `give` or `abandon` counts.
+#[derive(Default)]
+pub struct Handoff {
+    held: Mutex<Held>,
+    settled: Condvar,
+}
+
+#[derive(Default)]
+enum Held {
+    #[default]
+    Waiting,
+    Given(Arc<dyn Sink>),
+    Abandoned,
+}
+
+impl Handoff {
+    pub fn give(&self, sink: Arc<dyn Sink>) {
+        self.settle(Held::Given(sink));
     }
-    let Some(spec) = plan(window, launch) else {
-        crash::log(
-            "supervise_idle",
-            json!({ "note": "no lab is set; the splash stays" }),
-        );
-        return Ok(Supervisor::new(None, None));
+
+    pub fn abandon(&self) {
+        self.settle(Held::Abandoned);
+    }
+
+    fn settle(&self, to: Held) {
+        if let Ok(mut held) = self.held.lock()
+            && matches!(*held, Held::Waiting)
+        {
+            *held = to;
+        }
+        self.settled.notify_all();
+    }
+
+    /// The window's sink, waited for until it is given; None once abandoned.
+    fn sink(&self) -> Option<Arc<dyn Sink>> {
+        let held = self.held.lock().ok()?;
+        let waiting = |h: &mut Held| matches!(h, Held::Waiting);
+        match &*self.settled.wait_while(held, waiting).ok()? {
+            Held::Given(sink) => Some(sink.clone()),
+            _ => None,
+        }
+    }
+
+    fn with(&self, call: impl FnOnce(&dyn Sink)) {
+        if let Some(sink) = self.sink() {
+            call(sink.as_ref());
+        }
+    }
+}
+
+impl Sink for Handoff {
+    fn ready(&self, port: u16, session: &str) {
+        self.with(|s| s.ready(port, session));
+    }
+    fn stopped(&self, code: &str) {
+        self.with(|s| s.stopped(code));
+    }
+    fn exited(&self, exit_code: Option<u32>) {
+        self.with(|s| s.exited(exit_code));
+    }
+    fn gave_up(&self, log: &Path) -> AfterStop {
+        self.sink().map_or(AfterStop::Quit, |s| s.gave_up(log))
+    }
+    fn stale_dist(&self, state: &str) -> bool {
+        self.sink().is_some_and(|s| s.stale_dist(state))
+    }
+    fn reload(&self, uri: &str) {
+        self.with(|s| s.reload(uri));
+    }
+    fn checking(&self) {
+        self.with(|s| s.checking());
+    }
+    fn still_unverified(&self) {
+        self.with(|s| s.still_unverified());
+    }
+    fn ib_switch(&self, on: bool, attached: bool) {
+        self.with(|s| s.ib_switch(on, attached));
+    }
+}
+
+/// The loop on its own thread, its calls held in a handoff; its first line places the time before `supervise_spawned`.
+pub fn start_loop(shared: Arc<Shared>) -> Result<Arc<Handoff>, ShellError> {
+    let handoff = Arc::new(Handoff::default());
+    let sink: Arc<dyn Sink> = handoff.clone();
+    let body = move || {
+        crash::log("supervise_thread_began", json!({}));
+        run::run(shared, sink);
+    };
+    let thread = std::thread::Builder::new().name("nqt-supervise".into());
+    thread
+        .spawn(body)
+        .map_err(|e| ShellError::Io(e.to_string()))?;
+    Ok(handoff)
+}
+
+/// The supervisor before its window exists: None when idle (no lab, or a lab the lab check refused in main.rs).
+#[derive(Default)]
+pub struct Early(Option<Started>);
+
+enum Started {
+    /// Smoke only: a page server, loaded once the window exists.
+    PageServer(String),
+    /// The loop runs; its calls wait in the handoff.
+    Running(Arc<Shared>, Arc<Handoff>),
+}
+
+/// Starts the supervisor before the window is built (startup.md 7.2; 03 section 2.2 step 4): the attach or spawn, the
+/// handshake and the restarts run on the loop thread while WebView2 is built, from the settings alone (window options
+/// or smoke switches). A lab without the venv interpreter is refused here, before any thread.
+pub fn begin<R: Runtime>(app: &AppHandle<R>, launch: &Launch) -> Result<Early, ShellError> {
+    if let Some(url) = page_server(launch) {
+        return Ok(Early(Some(Started::PageServer(url))));
+    }
+    let Some(spec) = plan(app, launch) else {
+        let note = json!({ "note": "no lab is set; the splash stays" });
+        crash::log("supervise_idle", note);
+        return Ok(Early::default());
     };
     if !spec.python().is_file() {
-        let missing = format!("{} has no .venv\\Scripts\\python.exe", spec.lab.display());
+        let missing = format!(r"{} has no .venv\Scripts\python.exe", spec.lab.display());
         return Err(ShellError::Refused(missing));
     }
-    let contract = check::contract_range(window.config().plugins.0.get(CONFIG_KEY));
+    let contract = check::contract_range(app.config().plugins.0.get(CONFIG_KEY));
     let shared = Shared::new(spec.clone(), Expect::for_lab(&spec.lab, contract))?;
-    let pages = retry::pages_base(window.url().ok()).map_err(ShellError::Tauri)?;
-    let sink: Arc<dyn Sink> = Arc::new(WindowSink {
-        window: window.clone(),
-        pages,
-        stale,
-    });
-    install_navigation_check(window, shared.clone(), sink.clone())?;
-    crash::set_health_check(health_check(shared.clone()));
-    let loop_shared = shared.clone();
-    std::thread::Builder::new()
-        .name("nqt-supervise".into())
-        .spawn(move || run::run(loop_shared, sink))
-        .map_err(|e| ShellError::Io(e.to_string()))?;
-    Ok(Supervisor::new(None, Some(shared)))
+    let handoff = start_loop(shared.clone())?;
+    Ok(Early::running(shared, handoff))
+}
+
+impl Early {
+    /// An early start holding a running loop and its handoff.
+    pub fn running(shared: Arc<Shared>, handoff: Arc<Handoff>) -> Self {
+        Self(Some(Started::Running(shared, handoff)))
+    }
+
+    /// The window exists: the navigation check goes in, then the loop's held calls (READY, or a refusal made meanwhile)
+    /// go on to the window's sink. A step that fails drops `self` still holding the loop, which stops it (Drop).
+    pub fn attach<R: Runtime>(
+        mut self,
+        window: &WebviewWindow<R>,
+        stale: Option<StaleHook>,
+    ) -> Result<Supervisor, ShellError> {
+        let (shared, handoff) = match &self.0 {
+            None => return Ok(Supervisor::new(None, None)),
+            Some(Started::PageServer(url)) => return show_page_server(window, url.clone()),
+            Some(Started::Running(shared, handoff)) => (shared.clone(), handoff.clone()),
+        };
+        let pages = retry::pages_base(window.url().ok()).map_err(ShellError::Tauri)?;
+        let sink: Arc<dyn Sink> = Arc::new(WindowSink {
+            window: window.clone(),
+            pages,
+            stale,
+        });
+        install_navigation_check(window, shared.clone(), sink.clone())?;
+        crash::set_health_check(run::health_check(shared.clone()));
+        handoff.give(sink);
+        self.0 = None;
+        Ok(Supervisor::new(None, Some(shared)))
+    }
+}
+
+/// A start that never reached its window: the loop stops and its calls are answered fail closed.
+impl Drop for Early {
+    fn drop(&mut self) {
+        if let Some(Started::Running(shared, handoff)) = &self.0 {
+            shared.stop();
+            handoff.abandon();
+        }
+    }
 }
 
 #[cfg(test)]

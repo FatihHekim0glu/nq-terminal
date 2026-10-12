@@ -127,6 +127,7 @@ export function checkEvidence(records, report, { minRuns = 3, builds = ['smoke',
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'missing') problems.push(`check ${id} has no reading`)
   const unread = idleBreakdownUnread(records)
   if (unread.unread > 0) problems.push(`T4 canvas clause not evaluated: the idle breakdown was not read in ${unread.unread} of ${unread.taken} counted run(s): ${unread.reason}`)
+  problems.push(...spawnOffsetProblems(report.spawnOffset))
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'not-tested') problems.push(`check ${id} is not tested: only a page-level driver hid the view (no engine-level proof)`)
   return problems
 }
@@ -138,7 +139,71 @@ export function overCeiling(report) {
   for (const [id, c] of Object.entries(report.checks)) if (c.verdict === 'over-ceiling') bad.push(`check ${id} is over its ceiling`)
   for (const l of report.soakLeaks ?? []) if (l.verdict === 'fail') bad.push(`soak ${path.basename(l.file ?? '')}: ${l.reason}`)
   if (report.unreproducedRuns > 0) bad.push(`${report.unreproducedRuns} counted run(s) were taken without a reproduction of the W0B figures (UNREPRODUCED)`)
+  for (const p of spawnOffsetFailures(report.spawnOffset)) bad.push(`check spawn_offset: ${p}`)
   return bad
+}
+
+/** The spawn-offset check (startup.md 7.2, wave w4b): milliseconds from the shell's start line to supervise_spawned, read from the
+ *  shell log milestones of each counted G2 launch. A launch over the ceiling fails; the target is the median. */
+export const SPAWN_OFFSET = { label: 'spawn offset (start to supervise_spawned)', ceiling: 150, target: 120, minReadings: 5 }
+const G2_LAUNCH_MODES = ['rows', 'first-launch']
+
+/** The check over a folder's records, per build. Like a row it reads a build's accepted launches if it has any, else its provisional
+ *  ones (label PROVISIONAL), and needs `minRuns` readings of them (the exit criterion is 5 gated launches: --min-runs 5); fewer
+ *  is 'too-few', never within-target. A counted launch whose log has no spawn line (or no milestones at all) is unread (never
+ *  0 ms); a folder with no reading at all is 'missing'. `g2Counted` is the number of counted G2 launch records. */
+export function spawnOffsetCheck(records, { minRuns = 3 } = {}) {
+  const g2 = records.filter((r) => COUNTED.includes(r.status) && G2_LAUNCH_MODES.includes(r.mode))
+  const builds = {}
+  const all = []
+  const overAll = []
+  for (const build of [...new Set(g2.map((r) => r.build ?? '-'))]) {
+    const mine = g2.filter((r) => (r.build ?? '-') === build)
+    const accepted = mine.filter((r) => r.status === 'accepted')
+    const basis = accepted.length ? accepted : mine
+    const read = basis.map((r) => ({ file: r.file ?? null, build: r.build ?? null, ms: r.milestones?.spawnOffsetMs ?? null }))
+    const values = read.filter((x) => typeof x.ms === 'number').map((x) => x.ms)
+    const over = read.filter((x) => typeof x.ms === 'number' && x.ms > SPAWN_OFFSET.ceiling)
+    const medianMs = median(values)
+    const label = values.length === 0 ? 'MISSING' : accepted.length ? (values.length >= minRuns ? 'ACCEPTED' : 'TOO FEW RUNS') : 'PROVISIONAL'
+    const verdict = values.length === 0 ? 'missing' : over.length > 0 ? 'over-ceiling' : values.length < minRuns ? 'too-few' : medianMs <= SPAWN_OFFSET.target ? 'within-target' : 'within-ceiling'
+    builds[build] = { readings: values.length, unread: read.length - values.length, medianMs, worstMs: values.length ? Math.max(...values) : null, over, label, verdict }
+    all.push(...values)
+    overAll.push(...over)
+  }
+  const list = Object.values(builds)
+  const verdicts = list.map((b) => b.verdict)
+  const verdict = all.length === 0 ? 'missing' : verdicts.includes('over-ceiling') ? 'over-ceiling' : verdicts.some((v) => v === 'too-few' || v === 'missing') ? 'too-few' : verdicts.every((v) => v === 'within-target') ? 'within-target' : 'within-ceiling'
+  const label = all.length === 0 ? 'MISSING' : list.every((b) => b.label === 'ACCEPTED') ? 'ACCEPTED' : list.some((b) => b.label === 'TOO FEW RUNS') ? 'TOO FEW RUNS' : 'PROVISIONAL'
+  return { ...SPAWN_OFFSET, minRuns, g2Counted: g2.length, builds, label, readings: all.length, unread: list.reduce((n, b) => n + b.unread, 0), medianMs: median(all), worstMs: all.length ? Math.max(...all) : null, over: overAll, verdict }
+}
+
+/** The problems --check reports for the spawn-offset check: no reading on a folder of counted G2 launches, too few readings, and
+ *  counted launches whose shell log has no spawn line. Nothing for a report without the check or a folder with no G2 launch. */
+export function spawnOffsetProblems(check) {
+  if (!check || !(check.g2Counted > 0)) return []
+  const out = []
+  if (check.verdict === 'missing') out.push(`check spawn_offset has no reading (${check.g2Counted} counted G2 launch(es), none with a supervise_spawned line)`)
+  else if (check.verdict === 'too-few') out.push(`check spawn_offset has too few readings: ${Object.entries(check.builds).filter(([, b]) => b.readings < check.minRuns).map(([k, b]) => `${b.readings} on the ${k} build`).join(', ')}, ${check.minRuns} needed`)
+  if (check.unread > 0) out.push(`check spawn_offset: ${check.unread} of ${check.readings + check.unread} counted launch(es) have no spawn line in the shell log (spawn not read)`)
+  return out
+}
+
+/** One failure line per launch over the ceiling, per build with unread launches, and per build with fewer than minRuns readings;
+ *  none for a report without the check. */
+export function spawnOffsetFailures(check) {
+  const out = (check?.over ?? []).map((x) => `launch ${path.basename(x.file ?? '-')} spawned its backend ${x.ms} ms after start, over the ${check.ceiling} ms ceiling`)
+  for (const [build, b] of Object.entries(check?.builds ?? {})) {
+    if (b.unread > 0) out.push(`the ${build} build has ${b.unread} launch(es) with no spawn reading (shell log or its start/supervise_spawned line missing)`)
+    if (b.readings < (check.minRuns ?? 0)) out.push(`the ${build} build has ${b.readings} spawn reading(s), ${check.minRuns} needed`)
+  }
+  return out
+}
+
+/** The check's line in the printed report. */
+export function spawnOffsetLine(c) {
+  const ms = (v) => (v === null || v === undefined ? '-' : String(round(v, 1)))
+  return `check spawn_offset: ${c.verdict}${c.label ? ` ${c.label}` : ''} (median ${ms(c.medianMs)} ms, worst ${ms(c.worstMs)} ms over ${c.readings} launch(es)${c.unread ? `, ${c.unread} unread` : ''}; target ${c.target}, ceiling ${c.ceiling})`
 }
 
 const INFO = 'informational, not the row'
@@ -201,6 +266,7 @@ export function reportLines(report, records = []) {
   }
   for (const [id, a] of Object.entries(report.agreement)) out.push(`agreement ${id}: smoke ${fmt(a.smoke)} measure ${fmt(a.measure)} -> ${a.agree === null ? 'not both measured' : a.agree ? 'within noise' : 'DISAGREE'}`)
   for (const [id, c] of Object.entries(report.checks)) out.push(`check ${id}: ${c.verdict} (worst ${fmt(c.worstMs)} ms, ceiling ${c.ceiling})`)
+  if (report.spawnOffset) out.push(spawnOffsetLine(report.spawnOffset))
   if (report.unreproducedRuns > 0) out.push(`UNREPRODUCED runs counted: ${report.unreproducedRuns}`)
   out.push(`rejected runs kept: ${report.rejectedKept.length}; reproduction: ${report.reproduction ? (report.reproduction.reproduced ? 'reproduced' : 'NOT reproduced') + (report.reproduction.dry ? ' (dry)' : '') : 'no verdict in this folder'}`)
   return [...out, ...informationalLines(records)]
@@ -215,6 +281,7 @@ if (isMainModule(import.meta.url)) {
   if (!dir || !fs.existsSync(dir)) { console.error('usage: node report.mjs DIR [--min-runs 3] [--json] [--check] [--strict]'); process.exit(2) }
   const records = loadRecords(dir)
   const report = buildReport(records, { minRuns })
+  report.spawnOffset = spawnOffsetCheck(records, { minRuns })
   fs.writeFileSync(path.join(dir, 'report.json'), JSON.stringify(report, null, 1) + '\n', 'utf8')
   if (argv.includes('--json')) console.log(JSON.stringify(report, null, 1)); else printTable(report, records)
   if (argv.includes('--check')) {
