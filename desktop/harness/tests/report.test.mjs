@@ -244,7 +244,7 @@ test('a failed command-line lookup and failed soak breakdown reads each print an
   assert.ok(info(reportLines(buildReport(sk), sk)).some((l) => /soak breakdown not read in 3 samples: timeout/.test(l)))
 })
 
-import { fileURLToPath } from 'node:url'
+// ---- the start-up rows (wave w1, start-rows): informational lines beside the verdicts, never a verdict -------------------------
 import { startRowsOfLogs } from '../lib/startrows.mjs'
 
 const FIXDIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'startrows')
