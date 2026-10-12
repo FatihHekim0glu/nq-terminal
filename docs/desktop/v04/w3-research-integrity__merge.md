@@ -223,6 +223,7 @@ dburst_rev_v1, xfut_tcn120_v0). This section supersedes 2b and the register's co
 | Series tests, the seven `test_series*.py` files with the lab-only cases, `-n 2` (`D:/dev/v04/w3b-wkndshort/green.txt`) | 904 passed, 10 xfailed |
 | `registry_completeness` dump (`qa/.dumps`, read directly) | 59 of 59 registered rows covered: 54 learned, 5 not learnable |
 | `crosscheck --strict` | not run: the worktree has no `qa/.venv` and `uv run` would install one; the lab venv lacks its dependencies |
+| Merged to main at `082ee4d` | series tests 974 passed, 10 xfailed on the merged tree; `crosscheck --strict` PASS 2563, FAIL 0 (OK); hosted runs ci 38209573166 and desktop-check 38209573155 both succeeded |
 
 ### 3. The first-launch A/B with the larger N
 
