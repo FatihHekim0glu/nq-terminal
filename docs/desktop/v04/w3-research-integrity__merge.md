@@ -341,11 +341,59 @@ Born-failing evidence for what the merge added: `qa/tests/test_p12_sv9.py` faile
 
 REG's cold Deflated Sharpe, in process on the lab, no bar service, fresh interpreter, three runs each, interleaved (`D:/dev/v04/w3-research-integrity/rc/cold_deflated_timing.txt`, the machine much quieter than at the merge): 22 rows 1.26 to 1.32 s, 49 rows 2.55 to 2.67 s, of which the series read is 0.74 s against 2.0 s, the view 0.53 to 0.65 s, and scipy.stats is loaded in both. The larger N adds about 1.3 s of backend work, about 0.047 s a row, all in the series read. The later prewarm with 54 rows was not measured because only 49 rows are learned; at the same rate five more rows would add about 0.2 s. These are timings of the backend work, not of HOME ready. (At the merge, with the machine 65 to 80 percent busy, the same two cases read 2.3 to 4.1 s and 4.1 to 4.3 s.)
 
+## Statistics sign-off
+
+The statistics reviewer reviewed the register (full text: `register_review.md`, in the wave's `signoff` folder under `D:/dev/v04/w3-research-integrity`). It covered 37 rows (30 learned, 7 not learnable): 23 SIGNED, 6 SIGNED_WITH_NOTE, 8 REJECTED. The three flagged window starts were confirmed: `hvix_nd_v0` 2010-10-11 and `tsyauct_intra_ml_v0` 2013-01-02 are correct, and `apieia_ho_v0` 2010-10-05 was one session early and immaterial. Every learned row's window ends on or before 2021-12-31 and no row reviewed has a dated row on or after 2022-01-01.
+
+All 8 rejected rows were fixed in `ef6e240` (see section 2b) with the failing tests first. After that commit no row is REJECTED and the learned count is 53 of 59. The 6 notes need no change to the series: `gotobi6j_v0` (registry n counts events, the series has 132 months), `tsyauction_mid_v0` (only `lo1` is anchored to close), `tsydemfx_v0` (`ctl_LO` is gross of cost and labelled so), `cropsmooth_v0` (zero fill starts at the NQ default, 0.05 percent Sharpe effect), `dburst_rev_v1` and `xfut_tcn120_v0` (optional wording only).
+
+| Row | Reviewer verdict | Fix in ef6e240 |
+|---|---|---|
+| airfx_v0 | SIGNED | none |
+| cmax_v0 | SIGNED | none |
+| crushdev_v0 | SIGNED | none |
+| eqvrp_xasset_v0 | SIGNED | none |
+| fxval_ppp_v0 | SIGNED | none |
+| gotobi6j_v0 | SIGNED_WITH_NOTE | none |
+| gvzvrp_pm_v0 | SIGNED | none |
+| hi52_v0 | SIGNED | none |
+| liqbias_v0 | REJECTED | benchmark dropped |
+| metals_eq_ym_v1 | SIGNED | none |
+| oigrowth_v0 | SIGNED | none |
+| rateamp_tsy_v0 | SIGNED | none |
+| stmomturn_v0 | SIGNED | none |
+| termprem_cmdty_v0 | SIGNED | none |
+| tsyauction_mid_v0 | SIGNED_WITH_NOTE | none |
+| tsydemfx_v0 | SIGNED_WITH_NOTE | none |
+| xsbreadth_q_v0 | SIGNED | none |
+| xsintra_w_v0 | SIGNED | none |
+| xsml_m_v0 | SIGNED | none |
+| zqcut_v0 | SIGNED | none |
+| fedflow_tsy_v0 | SIGNED | none |
+| lhrev_letf_v0 | SIGNED | none |
+| tsyauct_intra_ml_v0 | SIGNED | none |
+| cropsmooth_v0 | SIGNED_WITH_NOTE | none |
+| hvix_nd_v0 | SIGNED | none |
+| apieia_ho_v0 | REJECTED | unit per HO contract, window start 2010-10-06 |
+| fomcdrift_tsy_v0 | REJECTED | window start 2011-01-26 |
+| fomcfx_v0 | REJECTED | window start 2010-12-01 |
+| fomcpc_fx_v0 | REJECTED | window start 2011-04-27 |
+| pretra_tsy_v0 | REJECTED | window start 2011-01-03 |
+| cotliq_v0 | SIGNED | none |
+| mpslope_ym_v0 | SIGNED | none |
+| wkndshort_v0 | REJECTED | reason replaced with the reviewer's text |
+| wkndgap_fx_v0 | REJECTED | learned, window start 2011-06-20 |
+| finroll_tff_v0 | SIGNED | none |
+| dburst_rev_v1 | SIGNED_WITH_NOTE | none |
+| xfut_tcn120_v0 | SIGNED_WITH_NOTE | none |
+
+The manager accepts the 64 paths outside every slice owns list (see section 6, Ownership) as wiring and fixtures. Open item 3 below is closed by this sign-off.
+
 ## Open items
 
 1. **(Closed in release fix 3, provisional readings.) The first-launch A/B was not run, so that exit criterion was open.** It needs the base arm `D:/dev/ablab033`, whose terminal is a detached worktree at `desktop-v0.3.3` that the manager creates (a git write that `ensure-ablab.ps1` refuses to make; the tag `desktop-v0.3.3` is not in this repository yet); neither it nor `D:/dev/ablabw3` exists. The candidate arm is `ensure-ablab.ps1 -Name w3 -TerminalJunction E:/projects/nq-lab/wt-w3` (the worktree's `web/dist` is built). `ab.mjs launch` has no size flag (it passes `opts.size` to `shellSpec`, but nothing on its command line sets it), so a run at 2400 x 1350 needs that option added; at its default the wide REG panel may not mount. Three interleaved first launches per arm, hidden, under the HEAVY slot, with start and end lines appended to `D:/dev/v04/measure/w3-research-integrity/windows.jsonl`. The timings above say the larger N adds about 1.3 s of backend work inside the first launch if REG asks for the Deflated Sharpe there, so the decision rule (HOME ready on the candidate not above the base arm's slowest accepted launch, else move the request behind an idle callback in `RegScreen.tsx` after HOME's panels have answered, and repeat once) should be applied by whoever runs it. `RegScreen.tsx` was not changed.
 2. **(Moved in release fix 3: 52 of 59, see that section.) Rows learned: 49 of 59, against a goal of up to 54.** Every registered row is learned or listed NOT_LEARNABLE with a reason (59 of 59 under `--strict`). The ten not learnable: the five weekly and quarterly rows outside convention C2, `airfx_v0`, `hvix_nd_v0`, `apieia_ho_v0` (these three need a keep-column field on `SeriesSource`: rows kept where a named column holds a named value), `dburst_rev_v1` and `xfut_tcn120_v0`. The field lives in `constants.py`, where the merge may change only `MNEMONICS`, and each mapping needs the statistics reviewer. With it 52 of 59 would be learned.
-3. **(Still open in release fix 3.) No statistics-reviewer sign-off.** The mappings (name, time rule, unit, void handling, anchor) are in the slice notes with their judgement calls flagged; the reviewers named in the wave's QA are separate agents. The tsyauct window start (2013-01-02) is written into `daily_event.py`, because the screen records no first test session; only the headline Sharpe anchor (1e-4) pins it, and the reviewer should confirm it.
+3. **(Closed by the statistics sign-off section above.) No statistics-reviewer sign-off.** The mappings (name, time rule, unit, void handling, anchor) are in the slice notes with their judgement calls flagged; the reviewers named in the wave's QA are separate agents. The tsyauct window start (2013-01-02) is written into `daily_event.py`, because the screen records no first test session; only the headline Sharpe anchor (1e-4) pins it, and the reviewer should confirm it.
 4. **Other series sources with a sample that starts later than their served window are not audited** beyond the two the daily_event fixer found; the count guard (`RECORDED_COUNTS`) catches a served length that differs from the screen's recorded n, but not a window that is long and zero-filled with n unrecorded.
 5. **The web install on this machine broke twice, and a pnpm run through the junction caused the second break.** At about 15:54 BST on 11 October the main tree's `web/node_modules` lost every top-level package link; someone reinstalled it at 18:41. At 19:00 this release check made `web/node_modules` of the worktree a junction to the main tree's install (the task's own instruction) and ran `pnpm --dir web check:api`. pnpm's dependency check saw a different workspace root and ran `pnpm install`, which stopped on `engineStrict` (Node 24.13.1 is below jsdom's 24.15) after it had removed the main tree's top-level links, `.bin` and `.modules.yaml`. The main tree's install was repaired at 19:05 (`pnpm install --frozen-lockfile --offline --config.engine-strict=false` in `terminal/web`, after moving its stale `.pnpm-workspace-state-v1.json` aside to `D:/dev/v04/w3-research-integrity/rc/`); the store was used offline and nothing was downloaded. The first break very likely had the same cause. This was a write in the main tree's git-ignored `node_modules`, outside this wave's remit, made to undo the damage. Anyone running pnpm in a worktree must pass `--config.verify-deps-before-run=false` (or set `npm_config_verify_deps_before_run=false`), and the release finisher should rerun its own web checks. The older link farm is parked at `D:/dev/v04/w3-research-integrity/rc/farm-web-nm`; `E:/projects/nq-lab/wt-w3/node_modules` (root) is still a link farm and can be deleted. Node 24.15 or later would let a plain `pnpm install` pass the engine check.
 6. The visual baseline of the DQ universe tab was not added (the fixture results have no 1d QA or bounds); the DQ universe e2e checks values, keyboard and axe only.
