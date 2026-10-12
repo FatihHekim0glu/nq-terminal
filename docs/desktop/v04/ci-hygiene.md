@@ -109,4 +109,16 @@ Guards: `web/scripts/playwrightOffline.test.ts` (the list is the four specs, no 
 
 ### Hosted runs of Round 2
 
-Pending the hosted runs of this branch.
+The push of `ec18d86` started `ci` 38226124548; it was rerun twice in full (`gh run rerun`), three attempts, all green (6 of 6 jobs). Every attempt ran 136 passed (3 skipped, as before) in the functional step and 54 passed in the timing step, 190 in all, the same count as Round 1. Each timing figure passed on its first measurement, so the quiet retry did not fire.
+
+| Attempt | Functional step | Timing step | `offline-e2e` job | MonitorGrid scroll (at the grain) | LineStack builds, ms (cold, two Log rebuilds) |
+|---|---|---|---|---|---|
+| 1 | 8.5 min | 1.9 min | 11.1 min | p95 16.8, max 16.8, 0 of 498 over 33.4 ms | 55.6, 28.5, 12.3 |
+| 2 | 9.7 min | 2.0 min | 12.8 min | p95 16.7, max 33.3, 0 over | 47.6, 34.9, 14.3 |
+| 3 | 11.8 min | 2.1 min | 14.9 min | p95 33.3, max 33.4, 0 over | 57.2, 37.2, 16.9 |
+
+Before (Round 1, one `offline` step on two workers): 190 passed in 12.1 to 13.3 min, MonitorGrid p95 33.4 with 12 to 16 frames over 33.4 ms, and 49.9 ms p95 on run 38219649238; LineStack cold builds 63 to 76 ms and a miss on a cold build now and then. Now no scroll frame is over 33.4 ms in any attempt and the LineStack cold build is 48 to 57 ms against the 100 ms bar. The job is not shorter: the timing step adds a second Vite build and one worker (about 2 min), and the functional step varied from 8.5 to 11.8 min with runner load, which this change does not control.
+
+`mac-webkit` run 38226179375, dispatched on the branch: success, 190 passed (3 skipped) in 16.3 min, the same spec set and the committed `offline-webkit-darwin` baselines.
+
+Open: three attempts are a small sample for a flake that showed about one run in four. MonitorGrid's attempt 3 p95 of 33.3 ms (a two-vsync frame at the 95th percentile) is still under the 34 ms bar but closer than the others, so a further miss on a loaded runner is possible; the bar is untouched by design.
