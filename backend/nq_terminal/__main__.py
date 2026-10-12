@@ -17,7 +17,9 @@ The start path (03 sections 2.2 and 2.4, Appendix A row 2):
    environment, a URL or a log.
 3. Bind 127.0.0.1 here with exclusive use in every mode (port 0 in desktop mode, `NQT_PORT` otherwise, 8765 for the
    launchers) and hand the socket to uvicorn, so the port is known before the app is built and its same-origin list
-   names it, and a busy port is refused rather than shared.
+   names it, and a busy port is refused rather than shared. In desktop mode with the preferred port on (`desktop/
+   port_pref.py`, owner decision O19, off by default) the port last bound is tried first, with the same exclusive bind,
+   and a busy one falls back to port 0; 8765 and ports outside 49152 to 65535 are never chosen.
 4. The app's start-up takes the lock (`desktop/lifecycle.py`); once the server is up, print one `NQT-READY {json}`
    line (`desktop/handshake.py`). Losing a race for the lock in the start-up also ends in `NQT-ATTACH` and exit 0.
    Importing this module builds no app (`app.app` is lazy): `serve` builds the one real app, once. The READY line's
@@ -57,7 +59,7 @@ from nq_terminal.threadcaps import cap_native_pools
 cap_native_pools(os.environ)
 
 from nq_terminal.app import create_app  # noqa: E402
-from nq_terminal.desktop import handshake, lifecycle, lock, watchdog  # noqa: E402
+from nq_terminal.desktop import handshake, lifecycle, lock, port_pref, watchdog  # noqa: E402
 from nq_terminal.desktop.handshake import StdinChannel  # noqa: E402
 from nq_terminal.desktop.lifecycle import Runtime  # noqa: E402
 from nq_terminal.services.prewarm import (  # noqa: E402
@@ -188,8 +190,9 @@ def serve(settings: Settings, build: AppBuilder) -> int:
         print("nq_terminal: no TOKEN and NONCE lines on stdin; not serving", file=sys.stderr, flush=True)
         return EXIT_NO_TOKEN
     token, nonce = credentials
-    sock = bind_socket(settings)
+    sock = port_pref.bind(settings, bind_socket)  # the preferred desktop port when on and free (O19)
     port = sock.getsockname()[1]
+    port_pref.remember(settings, port)  # writes only with the setting on and a port that changed
     app = build(replace(settings, port=port))
     lifecycle.install(app, app.state.settings)
     lifecycle.set_runtime(app, Runtime(token=token, port=port, pid=os.getpid(), nonce=nonce, mode=settings.mode))

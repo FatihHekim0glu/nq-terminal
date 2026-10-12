@@ -16,7 +16,9 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
   The one mount allowed is a plain `StaticFiles` at `/` serving exactly `settings.web_dist`; any other
   mount (a sub-app, a StaticFiles subclass, another path or folder) is refused, so data/ or results/ can
   never be served around the gate and FileCache.
-- `web/dist` is mounted at `/` only when it exists (after the API routes, so `/api` always wins).
+- `web/dist` is mounted at `/` only when it exists (after the API routes, so `/api` always wins). Its cache headers
+  (hashed `/assets/*` immutable for a year, every other page file `no-cache`; startup.md 7.5) are set by
+  `SecurityHeadersMiddleware`, not by another mount or a StaticFiles subclass, so the mount rule above is unchanged.
 - Interactive docs are off (they load scripts from a CDN); the schema is at /api/openapi.json.
 - The lifespan runs one no-op on the worker thread pool before the server listens (V021), so anyio's asyncio backend
   is imported and the first worker thread exists before `NQT-READY`: the first sync request after READY (the shell's
