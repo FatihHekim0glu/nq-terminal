@@ -21,12 +21,14 @@ Run: `python -m nq_terminal` from terminal/backend (binds 127.0.0.1 in code; see
 - The lifespan runs one no-op on the worker thread pool before the server listens (V021), so anyio's asyncio backend
   is imported and the first worker thread exists before `NQT-READY`: the first sync request after READY (the shell's
   `/api/session`) no longer imports or starts a thread while the HOME prewarm imports scipy.
+- The module-level `app` is a lazy attribute (`__getattr__`), built on first use, so importing the module builds no app.
 - `create_app` first makes the system allocator Arrow's memory pool (`services/allocator.py`, W5C D2), so every form
   returns freed memory to the operating system.
 """
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,7 +44,7 @@ from nq_terminal import __version__, memtrim
 from nq_terminal.api import desktop as desktop_api  # 03 2.2, 4.2 (the proof and the session routes)
 from nq_terminal.api import system
 from nq_terminal.api.home_prewarm import start_home_prewarm
-from nq_terminal.desktop import lifecycle, watchdog
+from nq_terminal.desktop import lifecycle, request_timing, watchdog
 from nq_terminal.api import audit, commands, live  # 2.4
 from nq_terminal.api import research  # 2.2
 from nq_terminal.services import allocator  # W5C D2: the system memory pool
@@ -177,6 +179,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(ALLOWED_HOSTS), www_redirect=False)
     app.add_middleware(LoopbackOnlyMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
+    request_timing.install(app)  # startup.md 11.3: one timing line per request in the HOME window, silent after it
     memtrim.install(app)  # vnext perf-1: outermost, so every request counts; the working-set trim after the prewarm and in quiet periods
     lifecycle.install(app, settings)  # the lock, taken in the start-up (03 2.1)
     app.include_router(system.router)
@@ -198,4 +201,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-app = create_app()
+_default_app: FastAPI | None = None
+_default_app_lock = threading.Lock()
+
+
+def __getattr__(name: str) -> FastAPI:
+    """`app.app` is built on first use and then kept (PEP 562). Importing this module used to end with `app = create_app()`,
+    an app that `python -m nq_terminal` built and discarded before `serve` built the real one (startup.md 7.4: 50 to 57 ms
+    before READY). `from nq_terminal.app import app` and `app_module.app` still work; uvicorn's factory form
+    (`nq_terminal.app:create_app`) never needed it."""
+    global _default_app
+    if name != "app":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    with _default_app_lock:
+        if _default_app is None:
+            _default_app = create_app()
+    return _default_app

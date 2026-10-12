@@ -248,6 +248,29 @@ describe('RecordWatchReader', () => {
     expect(urls).toEqual([...URLS].sort())
   })
 
+  it('regression guard: asks for /api/runs only after the own queries of the page have gone quiet, and shows no busy state meanwhile', async () => {
+    // v04 w1 home-window (startup.md 7.3): GP's picker no longer asks for the run list while HOME loads, so this reader is
+    // the first /api/runs request of a HOME page. It must not send it while a HOME query is still in flight, or the cold
+    // run index is back inside the HOME window. It cannot fail on the 0.3.3 tree, where the reader was already gated by
+    // useQuietReady (GP's own request, not this one, was the early one).
+    const fetchSpy = stubFetch()
+    let release: () => void = () => undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    mount()
+    void client.fetchQuery({ queryKey: ['home slow'], queryFn: () => held.then(() => 1) })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+    release()
+    await waitFor(() => expect(fetchSpy.mock.calls.some(([url]) => String(url) === '/api/runs')).toBe(true), { timeout: 4000 })
+    await waitFor(() => expect(latest.state).toBe('baseline'))
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+
   it('sends GET requests only', async () => {
     const fetchSpy = stubFetch()
     mount()

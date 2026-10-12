@@ -6,7 +6,7 @@
 // centred) and the basis footer.
 // Honesty rules: every price is the served value (decimals follow the data); a window past the fence
 // is refused before any request; fills are drawn only from a run the user linked or picked.
-import { useId, useState } from 'react'
+import { useId, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import CandleChart from '../../charts/CandleChart'
 import FunctionBar from '../../chrome/FunctionBar'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
@@ -36,6 +36,13 @@ function useFillsRun(group: ScreenProps['params']['group']): readonly [string | 
   const [pick, setPick] = useState<string | null | undefined>(undefined)
   const run = pick === undefined ? (linked?.kind === 'run' ? linked.value : null) : pick
   return [run, setPick]
+}
+
+/** True when the event came from the Fills picker (the combobox the parameter row labels with C.fills). */
+function fromFillsPicker(target: EventTarget): boolean {
+  const field = target instanceof Element ? target.closest('[role="combobox"]') : null
+  const labelId = field?.getAttribute('aria-labelledby')
+  return (labelId ? document.getElementById(labelId)?.textContent : field?.getAttribute('aria-label')) === C.fills
 }
 
 interface BarProps {
@@ -124,12 +131,17 @@ function GpBody({ mode, root, symbol, group, args, panelId }: BodyProps) {
   const [run, setRun] = useFillsRun(group)
   const [grid, setGrid] = useState(false)
   const [showRolls, setShowRolls] = useState(true)
-  const data = useGpData({ root, symbol, tf, variant, window: win.window, runId: run })
+  // The run list is not asked for while HOME loads; opening the picker asks for it at once (useGpData).
+  const [askRuns, setAskRuns] = useState(false)
+  const data = useGpData({ root, symbol, tf, variant, window: win.window, runId: run, deferRuns: !askRuns })
+  const onPickerEvent = (event: MouseEvent | KeyboardEvent) => {
+    if (!askRuns && ('key' in event ? event.key !== 'Tab' : true) && fromFillsPicker(event.target)) setAskRuns(true)
+  }
   const view = useChartView(data, root, ticker, tf, showRolls)
   const bars = data.bars
   const showChart = bars !== undefined && bars.t.length > 0 && data.refusal === null
   return (
-    <div className="gp-screen" data-screen={mode}>
+    <div className="gp-screen" data-screen={mode} onClickCapture={onPickerEvent} onKeyDownCapture={onPickerEvent}>
       <QuoteHeader quote={view.quote} />
       <GpFunctionBar mode={mode} root={root} panelId={panelId} grid={grid} onGrid={() => setGrid(!grid)} rolls={showRolls} onRolls={() => setShowRolls(!showRolls)} date={win.date} />
       <GpParams

@@ -81,3 +81,25 @@ export const CHECKS = Object.freeze({
   minimise_sim_stream_back_ms: { label: 'Stream back in stream mode after the simulated minimise', unit: 'ms', ceiling: 30_000 },
   minimise_real_stream_back_ms: { label: 'Stream back in stream mode after the real minimise and restore (screen 2)', unit: 'ms', ceiling: 30_000 },
 })
+
+/**
+ * The start-up rows of Roadmap v2 (startup.md section 11; metrics.md recommendation 1). Informational in wave w1: they have no target
+ * and no ceiling, appear beside the verdicts in the report and in the record, and never enter ROWS, so none can fail a run or a check.
+ * scope 'launch': one reading per launch (a shared usual-launch log holds several); 'build': one reading per record.
+ */
+export const START_ROWS = Object.freeze([
+  { id: 'spawn_offset_ms', short: 'spawn offset', unit: 'ms', scope: 'launch', informational: true, label: 'Spawn offset, shell start to the backend spawn',
+    method: 'shell log: start to supervise_spawned, read per launch' },
+  { id: 'spawn_to_ready_ms', short: 'spawn to READY', unit: 'ms', scope: 'launch', informational: true, label: 'Backend spawn to READY',
+    method: 'shell log: supervise_spawned to supervise_checked, read per launch' },
+  { id: 'home_stage_ms', short: 'HOME stage', unit: 'ms', scope: 'launch', informational: true, label: 'Prewarm HOME stage length',
+    method: 'backend log: prewarm started to prewarm finished, the backend\'s own clock, read per launch. The task list differs between builds: the 0.3.2 stage includes runs (about 1.06 s on a first launch), this tree\'s does not, so the stage alone cannot decide a before/after comparison. Compare cold_home and backend_ready to cold_home (HOME ready, the probe, unchanged), and read warm_home as the row after HOME, to see a cost moved past HOME and not removed' },
+  { id: 'page_files_served', short: 'page files served', unit: 'files', scope: 'launch', informational: true, label: 'Page files served by the backend per launch',
+    method: 'backend log: GET /assets/ lines between one Started server process line and the next' },
+  { id: 'import_time_ms', short: 'import time', unit: 'ms', scope: 'build', informational: true, label: 'Backend import time in process',
+    method: 'importtime.py: import nq_terminal.app and its app object in the lab interpreter, median of the runs after one warm-up run' },
+  { id: 'modules_without_bytecode', short: 'modules without current bytecode', unit: 'modules', scope: 'build', informational: true, label: 'Start-path modules without current bytecode',
+    method: 'importtime.py: every source module the import loaded, its .pyc read in place (missing, stale or wrong flags), nothing written' },
+  { id: 'slow_requests', short: 'slowest HOME request', unit: 'ms', scope: 'launch', informational: true, label: 'Slowest requests of the HOME window',
+    method: 'backend log: request_timing lines between prewarm started and prewarm finished, the slowest five with thread CPU' },
+])

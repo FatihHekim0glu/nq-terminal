@@ -16,23 +16,33 @@ detail carries a path. `app.py` includes `router` before the static mount.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi import Path as PathParam
 
 from nq_terminal.analytics._inputs import PERIODS_DAILY
-from nq_terminal.analytics.capacity import CapacityError
-from nq_terminal.analytics.series import SessionSeries
 from nq_terminal.api.analytics import Sources, _cost, _http_errors, _hypothesis, _name, _run, _run_id, _sources
 from nq_terminal.api.data import DAILY_TF, DAILY_VARIANT, NO_PRICE_SOURCE, DataServices, gate_info, get_services
 from nq_terminal.models.analytics import Context
 from nq_terminal.models.common import error_responses
 from nq_terminal.models.regimes_capacity_term import RunCapacity, TermStructure, TrendRegimeView
-from nq_terminal.services import regimes_capacity_term as rct
 from nq_terminal.services.bars import BarService, GateRefusal
+
+if TYPE_CHECKING:  # annotations only; the service and analytics modules load on the first request (see `_service`)
+    from nq_terminal.analytics.series import SessionSeries
 
 router = APIRouter(prefix="/api", responses=error_responses(403, 404, 422, 503))
 ROOT_PATTERN = r"^[A-Z0-9]{2}$"
 ROOT_CHARS = 2
+
+
+def _service():
+    """`services.regimes_capacity_term`, imported on the first request to one of these routes: it pulls the trend, capacity
+    and term-structure analytics and the dtsmom panel, which nothing before READY needs (startup.md 7.4;
+    `tests/test_import_budget.py`)."""
+    from nq_terminal.services import regimes_capacity_term
+    return regimes_capacity_term
 
 
 def _price_source(bars: BarService | None) -> BarService:
@@ -42,6 +52,7 @@ def _price_source(bars: BarService | None) -> BarService:
 
 
 def _trend(src: Sources, s: SessionSeries, context: Context) -> TrendRegimeView:
+    rct = _service()
     bars = src.bars if s.periods != PERIODS_DAILY else _price_source(src.bars)
     view, served = rct.trend_for(s, context, bars, src.version)
     if served is None:
@@ -80,6 +91,8 @@ def run_capacity(request: Request, run_id: str = _run_id()) -> RunCapacity:
         def version(symbol: str) -> tuple[int, int] | None:
             return catalog.version(symbol, DAILY_TF, DAILY_VARIANT)
 
+        from nq_terminal.analytics.capacity import CapacityError
+        rct = _service()
         try:
             view, served = rct.capacity_view(src.runs, bars, run_id, version)
         except CapacityError as exc:
@@ -92,6 +105,7 @@ def market_term_structure(root: str = PathParam(..., pattern=ROOT_PATTERN, max_l
                           services: DataServices = Depends(get_services)) -> TermStructure:
     """MV6: the front to next calendar-chain spread per session, annualised by the days between the pinned CME
     expiries, and the latest curve over every chain rank, to 2021-12-31."""
+    rct = _service()
     contract = rct.UNIVERSE.get(root)
     if contract is None:
         raise HTTPException(status_code=404, detail=f"not in the futures universe: {root}")

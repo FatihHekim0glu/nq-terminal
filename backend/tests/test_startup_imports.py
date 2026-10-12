@@ -1,7 +1,7 @@
 """D1.1: the start path imports no heavy library, and every router is still registered.
 
-A fresh interpreter imports `nq_terminal.__main__` (which builds the app, because `nq_terminal/app.py` ends with
-`app = create_app()`), builds the app again with fixture settings, and reports what is in `sys.modules`, the route
+A fresh interpreter imports `nq_terminal.__main__` (which builds no app: `app.app` is a lazy module attribute, and
+`serve` builds the one real app), builds an app with fixture settings, and reports what is in `sys.modules`, the route
 list and `app.openapi()`. The report is written to a file under `tmp_path`, so the parent never parses a large
 standard output.
 
@@ -59,7 +59,7 @@ import json, sys
 from pathlib import Path
 backend, fixtures, out = sys.argv[1], sys.argv[2], Path(sys.argv[3])
 sys.path.insert(0, backend)
-import nq_terminal.__main__  # noqa: F401  (builds the production app, as `python -m nq_terminal` does)
+import nq_terminal.__main__  # noqa: F401  (the start path; builds no app)
 from fastapi.routing import iter_route_contexts
 from nq_terminal.app import create_app
 from nq_terminal.settings import load_settings
@@ -134,3 +134,48 @@ def test_the_banned_names_belong_to_packages_that_can_be_imported_here() -> None
     """Guard for the guard: an absent module only proves laziness when its package exists in this environment."""
     missing = [n for n in BANNED_AT_START if importlib.util.find_spec(n.split(".")[0]) is None]
     assert missing == [], f"these packages cannot be imported here, so their absence proves nothing: {missing}"
+
+
+COUNT_SCRIPT = r"""
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import fastapi
+built = []
+original = fastapi.FastAPI.__init__
+def counting(self, *args, **kwargs):
+    built.append(1)
+    original(self, *args, **kwargs)
+fastapi.FastAPI.__init__ = counting
+import nq_terminal.__main__  # noqa: F401
+after_import = len(built)
+import nq_terminal.app as app_module
+first, second = app_module.app, app_module.app
+from nq_terminal.app import app as imported
+print(json.dumps({"after_import": after_import, "after_access": len(built), "same": first is second is imported,
+                  "is_app": isinstance(first, fastapi.FastAPI)}))
+"""
+
+
+@pytest.fixture(scope="module")
+def build_counts(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    work = tmp_path_factory.mktemp("startup_build_counts")
+    state = work / "state"
+    state.mkdir()
+    done = subprocess.run(
+        [sys.executable, "-c", COUNT_SCRIPT, str(BACKEND)],
+        env=_child_env(state), cwd=str(work), capture_output=True, text=True, encoding="utf-8",
+        timeout=180, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), check=False,
+    )
+    assert done.returncode == 0, "the child interpreter failed:\n" + done.stderr[-3000:]
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def test_importing_main_builds_no_app(build_counts: dict[str, Any]) -> None:
+    """Born failing: `app.py` ended with `app = create_app()`, so the import built an app that `serve` then threw away."""
+    assert build_counts["after_import"] == 0, "importing nq_terminal.__main__ built an app"
+
+
+def test_module_level_app_is_built_on_first_use_and_only_once(build_counts: dict[str, Any]) -> None:
+    assert build_counts["is_app"] is True
+    assert build_counts["after_access"] == 1
+    assert build_counts["same"] is True
