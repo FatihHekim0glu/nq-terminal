@@ -5,9 +5,10 @@
 //! the order 04 D4.1 fixes, each into the module that owns it, so a stage B slice never needs to edit this file:
 //!
 //! 1. `window::scrub_env` first, before any thread exists (edition 2024 makes `remove_var` unsafe);
-//! 2. `window::policy_check`;
-//! 3. `keys::install`, 4. `window::setup`, 5. `supervise::start` (with the stale-page hook of stale_page.rs),
-//!    6. `writes::on_download_starting`, 7. `crash::install` on the built window;
+//! 2. `window::policy_check`; then the settings read and `supervise::begin`, so the backend's spawn runs while the
+//!    window and its WebView2 are built (startup.md 7.2);
+//! 3. `keys::install`, 4. `window::setup`, 5. `Early::attach` (with the stale-page hook of stale_page.rs), which hands
+//!    the loop's held calls to the window, 6. `writes::on_download_starting`, 7. `crash::install` on the built window;
 //! 8. `smoke::browser_args`, which can only take effect on the window builder, so it is evaluated just before the
 //!    build;
 //! 9. `smoke::after_build` last.
@@ -187,14 +188,15 @@ fn start_record(app: &tauri::App, launch: &Launch) -> serde_json::Value {
 fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
     let options = window::resolve(app.handle(), &launch)?;
     app.manage(options.clone());
-    writes::configure(writes::WritePolicy {
-        lab: options.lab.clone(),
-        config_dir: options.config_dir.clone(),
-        save_dirs: smoke::save_dirs(&launch),
-    })
-    .map_err(|e| ShellError::Refused(e.to_string()))?;
+    configure_writes(&options, &launch)?;
     crash::set_log_dir(&options.config_dir);
     crash::log("start", start_record(app, &launch));
+    // The supervisor starts before the window, so the spawn runs while WebView2 is built (startup.md 7.2).
+    let early = if lab_may_start(&options) {
+        supervise::begin(app.handle(), &launch)?
+    } else {
+        supervise::shell::Early::default()
+    };
     let fitted = fitted_size(app, &options);
     #[allow(
         clippy::disallowed_methods,
@@ -220,18 +222,44 @@ fn setup(app: &mut tauri::App, launch: Launch) -> Result<(), ShellError> {
     window_fit::refit(&main);
     keys::install(&main, &launch)?;
     window::setup(&main, &launch)?;
-    let rebuild_log = options.config_dir.join(crash::LOG_DIR).join("rebuild.log");
-    let stale = options
-        .lab
-        .clone()
-        .map(|lab| stale_page::hook(&main, launch.rebuild_allowed(), lab, rebuild_log));
-    let supervisor = supervise::start(&main, &launch, stale)?;
+    // Managed at once: the window may already be on the backend, so a close must find the supervisor's shutdown.
+    app.manage(early.attach(&main, stale_hook(&main, &options, &launch))?);
     writes::on_download_starting(&main, &launch)?;
     crash::install(&main, &launch)?;
     smoke::after_build(&main, &launch)?;
-    app.manage(supervisor);
     app.manage(launch);
     Ok(())
+}
+
+/// The write guard's policy: the lab, the config folder and the save folders (writes.rs).
+fn configure_writes(options: &window::WindowOptions, launch: &Launch) -> Result<(), ShellError> {
+    writes::configure(writes::WritePolicy {
+        lab: options.lab.clone(),
+        config_dir: options.config_dir.clone(),
+        save_dirs: smoke::save_dirs(launch),
+    })
+    .map_err(|e| ShellError::Refused(e.to_string()))
+}
+
+/// The stale-page hook of stale_page.rs: the window's rebuild of a stale or missing page build, when a lab is set.
+fn stale_hook(
+    main: &tauri::WebviewWindow,
+    options: &window::WindowOptions,
+    launch: &Launch,
+) -> Option<supervise::StaleHook> {
+    let rebuild_log = options.config_dir.join(crash::LOG_DIR).join("rebuild.log");
+    let allowed = launch.rebuild_allowed();
+    let lab = options.lab.clone()?;
+    Some(stale_page::hook(main, allowed, lab, rebuild_log))
+}
+
+/// Whether the supervisor may start before the window: a lab the lab check refuses is never spawned (the supervisor
+/// stays idle and `window::setup` refuses the start with its own log line, as before); no lab is the supervisor's own
+/// case (idle, or the smoke page server).
+fn lab_may_start(options: &window::WindowOptions) -> bool {
+    let tools = window::folders::Tools::from_env();
+    let passes = |lab: &std::path::Path| window::folders::check_lab(lab, &tools).is_ok();
+    options.lab.as_deref().is_none_or(passes)
 }
 
 /// A close request sent to one of the UI thread's helper windows goes on to the app window (close_relay.rs). Runs on

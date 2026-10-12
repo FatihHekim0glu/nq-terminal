@@ -1,6 +1,11 @@
 // The report and its --check (born failing): a missing row, a figure that does not match its raw record and a ceiling breach
 // must each be caught; a complete synthetic set must pass.
 import test from 'node:test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { buildReport, checkEvidence, overCeiling, collectFigures, reportLines } from '../report.mjs'
 import { ROWS, rowsForLaunch } from '../lib/rows.mjs'
@@ -239,10 +244,6 @@ test('a failed command-line lookup and failed soak breakdown reads each print an
   assert.ok(info(reportLines(buildReport(sk), sk)).some((l) => /soak breakdown not read in 3 samples: timeout/.test(l)))
 })
 
-// ---- the start-up rows (wave w1, start-rows): informational lines beside the verdicts, never a verdict -------------------------
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { startRowsOfLogs } from '../lib/startrows.mjs'
 
@@ -368,4 +369,152 @@ test('start rows whose import reading is provisional (loaded machine) print PROV
   const main = startInfo(reportLines(buildReport(recs), recs)).find((l) => /start-up rows.*smoke build/.test(l))
   assert.match(main, /import time 900 ms/)
   assert.match(main, /PROVISIONAL/)
+})
+
+// The spawn-offset check (startup.md 7.2; wave w4b): a G2 launch whose supervise_spawned comes more than 150 ms after the shell's
+// start line fails; the target is a median of 120 ms or less. Born failing: before the check, a 151 ms launch passed unseen.
+import { spawnOffsetCheck, spawnOffsetFailures, SPAWN_OFFSET } from '../report.mjs'
+import { milestones as shellMilestones, parseShellLog as parseShell } from '../lib/shelllog.mjs'
+
+const SPAWN_T0 = 1_760_000_000_000
+/** A counted G2 launch record whose shell log has its start line at 20 ms and supervise_spawned `offset` ms later. */
+function launchWithOffset(slot, offset, over = {}) {
+  const log = [{ t: SPAWN_T0 + 20, event: 'start' }, { t: SPAWN_T0 + 20 + offset, event: 'supervise_spawned', launcher_pid: 7, route: 'job_list' }]
+  const ms = shellMilestones(parseShell(log.map((l) => JSON.stringify(l)).join('\n')), SPAWN_T0)
+  return record('measure', slot, GOOD.measure, { milestones: ms, ...over })
+}
+
+test('the spawn-offset ceiling is 150 ms and the target a median of 120 ms', () => {
+  assert.deepEqual([SPAWN_OFFSET.ceiling, SPAWN_OFFSET.target], [150, 120])
+})
+
+test('a launch with supervise_spawned 151 ms after start is flagged; one at 150 ms is not (born failing)', () => {
+  const at150 = [launchWithOffset(1, 100), launchWithOffset(2, 150), launchWithOffset(3, 90)]
+  const check150 = spawnOffsetCheck(at150)
+  assert.equal(check150.readings, 3)
+  assert.deepEqual(check150.over, [])
+  assert.deepEqual(spawnOffsetFailures(check150), [])
+  const at151 = [launchWithOffset(1, 100), launchWithOffset(2, 151), launchWithOffset(3, 90)]
+  const check151 = spawnOffsetCheck(at151)
+  assert.equal(check151.verdict, 'over-ceiling')
+  assert.deepEqual(check151.over.map((o) => o.ms), [151])
+  const failures = spawnOffsetFailures(check151)
+  assert.equal(failures.length, 1)
+  assert.match(failures[0], /measure-2\.json/)
+  assert.match(failures[0], /151 ms/)
+  const report = { ...buildReport([...complete(), ...at151]), spawnOffset: check151 }
+  assert.ok(overCeiling(report).some((l) => /spawn_offset/.test(l) && /151 ms/.test(l)), overCeiling(report).join('; '))
+  const clean = { ...buildReport([...complete(), ...at150]), spawnOffset: check150 }
+  assert.ok(!overCeiling(clean).some((l) => /spawn_offset/.test(l)))
+})
+
+test('the spawn-offset verdict tells the target from the ceiling, and the median is printed with both', () => {
+  const quick = spawnOffsetCheck([launchWithOffset(1, 60), launchWithOffset(2, 120), launchWithOffset(3, 140)])
+  assert.equal(quick.medianMs, 120)
+  assert.equal(quick.verdict, 'within-target')
+  const slow = spawnOffsetCheck([launchWithOffset(1, 125), launchWithOffset(2, 130), launchWithOffset(3, 140)])
+  assert.equal(slow.verdict, 'within-ceiling')
+  const recs = [...complete(), launchWithOffset(4, 125)]
+  const line = reportLines({ ...buildReport(recs), spawnOffset: spawnOffsetCheck(recs) }, recs).find((l) => l.startsWith('check spawn_offset'))
+  assert.match(line, /median 125 ms/)
+  assert.match(line, /target 120/)
+  assert.match(line, /ceiling 150/)
+})
+
+test('only counted G2 launches are read, and a launch with no spawn line is unread, never 0 ms', () => {
+  const rejected = launchWithOffset(1, 400, { status: 'rejected' })
+  const soakLike = launchWithOffset(2, 400, { mode: 'soak' })
+  const noSpawn = record('measure', 3, GOOD.measure, { milestones: shellMilestones(parseShell(JSON.stringify({ t: SPAWN_T0 + 20, event: 'start' })), SPAWN_T0) })
+  const firstLaunch = launchWithOffset(4, 110, { mode: 'first-launch' })
+  const check = spawnOffsetCheck([rejected, soakLike, noSpawn, firstLaunch])
+  assert.equal(check.readings, 1)
+  assert.equal(check.unread, 1)
+  assert.equal(check.medianMs, 110)
+  assert.equal(spawnOffsetCheck([]).verdict, 'missing')
+  assert.deepEqual(spawnOffsetFailures(undefined), [])
+})
+
+// Fixer 12 (born failing): the 150 ms gate must not pass with zero readings, must be read per build, and the CLI path must exit 4.
+test('counted launches with no spawn reading fail the strict gate (verdict missing is not a pass)', () => {
+  const nulls = [1, 2, 3, 4, 5].map((s) => record('measure', s, GOOD.measure, { milestones: { spawnOffsetMs: null } }))
+  const check = spawnOffsetCheck(nulls)
+  assert.equal(check.verdict, 'missing')
+  const bad = overCeiling({ ...buildReport([...complete(), ...nulls]), spawnOffset: check })
+  assert.ok(bad.some((l) => /spawn_offset/.test(l) && /measure/.test(l) && /0 spawn reading/.test(l)), bad.join('; '))
+  // a launch record that lost its milestones altogether (shell log gone) counts as unread too
+  const lost = [1, 2, 3].map((s) => record('smoke', s, GOOD.smoke))
+  assert.equal(spawnOffsetCheck(lost).unread, 3)
+  assert.ok(overCeiling({ ...buildReport(lost), spawnOffset: spawnOffsetCheck(lost) }).some((l) => /spawn_offset/.test(l)))
+})
+
+test('one unread launch, or too few readings, fails even when the readings that exist are under the ceiling', () => {
+  const some = [launchWithOffset(1, 100), launchWithOffset(2, 100), launchWithOffset(3, 100), record('measure', 4, GOOD.measure, { milestones: { spawnOffsetMs: null } })]
+  const bad = overCeiling({ ...buildReport(some), spawnOffset: spawnOffsetCheck(some) })
+  assert.ok(bad.some((l) => /1 launch\(es\) with no spawn reading/.test(l)), bad.join('; '))
+  const few = [launchWithOffset(1, 100), launchWithOffset(2, 100)]
+  assert.ok(overCeiling({ ...buildReport(few), spawnOffset: spawnOffsetCheck(few) }).some((l) => /2 spawn reading/.test(l) && /3 needed/.test(l)))
+  const ok = [launchWithOffset(1, 100), launchWithOffset(2, 100), launchWithOffset(3, 100)]
+  assert.deepEqual(overCeiling({ ...buildReport(ok), spawnOffset: spawnOffsetCheck(ok) }).filter((l) => /spawn_offset/.test(l)), [])
+})
+
+test('the check is computed per build: a slow smoke launch is not hidden by fast measure launches', () => {
+  const recs = [1, 2, 3].map((s) => launchWithOffset(s, 60)).concat([1, 2, 3].map((s) => ({ ...launchWithOffset(s, 140), build: 'smoke', file: `D:/x/smoke-${s}.json` })))
+  const check = spawnOffsetCheck(recs)
+  assert.equal(check.builds.measure.medianMs, 60)
+  assert.equal(check.builds.smoke.medianMs, 140)
+  assert.equal(check.builds.smoke.verdict, 'within-ceiling')
+  assert.equal(check.builds.measure.verdict, 'within-target')
+})
+
+test('report.mjs --check --strict exits 4 for a 151 ms launch and 0 at 150 ms (the CLI path, end to end)', () => {
+  const run = (offset) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spawn-cli-'))
+    try {
+      const read100 = launchWithOffset(0, 100).milestones // every counted launch of the folder needs its own reading
+      const recs = [...complete().map((r) => (r.mode === 'rows' ? { ...r, milestones: read100 } : r)), ...[1, 2, 3].map((s) => launchWithOffset(s + 10, s === 2 ? offset : 100, { file: undefined }))]
+      recs.forEach((r, i) => { const { file, ...rest } = r; fs.writeFileSync(path.join(dir, `r${i}.json`), JSON.stringify(rest)) })
+      return spawnSync(process.execPath, [fileURLToPath(new URL('../report.mjs', import.meta.url)), dir, '--check', '--strict'], { encoding: 'utf8', windowsHide: true })
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  }
+  const over = run(151)
+  assert.match(over.stderr, /spawn_offset/, over.stderr + over.stdout)
+  assert.equal(over.status, 4, over.stderr + over.stdout)
+  const at150 = run(150)
+  assert.equal(at150.status, 0, at150.stderr + at150.stdout)
+})
+
+// Issue: the spawn-offset check pooled provisional with accepted readings, needed no minimum count and never failed --check.
+test('spawn offset: accepted readings win over provisional ones, and provisional-only readings carry the PROVISIONAL label', () => {
+  const mixed = spawnOffsetCheck([...[1, 2, 3, 4, 5].map((s) => launchWithOffset(s, 100)), launchWithOffset(6, 140, { status: 'provisional' })])
+  assert.equal(mixed.label, 'ACCEPTED')
+  assert.equal(mixed.readings, 5)
+  assert.equal(mixed.worstMs, 100)
+  const loaded = spawnOffsetCheck([1, 2, 3, 4, 5].map((s) => launchWithOffset(s, 30, { status: 'provisional' })))
+  assert.equal(loaded.verdict, 'within-target')
+  assert.equal(loaded.label, 'PROVISIONAL')
+  const recs = [1, 2, 3, 4, 5].map((s) => launchWithOffset(s, 30, { status: 'provisional' }))
+  const line = reportLines({ ...buildReport(recs), spawnOffset: spawnOffsetCheck(recs) }, recs).find((l) => l.startsWith('check spawn_offset'))
+  assert.match(line, /PROVISIONAL/)
+})
+
+test('spawn offset: fewer readings than minRuns is too-few, never within-target (one provisional 30 ms record included)', () => {
+  const one = spawnOffsetCheck([launchWithOffset(1, 30, { status: 'provisional' })])
+  assert.equal(one.verdict, 'too-few')
+  assert.equal(one.label, 'PROVISIONAL')
+  assert.equal(spawnOffsetCheck([1, 2, 3, 4].map((s) => launchWithOffset(s, 30)), { minRuns: 5 }).verdict, 'too-few')
+  assert.equal(spawnOffsetCheck([1, 2, 3, 4, 5].map((s) => launchWithOffset(s, 30)), { minRuns: 5 }).verdict, 'within-target')
+  assert.equal(spawnOffsetCheck([launchWithOffset(1, 400)]).verdict, 'over-ceiling')
+})
+
+test('spawn offset: --check fails on a missing, too-few or unread spawn-offset check (born failing)', () => {
+  const launches = (n) => Array.from({ length: n }, (_, i) => launchWithOffset(i + 1, 100))
+  const problemsOf = (recs, opts) => checkEvidence(recs, { ...buildReport(recs), spawnOffset: spawnOffsetCheck(recs, opts) })
+  assert.deepEqual(problemsOf(launches(5), { minRuns: 5 }).filter((p) => /spawn_offset/.test(p)), [])
+  // counted G2 launches none of which has a spawn line: missing (and unread), not 'check ok'
+  assert.ok(problemsOf(complete()).some((p) => /spawn_offset/.test(p) && /no reading/.test(p)))
+  assert.ok(problemsOf(launches(2)).some((p) => /spawn_offset/.test(p) && /2 on the measure build/.test(p) && /3 needed/.test(p)))
+  const noSpawn = record('measure', 9, GOOD.measure, { milestones: shellMilestones(parseShell(JSON.stringify({ t: SPAWN_T0 + 20, event: 'start' })), SPAWN_T0) })
+  assert.ok(problemsOf([...launches(5), noSpawn]).some((p) => /spawn_offset/.test(p) && /1 of 6/.test(p) && /no spawn line/.test(p)))
+  const bare = complete()
+  assert.deepEqual(checkEvidence(bare, buildReport(bare)), [])
 })
