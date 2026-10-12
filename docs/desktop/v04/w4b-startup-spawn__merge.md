@@ -250,3 +250,11 @@ No route and no Cargo dependency is added. No file under the lab's `results/`, `
 - The edge noted above (a close while WebView2 is being built) has no test.
 - No agent review (code-reviewer, rust-reviewer) was run from here. The three QA focuses in the wave spec are left to the QA step.
 - `pnpm` itself cannot run in this worktree on node 24.13.1 (jsdom engine range); the web commands here ran through `node node_modules/...`.
+
+## Merge into main
+
+- Merge commit `e4313ef` (branch head `fbe7b4f` into main `32bfb8f`), then fixes `1647cfb`, `9b4eb5f`, `85eb3b2` and `5f5524b`; pushed head `5f5524b`.
+- One conflict: `desktop/harness/tests/report.test.mjs`. Both sides appended tests at the end of the file (w1 start rows, w4b spawn offset). Both blocks are kept; the imports the w1 block repeated (`fs`, `os`, `path`, `fileURLToPath`) were dropped because the branch now declares them at the top. `report.mjs` merged without a conflict.
+- Follow-up edits: the hook-order line in `desktop/README.md`; the `spawn_offset` sentence in `desktop/harness/README.md`; a wider wait in `tests/supervise_swap.rs` (`WATCH_BUDGET` 10 s) and `tests/supervise_tool.rs` (10 s tool limit, 40 s bound). Not applied: the `tests/hidden_support/scope.rs` change, because it would stop the window watch counting a foreground change to an untraceable window, which is the guard that the app takes no foreground; it stays open.
+- Local checks: `node --test desktop/harness/tests/*.test.mjs` 501 passed, 0 failed. Cargo not run (7.2 GB free, under the 10 GB bar); the hosted Windows run covers it.
+- Hosted runs for `5f5524b`: `desktop-check` 38219649086 success; `ci` 38219649238 failed once on the known MonitorGrid p95 frame-time flake (49.9 ms against 34 ms, listed in `ci-hygiene.md`), rerun once with `--failed`, success.
