@@ -206,3 +206,59 @@ All on the final tree (the only edit since the second pass is the help sentence 
 | prose lint on the 12 changed `.md` files | pass, except `TESTING.md` (14 triads) and the addendum (34 triads), the same counts `HEAD` has; `copyRules.test.ts` ran in the full Vitest |
 | scans of the changed files | no CR, no em or en dash outside the two notices files (licence text), no control character beyond the NUL in `bundleCheck.test.ts` that `HEAD` holds, no tool attribution (the word "generated" in the notices headers names the generator command) |
 | free space on C: | 425 GB at the start and at the end |
+
+## Merge into main
+
+Merge commit `7ee1277` ("chore(v04): merge the w5 Mac proof kit wave") on `main`, 12 October 2026. No fix commits were needed. Branch `origin/v04/w5-mac-kit` at `844071d` was merged with `--no-ff`.
+
+### Conflicts and how they were resolved
+
+| File | Conflict | Resolution |
+| --- | --- | --- |
+| `docs/desktop/ci.md` | The "Release script self-tests" row: main's text carried a damaged scratch path in the `record_green.tests.ps1` entry, the branch had the clean text. | Took the branch row (same content, clean text). |
+| `web/scripts/bundleCheck.ts`, `web/scripts/shellBudget.test.ts` | Both waves raised the shell budget from 110,000 / 115,000: w3 by 100 B (110,100 / 115,100), w5 by 600 B (110,600 / 115,600). | Union of the two raises: target 110,700, ceiling 115,700, with the reason written beside each. Hand-set from the two measured sums (110,452 B plus about 100 B), since the main tree's `web/node_modules` cannot build; the 5 kB of room is kept. The hosted `ci` web job then passed on `082ee4d`, which confirms it. |
+
+`ci.yml`, `package.json`, `pnpm-lock.yaml`, `vite.config.ts` and `README.md` merged without conflict, so no lockfile was edited by hand and no `pnpm install` was run.
+
+### Local checks (light only)
+
+| Check | Result |
+| --- | --- |
+| `node --test desktop/harness/tests/*.test.mjs` | 485 of 485 pass (the w2a `record_green` pin test is now satisfied by main's `ci.yml`) |
+| `node --test desktop/scripts/tests/*.test.mjs` | 247 of 247 pass |
+| `node --test scripts/tests/*.test.mjs` | 29 of 29 pass |
+| `gen-api.mjs --check` | in sync |
+| `backend/tests/test_desktop_tree.py` | 9 of 9 pass |
+
+Vitest, Playwright and the full backend suite were not run locally, by instruction.
+
+### Hosted runs
+
+| Run | Commit | Result |
+| --- | --- | --- |
+| `supply-chain` 38207205938 | `7ee1277` | success |
+| `ci` 38207205902 | `7ee1277` | cancelled by a newer push (w4a merge) |
+| `desktop-check` 38207205917 | `7ee1277` | failure: job "clippy and tests (smoke)", step "Tests, less the runner skip list", test `window_stopped_page::each_stopped_reason_is_announced_by_title_and_focus` (title read `stopped`, not `The backend stopped.`). Rust start-up page code that w5 does not touch. |
+| `ci` 38208492125, `desktop-check` 38208492133 | `9707778` (w4a merge) | ci cancelled by the next push; desktop-check failed in the same job on `save_outcome::tests::a_copy_of_the_crate_fails_when_the_seams_are_required` (a different Rust unit test, also not touched by w5) |
+| `ci` 38209573166, `desktop-check` 38209573155 | `082ee4d` (contains the w5 merge) | both success |
+| `mac-webkit` 38207205886 | `7ee1277` | failure, see below |
+
+The two smoke-job failures did not repeat on `082ee4d` with no w5 change in between, so they were timing and ordering failures of the Rust start-up tests, not merge defects. They are noted for wave w4a.
+
+### mac-webkit first run (not blocking the merge)
+
+Jobs: `goldens under JavaScriptCore` success; `self-test page under WebKit` success; `offline demo suite under WebKit` failure (step "Offline suite under WebKit": 72 failed, 3 skipped, 118 passed, 27.5 min). Causes seen in the log:
+
+- First-run baselines: the job runs with `--update-snapshots=all`, so every screenshot is written, not compared ("A snapshot doesn't exist at .../offline-webkit-darwin/..."). The `offline-webkit-darwin` baselines are not committed yet.
+- About 60 failures are `e2e/visual/screens.ts:272`, `openDropdownEarly`: `page.keyboard.press('Control+k')` then `toBeFocused()` fails on macOS. The same Control+k, Escape and Ctrl+Arrow presses sit in `keyboard.spec.ts` and `shell.spec.ts`. On a Mac the wave's key table (D7.4) uses Cmd, so the e2e helpers need a platform-aware modifier. This is a test-helper gap, not a product defect, but it is more than a one-line fix and cannot be checked without a Mac, so it was not changed here.
+- Two perf assertions on the hosted Mac runner: `gallery-candles.spec.ts:114` (4,000 bars zoom frame budget) and `gallery-grids-tiles.spec.ts:62` (MonitorGrid 10k scroll).
+
+G1 item 1 (JavaScriptCore goldens) and the self-test page of G1 item 2 passed on a hosted macOS runner. The offline WebKit suite of G1 item 2 is FAILED PROVISIONAL with the three causes above.
+
+### Post-merge items
+
+- Parity real mode, by the command in `w5-mac-kit__parity-auto.md`, after the main-tree reinstall.
+- `radixPrimitiveStub.test.tsx` on a proper install (it cannot load under the broken main-tree `node_modules`).
+- `65-help-notices.desktop.ts` in the shell.
+- The Rust crate notices (`desktop/src-tauri/THIRD_PARTY_NOTICES.txt`) to be bundled by w6.
+- mac-webkit: a platform-aware modifier in the e2e key helpers, commit the first `offline-webkit-darwin` baselines, then re-run.
