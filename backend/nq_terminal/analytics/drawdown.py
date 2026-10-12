@@ -13,13 +13,17 @@ DD2: an episode is a maximal run of sessions under water. Its peak is the last s
 on ties), its recovery the first session back at the peak (`E_t >= E_peak`), else None and `open` is True.
 Lengths are in sessions: peak to trough, trough to recovery (None when open), and peak to recovery, or peak to
 the last session for an open episode. Rows are sorted deepest first.
+
+DD3 (from DD2, no cap): every episode in time order, the time to recovery of each recovered one (sessions from its
+trough to its recovery), a histogram of those times in fixed bins and the longest time under water (the longest
+`length`, peak to recovery, an open episode measured to the last session). An open episode is never a recovery.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from nq_terminal.analytics._inputs import check_basis, returns_series
+from nq_terminal.analytics._inputs import PERIODS_DAILY, PERIODS_MONTHLY, check_basis, check_periods, returns_series
 
 TOP_EPISODES = 10
 
@@ -77,3 +81,56 @@ def drawdown_table(r, basis: str, top: int = TOP_EPISODES) -> list[dict]:
     episodes = [_episode(values, s, e) for s, e in _runs(values < 0)]
     episodes.sort(key=lambda ep: (ep["depth"], ep["peak"]))
     return [_row(ep, uw.index, len(values)) for ep in episodes[:top]]
+
+
+# ---------------------------------------------------------------- DD3
+
+# Time-to-recovery bins, in sessions (daily) or months (monthly), as inclusive (lo, hi) with hi None for the last
+# open-ended bin: 1, 2-5, 6-10, 11-21 (about a month), 22-63 (a quarter), 64-126, 127-252 (a year), 253 and over;
+# monthly: 1, 2-3, 4-6, 7-12, 13-24, 25-60, 61-120, 121 and over. Recovery times are heavy tailed, so the bins widen.
+BINS = {
+    PERIODS_DAILY: ((1, 1), (2, 5), (6, 10), (11, 21), (22, 63), (64, 126), (127, 252), (253, None)),
+    PERIODS_MONTHLY: ((1, 1), (2, 3), (4, 6), (7, 12), (13, 24), (25, 60), (61, 120), (121, None)),
+}
+LENGTH_UNIT = {PERIODS_DAILY: "sessions", PERIODS_MONTHLY: "months"}
+
+
+def all_episodes(r, basis: str) -> list[dict]:
+    """DD3: every drawdown episode in time order (DD2's rows without the top-10 cut), same fields as `drawdown_table`."""
+    uw = underwater(r, basis)
+    values = uw.to_numpy()
+    return [_row(_episode(values, s, e), uw.index, len(values)) for s, e in _runs(values < 0)]
+
+
+def recovery_histogram(times, periods: int) -> list[dict]:
+    """Counts of recovery times (sessions or months from trough to recovery) in the fixed bins of `periods`."""
+    check_periods(periods)
+    values = list(times)
+    return [{"lo": lo, "hi": hi, "count": sum(1 for t in values if t >= lo and (hi is None or t <= hi))}
+            for lo, hi in BINS[periods]]
+
+
+def _longest(rows: list[dict]) -> dict | None:
+    """The episode with the most sessions under water (the earliest on a tie); an open one runs to the last session."""
+    if not rows:
+        return None
+    best = max(rows, key=lambda row: row["length"])
+    return {"peak": best["peak"], "trough": best["trough"], "recovery": best["recovery"], "depth": best["depth"],
+            "length": best["length"], "open": best["open"]}
+
+
+def episode_summary(r, basis: str, periods: int) -> dict:
+    """DD3: all episodes, the recovery times of the recovered ones, their histogram and the longest time under water.
+
+    An open episode (still under water at the last session) is never a recovery: it is left out of the recovery times,
+    their median and maximum and the histogram, and counted in `n_open`. It still counts for the longest time under
+    water, measured to the last session. Times are in sessions (months for a monthly series), by position, not days.
+    """
+    check_periods(periods)
+    rows = all_episodes(r, basis)
+    times = [row["trough_to_recovery"] for row in rows if not row["open"]]
+    return {"unit": LENGTH_UNIT[periods], "episodes": rows, "n_episodes": len(rows), "n_recovered": len(times),
+            "n_open": len(rows) - len(times), "recovery_times": times,
+            "recovery_median": float(np.median(times)) if times else None,
+            "recovery_max": max(times) if times else None,
+            "histogram": recovery_histogram(times, periods), "longest": _longest(rows)}

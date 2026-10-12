@@ -8,7 +8,7 @@ import type { DistributionInput } from '../../charts/echarts/distributionModel'
 import { mretRows, type HeatmapInput } from '../../charts/echarts/heatmapModel'
 import type { Callout } from '../../charts/LineStack.draw'
 import type { LaneEpisode, LanesSpec, LineStackPane, RibbonSpec, RibbonState, StackSpan } from '../../charts/LineStack.types'
-import { TEAR, TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
+import { TEAR, TEAR_CONTEXT, TEAR_DD, TEAR_DD3, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR } from '../../copy/tear'
 import { TEAR_P1 } from '../../copy/tearP1'
 import { fillCopy } from '../../copy/workspace'
 import type { Analytics } from './tearKpis'
@@ -78,8 +78,8 @@ export function ddStack(data: Analytics, name: string, ext: Extended | null = nu
 // ---------------------------------------------------------------------------------------------
 // Drawdown episode lanes (roadmap 10, phase 1). The served DD2 rows drawn as they came: one lane per row,
 // deepest first, from its peak to its trough and on to its recovery, or to the last session while open.
-// Nothing here is derived from the rows (no longest, median or total): DD3 is not served, and the note
-// under the table says so.
+// Nothing here is derived from the rows (no longest, median or total): DD3 below counts the episodes from its
+// own served field, and the note under the table says how many of them the lanes draw.
 
 /** Number <GO> 11 to 20 pins the episode of rank 1 to 10; 1 to 5 are the tabs and 95 to 99 the function bar. */
 const LANE_NUMBER_BASE = 10
@@ -128,6 +128,112 @@ export function drawdownLanes(data: Analytics): LanesSpec | null {
   return episodes.length === 0 ? null : { name: TEAR_DD.lanesName, episodes }
 }
 
+// ---------------------------------------------------------------------------------------------
+// DD3 (ANALYTICS_CATALOG DD3): every drawdown episode with its time to recovery, a histogram of the recovery
+// times and the longest time under water, served on the full tear sheet as `drawdown.episodes`. Drawn as it
+// came: the counts, the median, the maximum and the bins are the API's; this file only words and scales them.
+
+type PeriodUnit = 'sessions' | 'months'
+type DrawdownRowShape = Analytics['drawdown_table'][number]
+
+/** The served DD3 body (backend `DrawdownEpisodes`). Null on the HOME path and in a body from an older backend. */
+interface ServedEpisodes {
+  readonly unit: PeriodUnit
+  readonly episodes: readonly DrawdownRowShape[]
+  readonly n_episodes: number
+  readonly n_recovered: number
+  readonly n_open: number
+  readonly recovery_median: number | null
+  readonly recovery_max: number | null
+  readonly histogram: readonly { readonly lo: number; readonly hi: number | null; readonly count: number }[]
+  readonly longest: {
+    readonly peak: string | null
+    readonly trough: string
+    readonly recovery: string | null
+    readonly depth: number
+    readonly length: number
+    readonly open: boolean
+  } | null
+}
+
+export interface Dd3Fact {
+  readonly id: 'episodes' | 'recovered' | 'open' | 'median' | 'max' | 'longest'
+  readonly label: string
+  readonly value: string
+}
+
+export interface Dd3Bin {
+  readonly label: string
+  readonly count: number
+  /** The bin's count over the tallest bin's, 0 to 1 (the bar's width). */
+  readonly share: number
+}
+
+export interface Dd3View {
+  readonly unit: PeriodUnit
+  readonly facts: readonly Dd3Fact[]
+  /** Empty while nothing has recovered. */
+  readonly bins: readonly Dd3Bin[]
+  readonly notes: readonly string[]
+}
+
+/** The DD3 body of a response, or null when it has none (the generated types gain the field with the contract). */
+function servedEpisodes(data: Analytics): ServedEpisodes | null {
+  return (data.drawdown as { readonly episodes?: ServedEpisodes | null }).episodes ?? null
+}
+
+const period = (unit: PeriodUnit, n: number): string => TEAR_DD3.units[unit][n === 1 ? 0 : 1]
+
+/** `3 sessions`, `1 month`, `2.5 months`; `--` when the API has no value. */
+function timeText(unit: PeriodUnit, value: number | null): string {
+  if (value === null) return MISSING
+  return `${formatNumber(value, Number.isInteger(value) ? 0 : 1)} ${period(unit, value)}`
+}
+
+function longestText(unit: PeriodUnit, longest: NonNullable<ServedEpisodes['longest']>): string {
+  const time = timeText(unit, longest.length)
+  const from = longest.peak ?? TEAR_DD3.startOfSeries
+  return longest.recovery === null
+    ? fillCopy(TEAR_DD3.longestOpen, { time, from })
+    : fillCopy(TEAR_DD3.longestClosed, { time, from, to: longest.recovery })
+}
+
+function binLabel(bin: ServedEpisodes['histogram'][number]): string {
+  if (bin.hi === null) return fillCopy(TEAR_DD3.binOver, { lo: bin.lo })
+  return bin.hi === bin.lo ? String(bin.lo) : fillCopy(TEAR_DD3.binRange, { lo: bin.lo, hi: bin.hi })
+}
+
+function dd3Facts(ep: ServedEpisodes): Dd3Fact[] {
+  const F = TEAR_DD3.facts
+  return [
+    { id: 'episodes', label: F.episodes, value: formatNumber(ep.n_episodes, 0) },
+    { id: 'recovered', label: F.recovered, value: formatNumber(ep.n_recovered, 0) },
+    { id: 'open', label: F.open, value: formatNumber(ep.n_open, 0) },
+    { id: 'median', label: F.median, value: timeText(ep.unit, ep.recovery_median) },
+    { id: 'max', label: F.max, value: timeText(ep.unit, ep.recovery_max) },
+    { id: 'longest', label: F.longest, value: ep.longest === null ? MISSING : longestText(ep.unit, ep.longest) },
+  ]
+}
+
+function dd3Bins(ep: ServedEpisodes): Dd3Bin[] {
+  const tallest = Math.max(0, ...ep.histogram.map((b) => b.count))
+  return ep.histogram.map((b) => ({ label: binLabel(b), count: b.count, share: tallest === 0 ? 0 : b.count / tallest }))
+}
+
+/** The DD3 block of the DD tab, or null when the response carries no episodes. */
+export function dd3View(data: Analytics): Dd3View | null {
+  const ep = servedEpisodes(data)
+  if (ep === null) return null
+  if (ep.n_episodes === 0) return { unit: ep.unit, facts: [], bins: [], notes: [TEAR_DD3.none] }
+  const recovered = ep.n_recovered > 0
+  return {
+    unit: ep.unit,
+    facts: dd3Facts(ep),
+    bins: recovered ? dd3Bins(ep) : [],
+    notes: [...(recovered ? [] : [TEAR_DD3.noneRecovered]), fillCopy(TEAR_DD3.rule, { unit: ep.unit })],
+  }
+}
+
 /** How many served rows are left out of the lanes for a date that is not real. */
 export function lanesDropped(data: Analytics): number {
   return readLanes(data).dropped
@@ -141,8 +247,10 @@ function lanesPane(lanes: LanesSpec): LineStackPane {
 export function laneNotes(data: Analytics): string[] {
   const served = data.drawdown_table.length
   const dropped = lanesDropped(data)
+  const total = servedEpisodes(data)?.n_episodes ?? 0
   return [
     ...(served - dropped > 0 ? [fillCopy(served === 1 ? TEAR_DD.lanesNoteOne : TEAR_DD.lanesNote, { n: served })] : []),
+    ...(served - dropped > 0 && total > served ? [fillCopy(TEAR_DD.lanesOf, { n: served, total })] : []),
     ...(dropped > 0 ? [fillCopy(dropped === 1 ? TEAR_DD.laneDroppedOne : TEAR_DD.laneDropped, { n: dropped })] : []),
   ]
 }

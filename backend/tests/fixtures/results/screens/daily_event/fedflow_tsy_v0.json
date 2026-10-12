@@ -1,0 +1,17 @@
+{
+ "headline": {
+  "n": 14,
+  "mean_bp": -3.9196819285714284,
+  "sd_bp": 5.036097718842276
+ },
+ "secondaries": {
+  "S10": {
+   "mean_net_0tick_bp": -2.6696819285714284,
+   "mean_net_2tick_bp": -5.269681928571429
+  }
+ },
+ "effective_start": {
+  "first_valid_event": "2012-01-09"
+ },
+ "synthetic": true
+}

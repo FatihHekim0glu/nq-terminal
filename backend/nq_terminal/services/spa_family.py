@@ -89,7 +89,7 @@ MONTHLY_REASON = "a monthly book: its result files hold no daily series, so it h
 UNIT_REASON = ("its series is in {unit}, not USD per session on one NQ contract, so its differential against one NQ "
                "contract has another unit (the statistic compares raw mean differentials, one unit across the family)")
 NO_SOURCE_REASON = ("no series source yet: the terminal has not learned this registration (add its SeriesSource to "
-                    "SERIES_SOURCES in nq_terminal/constants.py), so it is not a member until it has one")
+                    "SERIES_SOURCES in nq_terminal/series_sources), so it is not a member until it has one")
 CASH = "cash"
 NQ_BUY_AND_HOLD = "nq_buy_and_hold"
 BENCHMARKS = (CASH, NQ_BUY_AND_HOLD)

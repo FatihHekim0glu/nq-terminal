@@ -134,7 +134,8 @@ Examples: `NQ GP`, `NQ1 INDEX GP 1d`, `TY1 COMDTY DES`, `NQ GIP 2019-03-14`, `vo
 | `JRNL` | Journals | P0 |
 | `HELP` | Mnemonics, keys, link groups, licences and attributions | P0 |
 | `COST` `BLK` `EXPO` `SEAL` | Own screens (P0 shows cost and blocks inside `DES`) | P1 |
-| `VCONE` `SEAS` `EVT` `ROLL` `DQ` | Volatility cone, seasonality, event study, roll calendar, data quality | P1 |
+| `VCONE` `SEAS` `EVT` `ROLL` `DQ` | Volatility cone, seasonality, event study, roll calendar, data quality (context an instrument or the universe) | P1 |
+| `PLAN` | Pre-registration plan: the bar, the detectable Sharpe and the n needed, from typed inputs only | P1 |
 | `JOBS` | Backtest queue | P2 |
 
 The mnemonic registry in `web/src/commands/registry.ts` is the single source for the parser, suggestions and `HELP`.

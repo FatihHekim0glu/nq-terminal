@@ -10,6 +10,7 @@ import { displayUnit, formatValue } from './tearFormat'
 import {
   basisLine,
   contextLines,
+  dd3View,
   ddStack,
   distributionInput,
   drawdownLanes,
@@ -618,7 +619,7 @@ describe('drawdownLanes (DD2): one lane per served row, in served order', () => 
     for (const e of [closed!, open!]) for (const at of [e.peak, e.trough, e.end]) expect(t).toContain(at)
   })
 
-  it('summarises nothing: a lane holds the served facts only (DD3 is not served)', () => {
+  it('summarises nothing: a lane holds the served facts only (DD3 is drawn apart, from its own field)', () => {
     const lanes = drawdownLanes(withRows(tenRows()))!
     expect(Object.keys(lanes).sort()).toEqual(['episodes', 'name'])
     for (const e of lanes.episodes) expect(Object.keys(e).sort()).toEqual(['depth', 'end', 'open', 'peak', 'rank', 'trough'])
@@ -683,7 +684,7 @@ describe('ddStack with the lanes pane', () => {
 })
 
 describe('laneNotes: what the lanes are, in words, and what they are not', () => {
-  it('names the rows as the deepest the API lists and says DD3 is not served', () => {
+  it('names the rows as the deepest the API lists and no longer says DD3 is not served', () => {
     const data = withRows(tenRows())
     const [note, ...rest] = laneNotes(data)
     expect(rest).toEqual([])
@@ -691,7 +692,8 @@ describe('laneNotes: what the lanes are, in words, and what they are not', () =>
     expect(note).toContain('the 10 deepest drawdowns the API lists (DD2), deepest first')
     expect(note).toContain('an open episode ends in a hatch')
     expect(note).not.toContain('is hatched')
-    expect(note).toContain('DD3 (all episodes and time to recovery) is not served')
+    expect(note).not.toContain('is not served')
+    expect(note).not.toContain('DD3')
   })
 
   it('says it in the singular for one row', () => {
@@ -699,7 +701,7 @@ describe('laneNotes: what the lanes are, in words, and what they are not', () =>
     expect(note).toBe(TEAR_DD.lanesNoteOne)
     expect(note).toContain('the deepest drawdown the API lists (DD2)')
     expect(note).toContain('an open episode ends in a hatch')
-    expect(note).toContain('DD3')
+    expect(note).not.toContain('is not served')
   })
 
   it('adds the count of rows left out for an unreadable date', () => {
@@ -719,6 +721,141 @@ describe('laneNotes: what the lanes are, in words, and what they are not', () =>
   it('derives no statistic from the rows: no longest, median or total in the copy', () => {
     for (const text of [TEAR_DD.lanesNote, TEAR_DD.lanesNoteOne, TEAR_DD.laneDropped, TEAR_DD.laneItem, TEAR_DD.lanesName]) {
       expect(text).not.toMatch(/longest|median|total|average|mean|recovery time/i)
+      expect(text).not.toMatch(/not served/i)
     }
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// DD3: every drawdown episode and its time to recovery, a histogram of the recovery times, the longest time
+// under water. Drawn as served: the view holds no statistic of its own.
+
+interface ServedRow { peak: string | null; trough: string; recovery: string | null; depth: number; peak_to_trough: number; trough_to_recovery: number | null; length: number; open: boolean }
+interface ServedBin { lo: number; hi: number | null; count: number }
+interface ServedEpisodes {
+  unit: 'sessions' | 'months'
+  episodes: ServedRow[]
+  n_episodes: number
+  n_recovered: number
+  n_open: number
+  recovery_median: number | null
+  recovery_max: number | null
+  histogram: ServedBin[]
+  longest: { peak: string | null; trough: string; recovery: string | null; depth: number; length: number; open: boolean } | null
+}
+
+const DAILY_BINS: Array<[number, number | null]> = [[1, 1], [2, 5], [6, 10], [11, 21], [22, 63], [64, 126], [127, 252], [253, null]]
+const MONTHLY_BINS: Array<[number, number | null]> = [[1, 1], [2, 3], [4, 6], [7, 12], [13, 24], [25, 60], [61, 120], [121, null]]
+const bins = (shape: Array<[number, number | null]>, counts: number[]): ServedBin[] => shape.map(([lo, hi], i) => ({ lo, hi, count: counts[i] ?? 0 }))
+
+/** The backend's 10-session hand table (test_drawdown_episodes.py): three episodes, two recovered after 1 and 3 sessions, one open. */
+const HAND_DD3: ServedEpisodes = {
+  unit: 'sessions',
+  episodes: [
+    { peak: '2020-01-02', trough: '2020-01-03', recovery: '2020-01-06', depth: -0.25, peak_to_trough: 1, trough_to_recovery: 1, length: 2, open: false },
+    { peak: '2020-01-06', trough: '2020-01-08', recovery: '2020-01-13', depth: -0.75, peak_to_trough: 2, trough_to_recovery: 3, length: 5, open: false },
+    { peak: '2020-01-13', trough: '2020-01-15', recovery: null, depth: -0.5, peak_to_trough: 2, trough_to_recovery: null, length: 2, open: true },
+  ],
+  n_episodes: 3,
+  n_recovered: 2,
+  n_open: 1,
+  recovery_median: 2,
+  recovery_max: 3,
+  histogram: bins(DAILY_BINS, [1, 1]),
+  longest: { peak: '2020-01-06', trough: '2020-01-08', recovery: '2020-01-13', depth: -0.75, length: 5, open: false },
+}
+
+/** The served response with the DD3 field set (the generated types carry it once the contract is regenerated). */
+function withEpisodes(episodes: ServedEpisodes | null, base: Analytics = HYP_ANALYTICS): Analytics {
+  return { ...base, drawdown: { ...base.drawdown, episodes } } as unknown as Analytics
+}
+
+const factOf = (view: NonNullable<ReturnType<typeof dd3View>>, id: string) => view.facts.find((f) => f.id === id)?.value
+
+describe('dd3View: the DD3 facts and the histogram, as served', () => {
+  it('is null for a response without episodes (an older body) and for a null field', () => {
+    expect(dd3View(HYP_ANALYTICS)).toBeNull()
+    expect(dd3View(withEpisodes(null))).toBeNull()
+  })
+
+  it('reads the hand table: counts, median, longest recovery and the longest time under water', () => {
+    const view = dd3View(withEpisodes(HAND_DD3))!
+    expect(view.facts.map((f) => f.id)).toEqual(['episodes', 'recovered', 'open', 'median', 'max', 'longest'])
+    expect(factOf(view, 'episodes')).toBe('3')
+    expect(factOf(view, 'recovered')).toBe('2')
+    expect(factOf(view, 'open')).toBe('1')
+    expect(factOf(view, 'median')).toBe('2 sessions')
+    expect(factOf(view, 'max')).toBe('3 sessions')
+    expect(factOf(view, 'longest')).toBe('5 sessions, 2020-01-06 to 2020-01-13')
+  })
+
+  it('born failing: an open episode is not counted as recovered, in the facts or in the bars', () => {
+    const view = dd3View(withEpisodes(HAND_DD3))!
+    expect(factOf(view, 'recovered')).toBe('2')
+    expect(factOf(view, 'open')).toBe('1')
+    expect(view.bins.reduce((sum, b) => sum + b.count, 0)).toBe(2)
+    // the open row is in the served list; counting it as recovered would make three
+    expect(HAND_DD3.episodes.filter((e) => e.open)).toHaveLength(1)
+  })
+
+  it('names an open longest episode as still under water, from its peak, or from the start', () => {
+    const open = { ...HAND_DD3, longest: { peak: '2020-01-13', trough: '2020-01-15', recovery: null, depth: -0.5, length: 9, open: true } }
+    expect(factOf(dd3View(withEpisodes(open))!, 'longest')).toBe('9 sessions, from 2020-01-13, still under water')
+    const fromStart = { ...open, longest: { ...open.longest, peak: null, length: 1 } }
+    expect(factOf(dd3View(withEpisodes(fromStart))!, 'longest')).toBe('1 session, from the start, still under water')
+  })
+
+  it('labels the bins and scales the bars to the tallest', () => {
+    const served = { ...HAND_DD3, histogram: bins(DAILY_BINS, [4, 2, 0, 1, 0, 0, 0, 1]), n_recovered: 8 }
+    const view = dd3View(withEpisodes(served))!
+    expect(view.bins.map((b) => b.label)).toEqual(['1', '2 to 5', '6 to 10', '11 to 21', '22 to 63', '64 to 126', '127 to 252', '253 and over'])
+    expect(view.bins.map((b) => b.count)).toEqual([4, 2, 0, 1, 0, 0, 0, 1])
+    expect(view.bins.map((b) => b.share)).toEqual([1, 0.5, 0, 0.25, 0, 0, 0, 0.25])
+  })
+
+  it('says months for a monthly book and keeps the singular for one', () => {
+    const served = { ...HAND_DD3, unit: 'months' as const, recovery_median: 1, recovery_max: 1, histogram: bins(MONTHLY_BINS, [2]) }
+    const view = dd3View(withEpisodes(served))!
+    expect(factOf(view, 'median')).toBe('1 month')
+    expect(view.bins.map((b) => b.label)[1]).toBe('2 to 3')
+    expect(view.unit).toBe('months')
+    expect(factOf(dd3View(withEpisodes({ ...served, recovery_median: 2.5, recovery_max: 6 }))!, 'median')).toBe('2.5 months')
+  })
+
+  it('draws no histogram while nothing has recovered, and says so', () => {
+    const served = { ...HAND_DD3, episodes: [HAND_DD3.episodes[2]!], n_episodes: 1, n_recovered: 0, n_open: 1, recovery_median: null, recovery_max: null, histogram: bins(DAILY_BINS, []) }
+    const view = dd3View(withEpisodes(served))!
+    expect(view.bins).toEqual([])
+    expect(factOf(view, 'median')).toBe('--')
+    expect(factOf(view, 'max')).toBe('--')
+    expect(view.notes[0]).toBe('No episode has recovered yet, so there is no histogram of recovery times.')
+  })
+
+  it('says there is nothing to count for a series that never fell', () => {
+    const none = { ...HAND_DD3, episodes: [], n_episodes: 0, n_recovered: 0, n_open: 0, recovery_median: null, recovery_max: null, histogram: bins(DAILY_BINS, []), longest: null }
+    const view = dd3View(withEpisodes(none))!
+    expect(view.facts).toEqual([])
+    expect(view.bins).toEqual([])
+    expect(view.notes).toEqual(['No drawdown episodes, so there are no recovery times.'])
+  })
+
+  it('states the rule in words: trough to recovery, and an open episode is not a recovery', () => {
+    const [rule] = dd3View(withEpisodes(HAND_DD3))!.notes
+    expect(rule).toContain("from an episode's trough to its first session back at the peak")
+    expect(rule).toContain('An episode still under water has not recovered')
+  })
+})
+
+describe('laneNotes with DD3 served: the lanes are the deepest few of all the episodes', () => {
+  it('adds how many of the episodes the lanes draw', () => {
+    const many = { ...HAND_DD3, n_episodes: 41, n_recovered: 40 }
+    const notes = laneNotes(withEpisodes(many, withRows(tenRows())))
+    expect(notes).toHaveLength(2)
+    expect(notes[1]).toBe('The lanes draw 10 of the 41 episodes; DD3 below counts all 41.')
+  })
+
+  it('adds nothing when the lanes already draw every episode, or nothing is served', () => {
+    expect(laneNotes(withEpisodes(HAND_DD3, withRows(tenRows())))).toHaveLength(1)
+    expect(laneNotes(withRows(tenRows()))).toHaveLength(1)
   })
 })

@@ -10,13 +10,15 @@ import { EVIDENCE } from '../../copy/evidence'
 import { stubLayout } from '../../grids/testing'
 import { gridWidth } from '../../grids/useElementWidth'
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../des/desTestData'
+import { POWER_TABLE_REAL } from '../plan/powerTable.fixtures'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import { EVIDENCE_COLUMNS, EVIDENCE_COMPACT_COLUMNS, EVIDENCE_NO_POWER_COLUMNS } from './evidenceColumns'
 import { buildEvidenceRows } from './evidenceModel'
-import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, HYPOTHESES, REGISTRY } from './regFixtures'
 import { buildRegRows } from './regModel'
 import RegEvidence from './RegEvidence'
 import type { HypothesisDetails } from './useHypothesisDetails'
+import { powerViewFromServed } from './usePowerTable'
 
 beforeAll(() => stubLayout(1200))
 afterEach(cleanup)
@@ -39,7 +41,7 @@ const ROWS = buildEvidenceRows({
   confirmations: CONFIRMATIONS,
   deflated: DEFLATED_REAL,
   details: DETAILS,
-  family: { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k },
+  power: powerViewFromServed(POWER_TABLE_REAL),
 })
 
 function headers(): string[] {

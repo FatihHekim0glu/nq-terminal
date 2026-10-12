@@ -24,6 +24,7 @@ import { LEDGER, RUNS, RUN_DETAILS, RUN_FILLS, RUN_TRADES, compareStats, logPage
 import { COMMAND_INDEX, health } from './data/system'
 import { IB_OFF, JOBS_OFF } from './data/p2'
 import { DEMO_DETAIL } from './data/text'
+import { PLAN_EXAMPLE, POWER_TABLE_REAL } from '../screens/plan/powerTable.fixtures'
 
 export type { DemoAnswer }
 
@@ -55,6 +56,18 @@ export interface DemoResponse {
 function hypothesisView<T>(views: ReadonlyMap<string, T>, name: string, query: URLSearchParams) {
   const key = hypothesisKey(name, query)
   return key === null ? NOT_IN_DEMO : servedOrGap(views.get(key))
+}
+
+/**
+ * The one plan the demo holds a body for: the round 17 design (787 events of 14.8 bp, family 80, Sharpe 1) at the
+ * planner's own defaults. The PLAN screen always sends periods and alpha, so they are part of the match.
+ */
+const CAPTURED_PLAN = { n: '787', k: '80', sharpe: '1', event_sd: '14.8', periods: '252', alpha: '0.05' } as const
+
+function isCapturedPlan(query: URLSearchParams): boolean {
+  const keys = [...query.keys()].sort()
+  const wanted = Object.keys(CAPTURED_PLAN).sort()
+  return keys.length === wanted.length && wanted.every((key, i) => keys[i] === key && query.get(key) === CAPTURED_PLAN[key as keyof typeof CAPTURED_PLAN])
 }
 
 export const DEMO_ROUTES: DemoRoutes = {
@@ -114,6 +127,8 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/analytics/run/{run_id}/trade-paths': ({ params }) => servedOrGap(TRADE_PATH_VIEWS.get(params.run_id)),
   '/api/analytics/run/{run_id}/excursions': ({ params }) => servedOrGap(EXCURSION_VIEWS.get(params.run_id)),
   '/api/analytics/deflated': () => served(DEFLATED),
+  '/api/analytics/power': () => served(POWER_TABLE_REAL),
+  '/api/analytics/plan': ({ query }) => (isCapturedPlan(query) ? served(PLAN_EXAMPLE) : NOT_IN_DEMO),
   '/api/analytics/paper-tracking': ({ query }) => forBookJournal(PAPER_TRACKING, query.get('file')),
   '/api/analytics/paper-expectation': ({ query }) => forBookJournal(PAPER_EXPECTATION, query.get('file')),
 
@@ -140,6 +155,7 @@ export const DEMO_ROUTES: DemoRoutes = {
   '/api/dq/symbols': () => NOT_IN_DEMO,
   '/api/dq/calendar/{symbol}': () => NOT_IN_DEMO,
   '/api/dq/guards': () => NOT_IN_DEMO,
+  '/api/dq/universe': () => NOT_IN_DEMO,
 
   // P2: the demo holds no body for these views; the queue and the IB snapshot answer as a server with both off
   '/api/analytics/hypothesis/{name}/risk-extras': () => NOT_IN_DEMO,

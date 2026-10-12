@@ -136,8 +136,8 @@ describe('the endpoint index checker (born failing on a planted drift)', () => {
 })
 
 describe('docs/ARCHITECTURE.md section 4.1 endpoint index', () => {
-  it('pins the contract to the 84 paths the docs quote, all GET but the four writes', () => {
-    expect(CONTRACT_PATHS, 'contract/openapi.json changed: update docs/ARCHITECTURE.md section 4.1 and the README path count').toHaveLength(84)
+  it('pins the contract to the 87 paths the docs quote, all GET but the four writes', () => {
+    expect(CONTRACT_PATHS, 'contract/openapi.json changed: update docs/ARCHITECTURE.md section 4.1 and the README path count').toHaveLength(87)
     // PRD U3, 03 10.3 and release 0.2.0: the queue's POST and DELETE, the launch action's POST and the workspace PUT are the only writes; every other path is GET and nothing else.
     const writes: Readonly<Record<string, readonly string[]>> = { '/api/jobs': ['get', 'post'], '/api/jobs/{job_id}': ['get', 'delete'], '/api/jobs/actions': ['post'], '/api/workspaces/{doc}': ['get', 'put'] }
     for (const [route, methods] of Object.entries(OPENAPI.paths)) expect({ route, methods: Object.keys(methods).sort() }).toEqual({ route, methods: [...(writes[route] ?? ['get'])].sort() })

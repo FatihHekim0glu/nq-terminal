@@ -55,6 +55,8 @@ const SeasScreen = lazy(() => import('../screens/seas/SeasScreen'))
 const EvtScreen = lazy(() => import('../screens/evt/EvtScreen'))
 const RollScreen = lazy(() => import('../screens/roll/RollScreen'))
 const DqScreen = lazy(() => import('../screens/dq/DqScreen'))
+// PLAN (research_ux item 2): the pre-registration planner, no context and no data
+const PlanScreen = lazy(() => import('../screens/plan/PlanScreen'))
 // 12 (P2, U3): the backtest queue, the one screen that writes (through api/jobsClient.ts only)
 const JobsScreen = lazy(() => import('../screens/jobs/JobsScreen'))
 
@@ -94,6 +96,7 @@ export const BUILT_SCREENS: ScreenRegistry = {
   EVT: EvtScreen,
   ROLL: RollScreen,
   DQ: DqScreen,
+  PLAN: PlanScreen,
   JOBS: JobsScreen,
 }
 

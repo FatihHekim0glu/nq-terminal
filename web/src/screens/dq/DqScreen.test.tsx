@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // DQ screen (ANALYTICS RI4 and RI5): the calendar heatmap named by its data summary with a table view, the
 // legend with letters, hover and Number <GO> reasons, the flagged-day grid, the QA years, the [POST HOC]
-// label verbatim, the symbol switch and the guard fingerprint tab; all from GETs under /api/dq.
+// label verbatim, the symbol switch, the guard fingerprint tab and the universe matrix; all from GETs under /api/dq.
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,6 +15,7 @@ import { DQ } from '../../copy/dq'
 import { stubLayout } from '../../grids/testing'
 import DqScreen from './DqScreen'
 import type { DqCalendar, DqIndex, DqSymbol, GuardStatusReport } from './types'
+import type { DqUniverse } from './universeModel'
 
 const PANEL_ID = 'p-dq'
 const PARAMS: PanelParams = { code: 'DQ', context: null, args: {}, group: 'A' }
@@ -51,11 +52,23 @@ const GUARDS: GuardStatusReport = {
   ],
 }
 
+const UNIVERSE_COUNTS = { sessions: 10, usable: 9, gated_out: 1, unrepairable: 0, rejected: 0, usable_share: 0.9 }
+const UNIVERSE: DqUniverse = {
+  label: LABEL, fence: '2021-12-31', years: [2010, 2011], missing: [],
+  roots: [{
+    root: 'NQ', symbol: 'NQ.V.0', repair_status: 'nq', source: 'results/x.json', qa_source: 'results/qa_report.json',
+    first_bar: '2010-09-29', last_bar: '2021-12-31 or later, sealed', last_sealed: true, daily: null, blocks: [],
+    rows: [{ timeframe: '1m', variant: 'vendor', total: UNIVERSE_COUNTS,
+      cells: [{ year: 2010, ...UNIVERSE_COUNTS, sessions: 0, usable: 0, gated_out: 0, usable_share: null }, { year: 2011, ...UNIVERSE_COUNTS }] }],
+  }],
+}
+
 async function defaultFetch(input: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(input), 'http://x')
   let body: unknown = INDEX
   if (url.pathname.startsWith('/api/dq/calendar/')) body = calendarFor(decodeURIComponent(url.pathname.split('/').pop()!))
   if (url.pathname === '/api/dq/guards') body = GUARDS
+  if (url.pathname === '/api/dq/universe') body = UNIVERSE
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
@@ -183,6 +196,42 @@ describe('DQ screen', () => {
     expect(within(grid).getByText('OK')).toBeTruthy()
     expect(screen.getByText('1 OK, 1 mismatch, 0 with no record.')).toBeTruthy()
     expect(urls()).toContain('/api/dq/guards')
+  })
+
+  it('shows the universe matrix on the third tab, 87, read from /api/dq/universe only when it is opened', async () => {
+    renderDq()
+    await screen.findByRole('img', { name: /NQ\.V\.0/ })
+    expect(urls()).not.toContain('/api/dq/universe')
+    act(() => {
+      activateNumbered(PANEL_ID, 87)
+    })
+    const grid = await screen.findByRole('grid', { name: 'Data usability, every root by year' })
+    expect(urls()).toContain('/api/dq/universe')
+    expect(within(grid).getByRole('gridcell', { name: /^NQ 1m vendor 2011: 9 of 10 sessions usable, 90\.0%/ })).toBeTruthy()
+    expect(within(grid).getByText('2021-12-31 or later, sealed')).toBeTruthy()
+    expect(screen.getAllByText(LABEL).length).toBeGreaterThan(0)
+    expect(screen.getByRole('tab', { name: /Universe/ })).toBeTruthy()
+  })
+
+  it('opens on the universe matrix when the context is a universe', async () => {
+    render(<DqScreen params={PARAMS} context={{ kind: 'universe', value: 'NQ' }} />, { wrapper: Panel })
+    expect(await screen.findByRole('grid', { name: 'Data usability, every root by year' })).toBeTruthy()
+    expect(screen.queryByRole('img', { name: /data quality calendar/ })).toBeNull()
+  })
+
+  it('says so when the universe cannot be read', async () => {
+    fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://x')
+      if (url.pathname === '/api/dq/universe') return new Response(JSON.stringify({ detail: 'a repair record could not be classified' }), { status: 502, headers: { 'content-type': 'application/json' } })
+      return defaultFetch(input)
+    })
+    try {
+      render(<DqScreen params={PARAMS} context={{ kind: 'universe', value: 'NQ' }} />, { wrapper: Panel })
+      expect(await screen.findByText(/could not be read: a repair record could not be classified/, {}, { timeout: 4000 })).toBeTruthy()
+    } finally {
+      fetchSpy.mockReset()
+      fetchSpy.mockImplementation(defaultFetch)
+    }
   })
 
   it('shows no permanent Loading when the symbol index is empty (D31)', async () => {

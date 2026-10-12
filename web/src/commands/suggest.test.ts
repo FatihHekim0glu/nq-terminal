@@ -59,7 +59,7 @@ describe('suggestions', () => {
     expect(afterNq).not.toContain('NQ RUN ')
     expect(afterNq).not.toContain('NQ REG ')
     expect(values('nt_dtsmom_v0_ts1 R')).toEqual(['nt_dtsmom_v0_ts1 RUN ', 'nt_dtsmom_v0_ts1 RET ', 'nt_dtsmom_v0_ts1 RR '])
-    expect(values('27F ')).toEqual(['27F MON ', '27F CORR '])
+    expect(values('27F ')).toEqual(['27F MON ', '27F CORR ', '27F DQ '])
   })
 
   it('argument position: timeframes for GP, none for GIP (it takes a typed date)', () => {

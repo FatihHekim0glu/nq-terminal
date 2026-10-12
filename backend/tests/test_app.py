@@ -188,6 +188,7 @@ EXPECTED_PATHS = {  # ARCHITECTURE s4 (Phases 1 and 2); the contract snapshot pi
     "/api/events/calendar", "/api/events/study",
     "/api/market/rolls", "/api/market/paper-rolls",
     "/api/dq/symbols", "/api/dq/calendar/{symbol}", "/api/dq/guards",
+    "/api/dq/universe",  # w3 (DQ universe: roots by years, records only)
     "/api/market/term-structure/{root}",  # P2 (MV6)
     "/api/ib/snapshot",  # P2 (U3, read only)
     "/api/jobs", "/api/jobs/{job_id}",  # P2 (U3, two of the four writes)

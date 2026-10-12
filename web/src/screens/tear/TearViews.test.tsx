@@ -717,13 +717,13 @@ describe('DD: hovering the lanes or the table marks the same episode', () => {
 })
 
 describe('DD: the lanes note under the table', () => {
-  it('names the rows as the deepest the API lists, and says DD3 is not served, after the table', () => {
+  it('names the rows as the deepest the API lists, without the old DD3 is not served line, after the table', () => {
     const { container } = mountDd(withRows(10))
     const [text] = laneNotes(withRows(10))
     const note = screen.getByText(text!)
     expect(note.className).toBe('tear-note')
     expect(note.textContent).toContain('the 10 deepest drawdowns the API lists (DD2), deepest first')
-    expect(note.textContent).toContain('DD3 (all episodes and time to recovery) is not served')
+    expect(container.textContent).not.toContain('is not served')
     const html = container.innerHTML
     expect(html.indexOf(text!)).toBeGreaterThan(html.indexOf('</table>'))
   })
@@ -748,6 +748,93 @@ describe('DD: the lanes note under the table', () => {
     mountDd({ ...HYP_ANALYTICS, drawdown_table: [] })
     expect(laneNotes({ ...HYP_ANALYTICS, drawdown_table: [] })).toEqual([])
     expect(screen.queryByText(/deepest drawdown/)).toBeNull()
+  })
+})
+
+// DD3: every drawdown episode with its time to recovery, drawn under the top drawdowns from the served `episodes`.
+type Dd3Row = { peak: string | null; trough: string; recovery: string | null; depth: number; peak_to_trough: number; trough_to_recovery: number | null; length: number; open: boolean }
+const DD3_SHAPE: Array<[number, number | null]> = [[1, 1], [2, 5], [6, 10], [11, 21], [22, 63], [64, 126], [127, 252], [253, null]]
+const dd3Bins = (counts: number[]) => DD3_SHAPE.map(([lo, hi], i) => ({ lo, hi, count: counts[i] ?? 0 }))
+const DD3_ROWS: Dd3Row[] = [
+  { peak: '2020-01-02', trough: '2020-01-03', recovery: '2020-01-06', depth: -0.25, peak_to_trough: 1, trough_to_recovery: 1, length: 2, open: false },
+  { peak: '2020-01-06', trough: '2020-01-08', recovery: '2020-01-13', depth: -0.75, peak_to_trough: 2, trough_to_recovery: 3, length: 5, open: false },
+  { peak: '2020-01-13', trough: '2020-01-15', recovery: null, depth: -0.5, peak_to_trough: 2, trough_to_recovery: null, length: 2, open: true },
+]
+const DD3_SERVED = {
+  unit: 'sessions',
+  episodes: DD3_ROWS,
+  n_episodes: 3,
+  n_recovered: 2,
+  n_open: 1,
+  recovery_median: 2,
+  recovery_max: 3,
+  histogram: dd3Bins([1, 1]),
+  longest: { peak: '2020-01-06', trough: '2020-01-08', recovery: '2020-01-13', depth: -0.75, length: 5, open: false },
+}
+const withDd3 = (episodes: unknown, base: Analytics = HYP_ANALYTICS): Analytics => ({ ...base, drawdown: { ...base.drawdown, episodes } }) as unknown as Analytics
+const dd3Group = () => screen.getByRole('group', { name: 'Drawdown episodes and time to recovery (DD3)' })
+
+describe('DD: the DD3 block under the top drawdowns', () => {
+  it('is absent from a response without episodes, and the old not-served line is gone', () => {
+    const { container } = mountDd()
+    expect(screen.queryByRole('group', { name: /DD3/ })).toBeNull()
+    expect(container.textContent).not.toContain('is not served')
+  })
+
+  it('lists the facts as served, each under its row header', () => {
+    mountDd(withDd3(DD3_SERVED))
+    const facts = within(dd3Group()).getByRole('table', { name: 'Drawdown episodes (DD3)' })
+    const pairs = within(facts).getAllByRole('row').slice(1).map((r) => [within(r).getByRole('rowheader').textContent, within(r).getByRole('cell').textContent])
+    expect(pairs).toEqual([
+      ['Episodes', '3'],
+      ['Recovered', '2'],
+      ['Still under water', '1'],
+      ['Median time to recovery', '2 sessions'],
+      ['Longest time to recovery', '3 sessions'],
+      ['Longest time under water', '5 sessions, 2020-01-06 to 2020-01-13'],
+    ])
+  })
+
+  it('draws the histogram as a table with a bar per bin, the bars hidden from assistive technology', () => {
+    mountDd(withDd3(DD3_SERVED))
+    const hist = within(dd3Group()).getByRole('table', { name: 'Time to recovery, trough to recovery, in sessions (DD3)' })
+    const rows = within(hist).getAllByRole('row').slice(1)
+    expect(rows).toHaveLength(8)
+    expect(within(hist).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Time to recovery', 'Episodes'])
+    expect(rows.map((r) => [within(r).getByRole('rowheader').textContent, within(r).getAllByRole('cell')[0]!.textContent])).toEqual([
+      ['1', '1'], ['2 to 5', '1'], ['6 to 10', '0'], ['11 to 21', '0'], ['22 to 63', '0'], ['64 to 126', '0'], ['127 to 252', '0'], ['253 and over', '0'],
+    ])
+    const bar = rows[0]!.querySelector('[data-bar]') as HTMLElement
+    expect(bar.getAttribute('aria-hidden')).toBe('true')
+    expect(bar.style.width).toBe('100%')
+    expect((rows[2]!.querySelector('[data-bar]') as HTMLElement).style.width).toBe('0%')
+  })
+
+  it('born failing: the open episode is in the still under water row, not in the histogram', () => {
+    mountDd(withDd3(DD3_SERVED))
+    const hist = within(dd3Group()).getByRole('table', { name: /Time to recovery/ })
+    const total = within(hist).getAllByRole('row').slice(1).reduce((sum, r) => sum + Number(within(r).getAllByRole('cell')[0]!.textContent), 0)
+    expect(total).toBe(2)
+    expect(within(dd3Group()).getByText('Recovered').nextElementSibling!.textContent).toBe('2')
+  })
+
+  it('says it in words, as a note after the tables: the rule and what an open episode is', () => {
+    mountDd(withDd3(DD3_SERVED))
+    const note = within(dd3Group()).getByText(/An episode still under water has not recovered/)
+    expect(note.className).toBe('tear-note')
+  })
+
+  it('leaves the histogram out while nothing has recovered, and says so', () => {
+    mountDd(withDd3({ ...DD3_SERVED, episodes: [DD3_ROWS[2]], n_episodes: 1, n_recovered: 0, n_open: 1, recovery_median: null, recovery_max: null, histogram: dd3Bins([]) }))
+    expect(within(dd3Group()).queryByRole('table', { name: /Time to recovery/ })).toBeNull()
+    expect(within(dd3Group()).getByText('No episode has recovered yet, so there is no histogram of recovery times.')).toBeTruthy()
+  })
+
+  it('keeps the top drawdowns table, its rows and its lanes as they were', () => {
+    mountDd(withDd3(DD3_SERVED))
+    expect(bodyRows()).toHaveLength(1)
+    expect(within(ddTable()).getAllByRole('columnheader')).toHaveLength(9)
+    expect((lastStack().panes as ReturnType<typeof ddStack>['panes']).map((p) => p.id)).toEqual(['equity', 'underwater', 'lanes'])
   })
 })
 

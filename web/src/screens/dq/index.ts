@@ -3,4 +3,4 @@
 import { DQ } from '../../copy/dq'
 
 export { default as DqScreen } from './DqScreen'
-export const DQ_SCREEN = { code: 'DQ', title: DQ.title, phase: '11', accepts: ['instrument'] } as const
+export const DQ_SCREEN = { code: 'DQ', title: DQ.title, phase: '11', accepts: ['instrument', 'universe'] } as const

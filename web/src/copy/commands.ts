@@ -44,6 +44,7 @@ export const MNEMONIC_SCREENS = {
   EVT: 'Event study',
   ROLL: 'Roll calendar',
   DQ: 'Data quality',
+  PLAN: 'Pre-registration plan',
   JOBS: 'Backtest queue',
 } as const
 

@@ -291,7 +291,7 @@ function measurePanel(width: number): void {
 }
 
 describe('REG: 92) Evidence power columns (roadmap #11 on the evidence matrix, W8-R5c)', () => {
-  it('shows MDE alpha/k and Sharpe/MDE beside the DSR column, with the figures powerView gives volmanaged_v0', async () => {
+  it('shows MDE alpha/k and Sharpe/MDE beside the DSR column, with the served figures for volmanaged_v0', async () => {
     stubApi()
     measurePanel(1400)
     await ready()
@@ -299,7 +299,7 @@ describe('REG: 92) Evidence power columns (roadmap #11 on the evidence matrix, W
     const grid = await screen.findByRole('grid', { name: EVIDENCE.gridLabel })
     expect(within(grid).getByRole('columnheader', { name: /MDE alpha\/k/ })).toBeTruthy()
     expect(within(grid).getByRole('columnheader', { name: /Sharpe\/MDE/ })).toBeTruthy()
-    // The deflated view and the family arrive after the grid first draws: wait for the cells, not the grid.
+    // The deflated view and the served power table arrive after the grid first draws: wait for the cells, not the grid.
     await waitFor(() => {
       const rows = within(grid).getAllByRole('row').filter((r) => r.closest('tbody'))
       const vm = rows.find((r) => within(r).queryByText('volmanaged_v0') !== null)!
@@ -308,7 +308,7 @@ describe('REG: 92) Evidence power columns (roadmap #11 on the evidence matrix, W
     })
   })
 
-  it('names the two columns in the [POST HOC] legend as computed in the browser', async () => {
+  it('names the two columns in the [POST HOC] legend as served, not computed in the browser', async () => {
     stubApi()
     await ready()
     fireEvent.click(screen.getByRole('tab', { name: '92) Evidence' }))
@@ -317,15 +317,19 @@ describe('REG: 92) Evidence power columns (roadmap #11 on the evidence matrix, W
     expect(text).toContain(EVIDENCE.legendPostHoc)
     expect(EVIDENCE.legendPostHoc).toContain(EVIDENCE.cols.mde)
     expect(EVIDENCE.legendPostHoc).toContain(EVIDENCE.cols.ratio)
-    expect(EVIDENCE.legendPostHoc).toContain('computed in the browser')
+    expect(EVIDENCE.legendPostHoc).toContain('served')
+    expect(EVIDENCE.legendPostHoc).not.toContain('in the browser')
   })
 
-  it('makes the request for the family once: the multiple-testing GET is shared with the board, not repeated', async () => {
+  it('asks for the served power table once, on 92) Evidence alone, and repeats no multiple-testing GET', async () => {
     const seen = stubApi()
     measurePanel(1400)
     await ready()
+    const powerGets = () => seen.filter((s) => s.url === '/api/analytics/power')
+    expect(powerGets()).toHaveLength(0)
     fireEvent.click(screen.getByRole('tab', { name: '92) Evidence' }))
     await screen.findByRole('grid', { name: EVIDENCE.gridLabel })
+    await waitFor(() => expect(powerGets()).toHaveLength(1))
     expect(seen.filter((s) => s.url === '/api/multiple-testing')).toHaveLength(1)
   })
 

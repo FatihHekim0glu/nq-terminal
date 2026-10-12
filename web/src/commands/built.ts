@@ -6,7 +6,7 @@ import type { MnemonicCode } from './registry'
 
 export const BUILT_CODES: ReadonlySet<MnemonicCode> = new Set<MnemonicCode>([
   'HOME', 'GP', 'GIP', 'DES', 'REG', 'MT', 'RUNS', 'RUN', 'EQ', 'DD', 'RET', 'RR', 'MRET', 'MON', 'CORR', 'LEDG', 'OOS', 'LIVE', 'JRNL', 'HELP',
-  'COST', 'BLK', 'EXPO', 'SEAL', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ', 'JOBS',
+  'COST', 'BLK', 'EXPO', 'SEAL', 'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ', 'PLAN', 'JOBS',
 ])
 
 /** Whether `code`, exactly as the registry spells it, opens a built screen. */

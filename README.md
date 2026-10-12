@@ -43,7 +43,7 @@ mode, and the full terminal needs the private nq-lab checkout beside it.
 
 As of 8 October 2026:
 
-- **Web terminal.** Built: 30 of the 30 mnemonics open a screen, on 84 API paths.
+- **Web terminal.** Built: 31 of the 31 mnemonics open a screen, on 87 API paths.
 - **Windows desktop app, 0.3.2.** Released on 8 October 2026 as the annotated tag desktop-v0.3.2, on commit `e948719`: an
   unsigned, per-user installer of 3,268,015 bytes ([hand-over](docs/desktop/handover_windows.md), section 1). It brings
   an on-screen switch for the read-only IB snapshot (Options, then IB snapshot; it takes effect at the next start and
@@ -94,14 +94,14 @@ As of 8 October 2026:
 
 ## Highlights
 
-- **Read only by construction.** All 84 API paths are GET, bar four writes: queueing and stopping a backtest on the
+- **Read only by construction.** All 87 API paths are GET, bar four writes: queueing and stopping a backtest on the
   `JOBS` screen (`POST /api/jobs`, `DELETE /api/jobs/{job_id}`), starting a run of a registered strategy from a ledger
   row or re-running an anchor (`POST /api/jobs/actions`, see [the research launcher](docs/research_launcher.md)) and
   saving a workspace (`PUT /api/workspaces/{doc}`). Tests fail on any other method.
 - **One gated door to prices.** Every price read goes through nq-lab's out-of-sample gate, which decides and logs it.
 - **Honest labels.** `[PRE-REG]` marks a value read from a registered result and `[POST HOC]` one the terminal
   computed. Sealed windows show as spent. The terminal adds no pass or fail of its own.
-- **Keyboard first.** 30 mnemonics on a command line drive dockable panels that link by group and share a time
+- **Keyboard first.** 31 mnemonics on a command line drive dockable panels that link by group and share a time
   crosshair. `HL` searches functions, metrics, instruments and help text.
 - **Exports keep their labels.** `GRAB` saves a panel as an image whose caption names its basis, unit, tag and source.
 - **Three implementations of the headline metrics.** The terminal's own functions, Nautilus statistics and reference
@@ -373,7 +373,8 @@ Numbers such as `92)` are the item numbers of a panel's views and tabs: type the
 | `EQ`, `DD`, `RET`, `RR`, `MRET` | The analytics tear sheet for a hypothesis (Basis A) or a run (Basis B) |
 | `COST`, `BLK`, `EXPO`, `SEAL` | Cost ladder or cost waterfall; the blocks of a hypothesis; a run's exposure and turnover; the sealed-window files |
 | `GP`, `GIP`, `MON`, `CORR` | Candles with roll markers and fills; one session intraday; the 27-futures monitor; the clustered correlation matrix |
-| `VCONE`, `SEAS`, `EVT`, `ROLL`, `DQ` | Volatility cone, seasonality, event study around CPI, PPI, NFP and FOMC, roll calendar and data quality |
+| `VCONE`, `SEAS`, `EVT`, `ROLL`, `DQ` | Volatility cone, seasonality, event study around CPI, PPI, NFP and FOMC, roll calendar, and data quality for one instrument or the whole universe |
+| `PLAN` | The pre-registration planner: the bars at the next slot of the family, the detectable Sharpe and the observations needed, from typed inputs only (no data is read) |
 | `OOS`, `LEDG` | The gate's access log and openings; the run ledger with its anchor pairs |
 | `LIVE`, `JRNL` | The paper book, read only, with its expectation cone; its journals with plumbing rows hatched. Server-sent events, or 2 s polling as a fallback |
 | `HELP` | Every function with runnable examples, the keys, link groups, licences and a glossary of every label the terminal prints |
@@ -427,7 +428,7 @@ command line when the page opens and then cleared. Links open screens, contexts 
 numbers and `HL` never run from a URL, and a link with any other line is refused whole.
 
 <details>
-<summary>All 30 mnemonics</summary>
+<summary>All 31 mnemonics</summary>
 
 From [`web/src/commands/registry.ts`](web/src/commands/registry.ts), in HELP's order. P0 shipped first, P1 after it,
 and P2 (`JOBS`) with the owner's approval of 2026-10-01.
@@ -462,8 +463,9 @@ and P2 (`JOBS`) with the owner's approval of 2026-10-01.
 | 26 | `SEAS` | Seasonality | instrument or hypothesis | P1 |
 | 27 | `EVT` | Event study | instrument | P1 |
 | 28 | `ROLL` | Roll calendar | instrument | P1 |
-| 29 | `DQ` | Data quality | instrument | P1 |
-| 30 | `JOBS` | Backtest queue | none | P2 |
+| 29 | `DQ` | Data quality | instrument or universe | P1 |
+| 30 | `PLAN` | Pre-registration plan | none | P1 |
+| 31 | `JOBS` | Backtest queue | none | P2 |
 
 </details>
 
@@ -499,7 +501,7 @@ flowchart TB
   `/api` from one origin. One backend runs per lab, guarded by a lock file and a challenge-response handshake.
 - **The data gate.** Every price read goes through nq-lab's `nq_lab.data.serve` with caller `terminal`, so the gate
   decides and logs each read and serves nothing after 2021-12-31. Prices are cached in memory only, never on disk.
-- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 84 paths. pytest compares the app with it, and
+- **Contract.** [`contract/openapi.json`](contract/openapi.json) holds 87 paths. pytest compares the app with it, and
   `pnpm gen:api` generates the page's types from it; `pnpm test` fails first when they have drifted.
 - **Web page.** React 19.3.0, TypeScript 6.0.3 and Vite 8.3.1, with dockview panels under a cmdk command line, zustand
   and TanStack Query. Charts use uPlot, TradingView Lightweight Charts and Apache ECharts; grids use TanStack Table and
@@ -669,7 +671,7 @@ for em and en dashes and US spellings.
 | Document | What it covers |
 |---|---|
 | [`docs/PRD.md`](docs/PRD.md) | What the terminal is for, its scope by priority, the non-goals and the decision log |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack and versions, folder layout, data contracts, the endpoint index of all 84 paths, the gate, security, run and test commands |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack and versions, folder layout, data contracts, the endpoint index of all 87 paths, the gate, security, run and test commands |
 | [`docs/UI_SPEC.md`](docs/UI_SPEC.md) | The frame, design tokens, command line and keys, honesty labels, screens, components and copy rules |
 | [`docs/BLOOMBERG_LOOK.md`](docs/BLOOMBERG_LOOK.md) | The look and behaviour spec: palette, type, chrome, keyboard, charts and screens |
 | [`docs/ANALYTICS_CATALOG.md`](docs/ANALYTICS_CATALOG.md) | Every metric with its priority, definition, inputs and QA reference |

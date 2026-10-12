@@ -35,6 +35,7 @@ const CONTEXT_FOR_RULE: Readonly<Record<string, string>> = {
   universe: '27F',
   'hypothesis or instrument': 'volmanaged_v0',
   'instrument or hypothesis': 'NQ',
+  'instrument or universe': 'NQ',
   'run or hypothesis': 'nt_volmanaged_v0_fixture_m1',
 }
 const ARGUMENT_FOR: Readonly<Record<string, string>> = { GIP: '2019-03-14' }
@@ -45,7 +46,7 @@ const BUILT: ReadonlySet<string> = new Set([
   // Phase 9 (TASKS 9.4): the first P1 screens.
   'COST', 'BLK', 'EXPO', 'SEAL',
   // Phase 11: the P1 market and quality screens.
-  'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ',
+  'VCONE', 'SEAS', 'EVT', 'ROLL', 'DQ', 'PLAN',
   // Phase 12 (U3): the backtest queue; every mnemonic now opens a screen.
   'JOBS',
 ])

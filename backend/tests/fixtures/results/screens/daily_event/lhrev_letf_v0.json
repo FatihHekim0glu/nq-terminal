@@ -1,0 +1,24 @@
+{
+ "headline": {
+  "n": 30,
+  "mean_bp": 1.8243333333333334,
+  "sd_bp": 45.17555134356859
+ },
+ "cost_ladder_mean_bp": {
+  "0_tick": 1.9243333333333328,
+  "2_tick": 1.7243333333333335
+ },
+ "sample": {
+  "first_mark": "2012-01-05",
+  "last_mark": "2012-02-16"
+ },
+ "secondaries": {
+  "controls_alone": {
+   "LO_net_1tick": {
+    "n": 30,
+    "mean_bp": 2.827333333333334
+   }
+  }
+ },
+ "synthetic": true
+}

@@ -62,18 +62,6 @@ class EquityView(ResponseModel):
     perf_diff_unit: str | None
 
 
-class DrawdownView(ResponseModel):
-    """DD1: underwater series of the strategy and the benchmark, and their deepest points."""
-
-    unit: str
-    t: list[int]
-    date: list[str]
-    dd: list[Num]
-    bench_dd: list[Num] | None
-    max_drawdown: Num
-    bench_max_drawdown: Num
-
-
 class DrawdownRow(ResponseModel):
     """DD2: one episode; `peak` is null when the peak is the starting value, `recovery` null while it is open."""
 
@@ -85,6 +73,56 @@ class DrawdownRow(ResponseModel):
     trough_to_recovery: int | None
     length: int
     open: bool
+
+
+class RecoveryBin(ResponseModel):
+    """One bin of the DD3 time-to-recovery histogram: recovery times from `lo` to `hi` inclusive (`hi` null: and over)."""
+
+    lo: int
+    hi: int | None
+    count: int
+
+
+class LongestUnderWater(ResponseModel):
+    """DD3: the episode with the most sessions under water; `length` runs from its peak to its recovery, or to the
+    last session while it is open (`recovery` null)."""
+
+    peak: str | None
+    trough: str
+    recovery: str | None
+    depth: float
+    length: int
+    open: bool
+
+
+class DrawdownEpisodes(ResponseModel):
+    """DD3: every drawdown episode (time order, no cap), the time to recovery of the recovered ones (sessions from the
+    trough to the recovery; months for a monthly series), a histogram of those times and the longest time under
+    water. An open episode is never counted as recovered: it is in `n_open` and `longest`, not in the times."""
+
+    unit: Literal["sessions", "months"]
+    episodes: list[DrawdownRow]
+    n_episodes: int
+    n_recovered: int
+    n_open: int
+    recovery_median: Num
+    recovery_max: int | None
+    histogram: list[RecoveryBin]
+    longest: LongestUnderWater | None
+
+
+class DrawdownView(ResponseModel):
+    """DD1: underwater series of the strategy and the benchmark, and their deepest points. `episodes` (DD3) is
+    filled on the full tear sheet only; the HOME panel's view leaves it null."""
+
+    unit: str
+    t: list[int]
+    date: list[str]
+    dd: list[Num]
+    bench_dd: list[Num] | None
+    max_drawdown: Num
+    bench_max_drawdown: Num
+    episodes: DrawdownEpisodes | None
 
 
 class VolExtremes(ResponseModel):

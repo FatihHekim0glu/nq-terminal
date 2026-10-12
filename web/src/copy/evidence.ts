@@ -15,7 +15,7 @@ export const EVIDENCE = {
   legendPreReg: 'from the result files: Verdict, t, Holm p, Blocks > 0, Break-even.',
   legendSpent: 'Sealed test, the one-shot 2022+ opening.',
   legendPostHoc:
-    'on the SV3a common daily basis (Basis A): Sharpe (ann.), Years, DSR V0; computed in the browser from the served n, P and alpha/k (approximate, one sided, 80% power): MDE alpha/k, Sharpe/MDE.',
+    'on the SV3a common daily basis (Basis A): Sharpe (ann.), Years, DSR V0; served from the n and P of the Deflated Sharpe rows at alpha/k (approximate, one sided, 80% power): MDE alpha/k, Sharpe/MDE.',
   noScore: 'No column is a score and there is no total: the terminal adds no pass or fail.',
   tNote: 't as each result file names it (plain, Newey-West or alpha t); DES shows its label.',
   reading: 'Reading {n} hypothesis records.',

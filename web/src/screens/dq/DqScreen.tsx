@@ -1,4 +1,7 @@
 // DQ: data quality (ANALYTICS RI4 and RI5; UI_SPEC 7, look spec 4.4 and 4.8). Two sub-tabs under the red bar:
+// 87) Universe: every root by year 2010 to 2021, the share of NYSE sessions usable for 1m (vendor and repaired) and
+//     1d, the QA first and last bar, the repair status and the known blocks (GET /api/dq/universe, records only);
+//     it opens first when the context is a universe, the calendar when it is an instrument;
 // 85) Calendar: the symbol's sessions to 2021-12-31 as a calendar heatmap of vendor, gated out, rejected,
 //     rebuilt and unrepairable days (letters as well as fills), its table view by year, the flagged days in a
 //     numbered grid (Number <GO> or Enter selects one: the heatmap outlines it and the line under it gives the
@@ -17,15 +20,17 @@ import { DQ } from '../../copy/dq'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../../copy/workspace'
 import MonitorGrid, { type MonitorColumn } from '../../grids/MonitorGrid'
 import QueryStatus from '../mon/QueryStatus'
-import { useDqCalendar, useDqGuards, useDqSymbols } from '../../api/queries.screens'
+import { useDqCalendar, useDqGuards, useDqSymbols, useDqUniverse } from '../../api/queries.screens'
 import CalendarHeatmap, { Legend } from './CalendarHeatmap'
+import UniverseMatrix from './UniverseMatrix'
 import { flaggedCsv, flaggedDays, offCalendarDays, offCalendarText } from './model'
 import type { DqCalendar, DqDay, DqQaYear, GuardGroup, GuardStatusReport } from './types'
+import { universeCsv } from './universeModel'
 import '../mon/market.css'
 import './dq.css'
 
-type DqTab = 'calendar' | 'guards'
-const TABS: readonly DqTab[] = ['calendar', 'guards']
+type DqTab = 'calendar' | 'guards' | 'universe'
+const TABS: readonly DqTab[] = ['calendar', 'guards', 'universe']
 const FIRST_TAB = 85
 const DEFAULT_SYMBOL = 'NQ.V.0'
 
@@ -153,6 +158,10 @@ function guardsCsv(report: GuardStatusReport): string {
     report.groups.map((g) => [g.name, g.status, g.keys, g.live_sha256, g.recorded_sha256, g.record, g.changed_keys.join(' ')]))
 }
 
+function initialTab(context: ScreenProps['context']): DqTab {
+  return context && context.kind === 'universe' ? 'universe' : 'calendar'
+}
+
 function initialSymbol(context: ScreenProps['context']): string {
   return context && context.kind === 'instrument' && context.value ? `${context.value}.V.0` : DEFAULT_SYMBOL
 }
@@ -160,7 +169,7 @@ function initialSymbol(context: ScreenProps['context']): string {
 export default function DqScreen({ context }: ScreenProps) {
   const actions = usePanelActions()
   const viewId = useId()
-  const [tab, setTab] = useState<DqTab>('calendar')
+  const [tab, setTab] = useState<DqTab>(() => initialTab(context))
   const index = useDqSymbols()
   const known = index.data?.symbols ?? []
   const [picked, setPicked] = useState<string | null>(null)
@@ -168,10 +177,16 @@ export default function DqScreen({ context }: ScreenProps) {
   const symbol = known.some((s) => s.symbol === wanted) ? wanted : (known[0]?.symbol ?? '')
   const calendar = useDqCalendar(symbol)
   const guards = useDqGuards(tab === 'guards')
+  const universe = useDqUniverse(tab === 'universe')
   const onExport = () => {
     if (tab === 'guards') {
       const report = guards.data
       exportCsv(csvFileName('dq', 'guards'), report ? guardsCsv(report) : '', report?.groups.length ?? 0)
+      return
+    }
+    if (tab === 'universe') {
+      const data = universe.data
+      exportCsv(csvFileName('dq', 'universe'), data ? universeCsv(data) : '', data?.roots.length ?? 0)
       return
     }
     const days = calendar.data ? flaggedDays(calendar.data.days) : []
@@ -211,6 +226,12 @@ export default function DqScreen({ context }: ScreenProps) {
               <QueryStatus loading={index.isPending || (symbol !== '' && calendar.isPending)} error={index.error ?? calendar.error} loadingText={DQ.loading} failedText={DQ.failed} />
             )}
           </>
+        ) : tab === 'universe' ? (
+          universe.data ? (
+            <UniverseMatrix universe={universe.data} />
+          ) : (
+            <QueryStatus loading={universe.isPending} error={universe.error} loadingText={DQ.loading} failedText={DQ.failed} />
+          )
         ) : guards.data ? (
           <GuardsView report={guards.data} />
         ) : (

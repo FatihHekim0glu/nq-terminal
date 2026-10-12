@@ -86,10 +86,12 @@ export const TEAR_DD = {
   start: 'start',
   open: 'open',
   lengthUnit: 'Lengths in {unit}.',
-  /** The lanes pane under the underwater curve (roadmap 10): the DD2 rows as episodes. Nothing is summarised: DD3 is not served. */
+  /** The lanes pane under the underwater curve (roadmap 10): the DD2 rows as episodes. Nothing is summarised here: DD3 (TEAR_DD3) counts the episodes. */
   lanesName: 'Episodes',
-  lanesNote: 'Lanes: the {n} deepest drawdowns the API lists (DD2), deepest first. Each falls from peak to trough, then recovers; an open episode ends in a hatch. Not every episode: DD3 (all episodes and time to recovery) is not served.',
-  lanesNoteOne: 'Lanes: the deepest drawdown the API lists (DD2). It falls from peak to trough, then recovers; an open episode ends in a hatch. Not every episode: DD3 (all episodes and time to recovery) is not served.',
+  lanesNote: 'Lanes: the {n} deepest drawdowns the API lists (DD2), deepest first. Each falls from peak to trough, then recovers; an open episode ends in a hatch.',
+  lanesNoteOne: 'Lanes: the deepest drawdown the API lists (DD2). It falls from peak to trough, then recovers; an open episode ends in a hatch.',
+  /** After the lanes note, when DD3 is served and counts more episodes than the lanes draw. */
+  lanesOf: 'The lanes draw {n} of the {total} episodes; DD3 below counts all {total}.',
   /** Number <GO> 11 to 20 pins the episode of that rank. */
   laneItem: 'Episode {rank}',
   /** The message line after a pin, since the outline in the chart and the table fill are visual only. */
@@ -97,6 +99,32 @@ export const TEAR_DD = {
   laneUnpinned: 'Episode {rank} is no longer marked.',
   laneDropped: '{n} rows with an unreadable date are not drawn.',
   laneDroppedOne: '1 row with an unreadable date is not drawn.',
+} as const
+
+/** DD3: every drawdown episode with its time to recovery, a histogram of the recovery times, the longest time under water. */
+export const TEAR_DD3 = {
+  groupLabel: 'Drawdown episodes and time to recovery (DD3)',
+  factsCaption: 'Drawdown episodes (DD3)',
+  histogramCaption: 'Time to recovery, trough to recovery, in {unit} (DD3)',
+  cols: { measure: 'Measure', value: 'Value', time: 'Time to recovery', episodes: 'Episodes' },
+  facts: {
+    episodes: 'Episodes',
+    recovered: 'Recovered',
+    open: 'Still under water',
+    median: 'Median time to recovery',
+    max: 'Longest time to recovery',
+    longest: 'Longest time under water',
+  },
+  /** [singular, plural] of the series' period. */
+  units: { sessions: ['session', 'sessions'], months: ['month', 'months'] },
+  longestClosed: '{time}, {from} to {to}',
+  longestOpen: '{time}, from {from}, still under water',
+  startOfSeries: 'the start',
+  binRange: '{lo} to {hi}',
+  binOver: '{lo} and over',
+  rule: "Time to recovery counts {unit} from an episode's trough to its first session back at the peak. An episode still under water has not recovered: it is left out of the histogram and of the recovery times, and counted as still under water. The longest time under water counts from the peak to the recovery or, while an episode is open, to the last session.",
+  none: 'No drawdown episodes, so there are no recovery times.',
+  noneRecovered: 'No episode has recovered yet, so there is no histogram of recovery times.',
 } as const
 
 export const TEAR_RR = {

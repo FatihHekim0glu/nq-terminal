@@ -34,18 +34,21 @@ from nq_terminal.models.analytics import (
     Analytics,
     Context,
     DistributionView,
+    DrawdownEpisodes,
     DrawdownRow,
     DrawdownView,
     EquityView,
     HistogramView,
     HomePanel,
     Kpi,
+    LongestUnderWater,
     MinTrlView,
     Moments,
     MonthlyView,
     PeriodSeries,
     PsrView,
     QqView,
+    RecoveryBin,
     RegistryEntry,
     RelativeView,
     RiskView,
@@ -204,20 +207,40 @@ def equity_view(s: SessionSeries, u: Units) -> EquityView:
                       perf_diff_unit=None if diff is None else perf_diff_unit(s))
 
 
-def drawdown_view(s: SessionSeries, u: Units) -> DrawdownView:
+def drawdown_view(s: SessionSeries, u: Units, *, with_episodes: bool = False) -> DrawdownView:
+    """DD1, and with `with_episodes` DD3 too. The full tear sheet asks for the episodes; the HOME panel does not, so
+    its window does not grow (episodes are one more pass over the series and a larger body)."""
     t, dates = axis(s.r.index)
     present = s.bench.dropna() if s.bench is not None else None
     bench_max = drawdown.max_drawdown(present, s.basis) if present is not None and len(present) else None
     return DrawdownView(unit=u.drawdown, t=t, date=dates, dd=nums(drawdown.underwater(s.r, s.basis)),
                         bench_dd=_bench_curve(s, lambda b: drawdown.underwater(b, s.basis)),
-                        max_drawdown=num(drawdown.max_drawdown(s.r, s.basis)), bench_max_drawdown=num(bench_max))
+                        max_drawdown=num(drawdown.max_drawdown(s.r, s.basis)), bench_max_drawdown=num(bench_max),
+                        episodes=drawdown_episodes(s) if with_episodes else None)
+
+
+def _drawdown_row(row: dict) -> DrawdownRow:
+    return DrawdownRow(peak=_iso(row["peak"]), trough=_iso(row["trough"]), recovery=_iso(row["recovery"]),
+                       depth=row["depth"], peak_to_trough=row["peak_to_trough"],
+                       trough_to_recovery=row["trough_to_recovery"], length=row["length"], open=row["open"])
 
 
 def drawdown_rows(s: SessionSeries) -> list[DrawdownRow]:
-    return [DrawdownRow(peak=_iso(row["peak"]), trough=_iso(row["trough"]), recovery=_iso(row["recovery"]),
-                        depth=row["depth"], peak_to_trough=row["peak_to_trough"],
-                        trough_to_recovery=row["trough_to_recovery"], length=row["length"], open=row["open"])
-            for row in drawdown.drawdown_table(s.r, s.basis)]
+    return [_drawdown_row(row) for row in drawdown.drawdown_table(s.r, s.basis)]
+
+
+def drawdown_episodes(s: SessionSeries) -> DrawdownEpisodes:
+    """DD3: every episode, the recovery times of the recovered ones, their histogram and the longest time under water."""
+    found = drawdown.episode_summary(s.r, s.basis, s.periods)
+    longest = found["longest"]
+    return DrawdownEpisodes(
+        unit=found["unit"], episodes=[_drawdown_row(row) for row in found["episodes"]],
+        n_episodes=found["n_episodes"], n_recovered=found["n_recovered"], n_open=found["n_open"],
+        recovery_median=num(found["recovery_median"]), recovery_max=found["recovery_max"],
+        histogram=[RecoveryBin(**b) for b in found["histogram"]],
+        longest=None if longest is None else LongestUnderWater(
+            peak=_iso(longest["peak"]), trough=_iso(longest["trough"]), recovery=_iso(longest["recovery"]),
+            depth=longest["depth"], length=longest["length"], open=longest["open"]))
 
 
 def rolling_view(s: SessionSeries, u: Units) -> RollingView:
@@ -434,7 +457,7 @@ def build(s: SessionSeries, context: Context, *, stored: StoredAlpha | None = No
     ci = SharpeInterval(basis=s.basis, unit=u.ratio, sharpe=num(_perf().sharpe(s.r, s.periods)), lo=num(lo),
                         hi=num(hi), z=_perf().CI_Z, periods_per_year=s.periods)
     return Analytics(**info(s, context), kpis=kpi_tiles(s, u, val, rel, stored), ci=ci, equity=equity_view(s, u),
-                     drawdown=drawdown_view(s, u), drawdown_table=drawdown_rows(s), rolling=rolling_view(s, u),
+                     drawdown=drawdown_view(s, u, with_episodes=True), drawdown_table=drawdown_rows(s), rolling=rolling_view(s, u),
                      monthly=monthly_view(s, u), distribution=distribution_view(s, u), risk=risk_view(s, u),
                      relative=rel, stored_alpha=stored, validity=val)
 

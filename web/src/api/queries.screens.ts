@@ -133,3 +133,4 @@ export const useDqSymbols = () => useApiQuery('/api/dq/symbols', {})
 export const useDqCalendar = (symbol: string) =>
   useApiQuery('/api/dq/calendar/{symbol}', { path: { symbol } }, { enabled: hasId(symbol) })
 export const useDqGuards = (enabled = true) => useApiQuery('/api/dq/guards', {}, { enabled })
+export const useDqUniverse = (enabled = true) => useApiQuery('/api/dq/universe', {}, { enabled })

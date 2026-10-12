@@ -9,7 +9,6 @@ import type { GlyphPoint, GlyphRefLine, GlyphScatterInput, PointGlyph } from '..
 import { niceAxis } from '../../charts/echarts/shared'
 import { EVIDENCE_MAP as M } from '../../copy/evidence'
 import { fillCopy } from '../../copy/workspace'
-import { trackYears } from '../../quant/power'
 import { formatNumber } from '../tear/tearFormat'
 import { formatDsr, type DeflatedView } from './deflatedModel'
 import type { Badge, RegRow } from './regModel'
@@ -93,6 +92,11 @@ function referenceLines(view: DeflatedView): GlyphRefLine[] {
     { axis: 'y', value: view.sr0_annual ?? Number.NaN, label: fillCopy(M.vLine, { sr: formatNumber(view.sr0_annual, SHOWN_DECIMALS) }), tone: 'accent' },
     { axis: 'y', value: 0, label: M.zeroLine, tone: 'muted' },
   ]
+}
+
+/** The years a trial spans: n observations at `periods` per year; NaN when either cannot say. */
+function trackYears(n: number, periods: number): number {
+  return Number.isFinite(n) && n >= 0 && Number.isFinite(periods) && periods > 0 ? n / periods : Number.NaN
 }
 
 function pointOf(trial: Trial, numbered: { readonly row: RegRow; readonly n: number } | undefined): GlyphPoint {

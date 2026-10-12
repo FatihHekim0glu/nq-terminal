@@ -190,8 +190,12 @@ def test_parse_any_dispatches_on_kind():
     assert dumps.parse_any(costs_doc()).kind == "costs"
 
 
-def test_the_default_dump_folder_is_under_terminal_qa():
+def test_the_default_dump_folder_is_under_the_checkouts_qa():
     assert paths.DEFAULT_DUMP_DIR == Path(paths.__file__).resolve().parents[1] / ".dumps"
-    assert paths.DEFAULT_DUMP_DIR.parent.name == "qa" and paths.DEFAULT_DUMP_DIR.parent.parent.name == "terminal"
+    # The checkout folder is not named (a worktree is not called `terminal`): the layout is what counts, the
+    # `qa` project beside the `backend` project that writes the dumps, and the dump folder directly under `qa`.
+    assert paths.DEFAULT_DUMP_DIR.parent == paths.QA_ROOT and paths.QA_ROOT.name == "qa"
+    assert (paths.QA_ROOT / "crosscheck" / "paths.py").is_file()
+    assert (paths.QA_ROOT.parent / "backend" / "tests" / "test_dump_for_qa.py").is_file()
     ignore = (paths.QA_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert ".dumps/" in ignore

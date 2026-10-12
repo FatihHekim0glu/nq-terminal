@@ -84,7 +84,15 @@ DATA_START = "2010-09-28"  # the first NQ session every NQ screen served (za_v0 
 # Screens that record how many sessions they evaluated: the dotted path of that count in the screen JSON.
 RECORDED_COUNTS: Mapping[str, tuple[str, ...]] = {"za_v0": ("gated_days",), "mac5rev_v0": ("counts", "sessions"),
                                                   "eurodrift_v0": ("counts", "candidates"),
-                                                  "vt_har_v0": ("headline", "n"), "vrp_eq_v0": ("headline", "n")}
+                                                  "vt_har_v0": ("headline", "n"), "vrp_eq_v0": ("headline", "n"),
+                                                  # W3: the monthly rows learned in nq_terminal.series_sources
+                                                  **{name: ("headline", "n") for name in (
+                                                      "cmax_v0", "hi52_v0", "crushdev_v0", "eqvrp_xasset_v0",
+                                                      "fxval_ppp_v0", "gvzvrp_pm_v0", "liqbias_v0", "metals_eq_ym_v1",
+                                                      "oigrowth_v0", "rateamp_tsy_v0", "tsyauction_mid_v0", "tsydemfx_v0",
+                                                      "xsbreadth_q_v0", "xsintra_w_v0", "xsml_m_v0", "zqcut_v0")},
+                                                  "stmomturn_v0": ("headline_by_ticks", "1", "n"),
+                                                  "termprem_cmdty_v0": ("cost_ladder", "1_tick", "n")}
 INTRADAY = ("za_orb", "overnight")
 # (strategy, book) -> (benchmark strategy, benchmark book, label); a book missing from params is None.
 PAIRS: Mapping[tuple[str, str | None], tuple[str, str | None, str]] = {
@@ -227,13 +235,19 @@ def _gate_rejected(research: ResearchService, name: str, first: pd.Timestamp, st
     return set(flags["gated"])
 
 
-def screen_window(screen: Mapping[str, Any] | None) -> tuple[pd.Timestamp, pd.Timestamp]:
-    """[start, end) the screen served (`serve`, or `serve.nq`); else the NQ data start to the fence."""
+def screen_window(screen: Mapping[str, Any] | None,
+                  start: pd.Timestamp | None = None) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """[start, end) the screen served (`serve`, or `serve.nq`); else the NQ data start to the fence.
+
+    `start` moves the window start later (never earlier) for a row whose sample begins after the served window.
+    """
     serve = screen.get("serve") if isinstance(screen, Mapping) else None
+    first, end = pd.Timestamp(DATA_START), pd.Timestamp(IS_END)
     for node in (serve, serve.get("nq") if isinstance(serve, Mapping) else None):
         if isinstance(node, Mapping) and node.get("start") and node.get("end"):
-            return pd.Timestamp(node["start"]), pd.Timestamp(node["end"])
-    return pd.Timestamp(DATA_START), pd.Timestamp(IS_END)
+            first, end = pd.Timestamp(node["start"]), pd.Timestamp(node["end"])
+            break
+    return (max(first, start) if start is not None else first), end
 
 
 def _check_recorded(name: str, screen: Mapping[str, Any] | None, built: int) -> None:
@@ -253,7 +267,8 @@ def _trade_sessions(research: ResearchService, name: str, screen: Mapping[str, A
                     dates: pd.DatetimeIndex, values: Sequence[float]) -> tuple[pd.Series, tuple[str, ...]]:
     """Trades summed per exit session, zero-filled on every gated session of the screen's served window."""
     by_day = _recorded(dates, values).groupby(level=0).sum()
-    start, end = screen_window(screen)
+    declared = SERIES_SOURCES[name].window_start
+    start, end = screen_window(screen, pd.Timestamp(declared) if declared else None)
     sessions = session_index(start, end)
     stop = sessions[-1] + pd.Timedelta(days=1)
     outside = by_day.index.difference(sessions)

@@ -1,0 +1,53 @@
+/* PLAN (research_ux.md item 2; look spec 4.4, 4.5, 4.8). Tokens only, square corners, hard cuts. The two tables are
+   short and their headers are long sentences, so they wrap and size to their content instead of the grid's fixed
+   20px nowrap rows; the panel body scrolls them. At 700 CSS px and narrower the fields wrap under each other. */
+
+.plan {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-data);
+}
+
+.plan-line {
+  margin: 0;
+  padding: 2px 5px;
+  line-height: var(--row-h);
+}
+.plan-muted { color: var(--muted); }
+.plan-problems { color: var(--c-down); }
+
+.plan-section { padding: 4px 0 6px; }
+.plan-heading {
+  margin: 0;
+  padding: 0 5px;
+  color: var(--cyan-chart);
+  font-size: var(--fs-data);
+  font-weight: 400;
+  line-height: var(--row-h);
+}
+
+.plan-table { table-layout: auto; }
+.plan-table caption {
+  height: var(--row-h);
+  padding: 0 5px;
+  color: var(--white);
+  font-weight: var(--fw-bold);
+  line-height: var(--row-h);
+}
+.plan-table thead th,
+.plan-table td {
+  height: auto;
+  min-height: var(--row-h);
+  padding: 2px 5px;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.plan-table thead th { position: static; }
+.plan-table th[scope="row"] { color: var(--data); font-weight: 400; text-align: left; }
+
+/* The previous answer while the next design is debounced and asked: dimmed, and aria-busy for assistive technology. */
+.plan-section[data-stale] { opacity: 0.6; }

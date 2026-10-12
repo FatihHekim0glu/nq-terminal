@@ -12,7 +12,8 @@
 // their served Basis A screen series, and 97) Settings can clear the basket. While the record watch has
 // marked a registry row (roadmap 16), a Seen column first on the board shows NEW or CHG for it. The
 // registry's own error and loading lines are PanelFault and PanelLoading. A polite status line (RegStaleBanner, V031)
-// says when the registry is older than the newest result or spec. Read only.
+// says when the registry is older than the newest result or spec. Beside the DSR note, LearnedCount (W3) says how many
+// registered rows N counts and, on demand, the rows it leaves out with the reason. Read only.
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useConfirmations, useDeflated, useHypotheses, useMultipleTesting, useRegistry } from '../../api/queries'
 import { AmberField } from '../../chrome/Field'
@@ -40,6 +41,7 @@ import { evidenceCsv } from './evidenceModel'
 import { openDes } from './open'
 import RegCompare from './RegCompare'
 import RegStaleBanner from './RegStaleBanner'
+import LearnedCount from './LearnedCount'
 import { AcceptanceBlock, ConfirmBlock, CriteriaBlock, RoundRail, RuleNote, VerdictNotes } from './RegParts'
 import { withDeflated } from './deflatedModel'
 import { deflatedRequestable, needsDeflated, viewsShown, REG_VIEWS, REG_VIEW_START, type RegView } from './regViews'
@@ -199,6 +201,7 @@ export default function RegScreen(props: ScreenProps) {
       </div>
       {compact ? <p className="reg-msg reg-muted">{REG.compactNote}</p> : <RuleNote />}
       {data.deflated && !compact ? <p className="reg-msg reg-muted reg-dsr-note">{fillCopy(DEFLATED.regNote, { n: data.deflated.n_trials })}</p> : null}
+      {data.deflated && !compact ? <LearnedCount view={data.deflated} /> : null}
       <VerdictNotes rows={shown} />
       <AcceptanceBlock acceptances={registry.data?.acceptances} />
       <ConfirmBlock

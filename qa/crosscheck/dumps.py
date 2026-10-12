@@ -14,8 +14,14 @@ Schema `nqt-qa-dump/1`. Two kinds:
   with the line the terminal serves.
 - P1 bundles (`p1series`, `bootstrap`, `deflated`, `paths`, `regimes`, `stress`, `tracking`): the raw inputs of the
   Phase 10 metrics with the terminal's values (and Nautilus's where one exists); references in `p1_reference.py`.
-- P11 bundles (`vcone`, `seasonality`, `evt`, `roll`, `dq_sidecar`, `dq_nq`, `guards`): the raw inputs of the
-  Phase 11 screens with the terminal's values; references in `p11_*.py`.
+- P11 bundles (`vcone`, `seasonality`, `evt`, `roll`, `dq_sidecar`, `dq_nq`, `dq_universe`, `guards`): the raw inputs of the
+  Phase 11 screens with the terminal's values; references in `p11_*.py` (`dq_universe`: writer in
+  `test_dump_for_qa_dq_universe.py`).
+
+- W3 bundles (wave w3-research-integrity): `registry_completeness` (the registered rows of `results/registry.csv` with the
+  learned names and the NOT_LEARNABLE reasons; reference in `reference.py`, writer in `test_series_sources_registry.py`),
+  `p12plan` and `p12power` (SV9 served: the planner designs and the power table against scipy; reference in
+  `p12_sv9.py`, writer in `test_dump_for_qa_p12_sv9.py`).
 
 - `cached` (a `Bundle`, D1.4): the response bodies of the cached slow routes taken three times on one fixture
   app: `fresh` (a cold cache, so computed), `cached` (the same app again, served from memory) and `restart` (a new
@@ -70,8 +76,12 @@ BUNDLE_INPUTS = {"trades": ("pnl", "entry_ts"),
                  "evt": ("mode", "events", "pre", "post"),
                  "roll": ("dates", "t", "instrument_id", "offset", "c_none", "qa_rolls_total"),
                  "dq_sidecar": ("status", "fence", "sessions"), "dq_nq": ("fence", "sessions", "rejected", "still"),
+                 "dq_universe": ("fence", "years", "roots"),
                  "guards": ("groups", "records"),
                  **P2_SPA_INPUTS, **P2_RISK_INPUTS, **P2_RCT_INPUTS, **LV6_INPUTS,
+                 # W3: every registered row learned or NOT_LEARNABLE; SV9 served (the planner and the power table)
+                 "registry_completeness": ("registered", "learned", "not_learnable"),
+                 "p12plan": ("designs",), "p12power": ("rows", "alpha", "k"),
                  # D1.4: the cached slow routes, fresh against through the cache and after a restart
                  "cached": ("routes", "queries", "fresh", "cached", "restart")}
 CACHED_TAKES = ("fresh", "cached", "restart")

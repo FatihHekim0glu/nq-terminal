@@ -17,13 +17,16 @@ and failed). Nothing dated after 2021-12-31 is served.
 from __future__ import annotations
 
 import functools
+import re
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 import exchange_calendars as xc
 
-from nq_terminal.models.dq import DayState, DqCalendar, DqCounts, DqDay, DqIndex, DqQaYear, DqSymbol
+from nq_terminal.models.dq import (DayState, DqCalendar, DqCounts, DqDay, DqIndex, DqQaYear, DqSymbol, DqUniverse,
+                                   DqUniverseCell, DqUniverseCounts, DqUniverseDaily, DqUniverseRoot, DqUniverseRow,
+                                   RepairStatus, UniverseVariant)
 from nq_terminal.services.files import FileAccessError, FileCache, FileDecodeError
 
 LABEL = ("[POST HOC] descriptive: day states read from the QA reports and repair records, counted by the terminal; "
@@ -183,12 +186,16 @@ def _load(files: FileCache, results: Path, symbol: str) -> tuple[DqSymbol, list[
     return _nq(files, results) if symbol == NQ else _futures(files, results, symbol)
 
 
+def _missing_file(symbol: str, results: Path) -> str:
+    return _rel(NQ_VENDOR) if symbol == NQ else _rel(sidecar_name(symbol, results)[0])
+
+
 def symbol_index(files: FileCache, results: Path) -> DqIndex:
     symbols, missing = [], []
     for symbol in [NQ, *sidecar_symbols(results)]:
         loaded = _load(files, results, symbol)
         if loaded is None:
-            missing.append(_rel(NQ_VENDOR) if symbol == NQ else _rel(sidecar_name(symbol, results)[0]))
+            missing.append(_missing_file(symbol, results))
         else:
             symbols.append(loaded[0])
     return DqIndex(label=LABEL, fence=FENCE, symbols=symbols, missing=missing)
@@ -231,3 +238,143 @@ def calendar(files: FileCache, results: Path, symbol: str) -> DqCalendar | None:
     summary, days = loaded
     qa_source, years = qa_years(files, results, symbol)
     return DqCalendar(label=LABEL, fence=FENCE, symbol=summary, days=days, qa_source=qa_source, qa_years=years)
+
+
+# ---- the universe matrix (research_ux item 3): roots by years, from the per-symbol calendars ----------------------
+FIRST_YEAR, LAST_YEAR = 2010, 2021
+YEARS = tuple(range(FIRST_YEAR, LAST_YEAR + 1))
+SEALED_LAST = f"{FENCE} or later, sealed"
+CARRY_QA = "qa_report_carry_1d.json"
+MAX_BLOCK_REASONS = 6
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+Loader = Callable[[FileCache, Path, str], "tuple[DqSymbol, list[DqDay]] | None"]
+
+
+def year_counts(days: Iterable[DqDay]) -> dict[int, Counter]:
+    """State counts per grid year. A day dated after the fence, or in a year outside the grid, is dropped here, so
+    the matrix holds the fence whatever calendar it is fed."""
+    out: dict[int, Counter] = {year: Counter() for year in YEARS}
+    for day in days:
+        date = str(day.date)[:10]
+        year = int(date[:4]) if date[:4].isdigit() else None
+        if date > FENCE or year not in out:
+            continue
+        out[year][day.state] += 1
+    return out
+
+
+def _universe_counts(c: Counter, variant: UniverseVariant, nq: bool) -> dict[str, Any]:
+    """The repaired variant uses vendor plus rebuilt days. The vendor variant uses vendor days only: research drops
+    every rebuilt day there, which is `gated_out` for a futures root and `rejected` for NQ (the session gate)."""
+    repaired = variant == "repaired"
+    dropped = 0 if repaired else c["rebuilt"]
+    sessions = sum(c.values())
+    usable = c["vendor"] + (c["rebuilt"] if repaired else 0)
+    return {"sessions": sessions, "usable": usable, "unrepairable": c["unrepairable"],
+            "gated_out": c["gated_out"] + (0 if nq else dropped), "rejected": c["rejected"] + (dropped if nq else 0),
+            "usable_share": usable / sessions if sessions else None}
+
+
+def _universe_row(by_year: Mapping[int, Counter], variant: UniverseVariant, nq: bool) -> DqUniverseRow:
+    cells = [DqUniverseCell(year=y, **_universe_counts(by_year[y], variant, nq)) for y in YEARS]
+    total = sum((by_year[y] for y in YEARS), Counter())
+    return DqUniverseRow(timeframe="1m", variant=variant, cells=cells,
+                         total=DqUniverseCounts(**_universe_counts(total, variant, nq)))
+
+
+def repair_status(symbol: DqSymbol) -> RepairStatus:
+    repaired = symbol.status == "repaired"
+    if symbol.repair == "nq":
+        return "nq" if repaired else "not_assessed"
+    return "v2" if repaired and symbol.repair == "v2" else "v1" if repaired else "vendor_only"
+
+
+def _bar_date(value: Any) -> str | None:
+    match = _DATE.match(value) if isinstance(value, str) else None
+    return match.group(0) if match else None
+
+
+def first_bar(value: Any) -> str | None:
+    date = _bar_date(value)
+    return date if date is not None and date <= FENCE else None
+
+
+def last_bar(value: Any) -> tuple[str | None, bool]:
+    """(what to show, sealed): a bar after the fence is never a date, only `SEALED_LAST`."""
+    date = _bar_date(value)
+    if date is None:
+        return None, False
+    return (SEALED_LAST, True) if date > FENCE else (date, False)
+
+
+def _qa_bounds(files: FileCache, results: Path, symbol: str, missing: list[str]) -> tuple[str | None, Any, Any]:
+    name = NQ_QA if symbol == NQ else FUTURES_QA
+    doc = _read(files, results, name)
+    if doc is None:
+        missing.append(_rel(name))
+        return None, None, None
+    symbols = doc.get("symbols") if isinstance(doc, Mapping) else None
+    entry = doc if symbol == NQ else (symbols or {}).get(symbol.split(".")[0])
+    if not isinstance(entry, Mapping):
+        return None, None, None
+    return _rel(name), entry.get("first_ts"), entry.get("last_ts")
+
+
+def _daily(carry: Any, root: str) -> DqUniverseDaily | None:
+    roots = carry.get("roots") if isinstance(carry, Mapping) else None
+    bars = (((roots or {}).get(root) or {}).get("bars") or {}).get("0")
+    if not isinstance(bars, Mapping):
+        return None
+    rows, after = _int(bars.get("rows")), _int(bars.get("rows_at_or_after_fence")) or 0
+    last, sealed = last_bar(bars.get("last"))
+    return DqUniverseDaily(source=_rel(CARRY_QA), rows=None if rows is None else max(rows - after, 0),
+                           first_bar=first_bar(bars.get("first")), last_bar=last, last_sealed=sealed,
+                           missing_nyse_sessions=_int(bars.get("missing_nyse_sessions_from_2010_10")))
+
+
+def _blocks(summary: DqSymbol, days: Iterable[DqDay], skipped: Mapping[str, str]) -> list[str]:
+    """The record's own words: why the repair failed, then each reason a day stayed out with its session count."""
+    nq = summary.repair == "nq"
+    reasons: Counter = Counter()
+    for day in days:
+        date = str(day.date)[:10]
+        if day.state not in ("unrepairable", "rejected") or date > FENCE:
+            continue
+        reason = skipped.get(date) if nq and day.state == "unrepairable" else day.reason
+        if reason:
+            reasons[reason] += 1
+    ranked = sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0]))
+    words = [f"{r}: {n} session{'' if n == 1 else 's'}" for r, n in ranked[:MAX_BLOCK_REASONS]]
+    rest = ranked[MAX_BLOCK_REASONS:]
+    if rest:
+        words.append(f"{len(rest)} further reasons: {sum(n for _, n in rest)} sessions")
+    return ([str(summary.why_not_repaired)] if summary.why_not_repaired else []) + words
+
+
+def _universe_root(loaded: tuple[DqSymbol, list[DqDay]], carry: Any, skipped: Mapping[str, str],
+                   qa: tuple[str | None, Any, Any]) -> DqUniverseRoot:
+    summary, days = loaded
+    nq, by_year = summary.repair == "nq", year_counts(days)
+    variants: tuple[UniverseVariant, ...] = ("vendor", "repaired") if repair_status(summary) in ("nq", "v1", "v2") \
+        else ("vendor",)
+    last, sealed = last_bar(qa[2])
+    return DqUniverseRoot(root=summary.root, symbol=summary.symbol, repair_status=repair_status(summary),
+                          source=summary.source, qa_source=qa[0], first_bar=first_bar(qa[1]), last_bar=last,
+                          last_sealed=sealed, rows=[_universe_row(by_year, v, nq) for v in variants],
+                          daily=_daily(carry, summary.root), blocks=_blocks(summary, days, skipped))
+
+
+def universe(files: FileCache, results: Path, load: Loader = _load) -> DqUniverse:
+    """Every root with a record: its 1m rows by year (vendor, and repaired where the repair passed), the QA bounds,
+    the 1d row and the known blocks. `load` is the per-symbol calendar source, `_load` unless a test feeds a stub."""
+    carry = _read(files, results, CARRY_QA)
+    skipped = _skipped_reasons(_read(files, results, NQ_REPAIR_REPORT))
+    roots: list[DqUniverseRoot] = []
+    missing: list[str] = [] if carry is not None else [_rel(CARRY_QA)]
+    for symbol in [NQ, *sidecar_symbols(results)]:
+        loaded = load(files, results, symbol)
+        if loaded is None:
+            missing.append(_missing_file(symbol, results))
+            continue
+        roots.append(_universe_root(loaded, carry, skipped, _qa_bounds(files, results, symbol, missing)))
+    return DqUniverse(label=LABEL, fence=FENCE, years=list(YEARS), roots=roots, missing=list(dict.fromkeys(missing)))

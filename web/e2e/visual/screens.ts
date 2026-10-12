@@ -252,8 +252,22 @@ export async function openScreen(page: Page, screen: ScreenCase, viewport: Viewp
   await expect(page.getByRole('contentinfo').locator('time')).toHaveText('14:02:11 ET')
 }
 
-/** Focuses the command line and types the query, so the suggestion dropdown is open. */
+/** The rows the command index adds to the list: instruments, hypotheses and runs (the functions come from the registry). */
+export const INDEX_ROWS = '[data-group="instrument"], [data-group="hypothesis"], [data-group="run"]'
+/** The longest the dropdown waits for the command index: its read can be slow on a busy machine. */
+const INDEX_TIMEOUT_MS = 30_000
+
+/** Focuses the command line and types the query, so the suggestion dropdown is open, with the rows of the command
+ *  index in it. The functions list at once, but the instruments, hypotheses and runs arrive with GET /api/commands; a
+ *  baseline taken before them shows a shorter list that two identical frames then confirm, so it waits for them. */
 export async function openDropdown(page: Page): Promise<void> {
+  await openDropdownEarly(page)
+  await expect(page.getByRole('listbox').locator(INDEX_ROWS).first(), 'the command index is in the dropdown')
+    .toBeVisible({ timeout: INDEX_TIMEOUT_MS })
+}
+
+/** The dropdown as soon as its first option shows, before the command index has necessarily arrived. */
+export async function openDropdownEarly(page: Page): Promise<void> {
   await page.keyboard.press('Control+k')
   await expect(commandLine(page)).toBeFocused()
   await commandLine(page).fill(DROPDOWN_QUERY)

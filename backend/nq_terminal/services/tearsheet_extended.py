@@ -45,7 +45,9 @@ from nq_terminal.models.analytics_p1 import (
     ScatterView,
     StressRow,
     StressView,
+    UnlearnedRow,
 )
+from nq_terminal.series_sources import unlearned_reason
 from nq_terminal.services.neff_view import effective_n_view
 from nq_terminal.services.tearsheet import POST_HOC, Units, axis, num, nums, units
 
@@ -293,6 +295,8 @@ def deflated_view(trials: Sequence[deflated.Trial], unlearned: Sequence[str] = (
                                                           sr0_session=num(loo["sr0_session"]),
                                                           sr0_annual=num(loo["sr0_annual"]),
                                                           n_trials=loo["n_trials"]),
-                        n_note=found["n_note"] + unlearned_note(unlearned), euler_gamma=found["euler_gamma"],
+                        n_note=found["n_note"] + unlearned_note(unlearned),
+                        unlearned=[UnlearnedRow(name=name, reason=unlearned_reason(name)) for name in unlearned],
+                        euler_gamma=found["euler_gamma"],
                         dominant=_dominant(found["rows"]), rows=rows,
                         effective_n=effective_n_view(trials, found))

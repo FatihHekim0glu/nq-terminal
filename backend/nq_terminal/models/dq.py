@@ -84,3 +84,58 @@ class GuardStatusReport(ResponseModel):
     ok: int = Field(ge=0)
     mismatch: int = Field(ge=0)
     no_record: int = Field(ge=0)
+
+
+UniverseVariant = Literal["vendor", "repaired"]
+RepairStatus = Literal["nq", "v1", "v2", "vendor_only", "not_assessed"]
+
+
+class DqUniverseCounts(ResponseModel):
+    sessions: int = Field(ge=0, description="NYSE sessions of the year in the root's records, up to the fence")
+    usable: int = Field(ge=0, description="vendor days, plus rebuilt days in the repaired variant")
+    gated_out: int = Field(ge=0)
+    unrepairable: int = Field(ge=0)
+    rejected: int = Field(ge=0)
+    usable_share: float | None = Field(description="usable over sessions; null when there is no session")
+
+
+class DqUniverseCell(DqUniverseCounts):
+    year: int
+
+
+class DqUniverseRow(ResponseModel):
+    timeframe: Literal["1m"]
+    variant: UniverseVariant
+    cells: list[DqUniverseCell] = Field(description="one per year of the grid, first year to last")
+    total: DqUniverseCounts
+
+
+class DqUniverseDaily(ResponseModel):
+    source: str
+    rows: int | None = Field(description="1d bars up to the fence")
+    first_bar: str | None
+    last_bar: str | None = Field(description="a date up to the fence, else the sealed text")
+    last_sealed: bool
+    missing_nyse_sessions: int | None = Field(description="NYSE sessions from 2010-10 with no 1d bar, per the QA")
+
+
+class DqUniverseRoot(ResponseModel):
+    root: str
+    symbol: str
+    repair_status: RepairStatus
+    source: str = Field(description="the files the day states come from, relative to the project root")
+    qa_source: str | None
+    first_bar: str | None = Field(description="first 1m bar in the QA report, as a date")
+    last_bar: str | None = Field(description="last 1m bar as a date up to the fence, else the sealed text")
+    last_sealed: bool
+    rows: list[DqUniverseRow]
+    daily: DqUniverseDaily | None
+    blocks: list[str] = Field(description="the known blocks, quoted from the records")
+
+
+class DqUniverse(ResponseModel):
+    label: str
+    fence: str
+    years: list[int]
+    roots: list[DqUniverseRoot]
+    missing: list[str] = Field(description="expected files that could not be read")

@@ -2,13 +2,15 @@
 // registry, its five fixture hypothesis details (regFixtures.ts, deflatedFixtures.ts,
 // des/desTestData.ts) and the rest read as still pending, backend free, in the real panel chrome.
 import { OVERNIGHT, REBAL, VOLMANAGED, ZA, ZA_C3 } from '../des/desTestData'
+import { POWER_TABLE_REAL } from '../plan/powerTable.fixtures'
 import GalleryPanel from '../runs/galleryPanel'
 import { DEFLATED_REAL } from './deflatedFixtures'
 import { buildEvidenceRows } from './evidenceModel'
 import { buildRegRows } from './regModel'
-import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
+import { CONFIRMATIONS, HYPOTHESES, REGISTRY } from './regFixtures'
 import RegEvidence from './RegEvidence'
 import type { HypothesisDetails } from './useHypothesisDetails'
+import { powerViewFromServed } from './usePowerTable'
 
 const ROWS = buildRegRows(REGISTRY, HYPOTHESES)
 
@@ -30,7 +32,7 @@ const ROWS_VIEW = buildEvidenceRows({
   confirmations: CONFIRMATIONS,
   deflated: DEFLATED_REAL,
   details: DETAILS,
-  family: { alpha: MULTIPLE_TESTING.alpha, k: MULTIPLE_TESTING.k },
+  power: powerViewFromServed(POWER_TABLE_REAL),
 })
 
 export default function RegEvidenceGallery() {

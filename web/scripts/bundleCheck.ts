@@ -36,8 +36,12 @@ export const BUNDLE_BUDGET = {
    * Release 0.2.0 raised it by 100 B (114,900 to 115,000) for the global job indicator: its mount in App.tsx (a lazy
    * import, a boundary and a suspense, after the first idle moment) costs about 45 B gzip in the shell, and the indicator
    * itself is a chunk of its own. The 5 kB of room under the target is kept.
+   *
+   * Wave w3-research-integrity raised it by 100 B again (115,000 to 115,100) for the PLAN mnemonic and the DQ universe
+   * context: PLAN is one more registry row, screen title, built code, related-menu entry and lazy screen import in the
+   * shell (about 100 B gzip together); the screen itself, its copy and its help page are lazy chunks. The 5 kB of room is kept.
    */
-  shellGzip: 115_000,
+  shellGzip: 115_100,
   /**
    * The gallery build's shell (the E2E build, `--gallery`) is about 0.9 kB larger: its entry loads the API client
    * and the connection state eagerly, so those two split out of index. Measured 113.7 kB after shell diet 3, plus 2 kB.

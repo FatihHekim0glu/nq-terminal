@@ -47,6 +47,16 @@ export const DEFLATED = {
    * session (copy/tear.ts TEAR_RET.rows.hitRate, already labelled). */
   runsHitRateColumn: 'Hit rate (trades)',
   regNote: 'DSR V0 [POST HOC]: Deflated Sharpe over {n} registered trials on one daily basis (SV3), under the null variance V0; an extra view only, never a verdict. MT shows it beside the empirical V.',
+  /** W3: REG's line beside the Deflated Sharpe note: how many registered rows N counts, and on demand the rows it
+   * leaves out with the reason (the view's `unlearned` list, GET /api/analytics/deflated). */
+  learned: {
+    line: 'N counts {learned} of {registered} registered rows.',
+    show: 'Show the {n} rows N leaves out',
+    showOne: 'Show the row N leaves out',
+    hide: 'Hide the rows N leaves out',
+    listLabel: 'Registered rows N does not count, with the reason',
+    row: '{name}: {reason}',
+  },
   desLabel: 'Deflated Sharpe [POST HOC]',
   desLine: 'Sharpe {sr} per {period}; SR0 {floor} per {period} ({annual}/yr) under V, {floorNull} per {period} ({annualNull}/yr) under V0; DSR {dsr} under V, {dsrNull} under V0; N {n}; defined for the best trial only.',
   desNone: 'not an SV3 trial (unregistered)',

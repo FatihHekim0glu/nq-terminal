@@ -3,6 +3,9 @@
 - `/api/dq/symbols`: every symbol with a QA or repair record, its day-state counts and repair status;
 - `/api/dq/calendar/{symbol}`: one state and reason per session up to 2021-12-31, plus the per-year QA counts;
   `symbol` must match `^[A-Z0-9]{1,5}\\.V\\.0$` (else 422) and have a record (else 404, before any file is read);
+- `/api/dq/universe`: roots by years 2010 to 2021 for 1m (vendor and repaired variants), the QA first and last bar (a
+  last bar past the fence is only said to be sealed), the 1d row, the repair status and the known blocks, all
+  aggregated from the per-symbol calendars (502 when a repair record cannot be classified);
 - `/api/dq/guards`: OK, MISMATCH or NO RECORD per guard group.
 No price is read. Files are read through the data services' confined cache; errors never carry a path.
 """
@@ -13,7 +16,7 @@ from fastapi import Path as PathParam
 
 from nq_terminal.api.data import DataServices, get_services
 from nq_terminal.models.common import error_responses
-from nq_terminal.models.dq import DqCalendar, DqIndex, GuardStatusReport
+from nq_terminal.models.dq import DqCalendar, DqIndex, DqUniverse, GuardStatusReport
 from nq_terminal.services import dq, dq_guards
 
 router = APIRouter(prefix="/api/dq", tags=["dq"], responses=error_responses(404, 422, 502))
@@ -37,6 +40,15 @@ def calendar(symbol: str = PathParam(..., pattern=SYMBOL_PATTERN, max_length=11)
     if found is None:
         raise HTTPException(status_code=404, detail=f"no QA or repair record for {symbol}")
     return found
+
+
+@router.get("/universe", response_model=DqUniverse)
+def universe(services: DataServices = Depends(get_services)) -> DqUniverse:
+    """Usable, gated out, unrepairable and rejected sessions per root and year, from the records only."""
+    try:
+        return dq.universe(services.files, services.settings.results_dir)
+    except dq.DqRecordError as exc:
+        raise HTTPException(status_code=502, detail="a repair record could not be classified") from exc
 
 
 @router.get("/guards", response_model=GuardStatusReport)

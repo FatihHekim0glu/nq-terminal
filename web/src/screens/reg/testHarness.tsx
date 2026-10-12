@@ -17,6 +17,7 @@ import { DEFLATED_REAL } from './deflatedFixtures'
 import { EFFECTIVE_N_REAL } from './effectiveN.real.fixtures'
 import { SPA_REJECTS } from './spaFixtures'
 import { CONFIRMATIONS, HYPOTHESES, MULTIPLE_TESTING, REGISTRY } from './regFixtures'
+import { POWER_TABLE_REAL } from '../plan/powerTable.fixtures'
 
 export const PANEL_ID = 'reg-test'
 
@@ -39,6 +40,7 @@ export const ANSWERS: Readonly<Record<string, unknown>> = {
   '/api/multiple-testing': MULTIPLE_TESTING,
   '/api/confirmations': CONFIRMATIONS,
   '/api/analytics/deflated': { ...DEFLATED_REAL, effective_n: EFFECTIVE_N_REAL },
+  '/api/analytics/power': POWER_TABLE_REAL,
   '/api/analytics/spa': SPA_REJECTS,
   '/api/hypotheses/overnight_v0': OVERNIGHT,
   '/api/hypotheses/volmanaged_v0': VOLMANAGED,

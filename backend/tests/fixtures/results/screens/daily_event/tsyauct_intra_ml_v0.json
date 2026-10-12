@@ -1,0 +1,15 @@
+{
+ "headline": {
+  "n": 16,
+  "mean_bp": -0.319375,
+  "sd_bp": 1.2620906927264248
+ },
+ "secondaries": {
+  "S11": {
+   "zero_tick_fee_only": {
+    "mean_bp": -0.225625
+   }
+  }
+ },
+ "synthetic": true
+}

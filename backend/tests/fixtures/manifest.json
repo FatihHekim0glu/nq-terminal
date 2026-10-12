@@ -133,10 +133,320 @@
    "how": "trimmed",
    "note": "broken_days, repaired and skipped only"
   },
+  "results/screens/daily_event/apieia_ho_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/apieia_ho_v0_events.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/cropsmooth_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/cropsmooth_v0_dates.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/fedflow_tsy_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/fedflow_tsy_v0_daily.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/fomcdrift_tsy_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/fomcdrift_tsy_v0_events.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/fomcfx_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/fomcfx_v0_events.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/fomcpc_fx_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/fomcpc_fx_v0_events.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/hvix_nd_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/hvix_nd_v0_sessions.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/lhrev_letf_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/lhrev_letf_v0_daily.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/pretra_tsy_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/pretra_tsy_v0_events.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/daily_event/tsyauct_intra_ml_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/tsyauct_intra_ml_v0_daily.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
   "results/screens/dtsmom_v0_monthly.csv": {
    "source": "results/screens/dtsmom_v0_monthly.csv",
    "how": "trimmed",
    "note": "header plus the first 12 months"
+  },
+  "results/screens/monthly_a/airfx_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/airfx_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/cmax_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/cmax_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/crushdev_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/crushdev_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/eqvrp_xasset_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/eqvrp_xasset_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/fxval_ppp_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/fxval_ppp_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/gotobi6j_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/gotobi6j_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/gvzvrp_pm_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/gvzvrp_pm_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/hi52_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/hi52_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/liqbias_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/liqbias_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_a/make_fixtures.py": {
+   "source": null,
+   "how": "synthetic",
+   "note": "seeded generator of the synthetic fixtures in this folder (a second run is byte-identical)"
+  },
+  "results/screens/monthly_a/metals_eq_ym_v1.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_a/metals_eq_ym_v1_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/make_fixtures.py": {
+   "source": null,
+   "how": "synthetic",
+   "note": "seeded generator of the synthetic fixtures in this folder (a second run is byte-identical)"
+  },
+  "results/screens/monthly_b/oigrowth_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/oigrowth_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/rateamp_tsy_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/rateamp_tsy_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/stmomturn_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/stmomturn_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/termprem_cmdty_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/termprem_cmdty_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/tsyauction_mid_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/tsyauction_mid_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/tsydemfx_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/tsydemfx_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/xsbreadth_q_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/xsbreadth_q_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/xsintra_w_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/xsintra_w_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/xsml_m_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/xsml_m_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
+  },
+  "results/screens/monthly_b/zqcut_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/monthly_b/zqcut_v0_monthly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
   },
   "results/screens/overnight_v0.json": {
    "source": "results/screens/overnight_v0.json",

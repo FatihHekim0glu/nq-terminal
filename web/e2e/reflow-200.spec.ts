@@ -39,6 +39,7 @@ const MORE_SCREENS: readonly ScreenCase[] = [
   { name: 'SEAL', line: `${HYP} SEAL`, code: 'SEAL', charts: 0 },
   { name: 'EXPO', line: `${RUN} EXPO`, code: 'EXPO', charts: 0 },
   { name: 'DQ', line: 'NQ DQ', code: 'DQ', charts: 0 },
+  { name: 'PLAN', line: 'PLAN', code: 'PLAN', charts: 0 },
   { name: 'JOBS', line: 'JOBS', code: 'JOBS', charts: 0 },
 ]
 

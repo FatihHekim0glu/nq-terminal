@@ -1,0 +1,42 @@
+{
+ "headline": {
+  "n": 8,
+  "mean": 8.028232249999999
+ },
+ "net_0tick": {
+  "mean": 9.528232249999999
+ },
+ "net_2tick": {
+  "mean": 6.12823225
+ },
+ "voids": {
+  "legs": [
+   {
+    "R": "2012-01-11",
+    "root": "ZC",
+    "void": "warm-up: sigma"
+   },
+   {
+    "R": "2012-01-11",
+    "root": "ZS",
+    "void": "warm-up: sigma"
+   },
+   {
+    "R": "2012-02-27",
+    "root": "ZC",
+    "void": "warm-up: sigma"
+   },
+   {
+    "R": "2012-02-27",
+    "root": "ZS",
+    "void": "warm-up: sigma"
+   },
+   {
+    "R": "2012-08-22",
+    "root": "ZS",
+    "void": "r = 0"
+   }
+  ]
+ },
+ "synthetic": true
+}

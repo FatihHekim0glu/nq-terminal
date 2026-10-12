@@ -1,0 +1,15 @@
+{
+ "headline": {
+  "n": 10,
+  "mean_bp": -2.591765200000002,
+  "sd": 48.07454420951619
+ },
+ "fee_only_mean_bp": -1.3917651999999994,
+ "P3_mean_2tick_bp": -3.7917652000000017,
+ "structural_counts": {
+  "sessions": 40,
+  "valid": 38,
+  "headline": 10
+ },
+ "synthetic": true
+}

@@ -5,7 +5,8 @@
 // MRET: the year by month heat map, then the yearly totals (a house addition, labelled so). EQ and DD also
 // carry a Market context toggle: the RK5 stress windows as bands and the RG1 regime as a strip, from /extended.
 // DD's top drawdowns are also drawn as episode lanes under the underwater curve, cross-highlighted with the
-// table (hover on either side; Number <GO> 11 to 20 pins an episode).
+// table (hover on either side; Number <GO> 11 to 20 pins an episode). Under them DD3 counts every episode: the
+// time to recovery of the recovered ones as a histogram and the longest time under water.
 import { Fragment, useCallback, useId, useMemo, useState, type CSSProperties, type JSX, type ReactNode } from 'react'
 import type { ApiError } from '../../api/client'
 import { BarLadder } from '../../charts/echarts/BarLadder'
@@ -17,15 +18,15 @@ import { postMessage } from '../../chrome/MessageLine.store'
 import { usePanelActions } from '../../chrome/PanelChrome.actions'
 import { useNumbered } from '../../chrome/PanelChrome.numbers'
 import { ROVING_ATTR, ROVING_SCROLL_ATTR } from '../../chrome/WorkspaceFocus'
-import { TEAR_CONTEXT, TEAR_DD, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
+import { TEAR_CONTEXT, TEAR_DD, TEAR_DD3, TEAR_EQ, TEAR_MRET, TEAR_RET, TEAR_RR, TEAR_SV7 } from '../../copy/tear'
 import { fillCopy } from '../../copy/workspace'
 import type { PanelLink } from '../../state/linkGroups'
 import { Card } from './TearCard'
 import type { TearCode } from './TearSheet'
 import {
-  basisLine, contextLines, ddStack, distributionInput, drawdownLanes, drawdownRows, eqStack, laneNotes, laneNumber, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, stackContext,
+  basisLine, contextLines, dd3View, ddStack, distributionInput, drawdownLanes, drawdownRows, eqStack, laneNotes, laneNumber, mretHeatmap, rrBandNote, rrEmpty, rrExtremes, rrStack, stackContext,
   statsNotes, statsSections, tailsNote, yearlyLadder,
-  type DrawdownRowView, type RrEmpty, type StackSpec,
+  type Dd3View, type DrawdownRowView, type RrEmpty, type StackSpec,
 } from './tearCharts'
 import { displayUnit, formatNumber, formatValue } from './tearFormat'
 import type { Analytics } from './tearKpis'
@@ -223,11 +224,65 @@ function DrawdownTable({ rows, unit, highlight, pinned, onHover }: DrawdownTable
   )
 }
 
+/** The bar of one histogram bin: a tint behind the count, as wide as the bin is tall against the tallest. Decorative. */
+const dd3BarStyle = (share: number): CSSProperties => ({
+  position: 'absolute', top: 1, bottom: 1, left: 0, width: `${share * 100}%`, background: 'var(--data)', opacity: 0.25,
+})
+
+/**
+ * DD3: every drawdown episode counted (facts), the time to recovery of the recovered ones as a histogram (a table
+ * whose count cells carry a bar), and the rule in words. Plain tables, no scroll box: eight bins and six facts.
+ */
+function Dd3Block({ view }: { readonly view: Dd3View }) {
+  const C = TEAR_DD3.cols
+  return (
+    <div role="group" aria-label={TEAR_DD3.groupLabel}>
+      {view.facts.length === 0 ? null : (
+        <table className="nqt-grid">
+          <caption className="tear-caption">{TEAR_DD3.factsCaption}</caption>
+          <thead>
+            <tr><th scope="col">{C.measure}</th><th scope="col" className="num">{C.value}</th></tr>
+          </thead>
+          <tbody>
+            {view.facts.map((f) => (
+              <tr key={f.id}>
+                <th scope="row" className="name tear-rowhead">{f.label}</th>
+                <td className="num tear-value">{f.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {view.bins.length === 0 ? null : (
+        <table className="nqt-grid">
+          <caption className="tear-caption">{fillCopy(TEAR_DD3.histogramCaption, { unit: view.unit })}</caption>
+          <thead>
+            <tr><th scope="col">{C.time}</th><th scope="col" className="num">{C.episodes}</th></tr>
+          </thead>
+          <tbody>
+            {view.bins.map((b) => (
+              <tr key={b.label}>
+                <th scope="row" className="name tear-rowhead">{b.label}</th>
+                <td className="num tear-value" style={{ position: 'relative' }}>
+                  <span data-bar aria-hidden="true" style={dd3BarStyle(b.share)} />
+                  <span style={{ position: 'relative' }}>{formatNumber(b.count, 0)}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {view.notes.map((line) => <p key={line} className="tear-note">{line}</p>)}
+    </div>
+  )
+}
+
 function DdView({ data, name, link, extended, extendedError }: ViewProps) {
   const spec = useMemo(() => ddStack(data, name), [data, name])
   const market = useMarketContext(spec.t, extended, extendedError)
   const rows = useMemo(() => drawdownRows(data), [data])
   const notes = useMemo(() => laneNotes(data), [data])
+  const dd3 = useMemo(() => dd3View(data), [data])
   const laneRows = useMemo(() => drawdownLanes(data)?.episodes.length ?? 0, [data])
   const { highlight, pinned, onHover, togglePin } = useEpisodeMark(data)
   const panelId = usePanelActions().panelId || 'tear'
@@ -257,6 +312,7 @@ function DdView({ data, name, link, extended, extendedError }: ViewProps) {
       <Stack spec={spec} link={link} context={market.layers} lanes={{ highlight, onHover }} laneRows={laneRows} />
       <DrawdownTable rows={rows} unit={data.rolling.window_unit} highlight={highlight} pinned={pinned} onHover={onHover} />
       {notes.map((line) => <p key={line} className="tear-note">{line}</p>)}
+      {dd3 ? <Dd3Block view={dd3} /> : null}
     </>
   )
 }
