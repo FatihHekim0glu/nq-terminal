@@ -179,6 +179,17 @@ jobs:
             echo 'Playwright WebKit is not the WKWebView of the Mac app: a pass is a lead, never a proof.'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The baselines this run wrote (demo screens only, never research data), kept so they can be committed to
+      # web/e2e/__screenshots__/offline-webkit-darwin (docs/desktop/v04/w5b-mac-webkit.md).
+      - name: Upload the written baselines
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: webkit-darwin-baselines
+          path: web/e2e/__screenshots__/offline-webkit-darwin
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload the end-to-end results
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

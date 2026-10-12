@@ -61,6 +61,8 @@ test.describe('MonitorGrid', () => {
   })
 
   test('10,000 rows scroll smoothly, stay virtualised, and Enter opens the last row', async ({ page }) => {
+    // The hosted Mac renders at a median 78 ms a frame (run 38211517559), so the scroll and the axe pass over the page need more time.
+    test.slow(isWebkitOnMac(test.info().project.name), 'hosted Mac runner frame rate')
     const watch = await watchGallery(page)
     const main = await openGallery(page, 'MonitorGrid.large')
     const grid = main.getByRole('grid', { name: 'Runs, 10,000 fixture rows' })
