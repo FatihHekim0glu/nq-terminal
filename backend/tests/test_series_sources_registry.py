@@ -38,9 +38,13 @@ PREFIX = "nqt_w3_registry_"
 ORIGINAL_22 = ("za_v0", "tom_v0", "preholiday_v0", "prefomc_v0", "overnight_v0", "macroday_v0", "halloween_v0",
                "mac5rev_v0", "rebal_v0", "fomccycle_v0", "eurodrift_v0", "fomctone_v0", "volmanaged_v0", "tsmom_v0",
                "dtsmom_v0", "carry_v0", "eomtsy_v0", "cskew_v0", "mim_v0", "vt_har_v0", "vrp_eq_v0", "fxeomhedge_v0")
-C2_ROWS = ("cotliq_v0", "mpslope_ym_v0", "wkndgap_fx_v0", "wkndshort_v0", "finroll_tff_v0")
+C2_ROWS = ("cotliq_v0", "mpslope_ym_v0", "finroll_tff_v0")
 C2_REASON = ("outside convention C2 (P = 252 or 12, docs/ANALYTICS_CATALOG.md:16); needs a statistics decision "
              "(O23)")
+WKNDSHORT_REASON = ("An event row (one Friday-close to Monday-close short per active week, 381 events), but the weekly "
+                    "file dates each event at its Friday entry and holds no exit date; the return is realised at the "
+                    "next NYSE session's close, and a series source has no rule that dates a row at the next session. "
+                    "The per-root legs are in another unit and do not add up to the book.")
 SOURCE = constants.SeriesSource("x_daily.csv", "date", MappingProxyType({1: "r1"}), "return on capital per session",
                                 "daily")
 
@@ -98,9 +102,21 @@ def test_constants_re_exports_the_package_mapping_under_the_same_name():
         constants.NO_SUCH_TABLE  # noqa: B018 - the lazy re-export must not swallow other names
 
 
-def test_the_five_rows_outside_convention_c2_are_not_learnable_with_the_reason():
+def test_the_three_rows_outside_convention_c2_are_not_learnable_with_the_reason():
     assert {name: series_sources.NOT_LEARNABLE[name] for name in C2_ROWS} == dict.fromkeys(C2_ROWS, C2_REASON)
     assert not set(series_sources.NOT_LEARNABLE) & set(series_sources.SERIES_SOURCES)
+
+
+def test_born_failing_the_weekend_rows_carry_their_reviewed_status():
+    """wkndshort_v0 is an event row inside C1 trades, not a weekly book outside C2: its reason names the real obstacle
+    (dating at the next session). wkndgap_fx_v0's weekly file is dated at the Monday exit, so it is learned."""
+    assert series_sources.NOT_LEARNABLE["wkndshort_v0"] == WKNDSHORT_REASON
+    assert "wkndgap_fx_v0" in series_sources.SERIES_SOURCES and "wkndgap_fx_v0" not in series_sources.NOT_LEARNABLE
+    assert not any(chr(code) in WKNDSHORT_REASON for code in (0x2013, 0x2014))
+
+
+def test_the_registry_learns_53_and_names_6_not_learnable():
+    assert len(series_sources.SERIES_SOURCES) == 53 and len(series_sources.NOT_LEARNABLE) == 6
 
 
 def test_the_unlearned_reason_is_the_not_learnable_reason_or_no_series_source_yet():
@@ -196,7 +212,7 @@ def test_the_route_serves_the_list_for_rows_planted_in_a_copy_of_the_fixture_tre
     trials, unlearned = analytics_api.registry_trials(ResearchService(root))
     assert unlearned == ["wkndshort_v0", "zz_new_v0"]
     served = tearsheet_extended.deflated_view(trials, unlearned).model_dump(mode="json")
-    assert served["unlearned"] == [{"name": "wkndshort_v0", "reason": C2_REASON},
+    assert served["unlearned"] == [{"name": "wkndshort_v0", "reason": WKNDSHORT_REASON},
                                    {"name": "zz_new_v0", "reason": "no series source yet"}]
 
 

@@ -41,7 +41,8 @@ from fakes import FIXTURES
 
 FIXTURE_DIR = FIXTURES / "results" / "screens" / "daily_event"
 ROWS = ("fedflow_tsy_v0", "lhrev_letf_v0", "tsyauct_intra_ml_v0", "hvix_nd_v0", "apieia_ho_v0", "cropsmooth_v0",
-        "dburst_rev_v1", "fomcdrift_tsy_v0", "fomcfx_v0", "fomcpc_fx_v0", "pretra_tsy_v0", "xfut_tcn120_v0")
+        "dburst_rev_v1", "fomcdrift_tsy_v0", "fomcfx_v0", "fomcpc_fx_v0", "pretra_tsy_v0", "xfut_tcn120_v0",
+        "wkndgap_fx_v0")
 LEARNED = tuple(daily_event.SOURCES)
 TRADE_ROWS = tuple(n for n in LEARNED if daily_event.SOURCES[n].kind == "trades")
 FENCE = pd.Timestamp("2022-01-01", tz="UTC")
@@ -58,6 +59,7 @@ class Anchor:
     mean: str
     sd: str | None
     ladder: dict[int, str]
+    events_only: bool = False  # the file holds a zero row in every week without an event; the screen counts events
 
 
 _HEAD = {"n": "headline.n", "mean": "headline.mean_bp", "sd": "headline.sd_bp"}
@@ -78,6 +80,8 @@ ANCHORS = {
     "fomcpc_fx_v0": Anchor(1.0, **_HEAD, ladder={0: "secondaries.S12_costs.net_0tick_bp",
                                                  2: "P4_2tick.mean_bp"}),
     "pretra_tsy_v0": Anchor(1e4, **_HEAD, ladder=_LADDER),
+    "wkndgap_fx_v0": Anchor(1.0, "headline.n", "headline.mean", "headline.sd", {2: "headline.mean_2tick"},
+                            events_only=True),
 }
 
 
@@ -190,6 +194,8 @@ def anchor_headline(base: Path, name: str, cost: int = 1) -> None:
     """n, mean and sd of the series at `cost` against the screen JSON (the 1 tick headline, or the ladder)."""
     anchor, doc = ANCHORS[name], _doc(base, name)
     r = np.asarray(ResearchService(base).series(name, cost).r)
+    if anchor.events_only:
+        r = r[r != 0]
     if cost == 1:
         assert len(r) == _pluck(doc, anchor.n)
         assert r.mean() * anchor.scale == pytest.approx(_pluck(doc, anchor.mean), rel=1e-9, abs=1e-12)
@@ -239,22 +245,44 @@ def anchor_dates(base: Path, name: str) -> None:
         assert not dropped & seen and kept_voids <= seen
     elif name == "fomcpc_fx_v0":
         assert _years(stamps) == _pluck(doc, "headline.events_per_year")
+    elif name == "wkndgap_fx_v0":
+        # The trade is Sunday 18:00 CT to Monday 15:59 CT: realised at the Monday session, one row per valid week.
+        assert (stamps.weekday == 0).all()
+        assert (stamps[0].strftime("%Y-%m-%d"), stamps[-1].strftime("%Y-%m-%d")) == (
+            _pluck(doc, "first_valid_week"), _pluck(doc, "last_valid_week"))
+        events = pd.Series(np.asarray(hs.r), index=stamps)
+        events = events[events != 0]
+        for key, block in _pluck(doc, "blocks").items():
+            opens = key.split("_")[0]
+            opens = pd.Timestamp(_pluck(doc, "first_valid_week") if opens == "first" else f"{opens}-01")
+            assert events.index[events.index >= opens][0] == pd.Timestamp(block["first"])
     else:
         assert sorted(pd.to_datetime(kept[source.time_column])) == sorted(stamps)
 
 
 INDEPENDENT_DATE_FACTS = ("fomcdrift_tsy_v0", "fomcfx_v0", "pretra_tsy_v0", "lhrev_letf_v0", "fedflow_tsy_v0",
-                          "cropsmooth_v0", "hvix_nd_v0", "apieia_ho_v0")
+                          "cropsmooth_v0", "hvix_nd_v0", "apieia_ho_v0", "wkndgap_fx_v0")
 REGRESSION_ONLY_DATES = tuple(n for n in LEARNED if n not in INDEPENDENT_DATE_FACTS)
 
 
 # ---------------------------------------------------------------- the mapping table
 
 
-def test_the_slice_names_its_twelve_rows_once_each():
+def test_the_slice_names_its_thirteen_rows_once_each():
     assert set(daily_event.SOURCES) | set(daily_event.NOT_LEARNABLE) == set(ROWS)
     assert not set(daily_event.SOURCES) & set(daily_event.NOT_LEARNABLE)
-    assert len(LEARNED) == 10 and set(daily_event.NOT_LEARNABLE) == {"dburst_rev_v1", "xfut_tcn120_v0"}
+    assert len(LEARNED) == 11 and set(daily_event.NOT_LEARNABLE) == {"dburst_rev_v1", "xfut_tcn120_v0"}
+
+
+def test_each_row_states_the_unit_its_spec_defines():
+    """A basis-point column is a fraction of K unless the spec says otherwise: apieia_ho_v0's spec (rule 2) defines
+    P&L and cost in basis points of the entry price of one HO contract, so its unit names that, not a capital."""
+    units = {n: s.unit for n, s in daily_event.SOURCES.items()}
+    assert units["apieia_ho_v0"] == daily_event.BP_PER_HO_CONTRACT
+    assert "HO contract" in daily_event.BP_PER_HO_CONTRACT and "capital" not in daily_event.BP_PER_HO_CONTRACT
+    assert daily_event.BP_PER_HO_CONTRACT.endswith("per trade")
+    bp_of_k = ("fedflow_tsy_v0", "cropsmooth_v0", "hvix_nd_v0", "fomcpc_fx_v0", "wkndgap_fx_v0")
+    assert {n: units[n] for n in bp_of_k} == dict.fromkeys(bp_of_k, daily_event.BP_PER_TRADE)
 
 
 def test_texts_use_no_em_or_en_dash_and_each_refusal_gives_a_reason():
@@ -446,11 +474,17 @@ def test_regression_guard_an_event_on_a_non_session_is_refused_by_the_series_bui
 
 # ---------------------------------------------------------------- the window start (rows whose sample starts late)
 
-WINDOW_ROWS = ("tsyauct_intra_ml_v0", "fedflow_tsy_v0", "hvix_nd_v0", "apieia_ho_v0")
+WINDOW_ROWS = ("tsyauct_intra_ml_v0", "fedflow_tsy_v0", "hvix_nd_v0", "apieia_ho_v0", "fomcdrift_tsy_v0", "fomcfx_v0",
+               "fomcpc_fx_v0", "pretra_tsy_v0", "wkndgap_fx_v0")
+# The start each row's spec or screen fixes (statistics review of wave w3): a zero fill from the NQ data start would pad
+# sessions before the sample and zero-fill statements the screen left out.
+WINDOW_STARTS = {"fomcdrift_tsy_v0": "2011-01-26", "fomcfx_v0": "2010-12-01", "fomcpc_fx_v0": "2011-04-27",
+                 "pretra_tsy_v0": "2011-01-03", "apieia_ho_v0": "2010-10-06", "wkndgap_fx_v0": "2011-06-20"}
 
 
 def test_the_rows_whose_sample_starts_after_the_default_window_name_their_start():
     assert {n for n in LEARNED if daily_event.SOURCES[n].window_start} == set(WINDOW_ROWS)
+    assert {n: daily_event.SOURCES[n].window_start for n in WINDOW_STARTS} == WINDOW_STARTS
 
 
 @pytest.mark.parametrize("name", WINDOW_ROWS)
@@ -544,9 +578,57 @@ def test_hvix_window_starts_at_the_first_valid_session_of_the_file(lab):
 
 
 @pytest.mark.lab_only
-def test_apieia_window_starts_at_the_first_row_of_the_file(lab):
+def test_apieia_window_starts_at_the_first_trade_day_not_the_placebo_row_before_it(lab):
     frame = pd.read_csv(lab / "results" / "screens" / "apieia_ho_v0_events.csv")
-    assert daily_event.SOURCES["apieia_ho_v0"].window_start == frame["date"].iloc[0]
+    kept = frame[_keep_mask(frame, daily_event.SOURCES["apieia_ho_v0"])]
+    assert daily_event.SOURCES["apieia_ho_v0"].window_start == kept["date"].iloc[0] > frame["date"].iloc[0]
+
+
+def _spec(lab: Path, name: str) -> dict:
+    """The frozen spec, read only (`experiments/<name>.json`)."""
+    return json.loads((lab / "experiments" / f"{name}.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.lab_only
+def test_fomcdrift_window_starts_at_the_specs_first_scheduled_statement(lab):
+    spec, frame = _spec(lab, "fomcdrift_tsy_v0"), _raw(lab, "fomcdrift_tsy_v0")
+    assert daily_event.SOURCES["fomcdrift_tsy_v0"].window_start == spec["design"]["first_event"] == frame["date"].min()
+
+
+@pytest.mark.lab_only
+def test_fomcfx_window_starts_after_every_statement_the_screen_dropped_unwarmed(lab):
+    start = pd.Timestamp(daily_event.SOURCES["fomcfx_v0"].window_start)
+    dropped = [pd.Timestamp(d) for d in _doc(lab, "fomcfx_v0")["dropped_unwarmed"]]
+    first_p = pd.to_datetime(_raw(lab, "fomcfx_v0")["P"]).min()
+    assert dropped and all(d < start for d in dropped) and start <= first_p
+
+
+@pytest.mark.lab_only
+def test_fomcpc_window_starts_at_the_specs_first_event(lab):
+    spec, frame = _spec(lab, "fomcpc_fx_v0"), _raw(lab, "fomcpc_fx_v0")
+    first = spec["design"]["guards_fomcpc"]["fomcpc_first_event"]
+    assert daily_event.SOURCES["fomcpc_fx_v0"].window_start == first == frame["day"].min()
+
+
+@pytest.mark.lab_only
+def test_pretra_window_starts_at_the_specs_panel_start(lab):
+    spec, frame = _spec(lab, "pretra_tsy_v0"), _raw(lab, "pretra_tsy_v0")
+    assert daily_event.SOURCES["pretra_tsy_v0"].window_start == spec["design"]["panel_start"]
+    assert spec["design"]["panel_start"] < frame["Pm1"].min()
+
+
+@pytest.mark.lab_only
+def test_wkndgap_window_starts_at_the_screens_first_valid_week(lab):
+    assert daily_event.SOURCES["wkndgap_fx_v0"].window_start == _doc(lab, "wkndgap_fx_v0")["first_valid_week"]
+
+
+@pytest.mark.lab_only
+def test_wkndgap_counts_117_events_among_its_weeks_and_a_week_without_one_is_a_zero_row(lab):
+    frame, doc = _raw(lab, "wkndgap_fx_v0"), _doc(lab, "wkndgap_fx_v0")
+    active = frame["r1"] != 0
+    assert int(active.sum()) == doc["headline"]["n"] == doc["n_active"] == 117
+    assert len(frame) == doc["n_valid_weeks"] and (active == (frame["legs"] > 0)).all()
+    assert (frame.loc[~active, ["r0", "r1", "r2"]] == 0).all().all()
 
 
 @pytest.mark.lab_only
@@ -565,6 +647,31 @@ def test_xfut_headline_is_gross_less_cost_over_a_capital_the_file_lacks(lab):
     net = (frame["gross"] - frame["cost1"]).sum() / capital / doc["headline"]["T"]
     assert net == pytest.approx(doc["headline"]["mean"], rel=1e-9)
     assert "capital" not in " ".join(frame.columns).lower() and "net" not in frame.columns
+
+
+# ---------------------------------------------------------------- the weekend gap book is dated at its Monday exit
+
+
+def test_born_failing_wkndgap_dated_at_its_sunday_entry_fails_its_date_anchor(root, tmp_path):
+    """The trade opens on Sunday evening and is realised at Monday's close; a file dated at the entry fails."""
+    name = "wkndgap_fx_v0"
+    column = daily_event.SOURCES[name].time_column
+
+    def sunday(frame: pd.DataFrame) -> pd.DataFrame:
+        frame[column] = [(pd.Timestamp(d) - pd.Timedelta(days=1)).strftime("%Y-%m-%d") for d in frame[column]]
+        return frame
+
+    anchor_dates(_variant(tmp_path / "ok", root, name), name)
+    with pytest.raises((AssertionError, ResearchDataError, SeriesError)):
+        anchor_dates(_variant(tmp_path / "sunday", root, name, sunday), name)
+
+
+def test_born_failing_wkndgap_counting_its_zero_weeks_as_events_fails_the_headline(root, patched):
+    name = "wkndgap_fx_v0"
+    anchor_headline(root, name)
+    patched.setitem(ANCHORS, name, dataclasses.replace(ANCHORS[name], events_only=False))
+    with pytest.raises(AssertionError):
+        anchor_headline(root, name)
 
 
 # ---------------------------------------------------------------- the keep rule is what selects the sample

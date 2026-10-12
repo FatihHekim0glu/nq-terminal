@@ -233,6 +233,16 @@
    "how": "synthetic",
    "note": "synthetic: the lab file's column layout with made-up values on arbitrary sessions"
   },
+  "results/screens/daily_event/wkndgap_fx_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic files beside it"
+  },
+  "results/screens/daily_event/wkndgap_fx_v0_weekly.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up values on Monday sessions, a zero row in each week without an event"
+  },
   "results/screens/dtsmom_v0_monthly.csv": {
    "source": "results/screens/dtsmom_v0_monthly.csv",
    "how": "trimmed",

@@ -46,6 +46,9 @@ FENCE_DAY = "2022-01-01"
 TEN = ("airfx_v0", "cmax_v0", "crushdev_v0", "eqvrp_xasset_v0", "fxval_ppp_v0", "gotobi6j_v0", "gvzvrp_pm_v0",
        "hi52_v0", "liqbias_v0", "metals_eq_ym_v1")
 LEARNED = tuple(n for n in TEN if n in SOURCES)
+# Rows served without a benchmark: airfx_v0's controls are factor sleeves, and liqbias_v0's `D` is the strategy's own
+# gross event return less its pre-window drift, a transformation of the strategy rather than a book.
+NO_BENCHMARK = ("airfx_v0", "liqbias_v0")
 lab_only = pytest.mark.lab_only
 
 CAL = {"2012-13": ("2012-01", "2013-12"), "2014-17": ("2014-01", "2017-12"), "2018-21": ("2018-01", "2021-12")}
@@ -101,8 +104,7 @@ SPECS: dict[str, Spec] = {
     "fxval_ppp_v0": Spec(**_COSTS_FX, bench={1: ("control_means_pct.CB", PCT, None)}),
     "liqbias_v0": Spec(
         n="headline.n", mean={k: (f"cost_ladder_mean_pct.{k}_tick", PCT) for k in (0, 1, 2)},
-        sharpe={1: "headline.sharpe_ann"}, blocks=("blocks", EARLY, "mean_pct", PCT, "n"),
-        bench={1: ("control.mean_pct", PCT, "control.sharpe_ann")}),
+        sharpe={1: "headline.sharpe_ann"}, blocks=("blocks", EARLY, "mean_pct", PCT, "n")),
     "metals_eq_ym_v1": Spec(
         n="headline.n", mean={k: (f"means_pct_per_month.{k}.T", PCT) for k in (0, 1, 2)},
         bench={k: (f"means_pct_per_month.{k}.C", PCT, None) for k in (0, 1, 2)},
@@ -573,13 +575,32 @@ def test_the_lab_airfx_flat_month_is_the_one_row_the_screen_leaves_out(lab):
     assert (frame.loc[~frame["held"], [c for c in frame if c.startswith("r_")]] == 0.0).all().all()
 
 
+# ---------------------------------------------------------------- rows without a benchmark
+
+
+@pytest.mark.parametrize("name", NO_BENCHMARK)
+def test_born_failing_a_row_whose_control_is_not_a_book_maps_no_benchmark(name):
+    """Treynor, beta and the benchmark line read the mapped benchmark when the series is on capital; against a
+    control that is a transformation of the strategy (liqbias_v0's `D`) or a factor sleeve (airfx_v0) they mean
+    nothing, so no benchmark column and no label are mapped."""
+    source = SOURCES[name]
+    assert dict(source.bench) == {} and source.bench_label is None
+
+
+def test_liqbias_serves_no_benchmark_although_its_file_holds_the_control_column(fixture_tree):
+    header = pd.read_csv(fixture_tree.screens / SOURCES["liqbias_v0"].file, nrows=0).columns
+    assert "D" in header
+    s = hypothesis_series(fixture_tree.service, "liqbias_v0", 1)
+    assert s.bench is None and s.bench_label is None and s.on_capital
+
+
 # ---------------------------------------------------------------- the part feeds the shared flow
 
 
 @pytest.mark.parametrize("name", LEARNED)
 def test_the_analytics_series_builds_for_each_row(tree, name):
     s = hypothesis_series(tree.service, name, 1)
-    assert s.periods == 12 and s.kind == "monthly" and (s.bench is None) is (name == "airfx_v0")
+    assert s.periods == 12 and s.kind == "monthly" and (s.bench is None) is (name in NO_BENCHMARK)
     assert s.on_capital is (name != "gotobi6j_v0")
     assert len(s.r) == len(tree.service.series(name, 1).t) and not s.r.isna().any()
 

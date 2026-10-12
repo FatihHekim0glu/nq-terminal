@@ -15,8 +15,10 @@ against a name or a convention alone. The choices every row shares:
 - Costs: the CSV columns hold the net return at 0, 1 and 2 era ticks per side (plus $2.50 per side) where the screen
   records all three; a file with one cost column serves that cost only.
 - Benchmark: the control book the screen itself regresses on first (the constant or long-only book of the same
-  legs), at the one cost the screen records it at. A control that is a factor sleeve (airfx_v0's DOL, CARRY, TSMOM)
-  or a different strategy is not a benchmark and is left out.
+  legs), at the one cost the screen records it at. A control that is a factor sleeve (airfx_v0's DOL, CARRY, TSMOM),
+  a different strategy or a transformation of the strategy itself (liqbias_v0's `D`, its own gross event return less
+  the pre-window drift) is not a benchmark and is left out: Treynor, beta and the benchmark line against it would
+  mean nothing.
 - The fence: no mapping here can drop a row by date. Every row relies on the shared check in
   `ResearchService.series` (a stamp on or after 2022-01-01 is an error), and the tests name that a regression guard.
 
@@ -88,10 +90,10 @@ SOURCES: dict[str, SeriesSource] = {
     "hi52_v0": _monthly("hi52_v0_monthly.csv", "label", _costs("r_hi52_{k}"), _one(1, "lo_1"), LONG_ONLY_COMMODITY,
                         guard_column="end"),
     # Expiry-window energy spread book: r_m sums the events whose exit (L-1) falls in month m, every exit on or before
-    # the month's last NYSE session (proved from the events file by a lab-only test). `D` is the window-specificity
-    # control, gross of costs (the event return less the pre-window drift), the control the screen tests first.
-    "liqbias_v0": _monthly("liqbias_v0_monthly.csv", "month", _costs("r{k}"), _one(1, "D"),
-                           "window-specificity control D (gross, event return less the pre-window drift)"),
+    # the month's last NYSE session (proved from the events file by a lab-only test). No benchmark: the file's `D`
+    # (the window-specificity control, the event return less the pre-window drift) is a transformation of the
+    # strategy, not a book.
+    "liqbias_v0": _monthly("liqbias_v0_monthly.csv", "month", _costs("r{k}"), MappingProxyType({}), None),
     # Metals timing of the YM book on vrp_eq_v0's clock: holding month h covers (L_m, L_{m+1}], `void` months are left
     # out as in vrp_eq_v0, `C` is the constant 1x YM book the headline regresses on, at every cost.
     "metals_eq_ym_v1": _monthly("metals_eq_ym_v1_monthly.csv", "label", _costs("r_T_t{k}"), _costs("r_C_t{k}"),

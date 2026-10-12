@@ -1,9 +1,10 @@
 """Series sources for the daily and event rows of the registry (wave w3, slice series-daily-event).
 
-Twelve registered rows have a screen file that is not a monthly book: four daily files and eight event, leg or trade
-files. This module maps the ones whose headline sample a `SeriesSource` can reproduce (ten) and says, for the other
-two, why not (`NOT_LEARNABLE`). Nothing here reads a file; the mapping only names columns, and every column named is a return,
-a date or a cost, never a price (`tests/test_series_daily_event.py` checks that against `constants.PRICE_COLUMN`).
+Thirteen registered rows have a screen file that is not a monthly book: four daily files, eight event, leg or trade
+files and one weekly event file. This module maps the ones whose headline sample a `SeriesSource` can reproduce
+(eleven) and says, for the other two, why not (`NOT_LEARNABLE`). Nothing here reads a file; the mapping only names
+columns, and every column named is a return, a date or a cost, never a price (`tests/test_series_daily_event.py`
+checks that against `constants.PRICE_COLUMN`).
 
 Choices that bind every row below (ANALYTICS_CATALOG C1 and C2, SV3a step 2):
 - Event rows are `trades`. The file holds one value per event (or per event day) and nothing on the sessions between;
@@ -14,14 +15,21 @@ Choices that bind every row below (ANALYTICS_CATALOG C1 and C2, SV3a step 2):
 - The one `daily` row, lhrev_letf_v0, has a value on every mark (flat marks included), so it is used as recorded.
 - A value is dated at the session the return is realised, never the session the signal forms: fomcdrift_tsy_v0 at
   its `exit` (E+15), pretra_tsy_v0 at the pre-refunding Friday `P`, fomcfx_v0 at the statement day `D` (entry at the
-  close of the session before). The intraday books (fedflow, tsyauct, cropsmooth, fomcpc) realise on the day itself.
+  close of the session before), wkndgap_fx_v0 at the Monday `week` (entry Sunday 18:00 CT, exit Monday 15:59 CT).
+  The intraday books (fedflow, tsyauct, cropsmooth, fomcpc) realise on the day itself.
+- A trades row's zero fill starts where its sample starts (`window_start`), never at the NQ data start when the spec
+  or screen fixes a later one: padding sessions before the sample lowers the Sharpe and zero-fills events the screen
+  left out (statistics review of wave w3: fomcdrift, fomcfx, fomcpc and pretra).
+- wkndgap_fx_v0's weekly file holds a row for every valid week, 0.0 in a week without an event; a zero row adds
+  nothing to the session sum, so the served series is the 117 events of the headline and the zero fill.
 - A file that mixes the headline sample with other rows says so in `keep_where`: hvix_nd_v0 keeps the sessions where
   its `headline` column is True (100 spike sessions of the 2,193 valid ones) and apieia_ho_v0 the rows whose `kind`
   is `event` and whose `void` is empty (426 of 1,294). Rows the rule leaves out are not voids and are never zeroed.
 - A void event is left out, never zeroed (the screen's n excludes it): cropsmooth_v0's two warm-up dates and
   fomcfx_v0's two dates with six void roots have empty values, so the default empty-row rule drops them.
-- Units follow the column: a fraction of K is "return on capital", a basis-point column is "basis points of
-  capital". The Sharpe ratio is scale free, so the two stay comparable.
+- Units follow the spec: a fraction of K is "return on capital", a basis-point column is "basis points of
+  capital" unless the spec defines another base (apieia_ho_v0: basis points of one HO contract's entry price). The
+  Sharpe ratio is scale free, so they stay comparable.
 - Costs: 0, 1 and 2 ticks per side where the file holds all three (every mapped row does).
 - No benchmark is mapped for a `trades` row: `hypothesis_series` lines a benchmark column up with the summed session
   series row for row, which only works when the file has one row per session. lhrev_letf_v0 is such a file and keeps
@@ -40,6 +48,7 @@ from nq_terminal.constants import SeriesSource
 
 CAPITAL_PER_TRADE = "return on capital per trade"
 BP_PER_TRADE = "basis points of capital per trade"
+BP_PER_HO_CONTRACT = "basis points of one HO contract notional per trade"
 CAPITAL_PER_SESSION = "return on capital per session"
 TRADES, DAILY = "trades", "daily"
 COSTS = (0, 1, 2)
@@ -72,21 +81,35 @@ SOURCES: dict[str, SeriesSource] = {
     "hvix_nd_v0": SeriesSource("hvix_nd_v0_sessions.csv", "exit_ts",
                                MappingProxyType({0: "r_fee_bp", 1: "r_net1_bp", 2: "r_net2_bp"}), BP_PER_TRADE, TRADES,
                                window_start="2010-10-11", keep_where=MappingProxyType({"headline": True})),
-    # Heating oil on API and EIA report days: one intraday trade per event day in basis points of K, net at 0, 1 and 2
-    # ticks (`n0`, `n1`, `n2`). The file also holds two control weekday groups and the voided events; the headline is
-    # the `event` rows with an empty `void`. The zero fill starts at the file's first row (2010-10-05).
-    "apieia_ho_v0": SeriesSource("apieia_ho_v0_events.csv", "date", _per_cost("n{k}"), BP_PER_TRADE, TRADES,
-                                 window_start="2010-10-05",
+    # Heating oil on API and EIA report days: one intraday trade per event day, net at 0, 1 and 2 ticks (`n0`, `n1`,
+    # `n2`) in basis points of the entry price of one HO contract (spec rule 2), not of a capital K. The file also
+    # holds two control weekday groups and the voided events; the headline is the `event` rows with an empty `void`.
+    # The zero fill starts at the first trade day (2010-10-06), not the placebo row the day before.
+    "apieia_ho_v0": SeriesSource("apieia_ho_v0_events.csv", "date", _per_cost("n{k}"), BP_PER_HO_CONTRACT, TRADES,
+                                 window_start="2010-10-06",
                                  keep_where=MappingProxyType({"kind": "event", "void": None})),
-    # Post-FOMC drift: entered E+1, exited E+15; dated at the exit, where the return is realised.
+    # Post-FOMC drift: entered E+1, exited E+15; dated at the exit, where the return is realised. The sample starts
+    # with the spec's first scheduled statement (2011-01-26), so the 2010-11-03 and 2010-12-14 statements it excludes
+    # are not zero-filled.
     "fomcdrift_tsy_v0": SeriesSource("fomcdrift_tsy_v0_events.csv", "exit", _per_cost("r{k}"), CAPITAL_PER_TRADE,
-                                     TRADES),
-    # FOMC day in six FX futures: entry at the close of the session before D, exit at the close of D.
-    "fomcfx_v0": SeriesSource("fomcfx_v0_events.csv", "D", _per_cost("r{k}"), CAPITAL_PER_TRADE, TRADES),
-    # FOMC press conference hour in six FX futures: one day, basis points of K.
-    "fomcpc_fx_v0": SeriesSource("fomcpc_fx_v0_events.csv", "day", _per_cost("r{k}_bp"), BP_PER_TRADE, TRADES),
-    # Pre-refunding Friday in Treasury futures: entry at the close before P, exit at the close of P.
-    "pretra_tsy_v0": SeriesSource("pretra_tsy_v0_events.csv", "P", _per_cost("r{k}"), CAPITAL_PER_TRADE, TRADES),
+                                     TRADES, window_start="2011-01-26"),
+    # FOMC day in six FX futures: entry at the close of the session before D, exit at the close of D. The sample
+    # starts in December 2010, after the 2010-11-03 statement the screen dropped as unwarmed.
+    "fomcfx_v0": SeriesSource("fomcfx_v0_events.csv", "D", _per_cost("r{k}"), CAPITAL_PER_TRADE, TRADES,
+                              window_start="2010-12-01"),
+    # FOMC press conference hour in six FX futures: one day, basis points of K. The sample starts at the spec's first
+    # event (2011-04-27, the first press conference).
+    "fomcpc_fx_v0": SeriesSource("fomcpc_fx_v0_events.csv", "day", _per_cost("r{k}_bp"), BP_PER_TRADE, TRADES,
+                                 window_start="2011-04-27"),
+    # Pre-refunding Friday in Treasury futures: entry at the close before P, exit at the close of P. The sample starts
+    # at the spec's panel start (2011-01-03), so the late-2010 refunding Friday it excludes is not zero-filled.
+    "pretra_tsy_v0": SeriesSource("pretra_tsy_v0_events.csv", "P", _per_cost("r{k}"), CAPITAL_PER_TRADE, TRADES,
+                                  window_start="2011-01-03"),
+    # Weekend gap in six FX futures: one trade per active week, entered Sunday 18:00 CT and exited Monday 15:59 CT,
+    # dated at the Monday session `week`, basis points of K at 0, 1 and 2 ticks. Weeks without an event are 0.0 rows
+    # (117 events in 383 valid weeks). The zero fill starts at the screen's first valid week.
+    "wkndgap_fx_v0": SeriesSource("wkndgap_fx_v0_weekly.csv", "week", _per_cost("r{k}"), BP_PER_TRADE, TRADES,
+                                  window_start="2011-06-20"),
 }
 
 # Rows of this slice the current `SeriesSource` cannot reproduce. A mapping reached by dropping or reshaping rows would
