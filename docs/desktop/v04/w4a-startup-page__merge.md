@@ -141,3 +141,38 @@ Per-launch asset counts: `D:/dev/v04/measure/w4a-startup-page/asset_counts.json`
 - **`backend_ready` for a reused run folder:** fixed in `ab.mjs` for future runs (above); the usual rows of this A/B stay invalid until measured again.
 - **The shell budget** is as w1 left it (110.0 kB gzip, with the thin room w1 reported against its 110,000 byte target). This wave changed no web file.
 - **Post-merge checks** (`smoke_real.ps1 -Mode App` on the main tree with the merged tree's smoke build, the second `gatecheck.py check`) belong to the post-merge agent.
+
+## Merge into main
+
+Merged on 12 October 2026 as `97077782a9fddec2eff606a364d682f72164ea95` ("chore(v04): merge the w4a start-up page wave"), on top of
+`7ee1277` (the w5 Mac proof kit merge), with `--no-ff` from `dec6910`. There were no conflicts: git merged `security.py`, `app.py`,
+`__main__.py`, `test_safety_ast.py`, `test_p2_jobs_safety.py` and the docs without help, and the safety scan and the job-safety roster test
+both passed on the result, so every writer from both sides is still listed.
+
+Local checks on the merged main tree (the HEAVY slot held, 10.5 GB free before the run, no web install touched):
+
+| Check | Result |
+| --- | --- |
+| `pytest terminal/backend/tests -n 4` | exit 0: 5,705 passed, 353 skipped, 10 xfailed, 0 failed, 0 errors (no research-file guard teardown error this time) |
+| `qa crosscheck --strict` | PASS 2,563, FAIL 0, SKIP 0, INFO 104 |
+| `node --test desktop/harness/tests` | 485 passed, 0 failed |
+| `node --test desktop/scripts/tests scripts/tests` | 276 passed, 0 failed |
+| `gen-api --check` | in sync, sha256 `6ef2bedb...` |
+
+Vitest and Playwright were not run locally, by design; the main tree's `web/node_modules` is a known broken install and was left alone.
+
+Hosted runs on main:
+
+| Run | Workflow | Head | Result |
+| --- | --- | --- | --- |
+| 38208492125 | ci | the merge commit | cancelled by the next push to main (concurrency group), not a failure; its offline e2e, perf trend, ruff, rust format and qa jobs had passed |
+| 38208492133 | desktop-check | the merge commit | failed: `webview2_canaries_never_reach_the_engine_or_the_shell` (`tests/window_env.rs:165`), a timing fault w4a does not touch; the next run passed without a change to that area |
+| 38209573166 | ci | w3b wkndshort fix, which contains the merge | success |
+| 38209573155 | desktop-check | w3b wkndshort fix, which contains the merge | success |
+
+Post-merge items still owed:
+
+- `smoke_real.ps1 -Mode App` and a second gatecheck after the main-tree web reinstall.
+- The quiet-PC A/B rerun (every timing here and in the A/B section is PROVISIONAL).
+- O19 (the preferred desktop port, off by default) and the remoteStore review.
+- O6 (the resident backend design, no code built).
