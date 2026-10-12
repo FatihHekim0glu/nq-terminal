@@ -28,8 +28,11 @@ The table lists all 18 templates in the order of [session_order.json](session_or
 | 14 | Measurements left pending or provisional | [2026-10-03_pending-measurements.md](2026-10-03_pending-measurements.md) | G2 | 10 minutes in a quiet window | NOT RUN |
 | not a step | The all-day soak | [2026-10-03_all-day-soak.md](2026-10-03_all-day-soak.md) | G2, only if the overnight soak was partial | one day with the PC left alone | NOT RUN |
 | not a step | The weekly parity list | [2026-10-03_weekly-parity.md](2026-10-03_weekly-parity.md) | D6, once a week for four weeks | about 15 minutes | NOT RUN |
+| not an owner check | The automated weekly parity list | [2026-10-12_weekly-parity-auto.md](2026-10-12_weekly-parity-auto.md) | D6, replaces 13 of the 16 rows of the weekly list | none | NOT RUN |
 | not a step | The four-week dual-run kit | [2026-10-03_dual-run-kit.md](2026-10-03_dual-run-kit.md) | D6 | a few minutes a day | NOT RUN |
 | not an owner check | Install and upgrade test on the renamed product, beside the real install | [2026-10-05_install-upgrade-test.md](2026-10-05_install-upgrade-test.md) | release check `-RequireInstall` (automated) | none | NOT RUN |
+
+The automated weekly parity list is a spec (`pnpm --dir web e2e:desktop -- 80-parity-auto` in fixture mode, `web/e2e/desktop/parity.app.ts` in real mode); the owner part of the weekly list that stays is rows 10 to 12 and the real F10 and F11 keys. Its record is written by the run and has no owner box to tick, so it is a row of the table but not one of the 18 owner templates counted by name in `desktop/harness/tests/docs-claims.test.mjs`.
 
 The all-day soak row can be met by the hidden 8 hour soak of wave e2-endurance-040, if the owner accepts it in place of a day with the PC left alone. The install and upgrade test is an automated release check and is not refreshed in this folder.
 

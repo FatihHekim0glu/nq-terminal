@@ -8,6 +8,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { requestLine, commandLinkLine } from '../../chrome/CommandLine.bus'
 import { menuOptionId, MenuSheet } from '../../chrome/CommandLine.menu'
+import { detectKeysTable } from '../../chrome/CommandLine.keys'
 import { searchMenu, type MenuItem, type MenuModel } from '../../chrome/CommandLine.menus'
 import { AmberField } from '../../chrome/Field'
 import FunctionBar from '../../chrome/FunctionBar'
@@ -16,7 +17,7 @@ import { useNumbered, type NumberedItem } from '../../chrome/PanelChrome.numbers
 import { usePanelPage } from '../../chrome/PanelChrome.page'
 import { findMnemonic, MNEMONICS, type MnemonicCode, type MnemonicDef } from '../../commands/registry'
 import { loadSearchIndex, loadedSearchIndex } from '../../commands/searchIndexLoader'
-import { HELP, HELP_KEYS } from '../../copy/help'
+import { HELP, helpKeysFor } from '../../copy/help'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL } from '../../copy/workspace'
 import HelpIndex, { LICENCES } from './HelpIndex'
 import HelpToc, { type SectionId, type TocEntry, type TocSelection } from './HelpToc'
@@ -230,7 +231,7 @@ export default function HelpScreen({ built, mnemonics = MNEMONICS }: HelpScreenP
   }, [scrollTo])
   const toc: readonly TocEntry[] = [
     { id: 'mnemonics', label: HELP.mnemonicsHeading, count: mnemonics.length },
-    { id: 'keys', label: HELP.keysHeading, count: HELP_KEYS.length },
+    { id: 'keys', label: HELP.keysHeading, count: helpKeysFor(detectKeysTable()).length },
     { id: 'links', label: HELP.linkHeading, count: HELP.linkGroups.length },
     { id: 'keyboard', label: HELP.keyboardHeading, count: null },
     { id: 'licences', label: HELP.licencesHeading, count: LICENCES.length },

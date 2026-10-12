@@ -7,9 +7,10 @@
 // the drawn keyboard, link groups and licences. Every font listed is under an open licence.
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { findMnemonic, MNEMONICS, type MnemonicCode, type MnemonicDef } from '../commands/registry'
-import { HELP, HELP_FONT_LICENCES, HELP_KEYS, HELP_LICENCES } from '../copy/help'
+import { HELP, HELP_FONT_LICENCES, HELP_LICENCES, helpKeysFor } from '../copy/help'
 import { FUNCTION_BAR, FUNCTION_NUMBERS, PANEL, fillCopy } from '../copy/workspace'
 import { commandLinkLine, requestLine } from './CommandLine.bus'
+import { detectKeysTable } from './CommandLine.keys'
 import { menuOptionId, MenuSheet } from './CommandLine.menu'
 import { searchMenu, type MenuItem, type MenuModel } from './CommandLine.menus'
 import { AmberField } from './Field'
@@ -21,6 +22,7 @@ import { useNumbered } from './PanelChrome.numbers'
 import { usePanelPage } from './PanelChrome.page'
 import { SCREEN_PHASES } from './WorkspaceLayouts'
 import { ROVING_ATTR, ROVING_VERTICAL_ATTR } from './WorkspaceFocus'
+import NoticesDisclosure from '../screens/help/NoticesDisclosure'
 import './HelpScreen.css'
 
 export interface HelpScreenProps {
@@ -102,6 +104,9 @@ function Licences() {
           <li key={name}><span>{name}</span> <span className="muted">{licence}</span></li>
         ))}
       </ul>
+      <h5>{HELP.noticesHeading}</h5>
+      <p>{HELP.noticesText}</p>
+      <NoticesDisclosure />
     </>
   )
 }
@@ -315,7 +320,7 @@ export default function HelpScreen({ built, mnemonics = MNEMONICS }: HelpScreenP
   const activeId = activeItem ? menuOptionId(listId, activeItem.n) : undefined
   const toc: readonly TocEntry[] = [
     { id: 'mnemonics', label: HELP.mnemonicsHeading, count: mnemonics.length },
-    { id: 'keys', label: HELP.keysHeading, count: HELP_KEYS.length },
+    { id: 'keys', label: HELP.keysHeading, count: helpKeysFor(detectKeysTable()).length },
     { id: 'links', label: HELP.linkHeading, count: HELP.linkGroups.length },
     { id: 'keyboard', label: HELP.keyboardHeading, count: null },
     { id: 'licences', label: HELP.licencesHeading, count: LICENCES.length },

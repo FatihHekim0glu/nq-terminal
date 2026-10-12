@@ -90,6 +90,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 5.0.2
         version: 5.0.2(vitest@5.0.2)
+      axe-core:
+        specifier: 4.13.0
+        version: 4.13.0
       jsdom:
         specifier: 30.1.1
         version: 30.1.1

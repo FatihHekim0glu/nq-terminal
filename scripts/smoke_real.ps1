@@ -51,7 +51,8 @@
   build, no preview, no ApiPort or WebPort. web\dist must already be built (the smoke build refuses rebuilds). The shell's own
   log must show a real, own-folders launch (Test-AppLaunchRecord). The performance budgets are not measured in either mode here.
   App mode refuses to start outside the lab's own terminal folder (a worktree): the backend confines its reads to the real
-  paths under the lab. Browser mode runs in a worktree; the lab is then NQT_REAL_LAB, or nq-lab under the profile folder.
+  paths under the lab. The automated weekly parity list (web/e2e/desktop/parity.app.ts) runs in this mode only with NQT_PARITY_REAL=1
+  and -Grep 'weekly parity list, real lab'; without that variable an ordinary App run lists its tests as skipped. Browser mode runs in a worktree; the lab is then NQT_REAL_LAB, or nq-lab under the profile folder.
 .PARAMETER SmokeExe
   App mode: the smoke build (default NQT_SMOKE_EXE, then D:\dev\targets\w5a-app-smoke\release\nq-lab-terminal.exe).
 .PARAMETER SmokeSpec

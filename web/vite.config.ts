@@ -39,6 +39,7 @@ export function devPortOf(env: NodeJS.ProcessEnv = process.env): number {
 export const SESSION_PAGE = 'session.html'
 export function buildInputs(mode: string): Record<string, string> | undefined {
   if (mode === DEMO_MODE) return undefined // the demo has no backend, so no session
+  if (mode === SELFTEST_MODE) return { selftest: path.resolve(WEB_DIR, SELFTEST_PAGE) } // the self-test page and nothing else
   return {
     index: path.resolve(WEB_DIR, 'index.html'),
     session: path.resolve(WEB_DIR, SESSION_PAGE),
@@ -57,10 +58,41 @@ export const GALLERY_OUT_DIR = 'dist-gallery'
 export const DEMO_MODE = 'demo'
 export const DEMO_OUT_DIR = 'dist-demo'
 
-/** Each build writes to its own folder, so neither the gallery nor the demo can replace the production dist. */
+// `vite build --mode selftest` (`pnpm build:selftest`) builds the self-test page (D7.2; src/selftest) to dist-selftest. The page is
+// served under /__selftest/ (SELFTEST_BASE), so the desktop spec can answer exactly those requests inside the app's own page
+// and the self-test files never share a path with the production dist. Its entry is src/selftest/index.html; the plugin below
+// writes it out as index.html. No other build has an input that reaches it, and scripts/bundleCheck.ts (rule 9) fails a build
+// of any other mode that holds its code.
+export const SELFTEST_MODE = 'selftest'
+export const SELFTEST_OUT_DIR = 'dist-selftest'
+export const SELFTEST_BASE = '/__selftest/'
+export const SELFTEST_PAGE = 'src/selftest/index.html'
+
+/** Each build writes to its own folder, so neither the gallery, the demo nor the self-test can replace the production dist. */
 export function outDirFor(mode: string): string {
   if (mode === GALLERY_MODE) return GALLERY_OUT_DIR
+  if (mode === SELFTEST_MODE) return SELFTEST_OUT_DIR
   return mode === DEMO_MODE ? DEMO_OUT_DIR : 'dist'
+}
+
+/** The URL prefix every asset is served under: the root, except for the self-test page. */
+export function baseFor(mode: string): string {
+  return mode === SELFTEST_MODE ? SELFTEST_BASE : '/'
+}
+
+/** Writes the self-test page's html at the root of its dist (Vite names an html entry by its path from the project root). */
+export function selftestPageAtRoot(): Plugin {
+  return {
+    name: 'nqt:selftest-page-at-root',
+    enforce: 'post',
+    generateBundle: {
+      order: 'post',
+      handler(_options, bundle) {
+        const page = Object.values(bundle).find((chunk) => chunk.fileName === SELFTEST_PAGE)
+        if (page !== undefined) page.fileName = 'index.html'
+      },
+    },
+  }
 }
 
 // cmdk imports "@radix-ui/react-dialog" for Command.Dialog, which the terminal never renders (it uses the
@@ -161,8 +193,20 @@ export const CHUNK_GROUPS = [
   { name: 'vendor', test: /[\\/]node_modules[\\/](?!.*[\\/](?:queriesObserver|useQueries|mutationObserver|useMutation)\.js$)/, priority: 10 },
 ] as const
 
+// The self-test build adds one group: axe-core (about 150 kB gzip) loads only when the page runs it, as a chunk of its own, rather
+// than in the vendor chunk the page's shell imports. It ranks above vendor, like the libraries.
+export const SELFTEST_CHUNK_GROUPS = [{ name: 'axe', test: nodeModule('axe-core'), priority: 30 }] as const
+
+/** The chunk groups of a build: every mode's, plus axe's in the self-test build. */
+export function chunkGroupsFor(mode: string) {
+  return mode === SELFTEST_MODE ? [...CHUNK_GROUPS, ...SELFTEST_CHUNK_GROUPS] : [...CHUNK_GROUPS]
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [cmdkScoreStub(), infiniteStub(), react(), tailwindcss()],
+  plugins: [cmdkScoreStub(), infiniteStub(), react(), tailwindcss(), ...(mode === SELFTEST_MODE ? [selftestPageAtRoot()] : [])],
+  base: baseFor(mode),
+  // The self-test page needs nothing from public/ (the favicon, the notices file): its dist holds the page and its assets only.
+  publicDir: mode === SELFTEST_MODE ? false : 'public',
   resolve: { alias: [...RESOLVE_ALIASES] },
   build: {
     outDir: outDirFor(mode),
@@ -182,7 +226,7 @@ export default defineConfig(({ mode }) => ({
     rolldownOptions: {
       input: buildInputs(mode),
       output: {
-        codeSplitting: { groups: [...CHUNK_GROUPS] },
+        codeSplitting: { groups: chunkGroupsFor(mode) },
       },
     },
   },

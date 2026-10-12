@@ -3,6 +3,7 @@ dist
 *.tsbuildinfo
 e2e/.results
 dist-gallery
+dist-selftest
 dist-demo
 .vitest/
 e2e/__screenshots__/offline-*

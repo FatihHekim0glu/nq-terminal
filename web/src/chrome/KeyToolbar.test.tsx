@@ -56,4 +56,13 @@ describe('KeyToolbar: the 32px key toolbar (spec 4.2)', () => {
       expect(notPrevented).toBe(false)
     }
   })
+
+  it('names the Mac keys on a Mac: Fn+Up and Fn+Down for the pages, Option+K for the key map, no PC-only key', () => {
+    render(<KeyToolbar onKey={vi.fn()} keys="mac" />)
+    const names = within(screen.getByRole('group', { name: KEY_TOOLBAR.label })).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? '')
+    expect(names.join('|')).not.toMatch(/\b(Alt|Ctrl|End|PgUp|PgDn)\b/)
+    expect(names).toContain('Key map, Option+K')
+    expect(screen.getByRole('button', { name: /^PG BACK key, Fn\+Up/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^PG FWD key, Fn\+Down/ })).toBeTruthy()
+  })
 })

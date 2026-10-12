@@ -489,3 +489,88 @@ describe('the desktop walk answer check (e2e/desktop/app.ts)', () => {
     expect(got).toEqual(['404 /api/runs/x', '404 /api/qa', '500 /api/bars?end=2022-06-30'])
   })
 })
+
+// D8.1 (V04 wave w5-mac-kit): the offline suite also runs under Playwright's WebKit on Windows, headless, as an early defect list
+// for the macOS WKWebView (docs/desktop/v04/webkit_windows_defects.md). The project is opt-in: no package script and no
+// `--project=offline` run reaches it. Born failing: a config without the project, a webkit project that inherits the Chrome channel
+// fallback (which Playwright refuses for WebKit), and one that shares the Chromium baselines.
+describe('the offline-webkit project (D8.1)', () => {
+  /** The source text of the project object named `name` inside `projects: [...]`, or undefined when there is none. */
+  function projectBlock(source: string, name: string): string | undefined {
+    const start = source.indexOf(`name: '${name}'`)
+    if (start < 0) return undefined
+    const open = source.lastIndexOf('{', start)
+    let depth = 0
+    for (let i = open; i < source.length; i += 1) {
+      if (source[i] === '{') depth += 1
+      if (source[i] === '}') depth -= 1
+      if (depth === 0) return source.slice(open, i + 1)
+    }
+    return undefined
+  }
+
+  const config = read('playwright.offline.config.ts')
+  const block = projectBlock(config, 'offline-webkit')
+
+  it('born failing: a config without the offline-webkit project is caught', () => {
+    expect(projectBlock(config.replace(/name: 'offline-webkit'/g, `name: 'removed'`), 'offline-webkit')).toBeUndefined()
+    expect(projectBlock(`projects: [ { name: 'offline-webkit', use: { a: { b: 1 } } }, { name: 'x' } ]`, 'offline-webkit')).toBe(
+      `{ name: 'offline-webkit', use: { a: { b: 1 } } }`,
+    )
+  })
+
+  it('has an offline-webkit project that runs under the WebKit device descriptor, headless', () => {
+    expect(block).toBeDefined()
+    expect(block).toMatch(/devices\['Desktop Safari'\]/)
+    expect(block).not.toMatch(/headless:\s*false/)
+    expect(block).not.toMatch(/channel/)
+  })
+
+  it('runs the same specs as the offline project, with the same two real-backend checks skipped', () => {
+    expect(block).toMatch(/testMatch:\s*OFFLINE_SPECS/)
+    expect(block).toMatch(/grepInvert:\s*OFFLINE_GREP_INVERT/)
+    const offline = projectBlock(config, 'offline')
+    expect(offline).toMatch(/grepInvert:\s*OFFLINE_GREP_INVERT/)
+    expect(config).toMatch(/const OFFLINE_GREP_INVERT = \/no backend route\|the backend answers every write method\//)
+  })
+
+  it('also runs the in-page demo smoke under WebKit, from the same folder and with the same match as offline-demo', () => {
+    const demo = projectBlock(config, 'offline-webkit-demo')
+    expect(demo).toBeDefined()
+    expect(demo).toMatch(/devices\['Desktop Safari'\]/)
+    expect(demo).toMatch(/testDir:\s*'\.\/e2e\/offline'/)
+    expect(demo).toMatch(/testMatch:\s*\/\\.offline\\.ts\$\//)
+    expect(demo).toMatch(/baseURL:\s*DEMO_ORIGIN/)
+  })
+
+  it('never hands the Chrome channel fallback to WebKit: the channel belongs to the Chromium projects only', () => {
+    expect(config).toMatch(/const CHROMIUM_CHANNEL = CHANNEL \? \{ channel: CHANNEL \} : \{\}/)
+    const topLevelUse = /\n {2}use: \{[\s\S]*?\n {2}\},\n/.exec(config)?.[0] ?? ''
+    expect(topLevelUse).not.toMatch(/CHANNEL/)
+    for (const name of ['offline', 'offline-perf', 'offline-demo']) expect(projectBlock(config, name), name).toMatch(/CHROMIUM_CHANNEL/)
+  })
+
+  it('keeps its own baselines, apart from the Chromium ones, and the screenshot gate is the same one', () => {
+    expect(block).toContain(`snapshotPathTemplate: '{testDir}/__screenshots__/offline-webkit-{platform}/{testFilePath}/{arg}{ext}'`)
+    expect(projectBlock(config, 'offline-webkit-demo')).toContain(`offline-webkit-{platform}`)
+    expect(read('.gitignore').split(/\r?\n/)).toEqual(expect.arrayContaining(['e2e/__screenshots__/offline-*', 'e2e/offline/__screenshots__']))
+  })
+
+  it('is opt-in: no package script runs it, and e2e:offline names its projects so it stays out', () => {
+    for (const [name, line] of Object.entries(scripts)) {
+      if (name === 'e2e:offline:webkit') continue
+      expect(line, name).not.toContain('offline-webkit')
+    }
+    expect(scripts['e2e:offline']).not.toContain('webkit')
+  })
+
+  it('gives both engines the same page settings, because the Safari descriptor would otherwise bring a 1280x720 viewport and a scale of 2', () => {
+    expect(config).toMatch(
+      /const PAGE_SETTINGS = \{\s+viewport: \{ width: 1920, height: 1080 \},\s+deviceScaleFactor: 1,\s+colorScheme: 'dark',\s+reducedMotion: 'reduce',\s+locale: 'en-GB',\s+timezoneId: 'Europe\/London',/,
+    )
+    for (const name of ['offline-webkit', 'offline-webkit-demo']) {
+      expect(projectBlock(config, name), name).toMatch(/\.\.\.devices\['Desktop Safari'\], \.\.\.PAGE_SETTINGS/)
+    }
+    expect(config).toMatch(/\.\.\.devices\['Desktop Chrome'\], \.\.\.PAGE_SETTINGS/)
+  })
+})

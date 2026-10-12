@@ -5,6 +5,8 @@
 // action for assistive technology. No sector keys: F8 to F11 insert them.
 import type { MouseEvent } from 'react'
 import { KEY_TOOLBAR } from '../copy/chrome'
+import { MAC_KEYMAP_NAME, MAC_KEY_TOOLBAR_NAMES } from '../copy/platformKeys'
+import { detectKeysTable, type KeysTable } from './CommandLine.keys'
 import './KeyToolbar.css'
 
 export type OfficialKey = keyof typeof KEY_TOOLBAR.keys
@@ -13,6 +15,8 @@ export type KeyId = OfficialKey | CustomKey | 'keymap'
 
 export interface KeyToolbarProps {
   readonly onKey: (key: KeyId) => void
+  /** The key bindings the accessible names speak; the platform's own when absent. */
+  readonly keys?: KeysTable
 }
 
 const OFFICIAL: readonly OfficialKey[] = ['esc', 'help', 'search', 'menu', 'pgback', 'pgfwd']
@@ -34,16 +38,18 @@ function KeyButton({ id, text, name, colour, onKey }: { readonly id: KeyId; read
   )
 }
 
-export function KeyToolbar({ onKey }: KeyToolbarProps) {
+export function KeyToolbar({ onKey, keys = detectKeysTable() }: KeyToolbarProps) {
+  const mac = keys === 'mac'
+  const nameOf = (id: OfficialKey): string => (mac && (id === 'pgback' || id === 'pgfwd') ? MAC_KEY_TOOLBAR_NAMES[id] : KEY_TOOLBAR.keys[id].name)
   return (
     <div className="key-toolbar" role="group" aria-label={KEY_TOOLBAR.label} data-chrome="keys">
       {OFFICIAL.map((id) => (
-        <KeyButton key={id} id={id} text={KEY_TOOLBAR.keys[id].text} name={KEY_TOOLBAR.keys[id].name} colour={id === 'esc' ? 'cancel' : 'go'} onKey={onKey} />
+        <KeyButton key={id} id={id} text={KEY_TOOLBAR.keys[id].text} name={nameOf(id)} colour={id === 'esc' ? 'cancel' : 'go'} onKey={onKey} />
       ))}
       {CUSTOM.map((id) => (
         <KeyButton key={id} id={id} text={id} name={KEY_TOOLBAR.custom[id]} colour="go" onKey={onKey} />
       ))}
-      <button type="button" className="key-map-btn" data-key="keymap" aria-label={KEY_TOOLBAR.keymap} onMouseDown={preventPointerFocus} onClick={() => onKey('keymap')}>
+      <button type="button" className="key-map-btn" data-key="keymap" aria-label={mac ? MAC_KEYMAP_NAME : KEY_TOOLBAR.keymap} onMouseDown={preventPointerFocus} onClick={() => onKey('keymap')}>
         <span aria-hidden="true">{KEY_TOOLBAR.keymapGlyph}</span>
       </button>
     </div>

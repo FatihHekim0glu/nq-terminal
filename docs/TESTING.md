@@ -151,6 +151,7 @@ offline one.
 | `offline` | `flows/safety`, `flows/keyboard`, `flows/scan` and `flows/rules`, `shell.spec.ts`, the `gallery-*.spec.ts` files and `visual/screens.spec.ts`, against the gallery build; at most two workers | `e2e:offline` |
 | `offline-demo` | `e2e/offline/demo.offline.ts`, against the in-page demo build (the API served by the page, not over HTTP) | `e2e:offline` |
 | `offline-perf` | `perf/budgets.spec.ts` alone, with one worker | `e2e:offline:perf` |
+| `offline-webkit`, `offline-webkit-demo` | the same specs as `offline` and `offline-demo` under Playwright's WebKit (the `Desktop Safari` descriptor, the same page settings). Opt-in: `e2e:offline` never reaches them, they need `playwright install webkit`, and they write their own baselines (`offline-webkit-<platform>`) on the first run. The Windows defect list is `docs/desktop/v04/webkit_windows_defects.md` | `e2e:offline:webkit` |
 
 - **Servers.** The config builds the gallery bundle and the demo bundle into `web/node_modules/.tmp` and serves them with
   `vite preview` on 127.0.0.1:4373 and 4374. The demo route table (`src/demo/serve.ts`) is served over HTTP as

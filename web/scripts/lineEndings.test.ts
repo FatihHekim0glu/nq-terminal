@@ -10,7 +10,7 @@ const WEB = fileURLToPath(new URL('..', import.meta.url))
 const ROOTS = ['src', 'e2e', 'scripts']
 const ROOT_FILES = ['package.json', 'playwright.config.ts', 'vite.config.ts', 'tsconfig.json', 'tsconfig.app.json', 'tsconfig.node.json', 'index.html']
 const TEXT = /\.(ts|tsx|mts|mjs|js|css|json|html|md|sha256)$/
-const SKIP = new Set(['node_modules', '__screenshots__', 'dist', 'dist-gallery', 'test-results', '.results', 'playwright-report'])
+const SKIP = new Set(['node_modules', '__screenshots__', 'dist', 'dist-gallery', 'dist-selftest', 'test-results', '.results', 'playwright-report'])
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

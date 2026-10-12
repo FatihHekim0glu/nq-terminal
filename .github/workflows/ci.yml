@@ -150,6 +150,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "release_check.tests.ps1 exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\smoke_real.tests.ps1
           if ($LASTEXITCODE -ne 0) { throw "smoke_real.tests.ps1 exit $LASTEXITCODE" }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\tests\record_green.tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw "record_green.tests.ps1 exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\install-test.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw "install-test.ps1 -SelfTest exit $LASTEXITCODE" }
           powershell -NoProfile -ExecutionPolicy Bypass -File desktop\scripts\tests\install-test.tests.ps1

@@ -11,10 +11,30 @@
 // (defaultPrevented) is left alone, so a chart's Home and End or a grid's PgUp keep working. A printable
 // character that lands where nothing takes it (a panel, the page) is not bound either: it only earns a hint
 // on the message line, once in a while, saying where typing goes (U05).
+// Two tables (D7.4): 'pc' (Windows, Linux, anything unknown) and 'mac'. A Mac has Cmd where a PC has Ctrl, and Ctrl+K
+// there is the text field's own kill-to-end-of-line, so the Mac focus key is Cmd+K only. A Mac laptop has no Home, End or
+// page keys (Fn with an arrow sends them), so the Mac table adds Cmd+[ and Cmd+] for BACK and FORWARD. Every other
+// binding is shared, except that on the Mac table Option+digit and Option+K in a text field give way to the character
+// they type on many layouts ('#' on UK Option+3, '[' on German Option+5); the toolbar PANEL key covers that case. The table is read from the platform once (detectKeysTable); the maps take it as an argument.
 import { useEffect, useRef, type RefObject } from 'react'
 import type { KeyedSector } from '../commands/sectors'
 import { TYPE_HINT } from '../copy/typeHint'
 import { postMessage } from './MessageLine.store'
+
+/** The key bindings in force: 'pc' for Windows, Linux and anything unknown, 'mac' for macOS. */
+export type KeysTable = 'pc' | 'mac'
+
+/** The fields of navigator that name the platform (a subset, so a test can hand one in). */
+export interface PlatformLike {
+  readonly platform?: string
+  readonly userAgentData?: { readonly platform?: string }
+}
+
+/** The table for a platform: 'mac' when it names a Mac (userAgentData first, then navigator.platform), else 'pc'. */
+export function detectKeysTable(nav: PlatformLike | undefined = typeof navigator === 'undefined' ? undefined : navigator): KeysTable {
+  const name = nav?.userAgentData?.platform || nav?.platform || ''
+  return /^mac/i.test(name) ? 'mac' : 'pc'
+}
 
 /** The fields of a KeyboardEvent the maps read. */
 export interface KeyLike {
@@ -79,6 +99,25 @@ function altKey(e: KeyLike): GlobalKeyAction | null {
   return null
 }
 
+/**
+ * An Option chord that types something of its own on a Mac layout (UK Option+3 is '#', German Option+5 is '[',
+ * Option+K can be a dead key): its key is one printable character other than the digit or letter, or a dead key.
+ * In a text field that character wins over the panel chord; the toolbar PANEL key still reaches the panels.
+ */
+function typesOwnCharacter(e: KeyLike): boolean {
+  if (e.key === 'Dead') return true
+  if ([...e.key].length !== 1) return false
+  return !/^[1-9]$/.test(e.key) && e.key.toLowerCase() !== 'k'
+}
+
+/** Cmd+[ and Cmd+] on the mac table: BACK and FORWARD for a keyboard with no End key. Matched by key or physical bracket. */
+function macBracketKey(e: KeyLike): GlobalKeyAction | null {
+  if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return null
+  if (e.code === 'BracketLeft' || e.key === '[') return { kind: 'back' }
+  if (e.code === 'BracketRight' || e.key === ']') return { kind: 'forward' }
+  return null
+}
+
 function plainKey(e: KeyLike, where: KeyWhere): GlobalKeyAction | null {
   if (e.key === 'F1') return { kind: 'help' }
   if (isReserved(e.key)) return { kind: 'reserved', key: e.key }
@@ -93,10 +132,14 @@ function plainKey(e: KeyLike, where: KeyWhere): GlobalKeyAction | null {
 }
 
 /** What a keydown asks for, or null when it is not a terminal key here. Pure. */
-export function globalKeyAction(e: KeyLike, where: KeyWhere): GlobalKeyAction | null {
+export function globalKeyAction(e: KeyLike, where: KeyWhere, keys: KeysTable = 'pc'): GlobalKeyAction | null {
   if (e.isComposing || e.defaultPrevented) return null
+  if (keys === 'mac') {
+    const bracket = macBracketKey(e)
+    if (bracket) return bracket
+  }
   const mods = modifiers(e)
-  if (mods === 'alt') return altKey(e)
+  if (mods === 'alt') return keys === 'mac' && where.inTextField && typesOwnCharacter(e) ? null : altKey(e)
   if (mods === 'shift') {
     if (e.key === 'PageUp' || e.key === 'PageDown') return { kind: 'history', older: e.key === 'PageUp' }
     if (e.key === 'End') {
@@ -135,10 +178,12 @@ function isTextField(el: Element | null): boolean {
   return el instanceof HTMLElement && (el.isContentEditable || el.matches('input, textarea, select'))
 }
 
-export function isFocusKey(e: KeyboardEvent): 'escape' | 'ctrl-k' | 'home' | null {
+export function isFocusKey(e: KeyboardEvent, keys: KeysTable = 'pc'): 'escape' | 'ctrl-k' | 'home' | null {
   if (e.isComposing) return null
   if (e.key === 'Escape' && isPlain(e)) return 'escape'
-  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') return 'ctrl-k'
+  // The result is named for the PC key; on a Mac it is Cmd+K (Ctrl+K stays the text field's own).
+  const chord = keys === 'mac' ? e.metaKey && !e.ctrlKey : e.ctrlKey || e.metaKey
+  if (chord && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') return 'ctrl-k'
   if (e.key === 'Home' && isPlain(e) && !isTextField(document.activeElement)) return 'home'
   return null
 }
@@ -147,11 +192,15 @@ export function isFocusKey(e: KeyboardEvent): 'escape' | 'ctrl-k' | 'home' | nul
  * Focus `inputRef` on Esc, Ctrl+K or Home, remembering the element that had focus in `previousFocus`
  * so a later Esc (handled by the command line itself) can return there.
  */
-export function useCommandLineKeys(inputRef: RefObject<HTMLInputElement | null>, previousFocus: RefObject<HTMLElement | null>): void {
+export function useCommandLineKeys(
+  inputRef: RefObject<HTMLInputElement | null>,
+  previousFocus: RefObject<HTMLElement | null>,
+  keys: KeysTable = detectKeysTable(),
+): void {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const input = inputRef.current
-      const which = isFocusKey(e)
+      const which = isFocusKey(e, keys)
       if (!input || !which || e.defaultPrevented) return
       // Ctrl+K must still select the line and hold the browser's own shortcut back (the omnibox search
       // in Chrome and Edge, the search bar in Firefox) even when the command line already has focus
@@ -168,18 +217,18 @@ export function useCommandLineKeys(inputRef: RefObject<HTMLInputElement | null>,
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [inputRef, previousFocus])
+  }, [inputRef, previousFocus, keys])
 }
 
 /** Runs the app-level actions for keys `globalKeyAction` maps; focus keys are the command line's own. */
-export function useTerminalKeys(where: () => KeyWhere, run: (action: GlobalKeyAction) => void): void {
+export function useTerminalKeys(where: () => KeyWhere, run: (action: GlobalKeyAction) => void, keys: KeysTable = detectKeysTable()): void {
   const latest = useRef({ where, run })
   latest.current = { where, run }
   useEffect(() => {
     let hintedAt = -HINT_EVERY_MS
     function onKeyDown(e: KeyboardEvent) {
       const here = latest.current.where()
-      const action = globalKeyAction(e, here)
+      const action = globalKeyAction(e, here, keys)
       if (!action && strayLetter(e, here) && Date.now() - hintedAt >= HINT_EVERY_MS) {
         hintedAt = Date.now()
         postMessage(TYPE_HINT)
@@ -197,5 +246,5 @@ export function useTerminalKeys(where: () => KeyWhere, run: (action: GlobalKeyAc
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [keys])
 }

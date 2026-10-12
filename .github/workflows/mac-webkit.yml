@@ -1,0 +1,313 @@
+# macOS proof on a hosted runner (V04 D7.1 and D7.2, G1 items 1 and 2): the browser's maths under JavaScriptCore, and the offline
+# demo suite and the self-test page under Playwright's WebKit, on macos-26 (generally available since 26 February 2026 and free
+# for a public repository: https://github.blog/changelog/2026-02-26-macos-26-is-now-generally-available-for-github-hosted-runners/).
+# Node only: no Python, no backend, no lab data. docs/desktop/ci.md lists it.
+#
+# Every figure this workflow prints is a demo figure (fixture goldens and the in-page demo API, never research data) and
+# PROVISIONAL (one shared runner, one engine build). Playwright's WebKit is not the WKWebView of the Mac app: a pass here is a
+# lead for the owner's Mac session, never a replacement for it.
+#
+# Rules this file keeps (docs/desktop/02_decision.md, C3-2): a read-only token and no write scope anywhere, no secrets, every
+# action pinned by its full commit SHA, no step that hides a failure, and a newer push cancels the run it supersedes.
+#
+# Why a push trigger as well as the schedule: a schedule or dispatch trigger runs only from the default branch
+# (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows), so a workflow added on a
+# branch would never run before it is merged. The push trigger, limited to this file's own path, makes the first run happen on
+# the branch that adds it. desktop/harness/tests/mac-webkit-workflow.test.mjs pins all of this.
+name: mac-webkit
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/mac-webkit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-webkit-${{ github.ref }}
+  cancel-in-progress: true
+
+# bash with -e and pipefail, so a failing command inside a pipeline fails the step.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # G1 item 1: the four goldens of qa/golden (p12_expectation, p12_neff, p12_power, p2_neff_served) at 1e-9 relative through
+  # web/src/quant. The quant files import only each other, so no dependency is installed. The `jsc` shell is not guaranteed to
+  # be on the runner image: where it is found it runs a bundle of the same script (Apple's JavaScriptCore, the engine of Safari
+  # and WKWebView, as far as a command-line shell is the same build); where it is not, the run says FALLBACK and the reading
+  # is Bun's JavaScriptCore on macOS, which is a WebKit build but not Safari's. Bun runs the script in every case.
+  jsc-golden:
+    name: goldens under JavaScriptCore
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The version is the one this PC runs (Bun 1.3.9, JavaScriptCore build 0ddf6f47), so the two readings compare.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.9
+
+      # Unverified until the first run: the path of the jsc shell on a hosted image (it has moved between macOS releases).
+      # Each candidate is tried with a one-line script; a shell that is found but does not run counts as not found.
+      - name: Find the jsc shell
+        id: jsc
+        run: |
+          sw_vers
+          framework=/System/Library/Frameworks/JavaScriptCore.framework
+          found=""
+          for candidate in "$framework/Versions/A/Helpers/jsc" "$framework/Resources/jsc" /usr/local/bin/jsc; do
+            if [ -z "$found" ] && [ -x "$candidate" ]; then found="$candidate"; fi
+          done
+          if [ -z "$found" ] && command -v jsc > /dev/null; then found="$(command -v jsc)"; fi
+          if [ -z "$found" ] && viaxcrun="$(xcrun --find jsc 2> /dev/null)"; then found="$viaxcrun"; fi
+          if [ -z "$found" ] && listing="$(find "$framework" -name jsc -type f -perm -u+x -print -quit 2> /dev/null)"; then found="$listing"; fi
+          if [ -n "$found" ] && ! "$found" -e "print('jsc shell reachable')"; then
+            echo "::warning title=jsc shell::$found was found but does not run; FALLBACK to Bun on macOS"
+            found=""
+          fi
+          if [ -z "$found" ]; then
+            echo "::notice title=jsc shell::no usable jsc shell on this runner; FALLBACK to Bun on macOS (Bun's JavaScriptCore, not Safari's)"
+          fi
+          echo "path=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Goldens under Bun on macOS
+        run: bun web/scripts/jscGolden.mjs | tee "$RUNNER_TEMP/jsc-golden-bun.txt"
+
+      # A bundle with the goldens and the quant files inside, because the jsc shell has no module loader for the TypeScript
+      # sources and no file access. A shell that exits 0 without printing the summary line is a failure too.
+      - name: Goldens under the system JavaScriptCore shell
+        if: ${{ steps.jsc.outputs.path != '' }}
+        env:
+          JSC_PATH: ${{ steps.jsc.outputs.path }}
+        run: |
+          bun build web/scripts/jscGolden.mjs --target=browser --format=iife --outfile="$RUNNER_TEMP/jsc-golden.bundle.js"
+          "$JSC_PATH" "$RUNNER_TEMP/jsc-golden.bundle.js" | tee "$RUNNER_TEMP/jsc-golden-jsc.txt"
+          grep -q '^jsc-golden: 4 of 4 ' "$RUNNER_TEMP/jsc-golden-jsc.txt"
+
+      - name: Summary
+        if: ${{ always() }}
+        env:
+          JSC_PATH: ${{ steps.jsc.outputs.path }}
+        run: |
+          {
+            echo '### JavaScriptCore goldens (demo data, PROVISIONAL)'
+            echo
+            echo "Runner: macOS $(sw_vers -productVersion), $(uname -m)."
+            if [ -n "$JSC_PATH" ]; then
+              echo "System jsc shell: \`$JSC_PATH\`."
+            else
+              echo 'FALLBACK: no usable jsc shell on this runner, so the only reading is Bun on macOS (Bun JavaScriptCore, a WebKit build, not Safari).'
+            fi
+            for report in jsc-golden-bun jsc-golden-jsc; do
+              if [ -f "$RUNNER_TEMP/$report.txt" ]; then
+                echo
+                echo "#### $report"
+                echo '```'
+                cat "$RUNNER_TEMP/$report.txt"
+                echo '```'
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the golden reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jsc-golden-reports
+          path: |
+            ${{ runner.temp }}/jsc-golden-bun.txt
+            ${{ runner.temp }}/jsc-golden-jsc.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+  # G1 item 2, first part: the offline demo suite under Playwright's WebKit. The two offline-webkit projects of
+  # web/playwright.offline.config.ts serve the gallery build and the in-page demo build (dist-demo) from `vite preview` with a
+  # Node-side demo API, so there is no backend and no Python. The screenshot baselines belong to one machine, so
+  # --update-snapshots=all writes them here and every other assertion still runs (as in ci.yml).
+  webkit-offline:
+    name: offline demo suite under WebKit
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install WebKit
+        working-directory: web
+        run: pnpm exec playwright install webkit
+
+      - name: Offline suite under WebKit
+        working-directory: web
+        run: pnpm exec playwright test -c playwright.offline.config.ts --project=offline-webkit --project=offline-webkit-demo --workers=2 --update-snapshots=all
+
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo '### Offline demo suite under Playwright WebKit (demo data, PROVISIONAL)'
+            echo
+            echo "Runner: macOS $(sw_vers -productVersion), $(uname -m). Job status: ${{ job.status }}."
+            echo 'Playwright WebKit is not the WKWebView of the Mac app: a pass is a lead, never a proof.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the end-to-end results
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: webkit-offline-results
+          path: web/node_modules/.tmp/e2e-offline-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # G1 item 2, second part: the self-test page (web/src/selftest, built by `pnpm build:selftest`) opened in Playwright's WebKit
+  # from `vite preview` under its own base path /__selftest/, with no backend. The page publishes its report as window.__selftest
+  # (axe at WCAG 2.2 AA, the four goldens, the feature probes) and waits for one click before the clipboard and save probes; this
+  # job clicks, waits for state 'done' and judges the report with the page's own judgeReport (web/src/selftest/report.ts). The
+  # stream, copy and save probes are printed and kept in the report but do not fail the job (no backend, no person's machine);
+  # everything else does. The page was run this way under Playwright's WebKit on Windows before the first macOS run.
+  webkit-selftest:
+    name: self-test page under WebKit
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      SELFTEST_DIST: dist-selftest
+      SELFTEST_PORT: '4375'
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: web/package.json
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install web dependencies
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install WebKit
+        working-directory: web
+        run: pnpm exec playwright install webkit
+
+      - name: Build the self-test page
+        working-directory: web
+        run: pnpm build:selftest
+
+      # The script lives under node_modules/.tmp, which no source scan walks, so it resolves the web folder's packages.
+      - name: Open the self-test page in WebKit
+        working-directory: web
+        run: |
+          mkdir -p node_modules/.tmp "$RUNNER_TEMP/selftest"
+          cat > node_modules/.tmp/selftest-webkit.mjs <<'SCRIPT'
+          import { writeFileSync } from 'node:fs'
+          import { pathToFileURL } from 'node:url'
+          import { webkit } from '@playwright/test'
+          import { preview } from 'vite'
+
+          // The page's own judge (pure TypeScript, no DOM); Node strips the types.
+          const { judgeReport } = await import(pathToFileURL(`${process.cwd()}/src/selftest/report.ts`).href)
+
+          const BASE = '/__selftest/'
+          const port = Number(process.env.SELFTEST_PORT)
+          const out = `${process.env.RUNNER_TEMP}/selftest/report.json`
+          // With no backend and a headless browser, these three say what the engine did but do not fail the job: the stream needs a
+          // backend, the copy and the save need a person's machine. Their results are printed and kept in the report.
+          const OBSERVED = ['stream_mode', 'text_copy', 'blob_export']
+          const server = await preview({ configFile: false, root: process.cwd(), base: BASE, build: { outDir: process.env.SELFTEST_DIST }, preview: { host: '127.0.0.1', port, strictPort: true } })
+          const browser = await webkit.launch()
+          const problems = []
+          let report = null
+          try {
+            const page = await browser.newPage()
+            page.on('pageerror', (error) => problems.push(`page error: ${error.message}`))
+            await page.goto(`http://127.0.0.1:${port}${BASE}`)
+            const state = () => page.evaluate(() => window.__selftest?.state)
+            await page.waitForFunction(() => ['awaiting-gesture', 'done'].includes(window.__selftest?.state), null, { timeout: 120_000 })
+            if ((await state()) === 'awaiting-gesture') {
+              // Keep what the page published so far if the click cannot happen, so report.json still holds the golden diff.
+              report = await page.evaluate(() => JSON.parse(JSON.stringify(window.__selftest)))
+              await page.getByRole('button', { name: 'Run the clipboard and export probes' }).click()
+            }
+            await page.waitForFunction(() => window.__selftest?.state === 'done', null, { timeout: 120_000 })
+            report = await page.evaluate(() => JSON.parse(JSON.stringify(window.__selftest)))
+          } catch (error) {
+            problems.push(`no complete report in window.__selftest: ${error.message}`)
+          } finally {
+            await browser.close()
+            await server.close()
+          }
+          if (report !== null) {
+            writeFileSync(out, JSON.stringify(report, null, 2))
+            const observed = (failure) => OBSERVED.some((name) => failure.startsWith(`probe ${name} `) && !failure.includes('is missing'))
+            problems.push(...judgeReport(report).filter((failure) => !observed(failure)))
+            for (const name of OBSERVED) {
+              const probe = report.probes.find((p) => p.name === name)
+              console.log(`selftest-webkit: observed ${name}: ${probe === undefined ? 'missing' : `${probe.status}, ${probe.detail}`}`)
+            }
+          }
+          for (const problem of problems) console.error(`selftest-webkit: ${problem}`)
+          console.log(`selftest-webkit: ${report === null ? 'no report' : 'report written'}, ${problems.length} problems (demo, PROVISIONAL)`)
+          if (problems.length > 0) process.exit(1)
+          SCRIPT
+          node node_modules/.tmp/selftest-webkit.mjs
+
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo '### Self-test page under Playwright WebKit (demo data, PROVISIONAL)'
+            echo
+            echo "Runner: macOS $(sw_vers -productVersion), $(uname -m). Job status: ${{ job.status }}."
+            if [ -f "$RUNNER_TEMP/selftest/report.json" ]; then
+              echo '```json'
+              cat "$RUNNER_TEMP/selftest/report.json"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the self-test report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: selftest-webkit-report
+          path: ${{ runner.temp }}/selftest/report.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -8,9 +8,11 @@ import { displayContext } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { COMMAND_LINE } from '../copy/commands'
 import { MESSAGES } from '../copy/chrome'
+import { keyWords } from '../copy/platformKeys'
 import { WORKSPACE } from '../copy/workspace'
 import { requestHelpTopic } from '../screens/help/helpTopic.store'
 import { takeOpened } from './CommandLine.bus'
+import { detectKeysTable } from './CommandLine.keys'
 import type { MenuItem } from './CommandLine.menus'
 import { withMenus } from './CommandLine.menus.load'
 import { MORE_PREFIX, type CommandLineParts, type Suggestion } from './CommandLine.state'
@@ -139,7 +141,7 @@ function perform(p: CommandLineParts, action: LineAction, newPanel: boolean): st
       postMessage(p.options.onWatchSeen?.() ?? COMMAND_LINE.watchUnavailable)
       return ''
     case 'grab':
-      if (!p.options.onGrab?.()) postMessage(COMMAND_LINE.grabUnavailable)
+      if (!p.options.onGrab?.()) postMessage(keyWords(COMMAND_LINE.grabUnavailable, detectKeysTable()))
       p.menus.close()
       return ''
     case 'save':

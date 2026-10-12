@@ -4,12 +4,13 @@
 // Vite builds.
 import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 import { afterAll, describe, expect, it } from 'vitest'
+import { build as viteBuildApi } from 'vite'
 import {
   CHUNK_GROUPS,
   DEMO_MODE,
@@ -19,9 +20,14 @@ import {
   LIBRARY_CHUNKS,
   PRELOAD_HELPER,
   RESOLVE_ALIASES,
+  SELFTEST_BASE,
+  SELFTEST_MODE,
+  SELFTEST_OUT_DIR,
+  baseFor,
+  buildInputs,
   outDirFor,
 } from '../vite.config.ts'
-import { BUNDLE_BUDGET, DEMO_MARKERS, GALLERY_MARKERS, LIBRARY_MARKERS, RADIX_DIALOG_MARKERS, analyseBundle } from './bundleCheck.ts'
+import { BUNDLE_BUDGET, DEMO_MARKERS, GALLERY_MARKERS, LIBRARY_MARKERS, RADIX_DIALOG_MARKERS, SELFTEST_MARKERS, analyseBundle } from './bundleCheck.ts'
 
 const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temps: string[] = []
@@ -170,6 +176,63 @@ describe('analyseBundle on hand-made bundles', () => {
   })
 })
 
+/** A fake self-test dist: its page is served under /__selftest/, so its assets are too. */
+function fakeSelftestDist(files: Readonly<Record<string, string>>): string {
+  const dir = fakeDist(files)
+  writeFileSync(path.join(dir, 'index.html'), `<script type="module" crossorigin src="${SELFTEST_BASE}assets/index.js"></script>`, 'utf-8')
+  return dir
+}
+
+describe('rule 9: the self-test page is in no production build (D7.2)', () => {
+  it('names markers only the self-test page holds', () => {
+    expect(SELFTEST_MARKERS).toEqual(['nqt-selftest', '__selftest'])
+  })
+
+  it('born failing: a production bundle holding the self-test page fails, whichever marker it carries', () => {
+    for (const marker of SELFTEST_MARKERS) {
+      const planted = fakeDist({ 'index.js': '', 'boot-3.js': `const k="${marker}"` })
+      const report = analyseBundle(planted, { gallery: false })
+      expect(report.selftestFiles, marker).toEqual(['boot-3.js'])
+      expect(report.violations.join('\n'), marker).toMatch(/production bundle holds self-test code: boot-3\.js/)
+    }
+  })
+
+  it('born failing: a planted import in the shell itself is found in the shell', () => {
+    const inShell = fakeDist({ 'index.js': 'window.__selftest={}' })
+    expect(analyseBundle(inShell, { gallery: false }).violations.join('\n')).toMatch(/self-test code: index\.js/)
+  })
+
+  it('fails the gallery and the demo build too: the page is in no build but its own', () => {
+    const planted = fakeDist({ 'index.js': '', 'boot-3.js': 'const k="nqt-selftest"' })
+    expect(analyseBundle(planted, { gallery: true }).violations.join('\n')).toMatch(/self-test code/)
+    expect(analyseBundle(planted, { gallery: false, demo: true }).violations.join('\n')).toMatch(/self-test code/)
+  })
+
+  it('fails a self-test build that holds none of its markers, and passes one that holds them all', () => {
+    const empty = fakeSelftestDist({ 'index.js': '' })
+    expect(analyseBundle(empty, { gallery: false, selftest: true }).violations.join('\n')).toMatch(/self-test build lacks nqt-selftest, __selftest/)
+    const complete = fakeSelftestDist({ 'index.js': `const k=${JSON.stringify(SELFTEST_MARKERS)}` })
+    const ok = analyseBundle(complete, { gallery: false, selftest: true })
+    expect(ok.violations).toEqual([])
+    expect(ok.selftestFiles).toEqual(['index.js'])
+    const half = fakeSelftestDist({ 'index.js': 'const k="nqt-selftest"' })
+    expect(analyseBundle(half, { gallery: false, selftest: true }).violations.join('\n')).toMatch(/lacks __selftest/)
+  })
+
+  it('reads the entry of a page served under a base path, so the shell budget still applies to it', () => {
+    const over = textGzipping(BUNDLE_BUDGET.selftestShellGzip + 3_000)
+    const dir = fakeSelftestDist({ 'index.js': `const k=${JSON.stringify(SELFTEST_MARKERS)};${over}` })
+    const report = analyseBundle(dir, { gallery: false, selftest: true })
+    expect(report.initial).toEqual(['index.js'])
+    expect(report.violations.join('\n')).toContain(`over its ${BUNDLE_BUDGET.selftestShellGzip} budget`)
+  })
+
+  it('keeps a library out of the self-test shell as well: Perspective loads through its dynamic import', () => {
+    const dir = fakeSelftestDist({ 'index.js': `import"./perspective-1.js";const k=${JSON.stringify(SELFTEST_MARKERS)}`, 'perspective-1.js': '"PerspectiveViewerElement"' })
+    expect(analyseBundle(dir, { gallery: false, selftest: true }).violations.join('\n')).toMatch(/perspective.*shell/)
+  })
+})
+
 describe('the check matches the Vite config', () => {
   it('has markers and a budget for every library chunk group', () => {
     const names = LIBRARY_CHUNKS.map((c) => c.name).sort()
@@ -187,6 +250,32 @@ describe('the check matches the Vite config', () => {
     expect(outDirFor(GALLERY_MODE)).toBe(GALLERY_OUT_DIR)
     expect(outDirFor(DEMO_MODE)).toBe(DEMO_OUT_DIR)
     expect([GALLERY_OUT_DIR, DEMO_OUT_DIR]).toEqual(['dist-gallery', 'dist-demo'])
+  })
+
+  it('builds the self-test page (and only it) into dist-selftest, under /__selftest/, never over the production dist', () => {
+    expect(SELFTEST_MODE).toBe('selftest')
+    expect(outDirFor(SELFTEST_MODE)).toBe(SELFTEST_OUT_DIR)
+    expect(SELFTEST_OUT_DIR).toBe('dist-selftest')
+    expect(baseFor(SELFTEST_MODE)).toBe('/__selftest/')
+    expect(SELFTEST_BASE).toBe('/__selftest/')
+    for (const mode of ['production', GALLERY_MODE, DEMO_MODE]) expect(baseFor(mode), mode).toBe('/')
+    const inputs = buildInputs(SELFTEST_MODE) ?? {}
+    expect(Object.values(inputs).map((p) => path.relative(WEB_DIR, p).split(path.sep).join('/'))).toEqual(['src/selftest/index.html'])
+    for (const mode of ['production', GALLERY_MODE]) {
+      expect(JSON.stringify(buildInputs(mode)), mode).not.toMatch(/selftest/)
+    }
+  })
+
+  it('has a build:selftest script that builds the page and checks it as a self-test build, and pins axe-core to one version', () => {
+    const pkg = JSON.parse(readFileSync(path.join(WEB_DIR, 'package.json'), 'utf-8')) as {
+      scripts: Record<string, string>
+      devDependencies: Record<string, string>
+      dependencies: Record<string, string>
+    }
+    expect(pkg.scripts['build:selftest']).toBe('vite build --mode selftest && node scripts/bundleCheck.ts dist-selftest --selftest')
+    expect(pkg.devDependencies['axe-core']).toMatch(/^\d+\.\d+\.\d+$/)
+    expect(pkg.dependencies['axe-core']).toBeUndefined()
+    expect(pkg.scripts.build).not.toMatch(/selftest/)
   })
 
   it('aliases exactly the two Radix imports cmdk does not need the real package for, each to its local stub, and nothing else', () => {
@@ -243,7 +332,7 @@ describe('the check matches the Vite config', () => {
   })
 })
 
-function viteBuild(mode: 'production' | 'gallery' | 'demo', outDir: string): void {
+function viteBuild(mode: 'production' | 'gallery' | 'demo' | 'selftest', outDir: string): void {
   const vite = path.join(WEB_DIR, 'node_modules', 'vite', 'bin', 'vite.js')
   execFileSync(process.execPath, [vite, 'build', '--mode', mode, '--outDir', outDir, '--emptyOutDir', '--logLevel', 'error'], {
     cwd: WEB_DIR,
@@ -290,4 +379,39 @@ describe('real builds', () => {
     expect(report.demoFiles.length).toBeGreaterThan(0)
     expect(report.demoFiles.some((f) => report.initial.includes(f))).toBe(false)
   }, 120_000)
+
+  it('selftest: the page, its goldens and axe are there, the page is index.html, and no production file is', () => {
+    const out = tempDir('nqt-selftest-')
+    viteBuild('selftest', out)
+    expect(existsSync(path.join(out, 'index.html'))).toBe(true)
+    expect(existsSync(path.join(out, 'src'))).toBe(false)
+    const report = analyseBundle(out, { gallery: false, selftest: true })
+    expect(report.violations).toEqual([])
+    expect(report.selftestFiles.length).toBeGreaterThan(0)
+    expect(report.initial.length).toBeGreaterThan(0)
+    expect(report.galleryFiles).toEqual([])
+    expect(report.demoFiles).toEqual([])
+    // axe, dockview and Perspective are chunks of their own, behind dynamic imports: the page paints before any of them loads.
+    const names = readdirSync(path.join(out, 'assets'))
+    for (const chunk of ['axe', 'dockview', 'perspective']) {
+      expect(names.some((n) => n.startsWith(`${chunk}-`) && n.endsWith('.js')), chunk).toBe(true)
+      expect(report.initial.some((f) => f.startsWith(`${chunk}-`)), `${chunk} in the shell`).toBe(false)
+    }
+  }, 180_000)
+
+  it('born failing: a production build whose entry imports the self-test page fails the check', async () => {
+    const out = tempDir('nqt-planted-')
+    // The plant: main.tsx (the production entry) gains one dynamic import of the page's entry module, as a careless edit would.
+    const plant = {
+      name: 'nqt:plant-selftest',
+      enforce: 'pre' as const,
+      transform(code: string, id: string) {
+        return /[\\/]src[\\/]main\.tsx$/.test(id) ? `${code}\nvoid import('./selftest/main')\n` : null
+      },
+    }
+    await viteBuildApi({ root: WEB_DIR, mode: 'production', logLevel: 'error', plugins: [plant], build: { outDir: out, emptyOutDir: true } })
+    const report = analyseBundle(out, { gallery: false })
+    expect(report.selftestFiles.length).toBeGreaterThan(0)
+    expect(report.violations.join('\n')).toMatch(/production bundle holds self-test code/)
+  }, 180_000)
 })

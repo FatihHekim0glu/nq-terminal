@@ -3,10 +3,12 @@
 // copied as PNG data URLs, each kept only when it matches PNG_DATA_URL. Nothing is fetched or recomputed
 // here: the dossier is the panel as it is now. Lazy code: only the dynamic imports in the Workspace's
 // export menu reach it, so neither this file nor the dossier copy is part of the first load.
+import { detectKeysTable } from '../chrome/CommandLine.keys'
 import { panelElement } from '../chrome/KeyToolbar.panels'
 import { panelDossier } from '../chrome/panelSources'
 import { DOSSIER } from '../copy/dossier'
 import { GRAB } from '../copy/grab'
+import { keyWords } from '../copy/platformKeys'
 import { buildDossier } from './dossier/dossierModel'
 import type { Dossier, DossierContext, DossierFigure } from './dossier/types'
 import { collectFigures, type GrabFigure } from './grab/collect'
@@ -69,7 +71,7 @@ export function prepareExport(req: PrepareRequest): ExportJob | { readonly messa
   const input = panelDossier(req.panelId)?.() ?? null
   if (input === null) return { message: DOSSIER.unavailable }
   const panel = panelElement(req.panelId)
-  if (!panel) return { message: GRAB.noPanel }
+  if (!panel) return { message: keyWords(GRAB.noPanel, detectKeysTable()) }
   const now = req.now ?? new Date()
   const ctx: DossierContext = {
     now,

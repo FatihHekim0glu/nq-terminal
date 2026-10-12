@@ -1,6 +1,8 @@
 // Copy for HELP (spec 7.12, 5.1 and 5.2; UI_SPEC sections 5 and 7): the mnemonic index comes from the
 // command registry; keys, the drawn keyboard, link groups and licences are listed here. Our own text:
 // nothing is taken from any vendor manual. UK spelling, no em or en dashes.
+// HELP_KEYS and HELP_KEYBOARD are the PC table; helpKeysFor and helpKeyboardFor give the table of the running platform
+// (D7.4), so a Mac never reads a Ctrl key it does not have and a PC never reads Cmd.
 
 export const HELP = {
   title: 'Help',
@@ -33,7 +35,16 @@ export const HELP = {
   licencesHeading: 'Licences and attributions',
   tradingView: 'Candle charts use TradingView Lightweight Charts, copyright TradingView, Inc., under the Apache License 2.0. The TradingView attribution logo stays on every candle chart.',
   tradingViewLink: 'TradingView website',
+  noticesHeading: 'Third-party notices',
+  noticesText: 'The licence and copyright notices of the libraries the page ships with, generated from its lockfile, are in one text file. It covers the page libraries only, not the desktop shell.',
+  noticesLink: 'Third-party notices (text file)',
+  /** Relative, so it resolves under whatever path the page is served from; the file is web/public/third-party-notices.txt. */
+  noticesUrl: 'third-party-notices.txt',
   newTab: '(opens in a new tab)',
+  /** The notices open in the page itself (the desktop shell denies every new window), so these are the region's label and the load states. */
+  noticesRegion: 'Third-party notices text',
+  noticesLoading: 'Loading the third-party notices.',
+  noticesFailed: 'The third-party notices could not be loaded. Try again.',
   tradingViewUrl: 'https://www.tradingview.com/',
 } as const
 
@@ -95,3 +106,40 @@ export const HELP_LICENCES: ReadonlyArray<readonly [string, string]> = [
   ['zustand', 'MIT'],
   ['TanStack Query', 'MIT'],
 ]
+
+/** Said on every F-key row of the Mac table: a Mac laptop sends the media functions unless Fn is held. */
+const MAC_FN_NOTE = ' On a Mac, hold Fn with it unless the keyboard setting "Use F1, F2, etc. keys as standard function keys" is on.'
+
+/** The Mac spelling of a PC key name, or the name itself when it needs none. */
+const MAC_KEY_NAMES: Readonly<Record<string, string>> = {
+  'Alt+1 to Alt+9': 'Option+1 to Option+9',
+  'Alt+K': 'Option+K',
+  'Ctrl+K': 'Cmd+K',
+  Home: 'Home (Fn+Left)',
+  End: 'End (Fn+Right)',
+  'Shift+End': 'Shift+End (Shift+Fn+Right)',
+  'PgUp, PgDn': 'PgUp, PgDn (Fn+Up, Fn+Down)',
+  'Home, End (chart)': 'Home, End (chart; Fn+Left, Fn+Right)',
+}
+
+const MAC_BRACKET_ROWS: ReadonlyArray<readonly [string, string]> = [
+  ['Cmd+[', 'BACK in the focused panel, the same as End, for a keyboard with no End key.'],
+  ['Cmd+]', 'FORWARD in the focused panel, the same as Shift+End, for a keyboard with no End key.'],
+]
+
+function macRow([key, action]: readonly [string, string]): readonly [string, string] {
+  const text = action.replace("F12, Ctrl+R and Alt+F4 stay the browser's and the system's.", "F12, Cmd+R and Cmd+Q stay the browser's and the system's.")
+  return [MAC_KEY_NAMES[key] ?? key, /^F[0-9]/.test(key) ? text + MAC_FN_NOTE : text]
+}
+
+/** The key reference rows of a platform: the PC table as written, or the Mac table derived from it. */
+export function helpKeysFor(table: 'pc' | 'mac'): ReadonlyArray<readonly [string, string]> {
+  if (table === 'pc') return HELP_KEYS
+  return HELP_KEYS.flatMap((row) => (row[0] === 'Shift+End' ? [macRow(row), ...MAC_BRACKET_ROWS] : [macRow(row)]))
+}
+
+/** The drawn keyboard of a platform: the PC caps, or the Mac caps (Option for Alt). */
+export function helpKeyboardFor(table: 'pc' | 'mac'): typeof HELP_KEYBOARD {
+  if (table === 'pc') return HELP_KEYBOARD
+  return HELP_KEYBOARD.map((k) => (k.key === 'Alt+1..9' ? { ...k, key: 'Option+1..9' } : k))
+}

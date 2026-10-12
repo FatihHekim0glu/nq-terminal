@@ -41,7 +41,7 @@ const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
  * else out first, or raise this number in the same change as the feature that needs it, with the reason in the commit.
  * A change that cuts the shell further can lower both.
  */
-const PINNED_SHELL_CEILING = 115_000
+const PINNED_SHELL_CEILING = 115_600
 /**
  * Shell diet 4 (v2.1 polish): the shell was 114,480 B before it and is 109,658 B after (the key actions, the command line's
  * menus and suggestion sheet load on demand; Radix's Slot, TanStack's infinite-query paging, useMutation and the module
@@ -64,8 +64,18 @@ const PINNED_SHELL_CEILING = 115_000
  * Release 0.2.0 raised the target and the ceiling by 100 B each (109,900 to 110,000; 114,900 to 115,000) for the global job
  * indicator, mounted from App.tsx after the first idle moment through a lazy import (45 B gzip in the shell; the indicator,
  * its model and its copy are a chunk of their own). The shell measures 109,939 B. The 5 kB of room under the ceiling is kept.
+ *
+ * Wave w5-mac-kit raised the target by 200 B (110,000 to 110,200) for the Mac key table (D7.4): chrome/CommandLine.keys.ts, which the
+ * shell reads on every key, now picks a pc or a mac table from the platform (detectKeysTable) and has the Cmd+[ and Cmd+] map. The
+ * shell measures 110,169 B. The HELP rows of each platform live in copy/help.ts, which stays on demand. The ceiling above moved with it
+ * (115,000 to 115,200; BUNDLE_BUDGET.shellGzip in bundleCheck.ts too), so the 5 kB of room is kept.
+ *
+ * The same wave raised both by a further 400 B (110,200 to 110,600; 115,200 to 115,600) for the consumers of that table that the
+ * shell loads: the toolbars' accessible names (KeyToolbar, NavToolbar) and the message-line sentences (CommandLine.dispatch,
+ * export/grab) read the platform through copy/platformKeys.ts and say Cmd, Option and Fn on a Mac. The shell measures 110,452 B.
+ * The 5 kB of room is kept.
  */
-const SHELL_TARGET_AFTER_DIET_4 = 110_000
+const SHELL_TARGET_AFTER_DIET_4 = 110_600
 /** The gallery build's shell, which is about 0.9 kB larger (113,738 B measured), plus the same 2 kB. */
 const PINNED_GALLERY_SHELL_CEILING = 115_800
 
