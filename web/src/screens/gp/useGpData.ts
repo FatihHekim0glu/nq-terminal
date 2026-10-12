@@ -3,9 +3,14 @@
 // (/api/market/rv), and the fills of a linked run. Every read is a GET
 // through the shared query hooks. A window past the fence never becomes a query: the bars read is
 // disabled and the refusal text comes from the model instead.
+// The run list (the Fills picker) is not part of what HOME waits for: GP passes deferRuns until the picker is opened, and
+// the list is then asked for only when the picker opens or a run is already chosen. A caller that does not defer asks at
+// mount. The record watch's reader asks once the page has gone quiet and shares the cache entry, so the list is normally there before the picker opens, and the first launch's cold run index (about a second)
+// never sits inside the HOME window (v04 w1, startup.md 7.3). GP does not import the quiet gate itself: a second user of
+// it would turn it into a shared chunk and add a line to the shell's dependency map (the shell budget has 4 bytes to spare).
 import { useMemo } from 'react'
 import type { ApiError } from '../../api/client'
-import { useApiQuery, useRuns } from '../../api/queries'
+import { useApiQuery } from '../../api/queries'
 import { useCatalog, useMarketRv, useRunFills } from '../../api/queries.screens'
 import type { SuccessOf } from '../../api/types'
 import type { CandleFill } from '../../charts/CandleChart.model'
@@ -27,6 +32,8 @@ export interface GpRequest {
   readonly variant: Variant
   readonly window: DateWindow
   readonly runId: string | null
+  /** True while the Fills picker has not been opened: the run list is not requested (unless a run is chosen). */
+  readonly deferRuns?: boolean
 }
 
 export interface GpData {
@@ -83,7 +90,7 @@ export function useGpData(req: GpRequest): GpData {
   const universe = useApiQuery('/api/market/universe', { query: { window: RV_WINDOW } }, { enabled: wantRv })
   const wantLine = enabled && req.tf === '1d'
   const rv = useMarketRv(wantLine && req.symbol ? req.symbol : '', RV_WINDOW)
-  const runs = useRuns()
+  const runs = useApiQuery('/api/runs', {}, { enabled: req.deferRuns !== true || req.runId !== null })
   const runIds = useMemo(() => runs.data?.map((r) => r.run_id) ?? NO_RUNS, [runs.data])
   const fills = useFills(req.root, req.runId)
   return {

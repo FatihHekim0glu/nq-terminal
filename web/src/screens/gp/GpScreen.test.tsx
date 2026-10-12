@@ -7,6 +7,7 @@ import { createApiQueryClient } from '../../api/queries'
 import type { ResolvedContext } from '../../commands/types'
 import type { PanelParams } from '../../chrome/WorkspaceLayouts'
 import { onLineRequest, type LineRequest } from '../../chrome/CommandLine.bus'
+import { RecordWatchReader } from '../../chrome/RecordWatch.live'
 import { useLinkGroups } from '../../state/linkGroups'
 import { GIPScreen, GPScreen } from './index'
 
@@ -382,5 +383,76 @@ describe('GIP: one session intraday', () => {
     fireEvent.change(field, { target: { value: '2019-3-15' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(await screen.findByText('2019-3-15 is not a date. Use YYYY-MM-DD.')).toBeTruthy()
+  })
+})
+
+describe('GP: the Fills picker asks for /api/runs after HOME, not while it loads (v04 w1 home-window, startup.md 7.3)', () => {
+  // HOME's ready condition (probe.js) waits for GP's chart, MON's grid, EQ's figures and REG's grid, never the run list.
+  // The picker's list used to be requested at mount, which put the first launch's cold run index inside the HOME window.
+  const runRequests = () => urls.filter((u) => u === '/api/runs')
+
+  it('born failing: sends no /api/runs of its own while the panel loads, nor afterwards until the picker is opened', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    await waitFor(() => expect(screen.getByTestId('candle').dataset.indicator).toBe('RV22:,30,30.57044013941762'))
+    expect(runRequests()).toEqual([])
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    expect(runRequests()).toEqual([])
+  })
+
+  it('born failing: GP and the record watch together send one /api/runs, after the panel data and not before', async () => {
+    serve()
+    mount(
+      <>
+        <GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />
+        <RecordWatchReader />
+      </>,
+    )
+    await screen.findByTestId('candle')
+    expect(runRequests()).toEqual([])
+    await waitFor(() => expect(runRequests()).toEqual(['/api/runs']), { timeout: 3000 })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(runRequests()).toEqual(['/api/runs'])
+    const firstRuns = urls.indexOf('/api/runs')
+    for (const path of ['/api/bars', '/api/data/catalog', '/api/market/rv']) {
+      expect(urls.findIndex((u) => u.startsWith(path))).toBeGreaterThanOrEqual(0)
+      expect(urls.findIndex((u) => u.startsWith(path))).toBeLessThan(firstRuns)
+    }
+  })
+
+  it('opens the Fills picker with the list requested at once, and fills it when the answer arrives', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    expect(runRequests()).toEqual([])
+    fireEvent.click(screen.getByRole('combobox', { name: 'Fills' }))
+    await waitFor(() => expect(runRequests()).toEqual(['/api/runs']), { timeout: 400 })
+    expect(await screen.findByRole('option', { name: 'nt_volmanaged_v0_fixture_m1' })).toBeTruthy()
+  })
+
+  it('opens the Fills picker from the keyboard the same way', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    fireEvent.keyDown(screen.getByRole('combobox', { name: 'Fills' }), { key: 'ArrowDown' })
+    await waitFor(() => expect(runRequests()).toEqual(['/api/runs']), { timeout: 400 })
+  })
+
+  it('does not ask when another field is opened', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    fireEvent.click(screen.getByRole('combobox', { name: 'Variant' }))
+    expect(await screen.findByRole('option', { name: 'vendor' })).toBeTruthy()
+    expect(runRequests()).toEqual([])
+  })
+
+  it('holds no busy state of its own for the run list: the picker is not aria-busy while the list is pending', async () => {
+    serve()
+    mount(<GPScreen params={params('GP', { timeframe: '1d' })} context={NQ} />)
+    await screen.findByTestId('candle')
+    expect(runRequests()).toEqual([])
+    expect(screen.getByRole('combobox', { name: 'Fills' }).closest('[aria-busy="true"]')).toBeNull()
   })
 })

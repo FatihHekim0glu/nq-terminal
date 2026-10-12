@@ -238,3 +238,134 @@ test('a failed command-line lookup and failed soak breakdown reads each print an
   const sk = [...complete().filter((r) => r.mode !== 'soak'), soakRecord(900, { breakdownFailures: 3, breakdownError: 'timeout' })]
   assert.ok(info(reportLines(buildReport(sk), sk)).some((l) => /soak breakdown not read in 3 samples: timeout/.test(l)))
 })
+
+// ---- the start-up rows (wave w1, start-rows): informational lines beside the verdicts, never a verdict -------------------------
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { startRowsOfLogs } from '../lib/startrows.mjs'
+
+const FIXDIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'startrows')
+const fixture = (name) => fs.readFileSync(path.join(FIXDIR, name), 'utf8')
+const usualRows = () => startRowsOfLogs(fixture('usual-shell.txt'), fixture('usual-backend.txt'))
+const startInfo = (lines) => info(lines).filter((l) => /start-up rows|slowest HOME requests/.test(l))
+const withRows = (slot, startRows, over = {}) => record('smoke', slot, GOOD.smoke, { startRows, ...over })
+
+test('a counted record without start rows adds no start-up line, and the existing lines stay as they were (regression guard)', () => {
+  const plain = complete()
+  const lines = reportLines(buildReport(plain), plain)
+  assert.equal(startInfo(lines).length, 0)
+  const rich = plain.map((r, i) => (i === 0 ? { ...r, startRows: usualRows() } : r))
+  assert.deepEqual(reportLines(buildReport(rich), rich).filter((l) => !/informational, not the row/.test(l)), lines.filter((l) => !/informational, not the row/.test(l)))
+})
+
+test('start rows print one informational line per build with the median of every launch and "missing" where nothing was read (born failing)', () => {
+  const recs = [...complete(), withRows(11, usualRows())]
+  const report = buildReport(recs)
+  const lines = startInfo(reportLines(report, recs))
+  const main = lines.find((l) => /start-up rows, smoke build/.test(l))
+  assert.ok(main, lines.join('\n'))
+  assert.match(main, /median of 4 launch\(es\)/)
+  assert.match(main, /spawn offset 478 ms/)
+  assert.match(main, /spawn to READY 1535 ms/)
+  assert.match(main, /HOME stage 1152\.5 ms/)
+  assert.match(main, /page files served 107/)
+  assert.match(main, /import time missing/)
+  assert.match(main, /modules without current bytecode missing/)
+  assert.match(main, /slowest HOME requests missing/)
+  assert.ok(!lines.some((l) => /measure build/.test(l)), 'a build with no start rows prints nothing')
+  assert.equal(report.startRows.smoke.rows.home_stage_ms.n, 4)
+})
+
+test('a launch that lacks a figure is counted as missing beside the median of the rest', () => {
+  const shell = fixture('usual-shell.txt').split('\n').filter((l) => !(l.includes('"supervise_spawned"') && l.includes('57184'))).join('\n')
+  const recs = [...complete(), withRows(11, startRowsOfLogs(shell, fixture('usual-backend.txt')))]
+  const main = startInfo(reportLines(buildReport(recs), recs)).find((l) => /start-up rows/.test(l))
+  assert.match(main, /spawn offset 441 ms \(1 of 4 launch\(es\) missing\)/)
+})
+
+test('the slowest HOME requests print wall time only (no CPU claim), from the launches of the build', () => {
+  const log = ['INFO:     Started server process [18564]', '2026-10-07 23:19:49,508 INFO nq_terminal.services.prewarm: prewarm started: 5 tasks',
+    '2026-10-07 23:19:50,000 INFO nq_terminal.request_timing: request timing: GET /api/runs?x=1 status=200 start=1 end=1.9 wall_ms=900 thread_cpu_ms=500 process_cpu_ms=700',
+    '2026-10-07 23:19:50,100 INFO nq_terminal.request_timing: request timing: GET /api/eq status=200 start=1 end=1.2 wall_ms=200 thread_cpu_ms=200 process_cpu_ms=210',
+    '2026-10-07 23:19:51,341 INFO nq_terminal.services.prewarm: prewarm finished: 5 of 5 tasks ok in 1.83 s'].join('\n')
+  const rows = startRowsOfLogs(fixture('first-shell.txt'), log)
+  const recs = [...complete(), withRows(11, rows)]
+  const lines = startInfo(reportLines(buildReport(recs), recs))
+  const slow = lines.find((l) => /slowest HOME requests, smoke build/.test(l))
+  assert.ok(slow, lines.join('\n'))
+  assert.match(slow, /GET \/api\/runs 900 ms, GET \/api\/eq 200 ms$/)
+  assert.doesNotMatch(slow, /CPU/, 'event-loop CPU is not a per-request CPU, so the line leaves it out')
+  assert.doesNotMatch(slow, /x=1/, 'the query string never reaches the report')
+  assert.ok(!/slowest HOME requests missing/.test(lines.find((l) => /start-up rows/.test(l))))
+})
+
+test('the in-process import time and the bytecode count come from the record and print beside the launch rows', () => {
+  const imp = { status: 'ok', value: 1120, runs: 3, warmup: 5200, bytecode: { status: 'ok', value: 0, names: [], checked: 1168 } }
+  const recs = [...complete(), withRows(11, { ...usualRows(), import: imp })]
+  const main = startInfo(reportLines(buildReport(recs), recs)).find((l) => /start-up rows/.test(l))
+  assert.match(main, /import time 1120 ms/)
+  assert.match(main, /modules without current bytecode 0/)
+})
+
+test('a smoke record is read back from its own run folder when it carries no start rows, and a measure record never reads the lab state', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'startrows-report-'))
+  try {
+    const launch = path.join(root, 'launch', 'smoke-s2-a1')
+    fs.mkdirSync(path.join(launch, 'config', 'logs'), { recursive: true })
+    fs.mkdirSync(path.join(launch, 'state', 'logs'), { recursive: true })
+    fs.writeFileSync(path.join(launch, 'config', 'logs', 'shell.log'), fixture('first-shell.txt'))
+    fs.writeFileSync(path.join(launch, 'state', 'logs', 'backend.log'), fixture('first-backend.txt'))
+    const smoke = record('smoke', 12, GOOD.smoke, { stateFolder: path.join(launch, 'state') })
+    const measure = record('measure', 12, GOOD.measure, { stateFolder: path.join(launch, 'state') })
+    const recs = [...complete(), smoke, measure]
+    const lines = startInfo(reportLines(buildReport(recs), recs))
+    assert.match(lines.find((l) => /smoke build/.test(l)), /median of 1 launch\(es\): spawn offset 436 ms, spawn to READY 1466 ms, HOME stage 1833 ms/)
+    assert.ok(!lines.some((l) => /measure build/.test(l)), lines.join('\n'))
+    const gone = [...complete(), record('smoke', 13, GOOD.smoke, { stateFolder: path.join(root, 'no-such-run', 'state') })]
+    const goneLine = startInfo(reportLines(buildReport(gone), gone)).find((l) => /smoke build/.test(l))
+    assert.match(goneLine, /median of 0 launch\(es\)/, 'unreadable logs read as nothing, not as zero')
+    assert.match(goneLine, /spawn offset missing/)
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('rejected and dry records add no start-up line, the lines carry no em or en dash, and --check ignores the rows', () => {
+  const bad = [...complete(), withRows(11, usualRows(), { status: 'rejected' }), withRows(12, usualRows(), { status: 'dry' })]
+  assert.equal(startInfo(reportLines(buildReport(bad), bad)).length, 0)
+  const recs = [...complete(), withRows(11, usualRows())]
+  assert.doesNotMatch(reportLines(buildReport(recs), recs).join('\n'), /[\u2013\u2014]/)
+  assert.deepEqual(checkEvidence(recs, buildReport(recs)), [], 'no start row gates anything yet')
+  assert.deepEqual(overCeiling(buildReport(recs)), [])
+})
+
+// ---- start rows carry the accepted/provisional basis (born failing) --------------------------------------------------------
+test('start rows use accepted launches when any exist, count both kinds and carry no PROVISIONAL label', () => {
+  const slowShell = fixture('usual-shell.txt')
+  const recs = [...complete(), withRows(11, usualRows()), withRows(12, startRowsOfLogs(slowShell, fixture('usual-backend.txt')), { status: 'provisional' })]
+  const report = buildReport(recs)
+  assert.equal(report.startRows.smoke.basis, 'accepted')
+  assert.equal(report.startRows.smoke.accepted, 1)
+  assert.equal(report.startRows.smoke.provisional, 1)
+  assert.equal(report.startRows.smoke.launches, 4, 'the provisional record is left out of the figure')
+  const main = startInfo(reportLines(report, recs)).find((l) => /start-up rows.*smoke build/.test(l))
+  assert.match(main, /median of 4 launch\(es\)/)
+  assert.doesNotMatch(main, /PROVISIONAL/)
+  assert.match(main, /basis accepted: 1 accepted and 1 provisional record\(s\)/)
+})
+
+test('start rows built only from provisional (loaded-machine) records are labelled PROVISIONAL', () => {
+  const recs = [...complete(), withRows(11, usualRows(), { status: 'provisional' })]
+  const report = buildReport(recs)
+  assert.equal(report.startRows.smoke.basis, 'provisional')
+  const main = startInfo(reportLines(report, recs)).find((l) => /start-up rows.*smoke build/.test(l))
+  assert.match(main, /PROVISIONAL/)
+  assert.match(main, /median of 4 launch\(es\)/)
+})
+
+test('start rows whose import reading is provisional (loaded machine) print PROVISIONAL even on accepted records', () => {
+  const recs = [...complete(), withRows(11, { ...usualRows(), import: { status: 'ok', value: 900, provisional: true, cpuLoadPct: 40 } })]
+  const main = startInfo(reportLines(buildReport(recs), recs)).find((l) => /start-up rows.*smoke build/.test(l))
+  assert.match(main, /import time 900 ms/)
+  assert.match(main, /PROVISIONAL/)
+})

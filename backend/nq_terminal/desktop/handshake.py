@@ -14,6 +14,12 @@ for it:
 `proof` is HMAC-SHA256 keyed by the token's 32 raw bytes over the ASCII text `ready|<nonce>|<port>|<pid>`; the proof
 route answers the same MAC over `proof|<nonce>|<port>|<pid>`, so a READY answer can never be replayed as a proof
 answer or the other way round. A start that finds a live lock prints `NQT-ATTACH {"port":P}` instead and exits 0.
+
+`dist` is the exact `build_stamp.dist_status`: the shell refuses anything but `current` and then offers its rebuild
+(`supervise_check.check_ready`, `stale_page::hook`), so a file edited deep under `web/src` must still give `stale`. The
+source walk stays off the READY path: `serve` starts a `DistWalk` on a daemon thread before it builds the app, and
+`ready_payload` reads its result (startup.md 7.4). `schedule_dist_check` walks once more a few seconds after READY and
+logs a warning when a source changed since.
 """
 from __future__ import annotations
 
@@ -31,7 +37,8 @@ from typing import Any, BinaryIO
 
 import nq_lab
 
-from nq_terminal.desktop.build_stamp import OPENAPI, dist_status, openapi_sha256
+from nq_terminal.desktop import build_stamp
+from nq_terminal.desktop.build_stamp import OPENAPI, openapi_sha256
 from nq_terminal.settings import TERMINAL_DIR, Settings
 
 READY, PROOF = "ready", "proof"
@@ -43,6 +50,8 @@ HEX64 = re.compile(r"^[0-9a-f]{64}$")
 CONTROL_LINE = re.compile(rb"^(TOKEN|NONCE) ([0-9A-Fa-f]{64})\r?\n?$")
 MAX_CONTROL_LINE = 256
 POLL_S = 0.05
+DIST_CHECK_DELAY_S = 5.0  # the post-READY source walk waits this long, so HOME's first requests never meet it
+DIST_WALK_WAIT_S = 5.0  # how long the READY line waits for the start-path walk before it walks inline
 PACKAGE_DIR = Path(__file__).resolve().parents[1]
 LOG = logging.getLogger("nq_terminal.desktop")
 
@@ -93,12 +102,81 @@ def identity(settings: Settings) -> dict[str, Any]:
     }
 
 
-def ready_payload(settings: Settings, *, token: str, nonce: str | None, port: int, pid: int) -> dict[str, Any]:
-    """The READY fields in their fixed order; `proof` is None when no nonce came in (a plain start)."""
+class DistWalk:
+    """The web source walk (`build_stamp.newest_source_mtime_ms`) on a daemon thread, started early in the start path
+    so the READY line's exact `dist` costs no walk on the READY path. `newest_ms` is None when the walk failed or has
+    not finished within the wait; `ready_payload` then walks inline."""
+
+    def __init__(self, web_dir: Path) -> None:
+        self.web_dir = web_dir
+        self.thread: threading.Thread | None = None
+        self._newest: int | None = None
+        self._done = threading.Event()
+
+    @classmethod
+    def start(cls, web_dir: Path) -> "DistWalk":
+        walk = cls(web_dir)
+        thread = threading.Thread(target=walk._run, name="nqt-dist-walk", daemon=True)
+        try:
+            thread.start()
+        except RuntimeError:
+            LOG.warning("the web source walk thread could not start; the READY line walks inline")
+            walk._done.set()
+            return walk
+        walk.thread = thread
+        return walk
+
+    def _run(self) -> None:
+        try:
+            self._newest = build_stamp.newest_source_mtime_ms(self.web_dir)
+        except Exception:  # noqa: BLE001 - the READY line walks inline instead
+            LOG.warning("the web source walk before READY failed; the READY line walks inline", exc_info=True)
+        finally:
+            self._done.set()
+
+    def newest_ms(self, wait_s: float = DIST_WALK_WAIT_S) -> int | None:
+        """The newest source time in whole milliseconds, or None when the walk failed or is still running."""
+        return self._newest if self._done.wait(wait_s) else None
+
+
+def ready_payload(settings: Settings, *, token: str, nonce: str | None, port: int, pid: int,
+                  dist_walk: DistWalk | None = None) -> dict[str, Any]:
+    """The READY fields in their fixed order; `proof` is None when no nonce came in (a plain start).
+
+    `dist` is exact. With `dist_walk` (the start path's walk of this web folder) it reads the walk's result; without
+    one, or when the walk gave no answer, `dist_status` walks the sources here."""
     proof = mac(token, READY, nonce, port, pid) if nonce else None
+    contract_sha = openapi_sha256(OPENAPI)
+    web_dir = settings.web_dist.parent
+    newest = dist_walk.newest_ms() if dist_walk is not None and dist_walk.web_dir == web_dir else None
+    dist = build_stamp.dist_status(web_dir, OPENAPI, newest_ms=newest, contract_sha=contract_sha)
     return {"v": HANDSHAKE_VERSION, "port": port, "pid": pid, "proof": proof, **identity(settings),
-            "openapi_sha256": openapi_sha256(OPENAPI), "dist": dist_status(settings.web_dist.parent, OPENAPI),
-            "mode": settings.mode}
+            "openapi_sha256": contract_sha, "dist": dist, "mode": settings.mode}
+
+
+def _check_dist(settings: Settings, ready_dist: str, delay_s: float) -> None:
+    try:
+        time.sleep(delay_s)
+        full = build_stamp.dist_status(settings.web_dist.parent, OPENAPI)
+        if full != ready_dist:
+            LOG.warning("the READY line said the page build is %s; the check of the web sources after READY says %s: "
+                        "a source changed since, rebuild the page", ready_dist, full)
+    except Exception:  # noqa: BLE001 - a bookkeeping walk must never reach the app
+        LOG.warning("the web build check after READY failed", exc_info=True)
+
+
+def schedule_dist_check(settings: Settings, ready_dist: str,
+                        delay_s: float = DIST_CHECK_DELAY_S) -> threading.Thread | None:
+    """After READY, walk the web sources once on a daemon thread and log a warning when the answer differs from the
+    READY line's (a source changed after the start-path walk). Returns the thread, or None if it could not start."""
+    thread = threading.Thread(target=_check_dist, args=(settings, ready_dist, delay_s), name="nqt-dist-check",
+                              daemon=True)
+    try:
+        thread.start()
+    except RuntimeError:
+        LOG.warning("the web build check thread could not start")
+        return None
+    return thread
 
 
 def _line(prefix: str, payload: Mapping[str, Any]) -> str:

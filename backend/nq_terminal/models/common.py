@@ -2,7 +2,10 @@
 
 `ResponseModel` makes every field required in the response schema, defaults included, so the generated front-end
 types have no optional fields the backend always sends (`json_schema_serialization_defaults_required`). Every
-response model derives from it. `ErrorDetail` is the body of every declared error (`error_responses`): a string
+response model derives from it. It also defers the model's schema build to first use (`defer_build`, startup.md 7.4): 256
+models built at import cost about 0.1 s before READY, and a request builds only the models it touches (all 256 take about
+65 ms when built together). FastAPI does not force the build at route registration (`tests/test_import_budget.py`
+fails if that changes). `ErrorDetail` is the body of every declared error (`error_responses`): a string
 from the terminal's own checks, or FastAPI's validation list on a 422.
 """
 from __future__ import annotations
@@ -26,7 +29,7 @@ ERROR_TEXT = {
 
 
 class ResponseModel(BaseModel):
-    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True, defer_build=True)
 
 
 class ErrorDetail(ResponseModel):

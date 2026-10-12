@@ -12,6 +12,7 @@ import { loadRecords, COUNTED } from './lib/record.mjs'
 import { ROWS, CHECKS, verdictOf, privateBytesLeakVerdict } from './lib/rows.mjs'
 import { median, range, agreeWithinNoise, round } from './lib/stats.mjs'
 import { SETTLED_FROM_S } from './lib/mem.mjs'
+import { startRowsOfRecord, summariseStartRows, startRowLines } from './lib/startrows.mjs'
 
 export const AGREE_ROWS = ['backend_ready', 'cold_home', 'idle_mem_home']
 
@@ -89,6 +90,21 @@ export function soakLeaks(records) {
     .map((r) => ({ file: r.file, ...privateBytesLeakVerdict(r.samples) }))
 }
 
+/** The start-up rows per build: the median over every launch of the accepted records that carry them, else of the provisional ones
+ *  (the basis rule of rowReport), with both counts and the basis (informational; no verdict). */
+export function startRowsSummary(records) {
+  const out = {}
+  for (const build of [...new Set(records.filter((r) => COUNTED.includes(r.status)).map((r) => r.build))]) {
+    const withRows = (status) => records.filter((r) => r.status === status && r.build === build).map(startRowsOfRecord).filter(Boolean)
+    const accepted = withRows('accepted')
+    const provisional = withRows('provisional')
+    const basis = accepted.length ? 'accepted' : 'provisional'
+    const sources = accepted.length ? accepted : provisional
+    if (sources.length) out[build] = { ...summariseStartRows(sources), basis, accepted: accepted.length, provisional: provisional.length }
+  }
+  return out
+}
+
 export function buildReport(records, { minRuns = 3 } = {}) {
   const figs = collectFigures(records)
   const rows = ROWS.map((row) => rowReport(row, figs, minRuns))
@@ -102,7 +118,7 @@ export function buildReport(records, { minRuns = 3 } = {}) {
   for (const r of records) { const k = `${r.build ?? '-'}:${r.mode ?? '-'}`; (counts[k] ??= {})[r.status] = ((counts[k][r.status]) ?? 0) + 1 }
   const rejected = records.filter((r) => r.status === 'rejected').map((r) => ({ file: r.file, avgPct: r.gate?.avgPct ?? null, build: r.build }))
   const repro = newestReproduction(records)
-  return { rows, agreement, checks: checkReport(records, figs), soakLeaks: soakLeaks(records).map(({ rule, ...l }) => l), idleTrim: idleTrimSummary(records), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
+  return { rows, agreement, checks: checkReport(records, figs), soakLeaks: soakLeaks(records).map(({ rule, ...l }) => l), idleTrim: idleTrimSummary(records), startRows: startRowsSummary(records), counts, rejectedKept: rejected, reproduction: repro ? { reproduced: repro.reproduced, dry: repro.dry, verdict: repro.verdict } : null,
     unreproducedRuns: records.filter((r) => COUNTED.includes(r.status) && r.unreproduced === true).length,
     provenanceHeads: [...new Set(records.map((r) => r.provenance?.head).filter(Boolean))], stampsAgree: new Set(records.filter((r) => r.provenance?.diffSha256).map((r) => `${r.provenance.diffSha256}/${r.provenance.untrackedSha256}`)).size <= 1 }
 }
@@ -188,6 +204,7 @@ export function informationalLines(records) {
     if (sk.breakdownFailures > 0) lines.push(`${INFO}: soak breakdown not read in ${sk.breakdownFailures} samples: ${sk.breakdownError}`)
     lines.push(`${INFO}: soak, start-up peak ${fmt(sk.startupPeakMB)} MB (first sample at ${sk.firstSampleAtS} s), settled maximum ${settled} (samples from ${SETTLED_FROM_S} s); the row is the largest sample, ${fmt(sk.maxMB)} MB`)
   }
+  for (const [build, summary] of Object.entries(startRowsSummary(records))) lines.push(...startRowLines(summary, build, INFO))
   for (const l of soakLeaks(records)) lines.push(`soak private bytes (leak signal, ${path.basename(l.file ?? '')}): ${l.verdict}; ${l.reason}`)
   return lines
 }

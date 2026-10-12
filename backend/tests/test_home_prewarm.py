@@ -30,13 +30,14 @@ from conftest import api_client
 
 WAIT_S = 20.0
 # The price-free warm-up first (scipy's cluster and spatial modules and the XNYS calendar, none of which loads
-# scipy.stats), then what HOME asks for, in the order it needs it (the run index first of the reads: HOME's GP panel
-# requests /api/runs); then the entries HOME never asks for: `warm_stats` (nq_lab.sizing_stats and with it scipy.stats,
-# which no HOME request needs since V032: HOME's EQ panel reads the screen's stored fit), the ledger (RecordWatch,
-# LEDG), the deflated Sharpe and EQ's bootstrap, which a first launch must not compute while HOME is loading (02
-# section 4.1 item 3: the first launch).
-HOME_FIRST = ["warm", "runs", "two_day", "universe", "gp_bars"]
-AFTER_HOME = ["warm_stats", "ledger", "deflated", "eq_bootstrap"]
+# scipy.stats), then what HOME asks for, in the order it needs it (the price reads: MON two-day and universe, GP bars);
+# then the entries HOME's data never waits for: `warm_stats` (nq_lab.sizing_stats and with it scipy.stats, which no HOME
+# request needs since V032: HOME's EQ panel reads the screen's stored fit), the run index (GP's picker and RecordWatch
+# ask for /api/runs only after HOME's last data response, v04 w1), the ledger (RecordWatch, LEDG), the deflated Sharpe
+# and EQ's bootstrap, which a first launch must not compute while HOME is loading (02 section 4.1 item 3: the first
+# launch).
+HOME_FIRST = ["warm", "two_day", "universe", "gp_bars"]
+AFTER_HOME = ["warm_stats", "runs", "ledger", "deflated", "eq_bootstrap"]
 TASK_NAMES = HOME_FIRST + AFTER_HOME
 WARM_MODULES = ["scipy.cluster.hierarchy", "scipy.spatial.distance"]
 STATS_MODULES = ["nq_lab.sizing_stats"]
@@ -124,24 +125,72 @@ def test_the_task_list_is_the_home_layout_in_order_and_builds_without_any_read()
 
 def test_home_task_order():
     """W5C D4: the warm task heads the HOME list. The later list starts with `warm_stats` (V032: scipy.stats, which no
-    HOME request needs any more), then the ledger, because HOME's REG reads the registry, hypotheses, multiple-testing
-    and confirmations, never the ledger. The run index stays in the HOME list (right after warm): HOME's GP panel
-    requests /api/runs (useGpData), and on a first launch there is no persisted run index, so a request that raced a
-    later task would build it cold during HOME."""
+    HOME request needs any more), then the run index (v04 w1: HOME's ready condition does not wait for the run list, and
+    on a first launch the cold index took about a second of the HOME window), then the ledger, because HOME's REG reads
+    the registry, hypotheses, multiple-testing and confirmations, never the ledger."""
     state = SimpleNamespace()
-    assert [t.__name__ for t in home_prewarm.home_tasks(state)] == ["warm", "runs", "two_day", "universe", "gp_bars"]
-    assert [t.__name__ for t in home_prewarm.later_tasks(state)] == ["warm_stats", "ledger", "deflated",
+    assert [t.__name__ for t in home_prewarm.home_tasks(state)] == ["warm", "two_day", "universe", "gp_bars"]
+    assert [t.__name__ for t in home_prewarm.later_tasks(state)] == ["warm_stats", "runs", "ledger", "deflated",
                                                                      "eq_bootstrap"]
 
 
-def test_born_failing_nothing_home_never_asks_for_waits_but_the_run_index_is_warm_before_home_asks():
-    """scipy.stats (`warm_stats`), the ledger (RecordWatch, LEDG), the deflated Sharpe (1.2 s cold; a wide REG panel
-    asks for it only after HOME's data, see test_home_first_launch_imports) and EQ's bootstrap (HOME's EQ panel asks
-    for /panel) wait until every HOME task ran."""
+def test_born_failing_runs_is_a_later_task():
+    """v04 w1 home-window (startup.md 7.3): on a first launch the cold run index took 1.06 s of the HOME stage and no
+    HOME-ready condition needs the run list (the probe waits for GP's chart, MON's grid, EQ's figures and REG's grid).
+    GP's picker and RecordWatch ask for /api/runs after HOME's last data response, so the index is built by a later
+    task, which runs once HOME is served and the process is quiet. Fails on the 0.3.3 order, where it is the second
+    HOME task."""
+    state = SimpleNamespace()
+    assert "runs" not in [t.__name__ for t in home_prewarm.home_tasks(state)]
+    later = [t.__name__ for t in home_prewarm.later_tasks(state)]
+    assert "runs" in later and later.index("warm_stats") < later.index("runs") < later.index("ledger")
+
+
+def test_born_failing_nothing_home_never_asks_for_waits_until_every_home_task_ran():
+    """scipy.stats (`warm_stats`), the run index (GP's picker and RecordWatch, after HOME's data), the ledger
+    (RecordWatch, LEDG), the deflated Sharpe (1.2 s cold; a wide REG panel asks for it only after HOME's data, see
+    test_home_first_launch_imports) and EQ's bootstrap (HOME's EQ panel asks for /panel) wait until every HOME task
+    ran."""
     names = [t.__name__ for t in home_prewarm.home_tasks(SimpleNamespace())]
     later = [t.__name__ for t in home_prewarm.later_tasks(SimpleNamespace())]
     assert names[0] == "warm" and later[0] == "warm_stats"
     assert names == HOME_FIRST and later == AFTER_HOME, "what HOME never asks for waits for a quiet process"
+
+
+def test_born_failing_the_run_index_is_built_after_the_home_stage_and_before_the_ledger(tmp_path, monkeypatch):
+    """The real lists through the real prewarm thread (quiet always true): the run index is computed only after the HOME
+    tasks stage is over, and before the ledger starts. Fails on the 0.3.3 order, where it is built before the stage
+    ends, in front of the price reads."""
+    from nq_terminal.api import runs as runs_api
+
+    lab = Lab(tmp_path, "runs_order").build()
+    events: list[str] = []
+    lock = threading.Lock()
+
+    def note(event: str) -> None:
+        with lock:
+            events.append(event)
+
+    real_runs, real_ledger = runs_api.cached_runs, runs_api.cached_ledger
+
+    def runs_spy(state, query=None):
+        note("runs")
+        return real_runs(state, query)
+
+    def ledger_spy(state):
+        note("ledger")
+        return real_ledger(state)
+
+    monkeypatch.setattr(runs_api, "cached_runs", runs_spy)
+    monkeypatch.setattr(runs_api, "cached_ledger", ledger_spy)
+    state = lab.app.state
+    thread = prewarm.start_prewarm(home_prewarm.home_tasks(state), True, later=home_prewarm.later_tasks(state),
+                                   quiet=lambda: True, on_stage=lambda stage: note(f"stage:{stage}"))
+    assert thread is not None
+    thread.join(WAIT_S * 3)
+    assert not thread.is_alive()
+    assert events.count("runs") == 1
+    assert events.index(f"stage:{prewarm.STAGE_TASKS}") < events.index("runs") < events.index("ledger")
 
 
 def test_born_failing_the_warm_task_leaves_scipy_stats_to_the_later_stage(monkeypatch):
@@ -449,3 +498,18 @@ def test_the_whole_list_runs_with_terminal_lines_only_and_the_page_then_reads_no
     assert client.get("/api/bars?symbol=NQ.V.0&timeframe=1d").status_code == 200
     assert len(gate_lines(lab)) == before, "the page's reads after the prewarm are hits and log nothing"
     assert Path(lab.state).is_dir()
+
+
+def test_born_failing_the_stage_hook_closes_the_request_timing_window_when_the_home_tasks_stage_ends():
+    from fastapi import FastAPI
+
+    from nq_terminal.desktop import request_timing
+
+    app = FastAPI()
+    window = request_timing.install(app, enabled=True)
+    hook = home_prewarm._trim_after(app)
+    assert window.active()
+    hook(prewarm.STAGE_TASKS)
+    assert not window.active(), "per-request lines are written in the HOME window only"
+    window_two = request_timing.install(FastAPI(), enabled=True)
+    assert window_two.active(), "a window of another app is untouched"
