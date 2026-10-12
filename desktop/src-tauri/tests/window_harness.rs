@@ -528,7 +528,8 @@ pub fn devtools_port(run: &Path, shell: &mut Owned) -> u16 {
 }
 
 /// The Node prelude of every debugging-protocol script: the page target whose URL starts with the prefix, a
-/// session, `evaluate`, `key` (raw key down then up), `targets` and `sleep`. The body ends by printing one JSON line.
+/// session, `evaluate`, `key` (raw key down then up), `targets` and `sleep`; `PAGE_WAIT` follows it. The body ends by
+/// printing one JSON line.
 const CDP_PRELUDE: &str = r#"const [port, prefix] = process.argv.slice(1);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const targets = async () => (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json());
@@ -548,14 +549,57 @@ const evaluate = async (expression, extra = {}) => {
   return m.result.result.value;
 };
 const key = async (k) => { for (const type of ['rawKeyDown', 'keyUp']) await send('Input.dispatchKeyEvent', { type, ...k }); };
+"#;
+
+/// Waits until the page itself has loaded: its own address and `readyState` complete. The debugging list names the
+/// target by the address it is navigating to while the blank document the engine starts with (about:blank, which
+/// already reads complete) can still be the one that answers. A `readyState` check alone passed there on a slow hosted
+/// runner, and the body read an empty page: no marker, no title, no shell object (docs/desktop/v04/ci-hygiene.md;
+/// tests/downloads.rs waits the same way). It needs `prefix`, `sleep` and `evaluate`.
+const PAGE_WAIT: &str = r#"const pageReady = `location.href.startsWith(${JSON.stringify(prefix)}) && document.readyState === 'complete'`;
 for (const end = Date.now() + 30000; Date.now() < end; await sleep(100)) {
-  if (await evaluate("document.readyState === 'complete'") === true) break;
+  if (await evaluate(pageReady) === true) break;
 }
 "#;
 
+/// The wait before a script body, run by node against an `evaluate` that answers from a scripted page: the blank
+/// document twice (complete both times), the page still loading, then the page loaded under its fragment. Born
+/// failing: the wait stopped at the first answer, on the blank document.
+#[test]
+fn the_page_wait_passes_over_the_blank_document_to_the_page_itself() {
+    let stub = r#"const prefix = process.argv[1];
+const sleep = () => Promise.resolve();
+const pages = [['about:blank', 'complete'], ['about:blank', 'complete'], [prefix, 'loading'], [`${prefix}#exited`, 'complete'], ['about:blank', 'complete']];
+let seen = 0;
+const evaluate = async (expression) => {
+  const [href, readyState] = pages[Math.min(seen, pages.length - 1)];
+  seen += 1;
+  return new Function('location', 'document', `return (${expression})`)({ href }, { readyState });
+};
+"#;
+    let script = format!("{stub}{PAGE_WAIT}console.log(JSON.stringify({{ seen }}));\n");
+    let out = Command::new("node")
+        .args(["--input-type=module", "-e", &script, &page_url()])
+        .stdin(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .unwrap_or_else(|e| panic!("cannot run node: {e}"));
+    let text = String::from_utf8_lossy(&out.stdout);
+    let result: Value = serde_json::from_str(text.trim()).unwrap_or_else(|_| {
+        panic!(
+            "the wait gave no JSON: {text} {}",
+            String::from_utf8_lossy(&out.stderr)
+        )
+    });
+    assert_eq!(
+        result["seen"], 4,
+        "the wait must stop at the loaded page, the fourth answer: {result}"
+    );
+}
+
 /// Runs a debugging-protocol script body against the page and returns its JSON line.
 pub fn cdp(port: u16, prefix: &str, body: &str) -> Value {
-    let script = format!("{CDP_PRELUDE}\n{body}\nws.close();\n");
+    let script = format!("{CDP_PRELUDE}{PAGE_WAIT}\n{body}\nws.close();\n");
     let out = Command::new("node")
         .args([
             "--input-type=module",
