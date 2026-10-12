@@ -41,6 +41,10 @@ The same commands are the local stand-in: `desktop/scripts/check.ps1 -Web` runs 
 
 The offline screenshot baselines are git-ignored and belong to one machine (`web/e2e/__screenshots__/offline-<platform>`, `docs/TESTING.md`). A fresh runner has none, and Playwright fails a screenshot that has nothing to compare with. The `offline-e2e` job therefore runs with `--update-snapshots=all`: it writes the baselines and compares nothing, and every other assertion of every spec (requests, text, roles, axe, keyboard flows) still runs and fails the job. Pixel comparison stays a job of the machine that owns the baselines. If the owner commits Linux baselines later, drop the flag and the job compares them.
 
+### The two gallery perf figures in `offline-e2e`
+
+Two gallery specs hold a perf budget inside `offline-e2e`: the 10,000-row MonitorGrid scroll (p95 frame under 34 ms, under 5 percent of frames over 33.4 ms) and the LineStack build of 250,000 points per pane (every build under 100 ms). The budgets are unchanged; the measurement is not. The frame intervals are read at Chromium's 0.1 ms clock grain, so float noise no longer counts a 33.4 ms frame as over 33.4 ms, and on CI alone a miss of a budget gets one quiet second measurement on a fresh load of the entry, with both attempts in the log (`web/e2e/support/perfMeasure.ts`). The functional checks of those specs are never retried. `docs/desktop/v04/ci-hygiene.md` has the runs behind it.
+
 ## What does not run
 
 | Left out | Why |
@@ -86,7 +90,7 @@ Where the rest lives. `desktop-check.yml` (written in v0.4, wave w2b) carries cl
 
 | Job | What it runs |
 |---|---|
-| `rust` | A matrix over three feature sets (release, smoke, measure), `fail-fast: false`. For each: the toolchain from `rust-toolchain.toml`, the Cargo registry cached on `Cargo.lock`, a stand-in lab (a plain virtual environment under the runner's temp folder), `cargo clippy --all-targets --locked <set> -- -D warnings` and `cargo test --locked --no-fail-fast <set>` (so one run lists every failing test, not the first). The smoke set builds the page first (`pnpm install --frozen-lockfile`, `pnpm build`), because the shell refuses a lab with no `web/dist`. |
+| `rust` | A matrix over three feature sets (release, smoke, measure), `fail-fast: false`. For each: the toolchain from `rust-toolchain.toml`, the Cargo registry cached on `Cargo.lock`, `cargo fetch --locked --target x86_64-pc-windows-msvc` (every crate of the lockfile, so the release-graph tests of the smoke and measure sets never depend on what the cache held; `v04/ci-hygiene.md`), a stand-in lab (a plain virtual environment under the runner's temp folder), `cargo clippy --all-targets --locked <set> -- -D warnings` and `cargo test --locked --no-fail-fast <set>` (so one run lists every failing test, not the first). The smoke set builds the page first (`pnpm install --frozen-lockfile`, `pnpm build`), because the shell refuses a lab with no `web/dist`. |
 | `supply-chain` | `cargo deny --locked check` (0.20.2) and `cargo audit` (0.22.2), installed by a SHA-pinned `taiki-e/install-action`. |
 | `exe-size` | Builds the release exe, reads the latest release's exe out of its installer and fails when the new one is more than 25 percent larger. The limit is a first guess, since no MSVC exe has been measured. |
 | `coverage` | Report only: `cargo-llvm-cov` 0.9.1 on the default set, uploaded as the artefact `rust-coverage` with the figure in the run summary. It has `continue-on-error: true` and nothing waits on it. |
