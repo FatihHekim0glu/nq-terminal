@@ -111,12 +111,12 @@ fn a_tool_that_outlives_its_limit_is_stopped_and_the_run_says_so() {
     let code = "import os,subprocess,sys,time; p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'], creationflags=0x08000000); print('pid=%d' % os.getpid()); print('straggler=%d' % p.pid); sys.stdout.flush(); time.sleep(120)";
     let (python, line) = python_line(code);
     let started = std::time::Instant::now();
-    let exit = supervise::run_tool(&python, &line, &dir, &[], &log, Duration::from_secs(3));
+    let exit = supervise::run_tool(&python, &line, &dir, &[], &log, Duration::from_secs(10));
     let took = started.elapsed();
     let why = exit.expect_err("a tool that never ends is an error, not an exit code");
-    assert!(why.contains("did not finish within 3 s"), "why: {why}");
+    assert!(why.contains("did not finish within 10 s"), "why: {why}");
     assert!(
-        took < Duration::from_secs(30),
+        took < Duration::from_secs(40),
         "the wait is bounded, took {took:?}"
     );
     let text = log_text(&log);

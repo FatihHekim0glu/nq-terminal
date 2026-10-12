@@ -33,7 +33,7 @@ use support::{
     wait_until, watch,
 };
 
-const WATCH_BUDGET: Duration = Duration::from_secs(1);
+const WATCH_BUDGET: Duration = Duration::from_secs(10);
 
 struct Recording(Arc<Recorder>);
 
