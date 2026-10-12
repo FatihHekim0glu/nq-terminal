@@ -3,6 +3,7 @@
 // keyboard path (readout T O H L C V, Left and Right, Home and End, + and - zoom, T table view), the
 // crosshair following across linked charts, and the render and zoom timings on 4,000 bars.
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { isWebkitOnMac } from './support/commandKey.ts'
 import { expectGalleryClean, openGallery, screenshotGallery, watchGallery } from './gallery.ts'
 
 const DAILY = 'CandleChart'
@@ -136,6 +137,9 @@ test('performance: 4,000 bars render and zoom within budget', async ({ page }) =
     { type: 'zoom-frame-ms', description: zoomFrameMs.toFixed(2) },
   )
   console.log(`CandleChart 4000 bars: render ${renderMs.toFixed(1)} ms, zoom frame ${zoomFrameMs.toFixed(2)} ms`)
+  // Report-only under WebKit on the hosted Mac (w5b-mac-webkit): a shared virtual runner has no steady frame clock, so the bars
+  // would measure the runner. The figures above are printed and annotated; the Windows and chromium bars are unchanged.
+  if (isWebkitOnMac(test.info().project.name)) return
   expect(renderMs).toBeLessThan(RENDER_BUDGET_MS)
   expect(zoomFrameMs).toBeLessThan(ZOOM_FRAME_BUDGET_MS)
 })

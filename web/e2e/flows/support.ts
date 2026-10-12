@@ -4,6 +4,7 @@
 // every request a same-origin GET carrying the client header, no console error, no page error, no
 // CSP report, and no served price point past the fence.
 import { expect, test, type Locator, type Page, type Request, type Response } from '@playwright/test'
+import { COMMAND_LINE_KEY } from '../support/commandKey.ts'
 import { OFFLINE, recordDemoRefusals, withoutDemoRefusals } from '../target.ts'
 import { badJobWrites, isPriceEndpoint, nonGetRequests, pointsPastFence } from './scan.ts'
 
@@ -110,7 +111,7 @@ export async function openTerminal(page: Page): Promise<void> {
 
 /** Type a line into the command line and run it with Enter (or Shift+Enter for a new panel). */
 export async function runLine(page: Page, line: string, key: 'Enter' | 'Shift+Enter' = 'Enter'): Promise<void> {
-  await page.keyboard.press('Control+k')
+  await page.keyboard.press(COMMAND_LINE_KEY)
   await expect(commandLine(page)).toBeFocused()
   await commandLine(page).fill(line)
   await page.keyboard.press(key)

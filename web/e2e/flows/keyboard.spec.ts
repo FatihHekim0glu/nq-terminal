@@ -5,6 +5,7 @@
 // a chart bar by bar and switch it to its table. Each flow ends clean: every request a same-origin
 // GET, no console error, no CSP report, and no served price point past the fence.
 import { expect, test, type Page } from '@playwright/test'
+import { COMMAND_LINE_KEY } from '../support/commandKey.ts'
 import { OFFLINE } from '../target.ts'
 import {
   commandLine,
@@ -86,7 +87,7 @@ test.describe('keyboard flows', () => {
     expect(await panelTitles(page)).toEqual(['REG', 'MT'])
 
     // Shift+Enter opens the result in a new panel; Alt+N focuses panel N and the zone shows N.
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, '27F MON', 'Shift+Enter')
     await expect(panel(page, '27F MON')).toBeVisible()
     const titles = await panelTitles(page)
@@ -108,7 +109,7 @@ test.describe('keyboard flows', () => {
     await expect(page.getByRole('dialog', { name: 'Keyboard map' })).toHaveCount(0)
 
     // Up in the empty line walks the command history, newest first; Esc clears the line.
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await page.keyboard.press('ArrowUp')
     await expect(commandLine(page)).toHaveValue('27F MON')
     // The drill-down ran as a command too, so it sits between them.
@@ -128,7 +129,7 @@ test.describe('keyboard flows', () => {
       test.skip(OFFLINE && line.includes('GIP'), '1m bars are not in the demo dataset (src/demo/data/market.ts serves daily vendor bars only)')
       const watch = await watchFlow(page)
       await openTerminal(page)
-      await page.keyboard.press('Control+k')
+      await page.keyboard.press(COMMAND_LINE_KEY)
       await typeLine(page, line)
       await expect(panel(page, line)).toBeVisible()
       await settle(page)
@@ -143,7 +144,7 @@ test.describe('keyboard flows', () => {
   test('chart session: in the NQ GP chart, jump to the ends, zoom, switch to the table and back', async ({ page }) => {
     const watch = await watchFlow(page)
     await openTerminal(page)
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, 'NQ GP')
     await expect(panel(page, 'NQ GP')).toBeVisible()
     await settle(page)
@@ -192,7 +193,7 @@ test.describe('keyboard flows', () => {
   test('Left and Right inside a focused grid or chart stay inside it', async ({ page }) => {
     const watch = await watchFlow(page)
     await openTerminal(page)
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, 'REG')
     await settle(page)
     await page.keyboard.press('Tab')
@@ -207,7 +208,7 @@ test.describe('keyboard flows', () => {
     expect.soft(await cell()).toBe(start)
 
     for (const line of ['NQ GP', `${TEAR_SUBJECT} EQ`]) {
-      await page.keyboard.press('Control+k')
+      await page.keyboard.press(COMMAND_LINE_KEY)
       await typeLine(page, line)
       await settle(page)
       // The first chart of the panel and its own readout (EQ stacks more than one chart).
@@ -228,7 +229,7 @@ test.describe('keyboard flows', () => {
   test('runs session: RUNS grid, drill to RUN, Number <GO> on the tear sheet tabs, Tab completion, End back', async ({ page }) => {
     const watch = await watchFlow(page)
     await openTerminal(page)
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, 'RUNS')
     await expect(panel(page, 'RUNS')).toBeVisible()
     await settle(page)
@@ -248,17 +249,17 @@ test.describe('keyboard flows', () => {
     await settle(page)
 
     // A context and a function on the line; then Number <GO> runs the panel's numbered tab.
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, `${TEAR_SUBJECT} EQ`)
     await expect(panel(page, `${TEAR_SUBJECT} EQ`)).toBeVisible()
     await settle(page)
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await typeLine(page, '2')
     await expect(panel(page, `${TEAR_SUBJECT} DD`)).toBeVisible()
     await settle(page)
 
     // Tab completes the open suggestion list; Enter then runs the completed line.
-    await page.keyboard.press('Control+k')
+    await page.keyboard.press(COMMAND_LINE_KEY)
     await page.keyboard.type('led')
     await expect(page.getByRole('option').first()).toContainText('LEDG')
     await page.keyboard.press('Tab')
