@@ -60,7 +60,7 @@ Two test variables sit beside the switches, both compiled only into smoke builds
 
 ## Modules and hooks
 
-`main.rs` calls the hooks in this order: `window::scrub_env` first, before any thread exists; `window::policy_check`; then, on the built window, `keys::install`, `window::setup`, `supervise::start` (with the stale-page hook), `writes::on_download_starting` and `crash::install`; `smoke::browser_args`, which can only act on the window builder and so is read just before the build; and `smoke::after_build` last. A window close is held first while `flush.rs` has the page send its pending workspace changes (below); the close then goes on to the supervisor's `shutdown` (a confirmation first when a backtest runs; then stdin closed, five seconds of grace, the job ended); the exit runs it again.
+`main.rs` calls the hooks in this order: `window::scrub_env` first, before any thread exists; `window::policy_check`; then the settings read and `supervise::begin`, so the backend's spawn runs while the window is built; then, on the built window, `keys::install`, `window::setup`, `Early::attach` (with the stale-page hook; it hands the calls the loop held back to the window, in order), `writes::on_download_starting` and `crash::install`; `smoke::browser_args`, which can only act on the window builder and so is read just before the build; and `smoke::after_build` last. A window close is held first while `flush.rs` has the page send its pending workspace changes (below); the close then goes on to the supervisor's `shutdown` (a confirmation first when a backtest runs; then stdin closed, five seconds of grace, the job ended); the exit runs it again.
 
 | Module | What it does |
 | --- | --- |
