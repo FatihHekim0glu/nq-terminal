@@ -84,6 +84,14 @@ Why only the format check here. The crate had never been built on the hosted MSV
 
 Where the rest lives. `desktop-check.yml` (written in v0.4, wave w2b) carries clippy -D warnings (`cargo clippy --all-targets --locked -- -D warnings`) for the three feature sets, `cargo test --locked`, `cargo deny`, `cargo audit` and the first MSVC build, with the Cargo registry cached and a Rust coverage figure from that leg. The next section describes it, and `desktop-check-workflow.test.mjs` pins it (REL-07 is its release counterpart, `desktop-release.yml`). `ci-rust-job.test.mjs` still fails when a clippy, test or build step is added to `ci.yml`, so the two workflows do not drift into each other.
 
+## mac-webkit.yml
+
+Runs on a hosted macOS runner (weekly on Monday, by dispatch, and on a push that touches the workflow file). Two jobs, Node only, no backend and no lab data: the four fixture goldens of `qa/golden` under JavaScriptCore (Bun and the system `jsc` shell), and the offline demo suite under Playwright's WebKit (`offline-webkit` and `offline-webkit-demo`). Every figure is a demo figure and PROVISIONAL, and Playwright's WebKit is not the WKWebView of the Mac app.
+
+The WebKit job compares screenshots against the committed baselines in `web/e2e/__screenshots__/offline-webkit-darwin` (force-added, because `web/.gitignore` ignores `offline-*`); it no longer rewrites them. The frame-time and draw-time bars are report-only there (`isWebkitOnMac` in `web/e2e/support/commandKey.ts`, and `reportOnly` in `web/e2e/support/perfMeasure.ts`); Windows and chromium bars are unchanged.
+
+To refresh the baselines on purpose, dispatch the workflow with the screenshot change in place, download the `webkit-darwin-baselines` artifact of that run, copy its PNGs over the folder above, review the images, and commit them. Do not refresh to silence a failure you have not looked at. `docs/desktop/v04/w5b-mac-webkit.md` has the history.
+
 ## desktop-check.yml
 
 `.github/workflows/desktop-check.yml` is the shell's first MSVC leg (D4.1, D4.6; grade G-03). It runs on a push to any branch (`branches: ['**']`) and by hand, with `contents: read` and a newer push cancelling the older run. Four jobs, all on `windows-2025`, whose hosted rustup has the MSVC host (the first step proves it from `rustc -vV`):
