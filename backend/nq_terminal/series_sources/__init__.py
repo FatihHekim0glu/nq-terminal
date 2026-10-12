@@ -7,7 +7,7 @@ first, then the `SOURCES` dict of each module in `PARTS` in turn (`monthly_a`, `
 reads it here. Only the columns named are read; none is a price column (tested).
 
 `NOT_LEARNABLE` maps a registered row the terminal will not learn to the reason, which REG and SV3 show beside the
-Deflated Sharpe: the four rows below, and any a module lists in its own optional `NOT_LEARNABLE`. A name may not be
+Deflated Sharpe: the three rows below, and any a module lists in its own optional `NOT_LEARNABLE`. A name may not be
 both learned and not learnable, nor learned twice, and a reason may not be empty: the package refuses to load
 otherwise (`SeriesRegistryError`), so the server never starts with an ambiguous N.
 """
@@ -33,10 +33,6 @@ PARTS = tuple(name for name, _ in PART_MODULES)
 NO_SOURCE_REASON = "no series source yet"
 C2_REASON = ("outside convention C2 (P = 252 or 12, docs/ANALYTICS_CATALOG.md:16); needs a statistics decision "
              "(O23)")
-WKNDSHORT_REASON = ("An event row (one Friday-close to Monday-close short per active week, 381 events), but the weekly "
-                    "file dates each event at its Friday entry and holds no exit date; the return is realised at the "
-                    "next NYSE session's close, and a series source has no rule that dates a row at the next session. "
-                    "The per-root legs are in another unit and do not add up to the book.")
 
 BASE_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
     "za_v0": SeriesSource("za_v0_repaired_trades.csv", "date", MappingProxyType({1: "pnl_usd_nq"}), USD_TRADE,
@@ -97,13 +93,12 @@ BASE_SOURCES: Mapping[str, SeriesSource] = MappingProxyType({
 })
 
 # Weekly books (P = 52) and one quarterly book (P = 4): convention C2 knows P = 252 and 12 only, so these rows wait for
-# a statistics decision (O23) instead of a series moved to sessions here. wkndshort_v0 is an event row inside C1 trades,
-# not a weekly book; what stops it is its dating (statistics review of wave w3). wkndgap_fx_v0 is learned in
-# `daily_event` (its weekly file is dated at the Monday exit).
+# a statistics decision (O23) instead of a series moved to sessions here. The two weekend rows are event rows inside C1
+# trades, not weekly books, and both are learned in `daily_event`: wkndgap_fx_v0 from its weekly file dated at the
+# Monday exit, wkndshort_v0 from its legs file dated at each leg's exit (re-review of wave w3).
 BASE_NOT_LEARNABLE: Mapping[str, str] = MappingProxyType({
     "cotliq_v0": C2_REASON,
     "mpslope_ym_v0": C2_REASON,
-    "wkndshort_v0": WKNDSHORT_REASON,
     "finroll_tff_v0": C2_REASON,
 })
 

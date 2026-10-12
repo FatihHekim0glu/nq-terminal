@@ -1,0 +1,12 @@
+{
+ "headline": {
+  "mean": 0.0006139932785714286,
+  "n": 14,
+  "sd": 0.001025253853997331
+ },
+ "precheck": {
+  "T_active": 14,
+  "active_market_weeks": 22
+ },
+ "synthetic": true
+}

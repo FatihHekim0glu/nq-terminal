@@ -243,6 +243,16 @@
    "how": "synthetic",
    "note": "synthetic: the lab file's column layout with made-up values on Monday sessions, a zero row in each week without an event"
   },
+  "results/screens/daily_event/wkndshort_v0.json": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic screen JSON: only the keys the anchors read, numbers computed from the synthetic legs file beside it"
+  },
+  "results/screens/daily_event/wkndshort_v0_legs.csv": {
+   "source": null,
+   "how": "synthetic",
+   "note": "synthetic: the lab file's column layout with made-up USD legs for three markets on hand-picked Fridays, each exit X the first full day after F (holiday Mondays included), active and inactive legs"
+  },
   "results/screens/dtsmom_v0_monthly.csv": {
    "source": "results/screens/dtsmom_v0_monthly.csv",
    "how": "trimmed",

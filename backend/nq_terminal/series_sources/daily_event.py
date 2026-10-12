@@ -1,8 +1,8 @@
 """Series sources for the daily and event rows of the registry (wave w3, slice series-daily-event).
 
-Thirteen registered rows have a screen file that is not a monthly book: four daily files, eight event, leg or trade
+Fourteen registered rows have a screen file that is not a monthly book: four daily files, nine event, leg or trade
 files and one weekly event file. This module maps the ones whose headline sample a `SeriesSource` can reproduce
-(eleven) and says, for the other two, why not (`NOT_LEARNABLE`). Nothing here reads a file; the mapping only names
+(twelve) and says, for the other two, why not (`NOT_LEARNABLE`). Nothing here reads a file; the mapping only names
 columns, and every column named is a return, a date or a cost, never a price (`tests/test_series_daily_event.py`
 checks that against `constants.PRICE_COLUMN`).
 
@@ -15,22 +15,31 @@ Choices that bind every row below (ANALYTICS_CATALOG C1 and C2, SV3a step 2):
 - The one `daily` row, lhrev_letf_v0, has a value on every mark (flat marks included), so it is used as recorded.
 - A value is dated at the session the return is realised, never the session the signal forms: fomcdrift_tsy_v0 at
   its `exit` (E+15), pretra_tsy_v0 at the pre-refunding Friday `P`, fomcfx_v0 at the statement day `D` (entry at the
-  close of the session before), wkndgap_fx_v0 at the Monday `week` (entry Sunday 18:00 CT, exit Monday 15:59 CT).
-  The intraday books (fedflow, tsyauct, cropsmooth, fomcpc) realise on the day itself.
+  close of the session before), wkndgap_fx_v0 at the Monday `week` (entry Sunday 18:00 CT, exit Monday 15:59 CT),
+  wkndshort_v0 at each leg's exit `X` (the first full day after the Friday entry `F`: normally the Monday, a session
+  later when that day is a holiday, an early close or a year-end day). The intraday books (fedflow, tsyauct,
+  cropsmooth, fomcpc) realise on the day itself.
 - A trades row's zero fill starts where its sample starts (`window_start`), never at the NQ data start when the spec
   or screen fixes a later one: padding sessions before the sample lowers the Sharpe and zero-fills events the screen
   left out (statistics review of wave w3: fomcdrift, fomcfx, fomcpc and pretra).
 - wkndgap_fx_v0's weekly file holds a row for every valid week, 0.0 in a week without an event; a zero row adds
   nothing to the session sum, so the served series is the 117 events of the headline and the zero fill.
+- wkndshort_v0 is learned from its legs file, not its weekly file: the weekly file dates each week at the Friday
+  entry and holds no exit date, while every leg carries its exit `X`. Spec rule 2 defines the weekly book as the sum
+  of the active legs over K ($100M); the legs of a week share one exit, so the session sum is that book in USD
+  (381 events, equal to the weekly `r1` times K in every week).
 - A file that mixes the headline sample with other rows says so in `keep_where`: hvix_nd_v0 keeps the sessions where
-  its `headline` column is True (100 spike sessions of the 2,193 valid ones) and apieia_ho_v0 the rows whose `kind`
-  is `event` and whose `void` is empty (426 of 1,294). Rows the rule leaves out are not voids and are never zeroed.
+  its `headline` column is True (100 spike sessions of the 2,193 valid ones), apieia_ho_v0 the rows whose `kind`
+  is `event` and whose `void` is empty (426 of 1,294) and wkndshort_v0 the legs whose `active` is True (1,465 of
+  the 6,888 market-weeks). Rows the rule leaves out are not voids and are never zeroed.
 - A void event is left out, never zeroed (the screen's n excludes it): cropsmooth_v0's two warm-up dates and
   fomcfx_v0's two dates with six void roots have empty values, so the default empty-row rule drops them.
 - Units follow the spec: a fraction of K is "return on capital", a basis-point column is "basis points of
-  capital" unless the spec defines another base (apieia_ho_v0: basis points of one HO contract's entry price). The
-  Sharpe ratio is scale free, so they stay comparable.
-- Costs: 0, 1 and 2 ticks per side where the file holds all three (every mapped row does).
+  capital" unless the spec defines another base (apieia_ho_v0: basis points of one HO contract's entry price), and a
+  USD leg is "USD of the K = $100M book" (wkndshort_v0; a USD unit is not on capital). The Sharpe ratio is scale
+  free, so they stay comparable.
+- Costs: 0, 1 and 2 ticks per side where the file holds all three (every mapped row does but wkndshort_v0, whose
+  legs record the net at 1 tick only, `h_net1`).
 - No benchmark is mapped for a `trades` row: `hypothesis_series` lines a benchmark column up with the summed session
   series row for row, which only works when the file has one row per session. lhrev_letf_v0 is such a file and keeps
   its LO control (1 tick, the only cost the control is recorded at).
@@ -49,6 +58,7 @@ from nq_terminal.constants import SeriesSource
 CAPITAL_PER_TRADE = "return on capital per trade"
 BP_PER_TRADE = "basis points of capital per trade"
 BP_PER_HO_CONTRACT = "basis points of one HO contract notional per trade"
+BOOK_USD_PER_TRADE = "USD of the K = $100M book per trade"
 CAPITAL_PER_SESSION = "return on capital per session"
 TRADES, DAILY = "trades", "daily"
 COSTS = (0, 1, 2)
@@ -110,6 +120,12 @@ SOURCES: dict[str, SeriesSource] = {
     # (117 events in 383 valid weeks). The zero fill starts at the screen's first valid week.
     "wkndgap_fx_v0": SeriesSource("wkndgap_fx_v0_weekly.csv", "week", _per_cost("r{k}"), BP_PER_TRADE, TRADES,
                                   window_start="2011-06-20"),
+    # Weekend short in high-volatility weeks (twelve markets): one leg per active market-week, short from the Friday
+    # `F` close to the close of the first full day after it, dated at that exit `X`; net USD at 1 tick (`h_net1`).
+    # The headline legs are the `active` ones. The zero fill starts at the exit of the spec's first eligible Friday
+    # (2011-10-14).
+    "wkndshort_v0": SeriesSource("wkndshort_v0_legs.csv", "X", MappingProxyType({1: "h_net1"}), BOOK_USD_PER_TRADE,
+                                 TRADES, window_start="2011-10-17", keep_where=MappingProxyType({"active": True})),
 }
 
 # Rows of this slice the current `SeriesSource` cannot reproduce. A mapping reached by dropping or reshaping rows would
