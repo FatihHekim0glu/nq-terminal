@@ -410,6 +410,21 @@ test.describe('terminal shell', () => {
         const body = cell.closest('.nqt-panel-body')?.getBoundingClientRect()
         return body !== undefined && r.bottom > body.top && r.top < body.bottom && cell.querySelector('svg') === null
       }).length)).toBe(0)
+      // Layout settled: panel and chrome boxes unchanged over four frames. WebKit on the hosted Mac once placed the lower panels
+      // one pixel higher than in two earlier runs (run 38215795241), so the frame is taken only once nothing is still moving.
+      await page.evaluate(async () => {
+        const boxes = () => [...document.querySelectorAll('[data-nqt-panel], .nqt-panel-body, [role="contentinfo"]')]
+          .map((el) => { const r = el.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].join(',') }).join('|')
+        const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+        let last = boxes()
+        let same = 0
+        for (let i = 0; i < 120 && same < 4; i += 1) {
+          await frame()
+          const now = boxes()
+          same = now === last ? same + 1 : 0
+          last = now
+        }
+      })
       await expect(page.locator('[aria-busy="true"]')).toHaveCount(0)
       await expect(page).toHaveScreenshot(`home-${size.width}x${size.height}.png`, { mask: await runCounters(page), maskColor: MASK_COLOR })
       await runCommand(page, 'HELP')
