@@ -15,10 +15,16 @@
 //   offline-perf  e2e/perf/budgets.spec.ts alone (`pnpm e2e:offline:perf`, one worker)
 //   offline-demo  e2e/offline/*.offline.ts against the demo build. Named .offline.ts and never .spec.ts: the
 //                 Windows config has testDir './e2e' and would otherwise run them (scripts/playwrightOffline.test.ts).
+//   offline-webkit, offline-webkit-demo
+//                 the offline and offline-demo specs under Playwright's WebKit, headless, on any machine (V04 D8.1: an
+//                 early defect list for the macOS WKWebView, docs/desktop/v04/webkit_windows_defects.md). Opt-in: no
+//                 package script runs them; `playwright test -c playwright.offline.config.ts --project=offline-webkit`.
+//                 WebKit on Windows is not WKWebView: a pass or a failure here is a lead, never proof for macOS.
 //
 // Ports: NQT_E2E_OFFLINE_PORT (default 4373) and NQT_E2E_DEMO_PORT (default 4374), never the user's backend,
 // dev server or demo server. Output and each run's builds live under node_modules/.tmp, which no source scan walks.
-// Screenshot baselines are this machine's own (offline-{platform}), never compared with the Windows ones.
+// Screenshot baselines are this machine's own (offline-{platform}; offline-webkit-{platform} for the WebKit projects),
+// never compared with the Windows ones.
 import { chromium, defineConfig, devices } from '@playwright/test'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
@@ -58,6 +64,19 @@ function bundledChromiumMissing(): boolean {
   }
 }
 const CHANNEL = process.env.NQT_E2E_CHANNEL || (bundledChromiumMissing() ? 'chrome' : undefined)
+// A browser channel names a Chromium build: it goes to the Chromium projects only, never to WebKit (which refuses it).
+const CHROMIUM_CHANNEL = CHANNEL ? { channel: CHANNEL } : {}
+
+// What every project shares, applied after a device descriptor: the Safari one would otherwise bring a 1280x720
+// viewport and a scale of 2, and a difference between the engines must be the engine.
+const PAGE_SETTINGS = {
+  viewport: { width: 1920, height: 1080 },
+  deviceScaleFactor: 1,
+  colorScheme: 'dark',
+  reducedMotion: 'reduce',
+  locale: 'en-GB',
+  timezoneId: 'Europe/London',
+} as const
 
 // Each run builds into folders of its own, one per port: no other build (`pnpm build:*`, the Windows run) can
 // empty what this run serves. The servers start with the running Node and the local Vite, so no package
@@ -85,6 +104,9 @@ const OFFLINE_SPECS = [
   /visual[\\/]screens\.spec\.ts$/,
 ]
 const BUDGETS_SPEC = /perf[\\/]budgets\.spec\.ts$/
+// These two probe a real backend's routes with write methods and a cross-site read; the demo API has no such surface
+// (its own refusals are pinned by src/demo/serve.test.ts).
+const OFFLINE_GREP_INVERT = /no backend route|the backend answers every write method/
 
 export default defineConfig({
   testDir: './e2e',
@@ -102,32 +124,38 @@ export default defineConfig({
     toHaveScreenshot: { maxDiffPixelRatio: 0.002, animations: 'disabled', caret: 'hide', scale: 'css' },
   },
   use: {
-    ...devices['Desktop Chrome'],
-    ...(CHANNEL ? { channel: CHANNEL } : {}),
+    ...devices['Desktop Chrome'], ...PAGE_SETTINGS,
     baseURL: OFFLINE_ORIGIN,
-    viewport: { width: 1920, height: 1080 },
-    deviceScaleFactor: 1,
-    colorScheme: 'dark',
-    reducedMotion: 'reduce',
-    locale: 'en-GB',
-    timezoneId: 'Europe/London',
     trace: 'retain-on-failure',
   },
   projects: [
     {
       name: 'offline',
       testMatch: OFFLINE_SPECS,
-      // These two probe a real backend's routes with write methods and a cross-site read; the demo API has no
-      // such surface (its own refusals are pinned by src/demo/serve.test.ts).
-      grepInvert: /no backend route|the backend answers every write method/,
+      grepInvert: OFFLINE_GREP_INVERT,
       workers: 2,
+      use: { ...CHROMIUM_CHANNEL },
     },
-    { name: 'offline-perf', testMatch: BUDGETS_SPEC },
+    { name: 'offline-perf', testMatch: BUDGETS_SPEC, use: { ...CHROMIUM_CHANNEL } },
     {
       name: 'offline-demo',
       testDir: './e2e/offline',
       testMatch: /\.offline\.ts$/,
-      use: { baseURL: DEMO_ORIGIN },
+      use: { baseURL: DEMO_ORIGIN, ...CHROMIUM_CHANNEL },
+    },
+    {
+      name: 'offline-webkit',
+      testMatch: OFFLINE_SPECS,
+      grepInvert: OFFLINE_GREP_INVERT,
+      snapshotPathTemplate: '{testDir}/__screenshots__/offline-webkit-{platform}/{testFilePath}/{arg}{ext}',
+      use: { ...devices['Desktop Safari'], ...PAGE_SETTINGS, baseURL: OFFLINE_ORIGIN },
+    },
+    {
+      name: 'offline-webkit-demo',
+      testDir: './e2e/offline',
+      testMatch: /\.offline\.ts$/,
+      snapshotPathTemplate: '{testDir}/__screenshots__/offline-webkit-{platform}/{testFilePath}/{arg}{ext}',
+      use: { ...devices['Desktop Safari'], ...PAGE_SETTINGS, baseURL: DEMO_ORIGIN },
     },
   ],
   webServer: [

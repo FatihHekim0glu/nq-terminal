@@ -11,6 +11,7 @@ import { HELP, HELP_FONT_LICENCES, HELP_LICENCES } from '../../copy/help'
 import { fillCopy } from '../../copy/workspace'
 import { SCREEN_PHASES } from '../layouts/layouts'
 import CommandLink from './CommandLink'
+import NoticesDisclosure from './NoticesDisclosure'
 
 const roving = { [ROVING_ATTR]: '' }
 
@@ -69,6 +70,9 @@ function Licences() {
           <li key={name}><span>{name}</span> <span className="muted">{licence}</span></li>
         ))}
       </ul>
+      <h5>{HELP.noticesHeading}</h5>
+      <p>{HELP.noticesText}</p>
+      <NoticesDisclosure />
     </>
   )
 }

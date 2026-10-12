@@ -9,8 +9,10 @@
 //   7. a production build holds no demo code and no fixture data (a demo build must hold both);
 //   8. no build holds Radix dialog code: cmdk's Command.Dialog is unused, and vite.config.ts aliases its import
 //      to a stub (src/vendor/radixDialogStub.tsx), which took about 10 kB gzip out of the shell.
+//   9. no build but the self-test build (`vite build --mode selftest`, src/selftest) holds the self-test page: a production, gallery
+//      or demo bundle with any of its markers fails, and a self-test build must hold them all (D7.2).
 // Library code is found by strings only the library itself contains.
-// Usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]
+// Usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo | --selftest]
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -37,16 +39,27 @@ export const BUNDLE_BUDGET = {
    * import, a boundary and a suspense, after the first idle moment) costs about 45 B gzip in the shell, and the indicator
    * itself is a chunk of its own. The 5 kB of room under the target is kept.
    *
-   * Wave w3-research-integrity raised it by 100 B again (115,000 to 115,100) for the PLAN mnemonic and the DQ universe
-   * context: PLAN is one more registry row, screen title, built code, related-menu entry and lazy screen import in the
-   * shell (about 100 B gzip together); the screen itself, its copy and its help page are lazy chunks. The 5 kB of room is kept.
+   * Wave w5-mac-kit raised it by 200 B (115,000 to 115,200) with the target in shellBudget.test.ts (110,000 to 110,200), for the
+   * Mac key table in chrome/CommandLine.keys.ts (D7.4). The 5 kB of room under the target is kept.
+   *
+   * The same wave raised it by a further 400 B (115,200 to 115,600) with the target (110,200 to 110,600) for the toolbars' and the
+   * message line's Mac key names (copy/platformKeys.ts). The shell measures 110,452 B.
+   *
+   * The merge of w3-research-integrity (PLAN mnemonic, DQ universe context, about 100 B) onto this wave raised both by a further
+   * 100 B (110,600 to 110,700; 115,600 to 115,700). Hand-set from the two measured sums, to be confirmed by the hosted build. The
+   * 5 kB of room is kept.
    */
-  shellGzip: 115_100,
+  shellGzip: 115_700,
   /**
    * The gallery build's shell (the E2E build, `--gallery`) is about 0.9 kB larger: its entry loads the API client
    * and the connection state eagerly, so those two split out of index. Measured 113.7 kB after shell diet 3, plus 2 kB.
    */
   galleryShellGzip: 115_800,
+  /**
+   * The self-test build's shell (the page's own entry, `--selftest`): React, the page and its stylesheet; axe, the goldens, dockview
+   * and the probes load behind dynamic imports. Measured at 73.1 kB gzip, plus 2 kB (so a static import of axe, dockview or Perspective fails).
+   */
+  selftestShellGzip: 75_000,
   libraryGzip: {
     uplot: 30_000,
     'lightweight-charts': 75_000,
@@ -92,10 +105,18 @@ export const GALLERY_MARKERS: readonly string[] = ['__gallery', 'data-gallery-st
  */
 export const DEMO_MARKERS: readonly string[] = ['nqt-demo', 'nt_volmanaged_v0_fixture_m1']
 
+/**
+ * Strings only the self-test page holds: the data attribute its root carries (src/selftest/SelfTestApp.tsx) and the global it
+ * publishes its report on (src/selftest/session.ts). Any build but the self-test build holding one has the page in it.
+ */
+export const SELFTEST_MARKERS: readonly string[] = ['nqt-selftest', '__selftest']
+
 export interface BundleOptions {
   readonly gallery: boolean
   /** A demo build (`vite build --mode demo`): it must hold every demo marker. */
   readonly demo?: boolean
+  /** A self-test build (`vite build --mode selftest`): the page is the whole build, and it must hold every self-test marker. */
+  readonly selftest?: boolean
 }
 
 export interface BundleReport {
@@ -108,13 +129,16 @@ export interface BundleReport {
   readonly galleryFiles: readonly string[]
   /** Files holding any demo marker. */
   readonly demoFiles: readonly string[]
+  /** Files holding any self-test marker. */
+  readonly selftestFiles: readonly string[]
   readonly violations: readonly string[]
 }
 
 const gzipSize = (text: string) => gzipSync(Buffer.from(text, 'utf-8'), { level: 9 }).length
 
 function entryFiles(html: string): string[] {
-  const found = html.matchAll(/<(?:script[^>]*\bsrc|link[^>]*\brel="modulepreload"[^>]*\bhref)="\/assets\/([^"]+\.js)"/g)
+  // The assets sit under the build's base: `/` for the app, `/__selftest/` for the self-test page.
+  const found = html.matchAll(/<(?:script[^>]*\bsrc|link[^>]*\brel="modulepreload"[^>]*\bhref)="(?:\/[\w-]+)*\/assets\/([^"]+\.js)"/g)
   return [...found].map((m) => m[1] ?? '')
 }
 
@@ -169,8 +193,24 @@ function checkDemo(files: ReadonlyArray<readonly [string, string]>, opts: Bundle
   return { demoFiles, violations }
 }
 
-/** The shell budget of a build: the gallery build has its own (see BUNDLE_BUDGET.galleryShellGzip). */
+/** Rule 9: none of the self-test markers outside a self-test build; each of them somewhere in one. */
+function checkSelftest(files: ReadonlyArray<readonly [string, string]>, opts: BundleOptions) {
+  // A self-test build's own html names /__selftest/ as its base, so there only the scripts and styles count as holding a marker.
+  const searched = opts.selftest ? files.filter(([f]) => f !== 'index.html') : files
+  const selftestFiles = searched.filter(([, t]) => SELFTEST_MARKERS.some((m) => t.includes(m))).map(([f]) => f)
+  const violations: string[] = []
+  if (opts.selftest) {
+    const missing = SELFTEST_MARKERS.filter((m) => !searched.some(([, t]) => t.includes(m)))
+    if (missing.length > 0) violations.push(`self-test build lacks ${missing.join(', ')}`)
+  } else if (selftestFiles.length > 0) {
+    violations.push(`production bundle holds self-test code: ${selftestFiles.join(', ')}`)
+  }
+  return { selftestFiles, violations }
+}
+
+/** The shell budget of a build: the gallery and the self-test builds have their own (see BUNDLE_BUDGET). */
 export function shellBudgetFor(opts: BundleOptions): number {
+  if (opts.selftest) return BUNDLE_BUDGET.selftestShellGzip
   return opts.gallery ? BUNDLE_BUDGET.galleryShellGzip : BUNDLE_BUDGET.shellGzip
 }
 
@@ -186,7 +226,8 @@ export function analyseBundle(distDir: string, opts: BundleOptions): BundleRepor
   const files = [...text.entries(), ['index.html', html] as const]
   const galleryFiles = files.filter(([, t]) => GALLERY_MARKERS.some((m) => t.includes(m))).map(([f]) => f)
   const demo = checkDemo(files, opts)
-  const violations = [...libs.violations, ...demo.violations]
+  const selftest = checkSelftest(files, opts)
+  const violations = [...libs.violations, ...demo.violations, ...selftest.violations]
   for (const [f, t] of js) {
     if (t.includes(REACT_MARKER) && !f.startsWith('react-')) violations.push(`react code is in ${f}, outside its own react-*.js chunk`)
     const radix = RADIX_DIALOG_MARKERS.filter((m) => t.includes(m))
@@ -196,16 +237,16 @@ export function analyseBundle(distDir: string, opts: BundleOptions): BundleRepor
   if (shellGzip > shellBudget) violations.push(`shell JS is ${shellGzip} bytes gzip, over its ${shellBudget} budget`)
   if (!opts.gallery && galleryFiles.length > 0) violations.push(`production bundle holds gallery code: ${galleryFiles.join(', ')}`)
   if (opts.gallery && galleryFiles.length === 0) violations.push('gallery build holds no gallery code')
-  return { initial, shellGzip, libraries: libs.libraries, libraryGzip: libs.libraryGzip, galleryFiles, demoFiles: demo.demoFiles, violations }
+  return { initial, shellGzip, libraries: libs.libraries, libraryGzip: libs.libraryGzip, galleryFiles, demoFiles: demo.demoFiles, selftestFiles: selftest.selftestFiles, violations }
 }
 
 function main(argv: readonly string[]): number {
   const dir = argv[0]
   if (dir === undefined) {
-    process.stderr.write('usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo]\n')
+    process.stderr.write('usage: node scripts/bundleCheck.ts <dist dir> [--gallery | --demo | --selftest]\n')
     return 2
   }
-  const opts = { gallery: argv.includes('--gallery'), demo: argv.includes('--demo') }
+  const opts = { gallery: argv.includes('--gallery'), demo: argv.includes('--demo'), selftest: argv.includes('--selftest') }
   const report = analyseBundle(path.resolve(dir), opts)
   const kb = (n: number) => `${(n / 1000).toFixed(1)} kB`
   process.stdout.write(`bundle check: shell ${kb(report.shellGzip)} gzip of ${kb(shellBudgetFor(opts))} (${report.initial.join(', ')})\n`)

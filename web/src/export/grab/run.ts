@@ -4,12 +4,14 @@
 // no request of any kind, nothing recomputed. Lazy code: the Workspace handle reaches it through a
 // dynamic import, so neither this file nor its copy is part of the first load.
 import { getBridge } from '../../bridge'
+import { detectKeysTable } from '../../chrome/CommandLine.keys'
 import { saveBlob, sayWhenSaved } from '../../chrome/download'
 import { panelElement } from '../../chrome/KeyToolbar.panels'
 import { postMessage, type MessageTone } from '../../chrome/MessageLine.store'
 import { panelSource } from '../../chrome/panelSources'
 import { isDemoPage } from '../../copy/chrome'
 import { GRAB } from '../../copy/grab'
+import { keyWords } from '../../copy/platformKeys'
 import { PANEL, fillCopy } from '../../copy/workspace'
 import { collectFigures } from './collect'
 import { composeGrab, readGrabPalette } from './compose'
@@ -103,7 +105,7 @@ async function copyToClipboard(png: Promise<Blob | null>): Promise<boolean> {
  */
 export async function grabPanel(req: GrabRequest): Promise<boolean> {
   const panel = panelElement(req.panelId)
-  if (!panel) return say(GRAB.noPanel)
+  if (!panel) return say(keyWords(GRAB.noPanel, detectKeysTable()))
   const { figures, skipped } = collectFigures(panel)
   if (figures.length === 0) return say(GRAB.noFigures)
   if (req.target === 'clipboard' && !getBridge().canCopyImage()) return say(GRAB.clipboardUnavailable)

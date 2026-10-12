@@ -2,7 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import type { RefObject } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HINT_EVERY_MS, globalKeyAction, isFocusKey, strayLetter, useCommandLineKeys, useTerminalKeys, type KeyLike, type KeyWhere } from './CommandLine.keys'
+import { HINT_EVERY_MS, detectKeysTable, globalKeyAction, isFocusKey, strayLetter, useCommandLineKeys, useTerminalKeys, type KeyLike, type KeyWhere } from './CommandLine.keys'
 import { resetMessage, useMessage } from './MessageLine.store'
 import { TYPE_HINT } from '../copy/typeHint'
 
@@ -261,3 +261,148 @@ describe('useTerminalKeys: the hint for a letter typed on a panel (U05)', () => 
   })
 })
 
+
+describe('keys table: pc and mac (D7.4)', () => {
+  afterEach(() => {
+    cleanup()
+    document.body.innerHTML = ''
+  })
+
+  const cmd = (k: string, extra: Partial<KeyLike> = {}) => key(k, { metaKey: true, ...extra })
+
+  it('reads the running platform: a Mac (by userAgentData or navigator.platform) gets mac, anything else or nothing gets pc', () => {
+    expect(detectKeysTable({ userAgentData: { platform: 'macOS' }, platform: '' })).toBe('mac')
+    expect(detectKeysTable({ platform: 'MacIntel' })).toBe('mac')
+    expect(detectKeysTable({ userAgentData: { platform: 'Windows' }, platform: 'MacIntel' })).toBe('pc')
+    expect(detectKeysTable({ platform: 'Win32' })).toBe('pc')
+    expect(detectKeysTable({ platform: 'Linux x86_64' })).toBe('pc')
+    expect(detectKeysTable({})).toBe('pc')
+    expect(detectKeysTable(undefined)).toBe('pc')
+  })
+
+  it('Cmd+K is the focus key on a Mac and Ctrl+K is not (Ctrl+K kills to the end of the line in a Mac text field)', () => {
+    const cmdK = new KeyboardEvent('keydown', { key: 'k', metaKey: true })
+    const ctrlK = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true })
+    expect(isFocusKey(cmdK, 'mac')).toBe('ctrl-k')
+    expect(isFocusKey(ctrlK, 'mac')).toBeNull()
+    expect(isFocusKey(ctrlK, 'pc')).toBe('ctrl-k')
+    expect(isFocusKey(cmdK, 'pc')).toBe('ctrl-k')
+  })
+
+  it('Cmd+[ is BACK and Cmd+] is FORWARD on a Mac, by key or by physical bracket, and nothing on a PC', () => {
+    expect(globalKeyAction(cmd('[', { code: 'BracketLeft' }), inPanel, 'mac')).toEqual({ kind: 'back' })
+    expect(globalKeyAction(cmd(']', { code: 'BracketRight' }), inLine, 'mac')).toEqual({ kind: 'forward' })
+    expect(globalKeyAction(cmd('’', { code: 'BracketRight' }), inPanel, 'mac')).toEqual({ kind: 'forward' })
+    expect(globalKeyAction(cmd('[', { code: 'BracketLeft' }), inPanel, 'pc')).toBeNull()
+    expect(globalKeyAction(cmd(']', { code: 'BracketRight' }), inPanel)).toBeNull()
+  })
+
+  it('Cmd+[ with another modifier, or while composing, is not bound', () => {
+    expect(globalKeyAction(cmd('[', { code: 'BracketLeft', shiftKey: true }), inPanel, 'mac')).toBeNull()
+    expect(globalKeyAction(cmd('[', { code: 'BracketLeft', altKey: true }), inPanel, 'mac')).toBeNull()
+    expect(globalKeyAction(key('[', { code: 'BracketLeft', metaKey: true, ctrlKey: true }), inPanel, 'mac')).toBeNull()
+    expect(globalKeyAction(cmd('[', { code: 'BracketLeft', isComposing: true }), inPanel, 'mac')).toBeNull()
+    expect(globalKeyAction(key('[', { code: 'BracketLeft' }), inPanel, 'mac')).toBeNull()
+  })
+
+  it('born failing: a key a control already handled (defaultPrevented) is left alone on both tables', () => {
+    const mapped: KeyLike[] = [
+      key('F1'), key('F8'), key('F5'), key('End'), key('End', { shiftKey: true }), key('Home'), key('PageUp'), key('PageDown', { shiftKey: true }),
+      key('1', { altKey: true, code: 'Digit1' }), key('k', { altKey: true, code: 'KeyK' }),
+      cmd('[', { code: 'BracketLeft' }), cmd(']', { code: 'BracketRight' }),
+    ]
+    for (const table of ['pc', 'mac'] as const) {
+      for (const e of mapped) {
+        expect(globalKeyAction({ ...e, defaultPrevented: true }, inPanel, table)).toBeNull()
+      }
+    }
+    // The same keys, not prevented, are all mapped on the Mac, so the loop above tests something.
+    expect(mapped.filter((e) => globalKeyAction(e, inPanel, 'mac') !== null)).toHaveLength(mapped.length)
+  })
+
+  it('the Mac keeps every pc binding its keyboard can send: F-keys, Fn+arrows as Home, End and PgUp, Option+digits', () => {
+    expect(globalKeyAction(key('F1'), inPanel, 'mac')).toEqual({ kind: 'help' })
+    expect(globalKeyAction(key('F10'), inPanel, 'mac')).toEqual({ kind: 'sector', sector: 'INDEX' })
+    expect(globalKeyAction(key('End'), inPanel, 'mac')).toEqual({ kind: 'back' })
+    expect(globalKeyAction(key('PageUp', { shiftKey: true }), inPanel, 'mac')).toEqual({ kind: 'history', older: true })
+    expect(globalKeyAction(key('¡', { altKey: true, code: 'Digit1' }), inPanel, 'mac')).toEqual({ kind: 'panel', n: 1 })
+    expect(globalKeyAction(key('˚', { altKey: true, code: 'KeyK' }), inPanel, 'mac')).toEqual({ kind: 'keymap' })
+  })
+
+  it('born failing: on the Mac table, Option+digit and Option+K in a text field type their character instead of moving panel focus', () => {
+    // UK Option+3 types '#', German Option+5/7/8/9 type [ | { }, Option+K is a dead key on some layouts.
+    expect(globalKeyAction(key('#', { altKey: true, code: 'Digit3' }), inLine, 'mac')).toBeNull()
+    expect(globalKeyAction(key('[', { altKey: true, code: 'Digit5' }), inTypedLine, 'mac')).toBeNull()
+    expect(globalKeyAction(key('Dead', { altKey: true, code: 'KeyK' }), inLine, 'mac')).toBeNull()
+    expect(globalKeyAction(key('˚', { altKey: true, code: 'KeyK' }), inLine, 'mac')).toBeNull()
+    // Outside a text field the chord still moves focus, and a chord that types nothing new still does inside one.
+    expect(globalKeyAction(key('#', { altKey: true, code: 'Digit3' }), inPanel, 'mac')).toEqual({ kind: 'panel', n: 3 })
+    expect(globalKeyAction(key('3', { altKey: true, code: 'Digit3' }), inLine, 'mac')).toEqual({ kind: 'panel', n: 3 })
+    expect(globalKeyAction(key('k', { altKey: true, code: 'KeyK' }), inLine, 'mac')).toEqual({ kind: 'keymap' })
+    // The pc table is unchanged (AltGr is Ctrl+Alt there and is already excluded).
+    expect(globalKeyAction(key('#', { altKey: true, code: 'Digit3' }), inLine, 'pc')).toEqual({ kind: 'panel', n: 3 })
+  })
+
+  it('born failing: useTerminalKeys leaves a typing Option+digit alone in a text field on the Mac (no preventDefault, no run)', () => {
+    const run = vi.fn()
+    renderHook(() => useTerminalKeys(() => inLine, run, 'mac'))
+    const e = new KeyboardEvent('keydown', { key: '#', code: 'Digit3', altKey: true, cancelable: true })
+    act(() => {
+      window.dispatchEvent(e)
+    })
+    expect(e.defaultPrevented).toBe(false)
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('useTerminalKeys on the mac table runs Cmd+] as FORWARD and holds the browser default back; on the pc table it does nothing', () => {
+    const macRun = vi.fn()
+    const mac = renderHook(() => useTerminalKeys(() => inPanel, macRun, 'mac'))
+    let notPrevented = true
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: ']', code: 'BracketRight', metaKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(notPrevented).toBe(false)
+    expect(macRun).toHaveBeenCalledWith({ kind: 'forward' })
+    mac.unmount()
+
+    const pcRun = vi.fn()
+    renderHook(() => useTerminalKeys(() => inPanel, pcRun, 'pc'))
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: ']', code: 'BracketRight', metaKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(notPrevented).toBe(true)
+    expect(pcRun).not.toHaveBeenCalled()
+  })
+
+  it('useTerminalKeys leaves a Cmd+] that a control already prevented alone', () => {
+    const run = vi.fn()
+    renderHook(() => useTerminalKeys(() => inPanel, run, 'mac'))
+    const handled = new KeyboardEvent('keydown', { key: ']', code: 'BracketRight', metaKey: true, bubbles: true, cancelable: true })
+    handled.preventDefault()
+    act(() => {
+      window.dispatchEvent(handled)
+    })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('useCommandLineKeys on the mac table takes Cmd+K and leaves Ctrl+K to the text field', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    const inputRef = { current: input } as RefObject<HTMLInputElement | null>
+    const previousFocus = { current: null } as RefObject<HTMLElement | null>
+    renderHook(() => useCommandLineKeys(inputRef, previousFocus, 'mac'))
+
+    let notPrevented = true
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(notPrevented).toBe(true)
+    expect(document.activeElement).not.toBe(input)
+
+    act(() => {
+      notPrevented = window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))
+    })
+    expect(notPrevented).toBe(false)
+    expect(document.activeElement).toBe(input)
+  })
+})

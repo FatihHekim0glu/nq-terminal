@@ -49,6 +49,8 @@
 
 .help a { color: var(--link); text-underline-offset: 2px; }
 .help-licences { list-style: none; display: grid; gap: 2px; color: var(--text); }
+.help-notices { max-height: 24em; overflow: auto; margin: 4px 0; padding: 6px 8px; background: var(--raised); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono, monospace); font-size: 0.85em; }
+.help-notices:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
 
 /* HELP's own live search results (U19): in normal document flow directly under the field's row, so
    they never overlap anything and are never a page-level overlay a stray click could be caught by. */

@@ -9,7 +9,9 @@ import type { MnemonicCode } from '../commands/registry'
 import { displayContext } from '../commands/sectors'
 import type { ResolvedContext } from '../commands/types'
 import { NAV_TOOLBAR } from '../copy/chrome'
+import { MAC_NAV_NAMES } from '../copy/platformKeys'
 import type { PanelLink } from '../state/linkGroups'
+import { detectKeysTable, type KeysTable } from './CommandLine.keys'
 import { LinkChip } from './ContextStrip'
 import type { KillState } from './StatusBar.format'
 import './NavToolbar.css'
@@ -28,6 +30,8 @@ export interface NavToolbarProps {
   /** killState() of the health poll, so this reads the same as the status line. */
   readonly kill: KillState
   readonly onAction: (action: NavAction) => void
+  /** The key bindings the accessible names speak; the platform's own when absent. */
+  readonly keys?: KeysTable
 }
 
 function NavButton({ action, label, children, onAction, className = '' }: { readonly action: NavAction; readonly label: string; readonly children: ReactNode; readonly onAction: (a: NavAction) => void; readonly className?: string }) {
@@ -64,13 +68,14 @@ const KILL_TEXT: Readonly<Record<KillState, string>> = {
   unknown: NAV_TOOLBAR.killUnknown,
 }
 
-export function NavToolbar({ focused, kill, onAction }: NavToolbarProps) {
+export function NavToolbar({ focused, kill, onAction, keys = detectKeysTable() }: NavToolbarProps) {
   const code = focused?.code
+  const names = keys === 'mac' ? MAC_NAV_NAMES : NAV_TOOLBAR
   return (
     <div className="nav-toolbar" role="group" aria-label={NAV_TOOLBAR.label} data-chrome="nav">
       <div className="nav-left">
-        <NavButton action="back" label={NAV_TOOLBAR.back} onAction={onAction}><span aria-hidden="true">{'<'}</span></NavButton>
-        <NavButton action="forward" label={NAV_TOOLBAR.forward} onAction={onAction}><span aria-hidden="true">{'>'}</span></NavButton>
+        <NavButton action="back" label={names.back} onAction={onAction}><span aria-hidden="true">{'<'}</span></NavButton>
+        <NavButton action="forward" label={names.forward} onAction={onAction}><span aria-hidden="true">{'>'}</span></NavButton>
         <Divider />
         {contextButton(focused, onAction)}
         <Divider />

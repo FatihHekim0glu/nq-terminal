@@ -41,6 +41,14 @@ describe('NavToolbar: the 22px nav toolbar for the focused panel (spec 4.2)', ()
     expect(forward.getAttribute('aria-label')).toBe(NAV_TOOLBAR.forward)
   })
 
+  it('names the Mac keys for back and forward on a Mac, with no End', () => {
+    render(<NavToolbar focused={null} kill="off" onAction={vi.fn()} keys="mac" />)
+    const bar = screen.getByRole('group', { name: NAV_TOOLBAR.label })
+    expect(within(bar).getByRole('button', { name: 'Back, Cmd+[ or Fn+Right' })).toBeTruthy()
+    expect(within(bar).getByRole('button', { name: 'Forward, Cmd+] or Shift+Fn+Right' })).toBeTruthy()
+    expect(within(bar).queryByRole('button', { name: /\bEnd\b/ })).toBeNull()
+  })
+
   it('shows the kill switch and TWS state beside the message glyph', () => {
     const { bar } = setup({ kill: 'on' })
     expect(within(bar).getByText('KILL ON')).toBeTruthy()
